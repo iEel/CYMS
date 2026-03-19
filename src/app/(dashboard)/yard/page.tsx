@@ -390,7 +390,14 @@ export default function YardPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-400">
-                          {c.gate_in_date ? formatShortDate(c.gate_in_date) : '—'}
+                          {c.gate_in_date ? (
+                            <div>
+                              <span>{formatShortDate(c.gate_in_date)}</span>
+                              <span className="ml-1 text-slate-500 dark:text-slate-400">
+                                {new Date(c.gate_in_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                              </span>
+                            </div>
+                          ) : '—'}
                         </td>
                       </tr>
                     );
