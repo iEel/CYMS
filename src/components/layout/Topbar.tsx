@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import {
   Search,
@@ -31,6 +31,23 @@ export default function Topbar() {
   const [showSearch, setShowSearch] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const yardRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  // Notifications
+  interface NotifItem { id: string; source: string; type: string; title: string; detail: string; time: string; }
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotifItem[]>([]);
+  const [lastReadTime, setLastReadTime] = useState<string>('');
+
+  const getRelativeTime = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} hr`;
+    return `${Math.floor(hrs / 24)} d`;
+  };
 
   // Dark mode toggle
   useEffect(() => {
@@ -46,7 +63,26 @@ export default function Topbar() {
     }
     // NFR1 — Initialize offline sync
     initOfflineSync();
+    // Load last read time
+    const savedRead = localStorage.getItem('cyms_notif_last_read');
+    if (savedRead) setLastReadTime(savedRead);
   }, []);
+
+  // Fetch notifications
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const yid = session?.activeYardId || 1;
+      const res = await fetch(`/api/notifications?yard_id=${yid}&limit=20`);
+      const data = await res.json();
+      setNotifications(data.notifications || []);
+    } catch (err) { console.error(err); }
+  }, [session?.activeYardId]);
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
 
   const toggleDarkMode = () => {
     const newVal = !isDark;
@@ -115,6 +151,9 @@ export default function Topbar() {
       }
       if (yardRef.current && !yardRef.current.contains(e.target as Node)) {
         setYardDropdownOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -234,13 +273,78 @@ export default function Topbar() {
         </div>
 
         {/* Notification Bell */}
-        <button className="relative w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center
-          text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200"
+        <div ref={notifRef} className="relative">
+          <button
+            onClick={() => { setNotifOpen(!notifOpen); if (!notifOpen) fetchNotifications(); }}
+            className="relative w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center
+              text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200"
+          >
+            <Bell size={18} />
+            {notifications.filter(n => !lastReadTime || new Date(n.time) > new Date(lastReadTime)).length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-[#EF4444] text-white text-[10px] font-bold flex items-center justify-center px-1">
+                {Math.min(notifications.filter(n => !lastReadTime || new Date(n.time) > new Date(lastReadTime)).length, 99)}
+              </span>
+            )}
+          </button>
 
-        >
-          <Bell size={18} />
-          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#EF4444]" />
-        </button>
+          {notifOpen && (
+            <div className="absolute top-full right-0 mt-2 w-96 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50">
+              <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-white flex items-center gap-2">
+                  <Bell size={14} /> การแจ้งเตือน
+                </h3>
+                <button onClick={() => {
+                  const now = new Date().toISOString();
+                  setLastReadTime(now);
+                  localStorage.setItem('cyms_notif_last_read', now);
+                }} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">
+                  อ่านทั้งหมดแล้ว
+                </button>
+              </div>
+              <div className="max-h-80 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/50">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-slate-400">ไม่มีการแจ้งเตือน</div>
+                ) : (
+                  notifications.map((n) => {
+                    const isUnread = !lastReadTime || new Date(n.time) > new Date(lastReadTime);
+                    const ago = getRelativeTime(n.time);
+                    return (
+                      <div key={n.id} className={`px-4 py-3 transition-colors ${
+                        isUnread ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/20'
+                      }`}>
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-0.5 w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
+                            n.source === 'gate'
+                              ? n.type === 'gate_in'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                                : 'bg-orange-100 dark:bg-orange-900/30'
+                              : n.type === 'completed'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                                : n.type === 'pending'
+                                  ? 'bg-blue-100 dark:bg-blue-900/30'
+                                  : 'bg-slate-100 dark:bg-slate-700'
+                          }`}>
+                            {n.title.split(' ')[0]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs leading-tight ${
+                              isUnread ? 'font-semibold text-slate-800 dark:text-white' : 'text-slate-600 dark:text-slate-300'
+                            }`}>{n.title}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5 truncate">{n.detail}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isUnread && <span className="w-2 h-2 rounded-full bg-blue-500" />}
+                            <span className="text-[10px] text-slate-400 whitespace-nowrap">{ago}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Dark Mode Toggle */}
         <button

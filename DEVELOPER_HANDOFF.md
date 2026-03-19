@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 19 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A3 + 2-Phase Gate-Out + File Storage (98%)
+> ส่งมอบงาน: 19 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A3 + 2-Phase Gate-Out + File Storage + Notifications (99%)
 
 ---
 
@@ -170,6 +170,7 @@ container-yard-system/
 │   │       │   ├── eir/route.ts            # GET EIR data (+ condition/grade/company info)
 │   │       │   └── transfer/route.ts       # POST inter-yard transfer
 │   │       ├── uploads/route.ts            # POST photo/logo upload (base64 → file → URL)
+│   │       ├── notifications/route.ts      # GET activity feed (gate + work orders)
 │   │       ├── operations/
 │   │       │   ├── route.ts                # GET/POST/PUT work orders
 │   │       │   └── shift/route.ts          # POST smart shifting (LIFO)
@@ -198,7 +199,7 @@ container-yard-system/
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── Sidebar.tsx       # Left sidebar (collapsible + role-based menus)
-│   │   │   └── Topbar.tsx        # Top header (**real API search**, yard switcher, dark/high-contrast toggle)
+│   │   │   └── Topbar.tsx        # Top header (**real API search**, yard switcher, **notification bell**, dark/high-contrast toggle)
 │   │   ├── providers/
 │   │   │   ├── AuthProvider.tsx  # Auth context (login/logout/session)
 │   │   │   └── ToastProvider.tsx # Toast notifications (success/error/warning/info)
@@ -310,13 +311,19 @@ container-yard-system/
 |--------|----------|---------|
 | POST | `/api/uploads` | อัปโหลดภาพ — `{ data: 'data:image/jpeg;base64,...', folder: 'photos', filename_prefix: 'photo' }` → `{ url: '/uploads/photos/2026-03/photo_xxx.jpg' }` |
 
+### Notifications
+
+| Method | Endpoint | คำอธิบาย |
+|--------|----------|---------|
+| GET | `/api/notifications?yard_id=X&limit=20` | ดึง activity feed — รวม Gate Transactions + Work Order updates, เรียงตามเวลาล่าสุด |
+
 ### Operations
 
 | Method | Endpoint | คำอธิบาย |
 |--------|----------|---------|
 | GET | `/api/operations?yard_id=X&status=pending` | ดึง Work Orders |
 | POST | `/api/operations` | สร้าง Work Order — `{ order_type, container_id, to_zone/bay/row/tier, priority }` |
-| PUT | `/api/operations` | อัปเดทสถานะ — `{ order_id, action: accept/assign/start/complete/cancel }` |
+| PUT | `/api/operations` | อัปเดทสถานะ — `{ order_id, action: accept/complete/cancel }` + optional `{ to_zone_id, to_bay, to_row, to_tier }` สำหรับ position override |
 | POST | `/api/operations/shift` | Smart Shifting — `{ container_id, yard_id }` → LIFO plan |
 
 ### Settings
@@ -367,7 +374,7 @@ container-yard-system/
 - 2D/3D toggle
 - **2D**: Zone cards + occupancy bars
 - **3D**: Three.js — ตู้สมจริง (สัดส่วนจริง 20ft/40ft/45ft)
-- ตารางตู้ + filter + search
+- ตารางตู้ + filter + search + **pagination** (25 ตู้/หน้า + ปุ่มเลขหน้า + รีเซ็ตอัตโนมัติเมื่อเปลี่ยน filter)
 
 #### แท็บ "ค้นหาตู้" (Split Screen)
 - **ซ้าย**: Instant search → รายชื่อตู้ + รายละเอียด
@@ -449,6 +456,15 @@ container-yard-system/
 - กดเลือก → ไปหน้า Yard Management
 - ไม่พบผลลัพธ์ → แสดงข้อความ "ไม่พบ"
 
+### 7.8c Notification Bell (Topbar)
+- กระดิ้งแจ้งเตือนทำงานได้จริง — ดึงกิจกรรมล่าสุดจาก Gate + Work Orders
+- Badge ตัวเลขแสดงจำนวนที่ยังไม่อ่าน (สีแดง)
+- กดกระดิ้ง → เปิด dropdown รายการแจ้งเตือน
+- ไอคอนสีตามประเภท: 📥 Gate-In, 📤 Gate-Out, ✅ เสร็จ, 🆕 งานใหม่
+- เวลาสัมพัทธ์ (3 min, 2 hr, 1 d) + จุดสีน้ำเงิน unread
+- ปุ่ม "อ่านทั้งหมดแล้ว" → จำใน localStorage
+- รีเฟรชอัตโนมัติทุก 30 วินาที
+
 ### 7.8 ปฏิบัติการ (Operations)
 
 3 แท็บ:
@@ -457,6 +473,7 @@ container-yard-system/
 - ตาราง Work Orders + **2-button workflow** สำหรับคนขับรถยก:
   - 📥 **รับงาน** (pending → in_progress — ข้าม assigned)
   - ✅ **เสร็จ** (in_progress → completed + อัพเดทพิกัดตู้อัตโนมัติ)
+- **เปลี่ยนตำแหน่งวางตู้ได้**: กดเสร็จ → แสดงฟอร์มแก้ข Zone/Bay/Row/Tier (pre-fill ตำแหน่งเดิม) → ยืนยันเสร็จสิ้น
 - Filter ตาม status
 - ปุ่มยกเลิกสำหรับงานที่ยังไม่เริ่ม
 - ปุ่ม Mobile ขนาดใหญ่ (48px+) สำหรับใส่ถุงมือกดได้

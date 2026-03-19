@@ -98,6 +98,10 @@ export default function YardPage() {
   const [allocSaving, setAllocSaving] = useState(false);
   const [allocResult, setAllocResult] = useState<string | null>(null);
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const perPage = 25;
+
   const yardId = session?.activeYardId || 1;
 
   const fetchData = useCallback(async () => {
@@ -125,6 +129,12 @@ export default function YardPage() {
     if (filterStatus && c.status !== filterStatus) return false;
     return true;
   });
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [search, filterZone, filterStatus]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const paginated = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   if (loading) {
     return (
@@ -354,7 +364,7 @@ export default function YardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {filtered.slice(0, 50).map((c) => {
+                  {paginated.map((c) => {
                     const st = STATUS_LABELS[c.status] || STATUS_LABELS.available;
                     return (
                       <tr key={c.container_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
@@ -407,11 +417,45 @@ export default function YardPage() {
             </div>
             {/* Mobile: Card view (shown only on mobile) */}
             <div className="md:hidden">
-              <ContainerCardPWA yardId={yardId} containers={filtered} />
+              <ContainerCardPWA yardId={yardId} containers={paginated} />
             </div>
-            {filtered.length > 50 && (
-              <div className="p-3 text-center text-xs text-slate-400 border-t border-slate-100 dark:border-slate-700">
-                แสดง 50 รายการแรก จากทั้งหมด {filtered.length} ตู้
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="p-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <span className="text-xs text-slate-400">
+                  แสดง {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, filtered.length)} จาก {filtered.length} ตู้
+                </span>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1}
+                    className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-default">«</button>
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                    className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-default">‹</button>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let page: number;
+                    if (totalPages <= 5) {
+                      page = i + 1;
+                    } else if (currentPage <= 3) {
+                      page = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      page = totalPages - 4 + i;
+                    } else {
+                      page = currentPage - 2 + i;
+                    }
+                    return (
+                      <button key={page} onClick={() => setCurrentPage(page)}
+                        className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                          page === currentPage
+                            ? 'bg-blue-500 text-white'
+                            : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}>{page}</button>
+                    );
+                  })}
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                    className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-default">›</button>
+                  <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}
+                    className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-default">»</button>
+                </div>
               </div>
             )}
           </div>
