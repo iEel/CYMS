@@ -92,6 +92,8 @@ export default function GatePage() {
     charges: BillingCharge[];
     summary: { total_before_vat: number; vat_rate: number; vat_amount: number; grand_total: number };
     existing_invoices: { invoice_id: number; invoice_number: string; grand_total: number; status: string }[];
+    paid_invoices?: { invoice_id: number; invoice_number: string; grand_total: number; status: string; paid_at: string }[];
+    already_paid?: boolean;
     has_hold: boolean;
   }
   const [billingData, setBillingData] = useState<BillingData | null>(null);
@@ -183,6 +185,11 @@ export default function GatePage() {
       const billData = await billRes.json();
       setBillingData(billData);
       if (billData.is_credit) setPaymentMethod('credit');
+      // If already paid, skip payment flow
+      if (billData.already_paid) {
+        setBillingPaid(true);
+        setBillingInvoiceNumber(billData.paid_invoices?.[0]?.invoice_number || 'ชำระแล้ว');
+      }
     } catch (err) { console.error(err); }
     finally { setBillingLoading(false); }
 

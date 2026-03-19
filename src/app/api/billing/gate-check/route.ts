@@ -191,15 +191,18 @@ export async function POST(request: NextRequest) {
     const vatAmount = Math.round(totalBeforeVat * 0.07 * 100) / 100;
     const grandTotal = totalBeforeVat + vatAmount;
 
-    // 5. Check existing unpaid invoices for this container
+    // 5. Check existing invoices for this container (unpaid AND paid)
     const existingInv = await db.request()
       .input('cid', sql.Int, container_id)
       .query(`
-        SELECT invoice_id, invoice_number, grand_total, status
+        SELECT invoice_id, invoice_number, grand_total, status, paid_at
         FROM Invoices
-        WHERE container_id = @cid AND status IN ('issued', 'draft')
+        WHERE container_id = @cid
         ORDER BY created_at DESC
       `);
+
+    const paidInvoices = existingInv.recordset.filter((i: { status: string }) => i.status === 'paid');
+    const unpaidInvoices = existingInv.recordset.filter((i: { status: string }) => ['issued', 'draft'].includes(i.status));
 
     return NextResponse.json({
       container: {
@@ -216,7 +219,9 @@ export async function POST(request: NextRequest) {
         vat_amount: vatAmount,
         grand_total: grandTotal,
       },
-      existing_invoices: existingInv.recordset,
+      existing_invoices: unpaidInvoices,
+      paid_invoices: paidInvoices,
+      already_paid: paidInvoices.length > 0,
       has_hold: container.hold_status === 'billing_hold',
     });
   } catch (error) {
