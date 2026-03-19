@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/components/providers/AuthProvider';
+import Link from 'next/link';
 import {
   Container,
   TrendingUp,
@@ -130,8 +131,9 @@ export default function DashboardPage() {
           <h2 className="text-base font-semibold text-slate-800 dark:text-white mb-4">คำสั่งด่วน</h2>
           <div className="grid grid-cols-2 gap-3">
             {quickActions.map((action, i) => (
-              <button
+              <Link
                 key={i}
+                href={action.href}
                 className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-100 dark:border-slate-700
                   hover:border-slate-200 dark:hover:border-slate-600 hover:shadow-sm
                   transition-all duration-200 group"
@@ -143,7 +145,7 @@ export default function DashboardPage() {
                   {action.icon}
                 </div>
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{action.label}</span>
-              </button>
+              </Link>
             ))}
           </div>
         </div>
@@ -152,9 +154,9 @@ export default function DashboardPage() {
         <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-slate-800 dark:text-white">กิจกรรมล่าสุด</h2>
-            <button className="text-xs text-[#3B82F6] hover:underline flex items-center gap-1">
+            <Link href="/gate" className="text-xs text-[#3B82F6] hover:underline flex items-center gap-1">
               ดูทั้งหมด <ArrowRight size={12} />
-            </button>
+            </Link>
           </div>
           <div className="space-y-3">
             {recentActivities.map((act, i) => (
