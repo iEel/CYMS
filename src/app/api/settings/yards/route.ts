@@ -20,7 +20,9 @@ export async function GET() {
     const db = await getDb();
     await ensureBranchColumns(db);
     const result = await db.request().query(`
-      SELECT y.*,
+      SELECT y.yard_id, y.yard_name, y.yard_code, y.address,
+             y.latitude, y.longitude, y.geofence_radius, y.is_active,
+             y.created_at, y.updated_at,
         ISNULL(y.branch_type, 'head_office') as branch_type,
         ISNULL(y.branch_number, '00000') as branch_number,
         (SELECT COUNT(*) FROM YardZones z WHERE z.yard_id = y.yard_id) as zone_count
