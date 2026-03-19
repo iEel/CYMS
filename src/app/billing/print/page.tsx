@@ -12,6 +12,7 @@ interface InvoiceData {
   due_date: string; paid_at: string; created_at: string;
   customer_tax_id?: string; customer_address?: string;
   customer_branch_type?: string; customer_branch_number?: string;
+  notes?: string;
 }
 
 interface CompanyData {
@@ -183,26 +184,58 @@ export default function PrintInvoicePage() {
         </div>
 
         {/* Items Table */}
-        <table className="w-full text-sm border-collapse mb-6">
-          <thead>
-            <tr className="border-y-2 border-slate-800">
-              <th className="text-left py-2 w-8">ลำดับ</th>
-              <th className="text-left py-2">รายการ</th>
-              <th className="text-right py-2 w-20">จำนวน</th>
-              <th className="text-right py-2 w-28">ราคาต่อหน่วย</th>
-              <th className="text-right py-2 w-28">รวม</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-slate-200">
-              <td className="py-2">1</td>
-              <td className="py-2">{invoice.description || invoice.charge_type}</td>
-              <td className="py-2 text-right">{invoice.quantity}</td>
-              <td className="py-2 text-right font-mono">฿{invoice.unit_price?.toLocaleString()}</td>
-              <td className="py-2 text-right font-mono">฿{invoice.total_amount?.toLocaleString()}</td>
-            </tr>
-          </tbody>
-        </table>
+        {(() => {
+          // Parse charges from notes JSON
+          let chargeLines: { description: string; quantity: number; unit_price: number; subtotal: number }[] = [];
+          try {
+            if (invoice.notes) {
+              const parsed = JSON.parse(invoice.notes);
+              if (parsed.charges && Array.isArray(parsed.charges)) {
+                chargeLines = parsed.charges.filter((c: { subtotal: number }) => c.subtotal > 0).map((c: { description: string; quantity: number; unit_price: number; subtotal: number }) => ({
+                  description: c.description,
+                  quantity: c.quantity,
+                  unit_price: c.unit_price,
+                  subtotal: c.subtotal,
+                }));
+              }
+            }
+          } catch { /* ignore parse errors */ }
+
+          // Fallback to single line if no detailed charges
+          if (chargeLines.length === 0) {
+            chargeLines = [{
+              description: invoice.description || invoice.charge_type,
+              quantity: invoice.quantity,
+              unit_price: invoice.unit_price,
+              subtotal: invoice.total_amount,
+            }];
+          }
+
+          return (
+            <table className="w-full text-sm border-collapse mb-6">
+              <thead>
+                <tr className="border-y-2 border-slate-800">
+                  <th className="text-left py-2 w-8">ลำดับ</th>
+                  <th className="text-left py-2">รายการ</th>
+                  <th className="text-right py-2 w-20">จำนวน</th>
+                  <th className="text-right py-2 w-28">ราคาต่อหน่วย</th>
+                  <th className="text-right py-2 w-28">รวม</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chargeLines.map((line, idx) => (
+                  <tr key={idx} className="border-b border-slate-200">
+                    <td className="py-2">{idx + 1}</td>
+                    <td className="py-2">{line.description}</td>
+                    <td className="py-2 text-right">{line.quantity}</td>
+                    <td className="py-2 text-right font-mono">฿{line.unit_price?.toLocaleString()}</td>
+                    <td className="py-2 text-right font-mono">฿{line.subtotal?.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          );
+        })()}
 
         {/* Summary */}
         <div className="flex justify-end mb-6">
