@@ -264,13 +264,13 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     sceneRef.current = scene;
 
     // Camera
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 300);
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.5, 300);
     camera.position.set(30, 22, 35);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, logarithmicDepthBuffer: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
