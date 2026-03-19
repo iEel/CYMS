@@ -31,13 +31,19 @@ export default function CompanySettings() {
     try {
       const res = await fetch('/api/settings/company');
       const json = await res.json();
-      if (json) setData({
-        ...emptyCompany,
-        ...json,
-        branch_type: json.branch_type || 'head_office',
-        branch_number: json.branch_number || '00000',
-        logo_url: json.logo_url || '',
-      });
+      if (json) {
+        setData({
+          company_id: json.company_id,
+          company_name: json.company_name ?? '',
+          tax_id: json.tax_id ?? '',
+          branch_type: json.branch_type ?? 'head_office',
+          branch_number: json.branch_number ?? '00000',
+          address: json.address ?? '',
+          phone: json.phone ?? '',
+          email: json.email ?? '',
+          logo_url: json.logo_url ?? '',
+        });
+      }
     } catch (err) {
       console.error('Load company error:', err);
     } finally {
