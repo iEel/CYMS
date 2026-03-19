@@ -6,9 +6,11 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { formatShortDate } from '@/lib/utils';
 import ContainerSearch from '@/components/yard/ContainerSearch';
 import YardAudit from '@/components/yard/YardAudit';
+import ContainerCardPWA from '@/components/yard/ContainerCardPWA';
 import {
   MapPin, Search, Filter, ChevronDown, Cuboid, ClipboardCheck, SearchIcon,
   Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star,
+  Smartphone,
 } from 'lucide-react';
 
 const YardViewer3D = dynamic(() => import('@/components/yard/YardViewer3D'), {
@@ -86,7 +88,7 @@ export default function YardPage() {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
   const [selectedContainer, setSelectedContainer] = useState<ContainerData | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'search' | 'audit' | 'allocate'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'search' | 'allocate' | 'audit' | 'pwa'>('overview');
   const [highlightNumber, setHighlightNumber] = useState<string>('');
 
   // Allocate state
@@ -175,6 +177,7 @@ export default function YardPage() {
           { id: 'search' as const, label: 'ค้นหาตู้', icon: <Search size={14} /> },
           { id: 'allocate' as const, label: 'จัดวางตู้', icon: <Wand2 size={14} /> },
           { id: 'audit' as const, label: 'ตรวจนับ', icon: <ClipboardCheck size={14} /> },
+          { id: 'pwa' as const, label: 'PWA มือถือ', icon: <Smartphone size={14} /> },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -629,6 +632,10 @@ export default function YardPage() {
           zone_type: z.zone_type,
           container_count: z.container_count,
         }))} />
+      )}
+
+      {activeTab === 'pwa' && (
+        <ContainerCardPWA yardId={yardId} containers={containers} />
       )}
     </div>
   );
