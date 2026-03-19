@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="80" fill="#3B82F6"/>
+  <g transform="translate(256,240)">
+    <!-- Container body -->
+    <rect x="-120" y="-70" width="240" height="140" rx="12" fill="none" stroke="white" stroke-width="12"/>
+    <!-- Vertical corrugation lines -->
+    <line x1="-50" y1="-70" x2="-50" y2="70" stroke="white" stroke-width="6"/>
+    <line x1="20" y1="-70" x2="20" y2="70" stroke="white" stroke-width="6"/>
+    <line x1="90" y1="-70" x2="90" y2="70" stroke="white" stroke-width="6"/>
+    <!-- Crane hook -->
+    <line x1="0" y1="-140" x2="0" y2="-82" stroke="white" stroke-width="10"/>
+    <circle cx="0" cy="-82" r="14" fill="white"/>
+    <!-- Text -->
+    <text x="0" y="130" text-anchor="middle" font-family="Inter,sans-serif" font-size="48" font-weight="700" fill="white">CYMS</text>
+  </g>
+</svg>

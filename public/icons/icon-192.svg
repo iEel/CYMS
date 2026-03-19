@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="32" fill="#3B82F6"/>
+  <g transform="translate(96,96)">
+    <!-- Container body -->
+    <rect x="-52" y="-30" width="104" height="60" rx="6" fill="none" stroke="white" stroke-width="6"/>
+    <!-- Vertical lines -->
+    <line x1="-20" y1="-30" x2="-20" y2="30" stroke="white" stroke-width="3"/>
+    <line x1="12" y1="-30" x2="12" y2="30" stroke="white" stroke-width="3"/>
+    <!-- Crane hook -->
+    <line x1="0" y1="-60" x2="0" y2="-36" stroke="white" stroke-width="5"/>
+    <circle cx="0" cy="-36" r="6" fill="white"/>
+    <!-- Text -->
+    <text x="0" y="58" text-anchor="middle" font-family="Inter,sans-serif" font-size="18" font-weight="700" fill="white">CYMS</text>
+  </g>
+</svg>

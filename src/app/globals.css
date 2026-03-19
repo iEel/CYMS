@@ -213,3 +213,46 @@ body {
 .page-enter {
   animation: fadeIn var(--duration-normal) ease-out;
 }
+
+/* ===================================
+   Toast Slide In
+   =================================== */
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* ===================================
+   Pulse Glow (for selected items)
+   =================================== */
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+}
+
+.pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* ===================================
+   Focus Ring
+   =================================== */
+
+input:focus, select:focus, textarea:focus {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+/* ===================================
+   Print Styles
+   =================================== */
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; }
+}
