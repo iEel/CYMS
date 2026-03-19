@@ -116,48 +116,7 @@ function createContainerMesh(ctr: ContainerBlock, scene: THREE.Scene): THREE.Gro
   const edges = new THREE.LineSegments(edgesGeo, edgesMat);
   group.add(edges);
 
-  // === ร่องลอนคลื่น (corrugation) — เส้นแนวตั้งด้านข้าง ===
-  const corrugationMat = new THREE.LineBasicMaterial({
-    color: new THREE.Color(baseColor).multiplyScalar(0.7),
-    transparent: true,
-    opacity: 0.4,
-  });
-  const corrCount = is40 ? 16 : 8;
-  for (let i = 1; i < corrCount; i++) {
-    const xPos = -w / 2 + (w * i / corrCount);
-    const lineGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(xPos, -h / 2 + 0.04, d / 2 + 0.005),
-      new THREE.Vector3(xPos, h / 2 - 0.04, d / 2 + 0.005),
-    ]);
-    const line = new THREE.Line(lineGeo, corrugationMat);
-    group.add(line);
-    // back side
-    const lineBack = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(xPos, -h / 2 + 0.04, -d / 2 - 0.005),
-      new THREE.Vector3(xPos, h / 2 - 0.04, -d / 2 - 0.005),
-    ]);
-    group.add(new THREE.Line(lineBack, corrugationMat));
-  }
-
-  // === ประตูท้ายตู้ (door end) — แถบแนวตั้ง 2 บาน + handle ===
-  const doorMat = new THREE.LineBasicMaterial({
-    color: new THREE.Color(baseColor).multiplyScalar(0.6),
-    transparent: true,
-    opacity: 0.7,
-  });
-  // เส้นแบ่งประตู 2 บาน (แนวตั้งกลาง)
-  const doorCenter = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(w / 2 + 0.005, -h / 2 + 0.06, -d * 0.35),
-    new THREE.Vector3(w / 2 + 0.005, h / 2 - 0.06, -d * 0.35),
-  ]);
-  group.add(new THREE.Line(doorCenter, doorMat));
-  const doorCenter2 = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(w / 2 + 0.005, -h / 2 + 0.06, d * 0.35),
-    new THREE.Vector3(w / 2 + 0.005, h / 2 - 0.06, d * 0.35),
-  ]);
-  group.add(new THREE.Line(doorCenter2, doorMat));
-
-  // Handle bars (แถบล็อค)
+  // Handle bars (แถบล็อค) — ยื่นออกจากผิวตู้ชัดเจน ไม่มี z-fight
   const handleMat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(baseColor).multiplyScalar(0.4),
     roughness: 0.3,
@@ -166,11 +125,11 @@ function createContainerMesh(ctr: ContainerBlock, scene: THREE.Scene): THREE.Gro
   for (const zOff of [-d * 0.18, d * 0.18]) {
     const handleGeo = new THREE.CylinderGeometry(0.015, 0.015, h * 0.7, 4);
     const handle = new THREE.Mesh(handleGeo, handleMat);
-    handle.position.set(w / 2 + 0.02, 0, zOff);
+    handle.position.set(w / 2 + 0.03, 0, zOff);
     group.add(handle);
   }
 
-  // === Corner posts (4 มุม) ===
+  // === Corner posts (4 มุม) — อยู่ภายใน body ไม่ z-fight ===
   const cornerMat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(baseColor).multiplyScalar(0.45),
     roughness: 0.3,
@@ -179,34 +138,25 @@ function createContainerMesh(ctr: ContainerBlock, scene: THREE.Scene): THREE.Gro
   const cornerSize = 0.06;
   for (const xSign of [-1, 1]) {
     for (const zSign of [-1, 1]) {
-      const cornerGeo = new THREE.BoxGeometry(cornerSize, h + 0.01, cornerSize);
+      const cornerGeo = new THREE.BoxGeometry(cornerSize, h + 0.02, cornerSize);
       const corner = new THREE.Mesh(cornerGeo, cornerMat);
       corner.position.set(
         xSign * (w / 2 - cornerSize / 2),
         0,
         zSign * (d / 2 - cornerSize / 2),
       );
+      corner.renderOrder = 1;
       group.add(corner);
     }
   }
 
-  // === หลังคา (top rail) — เส้นเข้มกว่าบนหลังคา ===
-  const topRailGeo = new THREE.BoxGeometry(w + 0.01, 0.02, d + 0.01);
-  const topRailMat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(baseColor).multiplyScalar(0.75),
-    roughness: 0.6,
-    metalness: 0.3,
-  });
-  const topRail = new THREE.Mesh(topRailGeo, topRailMat);
-  topRail.position.y = h / 2;
-  group.add(topRail);
-
   // === laden/empty indicator — ตู้เต็มจะมี top stripe สีขาว ===
   if (ctr.is_laden) {
-    const stripGeo = new THREE.BoxGeometry(w * 0.3, 0.025, d * 0.5);
+    const stripGeo = new THREE.BoxGeometry(w * 0.3, 0.03, d * 0.5);
     const stripMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25 });
     const strip = new THREE.Mesh(stripGeo, stripMat);
-    strip.position.y = h / 2 + 0.013;
+    strip.position.y = h / 2 + 0.02;
+    strip.renderOrder = 2;
     group.add(strip);
   }
 
