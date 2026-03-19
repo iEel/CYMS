@@ -397,16 +397,31 @@ export default function BillingPage() {
             </div>
             <div className="p-4 space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                <select value={tariffForm.charge_type} onChange={e => setTariffForm({ ...tariffForm, charge_type: e.target.value })} className={inputClass}>
-                  {Object.entries(CHARGE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-                <input type="text" value={tariffForm.description} onChange={e => setTariffForm({ ...tariffForm, description: e.target.value })} className={inputClass} placeholder="รายละเอียด" />
-                <input type="number" min={0} step={0.01} value={tariffForm.rate} onChange={e => setTariffForm({ ...tariffForm, rate: parseFloat(e.target.value) || 0 })} className={inputClass} placeholder="ราคา (฿)" />
-                <select value={tariffForm.unit} onChange={e => setTariffForm({ ...tariffForm, unit: e.target.value })} className={inputClass}>
-                  {Object.entries(UNIT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-                <div className="flex gap-2">
-                  <input type="number" min={0} value={tariffForm.free_days} onChange={e => setTariffForm({ ...tariffForm, free_days: parseInt(e.target.value) || 0 })} className={`${inputClass} w-20`} placeholder="Free" title="Free days" />
+                <div>
+                  <label className={labelClass}>ประเภท</label>
+                  <select value={tariffForm.charge_type} onChange={e => setTariffForm({ ...tariffForm, charge_type: e.target.value })} className={inputClass}>
+                    {Object.entries(CHARGE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>รายละเอียด</label>
+                  <input type="text" value={tariffForm.description} onChange={e => setTariffForm({ ...tariffForm, description: e.target.value })} className={inputClass} placeholder="เช่น ค่าฝากตู้ 20ft" />
+                </div>
+                <div>
+                  <label className={labelClass}>ราคา (฿)</label>
+                  <input type="number" min={0} step={0.01} value={tariffForm.rate || ''} onFocus={e => e.target.select()} onChange={e => setTariffForm({ ...tariffForm, rate: parseFloat(e.target.value) || 0 })} className={inputClass} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className={labelClass}>หน่วย</label>
+                  <select value={tariffForm.unit} onChange={e => setTariffForm({ ...tariffForm, unit: e.target.value })} className={inputClass}>
+                    {Object.entries(UNIT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className={labelClass}>Free Days</label>
+                    <input type="number" min={0} value={tariffForm.free_days || ''} onFocus={e => e.target.select()} onChange={e => setTariffForm({ ...tariffForm, free_days: parseInt(e.target.value) || 0 })} className={inputClass} placeholder="0" />
+                  </div>
                   <button onClick={handleCreateTariff} className="h-10 px-4 rounded-lg bg-blue-600 text-white text-xs font-medium whitespace-nowrap hover:bg-blue-700"><Plus size={12} /></button>
                 </div>
               </div>

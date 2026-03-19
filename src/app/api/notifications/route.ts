@@ -19,14 +19,14 @@ export async function GET(request: NextRequest) {
         SELECT TOP (@limit)
           'gate' AS source,
           g.transaction_type AS event_type,
-          g.container_number,
+          c.container_number,
           g.driver_name,
           g.truck_plate,
           g.eir_number,
           g.created_at AS event_time,
           c.size, c.type
         FROM GateTransactions g
-        LEFT JOIN Containers c ON g.container_number = c.container_number
+        LEFT JOIN Containers c ON g.container_id = c.container_id
         WHERE g.yard_id = @yardId
         ORDER BY g.created_at DESC
       `);

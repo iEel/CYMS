@@ -155,9 +155,11 @@ export default function GatePage() {
     if (!searchQuery) return;
     setSearching(true);
     try {
-      const res = await fetch(`/api/containers?yard_id=${yardId}&status=in_yard&search=${searchQuery}`);
+      const res = await fetch(`/api/containers?yard_id=${yardId}&search=${searchQuery}`);
       const data = await res.json();
-      setSearchResults(Array.isArray(data) ? data : []);
+      const allResults = Array.isArray(data) ? data : [];
+      // Show containers physically in yard: in_yard or hold (ค้างจ่าย)
+      setSearchResults(allResults.filter((c: ContainerResult) => c.status === 'in_yard' || c.status === 'hold'));
     } catch (err) { console.error(err); }
     finally { setSearching(false); }
   };
