@@ -237,8 +237,8 @@ export default function YardsSettings() {
       {yards.map((yard) => (
         <div key={yard.yard_id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           {/* Yard Header */}
-          <button onClick={() => toggleExpand(yard.yard_id)}
-            className="w-full flex items-center justify-between p-5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+          <div onClick={() => toggleExpand(yard.yard_id)} role="button" tabIndex={0}
+            className="w-full flex items-center justify-between p-5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer">
             <div className="flex items-center gap-4">
               <div className={`w-3 h-3 rounded-full ${yard.is_active ? 'bg-[#10B981]' : 'bg-slate-300'}`} />
               <div className="text-left">
@@ -284,7 +284,7 @@ export default function YardsSettings() {
                 </>
               )}
             </div>
-          </button>
+          </div>
 
           {/* Expanded Zones */}
           {expandedYard === yard.yard_id && (
