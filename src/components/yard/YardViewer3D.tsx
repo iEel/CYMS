@@ -99,15 +99,15 @@ function createContainerMesh(ctr: ContainerBlock, _scene: THREE.Scene): THREE.Gr
     specular: 0x333333,
     flatShading: true,
     polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
+    polygonOffsetFactor: 2,
+    polygonOffsetUnits: 2,
   });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.castShadow = true;
   body.receiveShadow = true;
   group.add(body);
 
-  // === เส้นขอบ — polygonOffset บน body ดัน body ถอยหลัง edges จะชนะเสมอ ===
+  // === เส้นขอบ — polygonOffset บน body ดัน body ถอยหลัง ===
   const edgesGeo = new THREE.EdgesGeometry(bodyGeo);
   const edgesMat = new THREE.LineBasicMaterial({
     color: new THREE.Color(baseColor).multiplyScalar(0.4),
@@ -125,30 +125,6 @@ function createContainerMesh(ctr: ContainerBlock, _scene: THREE.Scene): THREE.Gr
     const handle = new THREE.Mesh(handleGeo, handleMat);
     handle.position.set(w / 2 + 0.04, 0, zOff);
     group.add(handle);
-  }
-
-  // === Corner castings — ตำแหน่ง 4 มุม ยื่นออกนอก body ===
-  const cornerMat = new THREE.MeshPhongMaterial({
-    color: new THREE.Color(baseColor).multiplyScalar(0.3),
-    shininess: 60,
-  });
-  const cs = 0.08;
-  for (const xSign of [-1, 1]) {
-    for (const zSign of [-1, 1]) {
-      const cornerGeo = new THREE.BoxGeometry(cs, cs, cs);
-      const corner = new THREE.Mesh(cornerGeo, cornerMat);
-      // วางที่มุมบน/ล่าง — ยื่นออกนอก body เล็กน้อย
-      corner.position.set(
-        xSign * (w / 2),
-        h / 2,
-        zSign * (d / 2),
-      );
-      group.add(corner);
-      // มุมล่าง
-      const corner2 = corner.clone();
-      corner2.position.y = -h / 2;
-      group.add(corner2);
-    }
   }
 
   return group;
