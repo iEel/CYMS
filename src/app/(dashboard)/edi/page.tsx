@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import * as XLSX from 'xlsx';
 import {
   Loader2, Search, FileText, Upload, ShieldCheck, Plus, Ship, Package,
   CheckCircle2, XCircle, Clock, AlertTriangle, RotateCcw, Anchor,
+  FileSpreadsheet, Trash2,
 } from 'lucide-react';
 
 interface BookingRow {
@@ -37,6 +39,13 @@ export default function EDIPage() {
   });
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // File Import
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileRows, setFileRows] = useState<Record<string, string>[]>([]);
+  const [fileName, setFileName] = useState('');
+  const [fileBatchLoading, setFileBatchLoading] = useState(false);
+  const [fileBatchResult, setFileBatchResult] = useState<{ success: number; failed: number } | null>(null);
 
   // Validate
   const [valForm, setValForm] = useState({ container_number: '', seal_number: '' });
@@ -75,6 +84,91 @@ export default function EDIPage() {
       }
     } catch (err) { console.error(err); setImportResult({ success: false, message: '❌ เกิดข้อผิดพลาด' }); }
     finally { setImportLoading(false); }
+  };
+
+  // File parsing (CSV / Excel)
+  const handleFileUpload = (file: File) => {
+    setFileName(file.name);
+    setFileBatchResult(null);
+    const reader = new FileReader();
+
+    if (file.name.endsWith('.csv') || file.name.endsWith('.txt')) {
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+        if (lines.length < 2) return;
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/["']/g, ''));
+        const rows = lines.slice(1).map(line => {
+          const vals = line.split(',').map(v => v.trim().replace(/["']/g, ''));
+          const row: Record<string, string> = {};
+          headers.forEach((h, i) => { row[h] = vals[i] || ''; });
+          return row;
+        });
+        setFileRows(rows);
+      };
+      reader.readAsText(file);
+    } else {
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
+        // Normalize headers to lowercase
+        const rows = json.map(row => {
+          const normalized: Record<string, string> = {};
+          Object.entries(row).forEach(([k, v]) => {
+            normalized[k.toLowerCase().trim()] = String(v);
+          });
+          return normalized;
+        });
+        setFileRows(rows);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  };
+
+  // Map file columns to booking fields
+  const mapRow = (row: Record<string, string>) => {
+    const get = (...keys: string[]) => {
+      for (const k of keys) {
+        const val = row[k] || row[k.replace(/_/g, ' ')] || row[k.replace(/_/g, '')];
+        if (val) return val;
+      }
+      return '';
+    };
+    return {
+      booking_number: get('booking_number', 'booking', 'bk_number', 'booking_no'),
+      booking_type: get('booking_type', 'type') || 'import',
+      vessel_name: get('vessel_name', 'vessel', 'ship'),
+      voyage_number: get('voyage_number', 'voyage', 'voyage_no'),
+      container_count: parseInt(get('container_count', 'count', 'qty')) || 1,
+      container_size: get('container_size', 'size') || '20',
+      container_type: get('container_type', 'ctr_type') || 'GP',
+      eta: get('eta', 'arrival'),
+      seal_number: get('seal_number', 'seal', 'seal_no'),
+      notes: get('notes', 'remark', 'remarks'),
+    };
+  };
+
+  const handleBatchImport = async () => {
+    setFileBatchLoading(true);
+    setFileBatchResult(null);
+    let success = 0, failed = 0;
+    for (const row of fileRows) {
+      const mapped = mapRow(row);
+      if (!mapped.booking_number) { failed++; continue; }
+      try {
+        const res = await fetch('/api/edi/bookings', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ yard_id: yardId, ...mapped }),
+        });
+        const data = await res.json();
+        if (data.success) success++; else failed++;
+      } catch { failed++; }
+    }
+    setFileBatchResult({ success, failed });
+    setFileBatchLoading(false);
+    if (success > 0) fetchBookings();
   };
 
   const handleValidate = async () => {
@@ -207,9 +301,93 @@ export default function EDIPage() {
               <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600"><Upload size={20} /></div>
               <div>
                 <h3 className="font-semibold text-slate-800 dark:text-white">นำเข้า Booking / Manifest</h3>
-                <p className="text-xs text-slate-400">กรอกข้อมูล Booking จากสายเรือ</p>
+                <p className="text-xs text-slate-400">กรอกข้อมูลด้วยตนเอง หรือ อัพโหลดไฟล์ CSV / Excel</p>
               </div>
             </div>
+          </div>
+
+          {/* ===== File Upload Section ===== */}
+          <div className="px-5 pt-4">
+            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden"
+              onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }} />
+
+            <div onClick={() => fileRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-blue-400', 'bg-blue-50/50'); }}
+              onDragLeave={e => { e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50/50'); }}
+              onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50/50'); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }}
+              className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all">
+              <FileSpreadsheet size={32} className="mx-auto text-slate-400 mb-2" />
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">ลากไฟล์มาวางที่นี่ หรือ คลิกเพื่อเลือกไฟล์</p>
+              <p className="text-[10px] text-slate-400 mt-1">รองรับ .csv, .xlsx, .xls — คอลัมน์: booking_number, vessel_name, voyage_number, container_count, container_size, container_type, seal_number</p>
+            </div>
+
+            {/* File Preview */}
+            {fileRows.length > 0 && (
+              <div className="mt-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <FileSpreadsheet size={14} className="text-emerald-500" />
+                    {fileName} — {fileRows.length} รายการ
+                  </p>
+                  <button onClick={() => { setFileRows([]); setFileName(''); setFileBatchResult(null); }}
+                    className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"><Trash2 size={12} /> ลบ</button>
+                </div>
+
+                {/* Preview table */}
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-700/50">
+                        <th className="px-2 py-2 text-left">#</th>
+                        <th className="px-2 py-2 text-left">Booking No.</th>
+                        <th className="px-2 py-2 text-left">Type</th>
+                        <th className="px-2 py-2 text-left">Vessel</th>
+                        <th className="px-2 py-2 text-left">Size</th>
+                        <th className="px-2 py-2 text-left">Seal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                      {fileRows.slice(0, 10).map((row, i) => {
+                        const m = mapRow(row);
+                        return (
+                          <tr key={i} className={m.booking_number ? '' : 'bg-red-50/50 dark:bg-red-900/10'}>
+                            <td className="px-2 py-1.5 text-slate-400">{i + 1}</td>
+                            <td className="px-2 py-1.5 font-mono font-semibold">{m.booking_number || <span className="text-red-400">ไม่มี</span>}</td>
+                            <td className="px-2 py-1.5">{m.booking_type}</td>
+                            <td className="px-2 py-1.5">{m.vessel_name}</td>
+                            <td className="px-2 py-1.5">{m.container_size}&apos;{m.container_type}</td>
+                            <td className="px-2 py-1.5 font-mono">{m.seal_number || '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {fileRows.length > 10 && (
+                    <div className="p-2 text-center text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-700/30">แสดง 10 จาก {fileRows.length} รายการ</div>
+                  )}
+                </div>
+
+                <button onClick={handleBatchImport} disabled={fileBatchLoading}
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
+                  {fileBatchLoading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                  นำเข้าทั้งหมด ({fileRows.length} รายการ)
+                </button>
+
+                {fileBatchResult && (
+                  <div className={`p-3 rounded-xl text-sm ${
+                    fileBatchResult.failed === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                  }`}>
+                    ✅ สำเร็จ {fileBatchResult.success} รายการ
+                    {fileBatchResult.failed > 0 && ` | ❌ ล้มเหลว ${fileBatchResult.failed} รายการ`}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ===== Divider ===== */}
+          <div className="mx-5 mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+            <p className="text-xs text-slate-400 font-medium mb-3">หรือ กรอกข้อมูลด้วยตนเอง</p>
           </div>
           <div className="p-5 space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
