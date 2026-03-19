@@ -7,6 +7,8 @@ interface CompanyData {
   company_id?: number;
   company_name: string;
   tax_id: string;
+  branch_type: string;
+  branch_number: string;
   address: string;
   phone: string;
   email: string;
@@ -14,7 +16,7 @@ interface CompanyData {
 }
 
 const emptyCompany: CompanyData = {
-  company_name: '', tax_id: '', address: '', phone: '', email: '', logo_url: '',
+  company_name: '', tax_id: '', branch_type: 'head_office', branch_number: '00000', address: '', phone: '', email: '', logo_url: '',
 };
 
 export default function CompanySettings() {
@@ -208,6 +210,32 @@ export default function CompanySettings() {
             placeholder="0-0000-00000-00-0"
             className={`${inputClass} font-mono`}
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            ประเภทสาขา
+          </label>
+          <div className="flex items-center gap-4 h-11">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" value="head_office" checked={data.branch_type === 'head_office'}
+                onChange={() => setData({ ...data, branch_type: 'head_office', branch_number: '00000' })}
+                className="accent-blue-600" />
+              <span className="text-sm text-slate-700 dark:text-slate-300">สำนักงานใหญ่</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" value="branch" checked={data.branch_type === 'branch'}
+                onChange={() => setData({ ...data, branch_type: 'branch', branch_number: '' })}
+                className="accent-blue-600" />
+              <span className="text-sm text-slate-700 dark:text-slate-300">สาขาที่</span>
+            </label>
+            {data.branch_type === 'branch' && (
+              <input type="text" value={data.branch_number}
+                onChange={(e) => setData({ ...data, branch_number: e.target.value })}
+                placeholder="00001"
+                className="h-11 w-28 px-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm font-mono text-slate-800 dark:text-white outline-none focus:border-blue-500" />
+            )}
+          </div>
         </div>
 
         <div>
