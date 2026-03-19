@@ -121,12 +121,7 @@ export default function PrintInvoicePage() {
     load();
   }, [invoiceId]);
 
-  // Auto-print after loaded
-  useEffect(() => {
-    if (!loading && invoice) {
-      setTimeout(() => window.print(), 500);
-    }
-  }, [loading, invoice]);
+  // Removed auto-print — user clicks the print button instead
 
   if (loading) {
     return (
