@@ -77,7 +77,7 @@ const SHIPPING_COLORS: Record<string, number> = {
   'PIL':        0xE31937,
 };
 
-// สร้าง container mesh — single box only (ไม่มี z-fighting)
+// สร้าง container mesh — สวยงาม + ไม่กระพริบ
 function createContainerMesh(ctr: ContainerBlock, _scene: THREE.Scene): THREE.Group {
   const is40 = ctr.size === '40' || ctr.size === '45';
   const w = is40 ? CW_40 : CW_20;
@@ -91,18 +91,66 @@ function createContainerMesh(ctr: ContainerBlock, _scene: THREE.Scene): THREE.Gr
   if (ctr.status === 'hold') baseColor = 0xF59E0B;
   if (ctr.status === 'repair') baseColor = 0xEF4444;
 
-  // Single box — one geometry, one material, zero z-fighting
-  const geo = new THREE.BoxGeometry(w, h, d);
-  const mat = new THREE.MeshPhongMaterial({
+  // === ตัวตู้หลัก ===
+  const bodyGeo = new THREE.BoxGeometry(w, h, d);
+  const bodyMat = new THREE.MeshPhongMaterial({
     color: baseColor,
     shininess: 25,
     specular: 0x333333,
     flatShading: true,
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  group.add(mesh);
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+
+  // === เส้นขอบ — depthTest:false ป้องกัน z-fight 100% ===
+  const edgesGeo = new THREE.EdgesGeometry(bodyGeo);
+  const edgesMat = new THREE.LineBasicMaterial({
+    color: new THREE.Color(baseColor).multiplyScalar(0.4),
+    depthTest: false,
+    transparent: true,
+    opacity: 0.6,
+  });
+  const edges = new THREE.LineSegments(edgesGeo, edgesMat);
+  edges.renderOrder = 1;
+  group.add(edges);
+
+  // === Handle bars (ยื่นออก 0.04 จากผิว — ไม่ z-fight) ===
+  const handleMat = new THREE.MeshPhongMaterial({
+    color: new THREE.Color(baseColor).multiplyScalar(0.35),
+    shininess: 50,
+  });
+  for (const zOff of [-d * 0.18, d * 0.18]) {
+    const handleGeo = new THREE.CylinderGeometry(0.018, 0.018, h * 0.7, 6);
+    const handle = new THREE.Mesh(handleGeo, handleMat);
+    handle.position.set(w / 2 + 0.04, 0, zOff);
+    group.add(handle);
+  }
+
+  // === Corner castings — ตำแหน่ง 4 มุม ยื่นออกนอก body ===
+  const cornerMat = new THREE.MeshPhongMaterial({
+    color: new THREE.Color(baseColor).multiplyScalar(0.3),
+    shininess: 60,
+  });
+  const cs = 0.08;
+  for (const xSign of [-1, 1]) {
+    for (const zSign of [-1, 1]) {
+      const cornerGeo = new THREE.BoxGeometry(cs, cs, cs);
+      const corner = new THREE.Mesh(cornerGeo, cornerMat);
+      // วางที่มุมบน/ล่าง — ยื่นออกนอก body เล็กน้อย
+      corner.position.set(
+        xSign * (w / 2),
+        h / 2,
+        zSign * (d / 2),
+      );
+      group.add(corner);
+      // มุมล่าง
+      const corner2 = corner.clone();
+      corner2.position.y = -h / 2;
+      group.add(corner2);
+    }
+  }
 
   return group;
 }
