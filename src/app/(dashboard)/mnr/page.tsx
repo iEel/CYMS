@@ -5,7 +5,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import {
   Loader2, Search, Wrench, FileCheck2, Plus, Package, CheckCircle2,
   XCircle, Clock, AlertTriangle, RotateCcw, Send, ThumbsUp, Play,
-  DollarSign, Ban, BookOpen, Camera, ImageIcon,
+  DollarSign, Ban, BookOpen, Camera, ImageIcon, Save,
 } from 'lucide-react';
 
 interface EORRow {
@@ -19,19 +19,17 @@ interface ContainerOption {
   container_id: number; container_number: string; size: string; type: string; shipping_line: string;
 }
 
-// Standard CEDEX-like damage codes
-const CEDEX_CODES = [
-  { code: 'DT01', component: 'Panel', damage: 'Dent', repair: 'Straighten', labor_hours: 1.5, material_cost: 200 },
-  { code: 'DT02', component: 'Panel', damage: 'Hole', repair: 'Patch & weld', labor_hours: 3.0, material_cost: 500 },
-  { code: 'RS01', component: 'Panel', damage: 'Rust', repair: 'Sand & repaint', labor_hours: 2.0, material_cost: 300 },
-  { code: 'CR01', component: 'Corner Post', damage: 'Crack', repair: 'Weld repair', labor_hours: 4.0, material_cost: 800 },
-  { code: 'DR01', component: 'Door', damage: 'Hinge broken', repair: 'Replace hinge', labor_hours: 2.5, material_cost: 600 },
-  { code: 'DR02', component: 'Door', damage: 'Gasket damaged', repair: 'Replace gasket', labor_hours: 1.0, material_cost: 400 },
-  { code: 'FL01', component: 'Floor', damage: 'Delamination', repair: 'Patch floor', labor_hours: 3.5, material_cost: 700 },
-  { code: 'FL02', component: 'Floor', damage: 'Hole', repair: 'Replace section', labor_hours: 5.0, material_cost: 1200 },
-  { code: 'RF01', component: 'Roof', damage: 'Puncture', repair: 'Patch & seal', labor_hours: 2.0, material_cost: 350 },
-  { code: 'RR01', component: 'Rail', damage: 'Bent', repair: 'Straighten rail', labor_hours: 2.5, material_cost: 450 },
-];
+// Standard CEDEX-like damage codes — loaded from DB
+interface CedexCode {
+  cedex_id: number;
+  code: string;
+  component: string;
+  damage: string;
+  repair: string;
+  labor_hours: number;
+  material_cost: number;
+  is_active: boolean;
+}
 
 export default function MnRPage() {
   const { session } = useAuth();
@@ -51,6 +49,28 @@ export default function MnRPage() {
   const [repairPhotos, setRepairPhotos] = useState<string[]>([]);
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // CEDEX Management
+  const [cedexCodes, setCedexCodes] = useState<CedexCode[]>([]);
+  const [cedexLoading, setCedexLoading] = useState(false);
+  const [showCedexForm, setShowCedexForm] = useState(false);
+  const [editingCedex, setEditingCedex] = useState<CedexCode | null>(null);
+  const [cedexForm, setCedexForm] = useState({
+    code: '', component: '', damage: '', repair: '', labor_hours: 0, material_cost: 0,
+  });
+  const [cedexSaving, setCedexSaving] = useState(false);
+
+  const fetchCedexCodes = useCallback(async () => {
+    setCedexLoading(true);
+    try {
+      const res = await fetch('/api/mnr/cedex');
+      const data = await res.json();
+      setCedexCodes(data.codes || []);
+    } catch (err) { console.error(err); }
+    finally { setCedexLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchCedexCodes(); }, [fetchCedexCodes]);
 
   const fetchOrders = useCallback(async () => {
     setListLoading(true);
@@ -75,15 +95,15 @@ export default function MnRPage() {
   };
 
   const estimatedCost = selectedCodes.reduce((sum, code) => {
-    const c = CEDEX_CODES.find(cx => cx.code === code);
-    return sum + (c ? c.labor_hours * 350 + c.material_cost : 0); // 350 ฿/hr labor rate
+    const c = cedexCodes.find(cx => cx.code === code);
+    return sum + (c ? c.labor_hours * 350 + c.material_cost : 0);
   }, 0);
 
   const handleCreate = async () => {
     if (!selectedContainer || selectedCodes.length === 0) return;
     setCreateLoading(true); setCreateResult(null);
     try {
-      const damages = selectedCodes.map(code => CEDEX_CODES.find(cx => cx.code === code));
+      const damages = selectedCodes.map(code => cedexCodes.find(cx => cx.code === code));
       const res = await fetch('/api/mnr', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -100,6 +120,54 @@ export default function MnRPage() {
       }
     } catch (err) { console.error(err); }
     finally { setCreateLoading(false); }
+  };
+
+  const handleSaveCedex = async () => {
+    setCedexSaving(true);
+    try {
+      const url = '/api/mnr/cedex';
+      const method = editingCedex ? 'PUT' : 'POST';
+      const payload = editingCedex
+        ? { ...cedexForm, cedex_id: editingCedex.cedex_id, is_active: editingCedex.is_active }
+        : cedexForm;
+      const res = await fetch(url, {
+        method, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success || data.data) {
+        setShowCedexForm(false);
+        setEditingCedex(null);
+        setCedexForm({ code: '', component: '', damage: '', repair: '', labor_hours: 0, material_cost: 0 });
+        fetchCedexCodes();
+      } else {
+        alert(data.error || 'เกิดข้อผิดพลาด');
+      }
+    } catch (err) { console.error(err); }
+    finally { setCedexSaving(false); }
+  };
+
+  const handleDeleteCedex = async (id: number) => {
+    if (!confirm('ยืนยันลบรหัส CEDEX นี้?')) return;
+    try {
+      await fetch(`/api/mnr/cedex?id=${id}`, { method: 'DELETE' });
+      fetchCedexCodes();
+    } catch (err) { console.error(err); }
+  };
+
+  const startEditCedex = (c: CedexCode) => {
+    setEditingCedex(c);
+    setCedexForm({
+      code: c.code, component: c.component, damage: c.damage,
+      repair: c.repair, labor_hours: c.labor_hours, material_cost: c.material_cost,
+    });
+    setShowCedexForm(true);
+  };
+
+  const startCreateCedex = () => {
+    setEditingCedex(null);
+    setCedexForm({ code: '', component: '', damage: '', repair: '', labor_hours: 0, material_cost: 0 });
+    setShowCedexForm(true);
   };
 
   const updateOrder = async (eorId: number, action: string) => {
@@ -265,7 +333,7 @@ export default function MnRPage() {
             <div>
               <label className={labelClass}>เลือกประเภทความเสียหาย (CEDEX)</label>
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                {CEDEX_CODES.map(c => (
+                {cedexCodes.map((c: CedexCode) => (
                   <label key={c.code} className={`flex items-center gap-3 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
                     selectedCodes.includes(c.code) ? 'border-violet-400 bg-violet-50 dark:bg-violet-900/10' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
                   }`}>
@@ -333,36 +401,126 @@ export default function MnRPage() {
       {/* =================== CEDEX TAB =================== */}
       {activeTab === 'cedex' && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 dark:border-slate-700">
-            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><BookOpen size={16} /> CEDEX Damage Codes Reference</h3>
+          <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><BookOpen size={16} /> CEDEX Damage Codes</h3>
+            <button onClick={startCreateCedex}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs rounded-lg hover:bg-violet-700 transition-colors">
+              <Plus size={14} /> เพิ่มรหัส
+            </button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-900/30 text-slate-500">
-                <tr>
-                  <th className="text-left px-4 py-2.5 font-semibold">รหัส</th>
-                  <th className="text-left px-4 py-2.5 font-semibold">ชิ้นส่วน</th>
-                  <th className="text-left px-4 py-2.5 font-semibold">ความเสียหาย</th>
-                  <th className="text-left px-4 py-2.5 font-semibold">วิธีซ่อม</th>
-                  <th className="text-right px-4 py-2.5 font-semibold">ชม.แรงงาน</th>
-                  <th className="text-right px-4 py-2.5 font-semibold">ค่าวัสดุ</th>
-                  <th className="text-right px-4 py-2.5 font-semibold">รวม (฿)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                {CEDEX_CODES.map(c => (
-                  <tr key={c.code} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                    <td className="px-4 py-2.5 font-mono font-semibold text-violet-600">{c.code}</td>
-                    <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{c.component}</td>
-                    <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{c.damage}</td>
-                    <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{c.repair}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-500">{c.labor_hours}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-500">฿{c.material_cost.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-slate-800 dark:text-white">฿{(c.labor_hours * 350 + c.material_cost).toLocaleString()}</td>
+
+          {/* Form Modal */}
+          {showCedexForm && (
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-violet-50/50 dark:bg-violet-900/10">
+              <h4 className="text-sm font-semibold text-slate-800 dark:text-white mb-3">
+                {editingCedex ? `แก้ไข ${editingCedex.code}` : 'เพิ่มรหัส CEDEX ใหม่'}
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">รหัส</label>
+                  <input type="text" value={cedexForm.code}
+                    onChange={e => setCedexForm({ ...cedexForm, code: e.target.value.toUpperCase() })}
+                    placeholder="DT01" disabled={!!editingCedex}
+                    className={`${inputClass} font-mono ${editingCedex ? 'opacity-50' : ''}`} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">ชิ้นส่วน</label>
+                  <input type="text" value={cedexForm.component}
+                    onChange={e => setCedexForm({ ...cedexForm, component: e.target.value })}
+                    placeholder="Panel" className={inputClass} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">ความเสียหาย</label>
+                  <input type="text" value={cedexForm.damage}
+                    onChange={e => setCedexForm({ ...cedexForm, damage: e.target.value })}
+                    placeholder="Dent" className={inputClass} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">วิธีซ่อม</label>
+                  <input type="text" value={cedexForm.repair}
+                    onChange={e => setCedexForm({ ...cedexForm, repair: e.target.value })}
+                    placeholder="Straighten" className={inputClass} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">ชม.แรงงาน</label>
+                  <input type="number" step="0.5" value={cedexForm.labor_hours}
+                    onChange={e => setCedexForm({ ...cedexForm, labor_hours: parseFloat(e.target.value) || 0 })}
+                    className={inputClass} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">ค่าวัสดุ (฿)</label>
+                  <input type="number" step="50" value={cedexForm.material_cost}
+                    onChange={e => setCedexForm({ ...cedexForm, material_cost: parseFloat(e.target.value) || 0 })}
+                    className={inputClass} />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-3">
+                <button onClick={handleSaveCedex} disabled={cedexSaving || !cedexForm.code || !cedexForm.component}
+                  className="px-4 py-2 bg-violet-600 text-white text-xs rounded-lg hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
+                  {cedexSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  {editingCedex ? 'บันทึก' : 'เพิ่ม'}
+                </button>
+                <button onClick={() => { setShowCedexForm(false); setEditingCedex(null); }}
+                  className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-lg hover:bg-slate-300">
+                  ยกเลิก
+                </button>
+                <span className="text-xs text-slate-400 ml-2">
+                  รวม: ฿{(cedexForm.labor_hours * 350 + cedexForm.material_cost).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {cedexLoading ? (
+            <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto" size={24} /></div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-900/30 text-slate-500">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-semibold">รหัส</th>
+                    <th className="text-left px-4 py-2.5 font-semibold">ชิ้นส่วน</th>
+                    <th className="text-left px-4 py-2.5 font-semibold">ความเสียหาย</th>
+                    <th className="text-left px-4 py-2.5 font-semibold">วิธีซ่อม</th>
+                    <th className="text-right px-4 py-2.5 font-semibold">ชม.แรงงาน</th>
+                    <th className="text-right px-4 py-2.5 font-semibold">ค่าวัสดุ</th>
+                    <th className="text-right px-4 py-2.5 font-semibold">รวม (฿)</th>
+                    <th className="text-center px-4 py-2.5 font-semibold">จัดการ</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {cedexCodes.map((c: CedexCode) => (
+                    <tr key={c.cedex_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                      <td className="px-4 py-2.5 font-mono font-semibold text-violet-600">{c.code}</td>
+                      <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{c.component}</td>
+                      <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{c.damage}</td>
+                      <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{c.repair}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-500">{c.labor_hours}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-500">฿{c.material_cost.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-slate-800 dark:text-white">฿{(c.labor_hours * 350 + c.material_cost).toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => startEditCedex(c)}
+                            className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded">
+                            <Wrench size={12} />
+                          </button>
+                          <button onClick={() => handleDeleteCedex(c.cedex_id)}
+                            className="p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded">
+                            <Ban size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {cedexCodes.length === 0 && (
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">ยังไม่มีรหัส CEDEX — กดปุ่ม "เพิ่มรหัส" หรือรัน migration</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="p-3 border-t border-slate-100 dark:border-slate-700 text-[10px] text-slate-400">
+            ทั้งหมด {cedexCodes.length} รายการ | อัตราแรงงาน 350 ฿/ชม.
           </div>
         </div>
       )}
