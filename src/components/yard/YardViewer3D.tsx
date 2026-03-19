@@ -77,11 +77,11 @@ const SHIPPING_COLORS: Record<string, number> = {
   'PIL':        0xE31937,
 };
 
-// สร้าง container mesh พร้อมรายละเอียด
-function createContainerMesh(ctr: ContainerBlock, scene: THREE.Scene): THREE.Group {
+// สร้าง container mesh — single box only (ไม่มี z-fighting)
+function createContainerMesh(ctr: ContainerBlock, _scene: THREE.Scene): THREE.Group {
   const is40 = ctr.size === '40' || ctr.size === '45';
   const w = is40 ? CW_40 : CW_20;
-  const h = ctr.size === '45' ? CH * 1.12 : CH; // 45ft = High Cube
+  const h = ctr.size === '45' ? CH * 1.12 : CH;
   const d = CD;
 
   const group = new THREE.Group();
@@ -91,74 +91,18 @@ function createContainerMesh(ctr: ContainerBlock, scene: THREE.Scene): THREE.Gro
   if (ctr.status === 'hold') baseColor = 0xF59E0B;
   if (ctr.status === 'repair') baseColor = 0xEF4444;
 
-  // === ตัวตู้หลัก ===
-  const bodyGeo = new THREE.BoxGeometry(w, h, d);
-  const bodyMat = new THREE.MeshStandardMaterial({
+  // Single box — one geometry, one material, zero z-fighting
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mat = new THREE.MeshPhongMaterial({
     color: baseColor,
-    roughness: 0.55,
-    metalness: 0.35,
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
+    shininess: 25,
+    specular: 0x333333,
+    flatShading: true,
   });
-  const body = new THREE.Mesh(bodyGeo, bodyMat);
-  body.castShadow = true;
-  body.receiveShadow = true;
-  group.add(body);
-
-  // === เส้นขอบ (wireframe edges) ===
-  const edgesGeo = new THREE.EdgesGeometry(bodyGeo);
-  const edgesMat = new THREE.LineBasicMaterial({
-    color: new THREE.Color(baseColor).multiplyScalar(0.5),
-    transparent: true,
-    opacity: 0.8,
-  });
-  const edges = new THREE.LineSegments(edgesGeo, edgesMat);
-  group.add(edges);
-
-  // Handle bars (แถบล็อค) — ยื่นออกจากผิวตู้ชัดเจน ไม่มี z-fight
-  const handleMat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(baseColor).multiplyScalar(0.4),
-    roughness: 0.3,
-    metalness: 0.6,
-  });
-  for (const zOff of [-d * 0.18, d * 0.18]) {
-    const handleGeo = new THREE.CylinderGeometry(0.015, 0.015, h * 0.7, 4);
-    const handle = new THREE.Mesh(handleGeo, handleMat);
-    handle.position.set(w / 2 + 0.03, 0, zOff);
-    group.add(handle);
-  }
-
-  // === Corner posts (4 มุม) — อยู่ภายใน body ไม่ z-fight ===
-  const cornerMat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(baseColor).multiplyScalar(0.45),
-    roughness: 0.3,
-    metalness: 0.5,
-  });
-  const cornerSize = 0.06;
-  for (const xSign of [-1, 1]) {
-    for (const zSign of [-1, 1]) {
-      const cornerGeo = new THREE.BoxGeometry(cornerSize, h + 0.02, cornerSize);
-      const corner = new THREE.Mesh(cornerGeo, cornerMat);
-      corner.position.set(
-        xSign * (w / 2 - cornerSize / 2),
-        0,
-        zSign * (d / 2 - cornerSize / 2),
-      );
-      corner.renderOrder = 1;
-      group.add(corner);
-    }
-  }
-
-  // === laden/empty indicator — ตู้เต็มจะมี top stripe สีขาว ===
-  if (ctr.is_laden) {
-    const stripGeo = new THREE.BoxGeometry(w * 0.3, 0.03, d * 0.5);
-    const stripMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25 });
-    const strip = new THREE.Mesh(stripGeo, stripMat);
-    strip.position.y = h / 2 + 0.02;
-    strip.renderOrder = 2;
-    group.add(strip);
-  }
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
 
   return group;
 }
@@ -391,7 +335,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     const restoreAll = () => {
       for (const [, entry] of containerMeshesRef.current) {
         (entry.mesh as THREE.Group).children.forEach(child => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
             child.material.opacity = 1;
             child.material.transparent = false;
             child.material.emissive.setHex(0x000000);
@@ -429,7 +373,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     for (const [, entry] of containerMeshesRef.current) {
       if (entry.mesh === targetMesh) continue;
       (entry.mesh as THREE.Group).children.forEach(child => {
-        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
           child.material.transparent = true;
           child.material.opacity = 0.08;
           child.material.depthWrite = false;
@@ -502,7 +446,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
 
       // Glow the highlighted container (smooth, non-flickering)
       (targetMesh as THREE.Group).children.forEach(child => {
-        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
           child.material.emissive.setHex(0xFFFF00);
           child.material.emissiveIntensity = 0.3 + Math.sin(glowTime * 1.5) * 0.15;
           child.material.transparent = false;
@@ -568,7 +512,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       const prevEntry = findContainerEntry(hoveredRef.current);
       if (prevEntry) {
         (prevEntry.mesh as THREE.Group).children.forEach(child => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
             child.material.emissive.setHex(0x000000);
           }
         });
@@ -582,7 +526,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       if (entry) {
         // Highlight all child meshes
         (entry.mesh as THREE.Group).children.forEach(child => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
             child.material.emissive.setHex(0x222222);
           }
         });
