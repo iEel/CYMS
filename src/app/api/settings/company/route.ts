@@ -10,6 +10,7 @@ async function ensureBranchColumns(db: Awaited<ReturnType<typeof getDb>>) {
         ALTER TABLE CompanyProfile ADD branch_type NVARCHAR(20) DEFAULT 'head_office';
       IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('CompanyProfile') AND name = 'branch_number')
         ALTER TABLE CompanyProfile ADD branch_number NVARCHAR(10) DEFAULT '00000';
+      ALTER TABLE CompanyProfile ALTER COLUMN logo_url NVARCHAR(MAX);
     `);
   } catch { /* columns may already exist */ }
 }
