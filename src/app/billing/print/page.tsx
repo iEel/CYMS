@@ -144,6 +144,7 @@ export default function PrintInvoicePage() {
         body { margin: 0; padding: 0; background: #f1f5f9; }
         .doc-body { 
           font-family: 'Sarabun', 'Noto Sans Thai', sans-serif;
+          font-size: 13px;
           max-width: 210mm;
           margin: 0 auto;
           background: white;
