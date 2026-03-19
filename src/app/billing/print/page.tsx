@@ -141,25 +141,34 @@ export default function PrintInvoicePage() {
   return (
     <>
       <style jsx global>{`
+        body { margin: 0; padding: 0; background: #f1f5f9; }
+        .doc-body { 
+          font-family: 'Sarabun', 'Noto Sans Thai', sans-serif;
+          max-width: 210mm;
+          margin: 0 auto;
+          background: white;
+          padding: 2rem;
+          box-sizing: border-box;
+        }
         @media print {
-          body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
+          .doc-body { padding: 0; }
         }
         @page { size: A4; margin: 15mm; }
-        .doc-body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; }
       `}</style>
 
       {/* Print button */}
-      <div className="no-print fixed top-4 right-4 z-50 flex gap-2">
-        <button onClick={() => window.print()} className="px-6 py-3 rounded-xl bg-blue-600 text-white font-medium shadow-lg hover:bg-blue-700">
+      <div className="no-print" style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 50, display: 'flex', gap: '0.5rem' }}>
+        <button onClick={() => window.print()} style={{ padding: '0.75rem 1.5rem', borderRadius: '0.75rem', background: '#2563eb', color: 'white', fontWeight: 500, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
           🖨️ พิมพ์
         </button>
-        <button onClick={() => window.close()} className="px-6 py-3 rounded-xl bg-slate-200 text-slate-700 font-medium shadow-lg hover:bg-slate-300">
+        <button onClick={() => window.close()} style={{ padding: '0.75rem 1.5rem', borderRadius: '0.75rem', background: '#e2e8f0', color: '#475569', fontWeight: 500, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
           ✕ ปิด
         </button>
       </div>
 
-      <div className="doc-body mx-auto bg-white p-8" style={{ maxWidth: '210mm' }}>
+      <div className="doc-body">
         {/* Header */}
         <div className="flex items-start justify-between border-b-2 border-slate-800 pb-4 mb-6">
           <div className="flex-1">
