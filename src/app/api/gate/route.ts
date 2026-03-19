@@ -49,6 +49,96 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// === Auto-Allocation Logic ===
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function autoAllocate(db: any, yardId: number, size: string, containerType: string, shippingLine?: string) {
+  // 1. ดึงโซนทั้งหมดในลาน
+  const zonesResult = await db.request()
+    .input('yardId', sql.Int, yardId)
+    .query(`
+      SELECT z.zone_id, z.zone_name, z.zone_type, z.max_bay, z.max_row, z.max_tier,
+        z.has_reefer_plugs, z.size_restriction
+      FROM YardZones z
+      WHERE z.yard_id = @yardId AND z.is_active = 1
+      ORDER BY z.zone_name
+    `);
+  const zones = zonesResult.recordset;
+  if (zones.length === 0) return null;
+
+  // 2. ดึงตู้ปัจจุบันในลาน
+  const containersResult = await db.request()
+    .input('yardId', sql.Int, yardId)
+    .query(`
+      SELECT zone_id, bay, [row], tier, shipping_line, size, type
+      FROM Containers
+      WHERE yard_id = @yardId AND status = 'in_yard'
+    `);
+  const containers = containersResult.recordset;
+
+  // 3. กฎวางตู้ (Allocation Rules)
+  let bestSlot: { zone_id: number; zone_name: string; bay: number; row: number; tier: number; reason: string; score: number } | null = null;
+
+  for (const zone of zones) {
+    if (zone.size_restriction && zone.size_restriction !== 'any' && zone.size_restriction !== size) continue;
+    if (containerType === 'RF' && zone.zone_type !== 'reefer') continue;
+    if (containerType !== 'RF' && zone.zone_type === 'reefer') continue;
+    if (containerType === 'DG' && zone.zone_type !== 'hazmat') continue;
+    if (containerType !== 'DG' && zone.zone_type === 'hazmat') continue;
+    if (zone.zone_type === 'repair') continue;
+
+    const zoneContainers = containers.filter((c: Record<string, unknown>) => c.zone_id === zone.zone_id);
+    const stackMap: Record<string, number> = {};
+    for (const c of zoneContainers) {
+      const key = `${c.bay}-${c.row}`;
+      stackMap[key] = Math.max(stackMap[key] || 0, c.tier as number);
+    }
+
+    // สายเรือเดียวกัน → Bay เดียวกัน
+    const sameLineBays = new Set<number>();
+    if (shippingLine) {
+      zoneContainers.filter((c: Record<string, unknown>) => c.shipping_line === shippingLine)
+        .forEach((c: Record<string, unknown>) => sameLineBays.add(c.bay as number));
+    }
+
+    for (let bay = 1; bay <= zone.max_bay; bay++) {
+      for (let row = 1; row <= zone.max_row; row++) {
+        const key = `${bay}-${row}`;
+        const currentHeight = stackMap[key] || 0;
+        const nextTier = currentHeight + 1;
+        if (nextTier > zone.max_tier) continue;
+
+        let score = 100;
+        const reasons: string[] = [];
+
+        if (shippingLine && sameLineBays.has(bay)) {
+          score += 30;
+          reasons.push(`สายเรือ ${shippingLine} อยู่ Bay นี้`);
+        }
+        score += (zone.max_tier - nextTier) * 5;
+        if (nextTier === 1) reasons.push('วางบนพื้น (หยิบง่าย)');
+
+        const zoneLoad = zoneContainers.length / (zone.max_bay * zone.max_row * zone.max_tier);
+        if (zoneLoad < 0.5) {
+          score += 15;
+          reasons.push(`โซนว่าง ${((1 - zoneLoad) * 100).toFixed(0)}%`);
+        }
+        if (nextTier > 3) score -= (nextTier - 3) * 10;
+
+        if (!bestSlot || score > bestSlot.score) {
+          bestSlot = {
+            zone_id: zone.zone_id, zone_name: zone.zone_name,
+            bay, row, tier: nextTier,
+            reason: reasons.length > 0 ? reasons.join(' • ') : `โซน ${zone.zone_name} ว่าง`,
+            score,
+          };
+        }
+      }
+    }
+  }
+
+  return bestSlot;
+}
+
 // POST — บันทึก Gate-In หรือ Gate-Out
 export async function POST(request: NextRequest) {
   try {
@@ -72,9 +162,35 @@ export async function POST(request: NextRequest) {
     const eirNumber = `${eirPrefix}-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}`;
 
     let finalContainerId = container_id;
+    let assignedLocation: { zone_name: string; zone_id: number; bay: number; row: number; tier: number; reason: string } | null = null;
 
     if (transaction_type === 'gate_in') {
       // === GATE-IN ===
+
+      // Auto-allocate if no zone specified
+      let finalZoneId = zone_id || null;
+      let finalBay = bay || null;
+      let finalRow = row || null;
+      let finalTier = tier || null;
+
+      if (!zone_id) {
+        const allocation = await autoAllocate(db, yard_id, size, containerType, shipping_line);
+        if (allocation) {
+          finalZoneId = allocation.zone_id;
+          finalBay = allocation.bay;
+          finalRow = allocation.row;
+          finalTier = allocation.tier;
+          assignedLocation = {
+            zone_name: allocation.zone_name,
+            zone_id: allocation.zone_id,
+            bay: allocation.bay,
+            row: allocation.row,
+            tier: allocation.tier,
+            reason: allocation.reason,
+          };
+        }
+      }
+
       // Check if container already exists
       const existingCheck = await db.request()
         .input('containerNumber', sql.NVarChar, container_number)
@@ -91,10 +207,10 @@ export async function POST(request: NextRequest) {
           .input('containerId', sql.Int, finalContainerId)
           .input('status', sql.NVarChar, 'in_yard')
           .input('yardId', sql.Int, yard_id)
-          .input('zoneId', sql.Int, zone_id || null)
-          .input('bay', sql.Int, bay || null)
-          .input('row', sql.Int, row || null)
-          .input('tier', sql.Int, tier || null)
+          .input('zoneId', sql.Int, finalZoneId)
+          .input('bay', sql.Int, finalBay)
+          .input('row', sql.Int, finalRow)
+          .input('tier', sql.Int, finalTier)
           .input('shippingLine', sql.NVarChar, shipping_line || null)
           .input('isLaden', sql.Bit, is_laden || false)
           .input('sealNumber', sql.NVarChar, seal_number || null)
@@ -116,10 +232,10 @@ export async function POST(request: NextRequest) {
           .input('type', sql.NVarChar, containerType)
           .input('status', sql.NVarChar, 'in_yard')
           .input('yardId', sql.Int, yard_id)
-          .input('zoneId', sql.Int, zone_id || null)
-          .input('bay', sql.Int, bay || null)
-          .input('row', sql.Int, row || null)
-          .input('tier', sql.Int, tier || null)
+          .input('zoneId', sql.Int, finalZoneId)
+          .input('bay', sql.Int, finalBay)
+          .input('row', sql.Int, finalRow)
+          .input('tier', sql.Int, finalTier)
           .input('shippingLine', sql.NVarChar, shipping_line || null)
           .input('isLaden', sql.Bit, is_laden || false)
           .input('sealNumber', sql.NVarChar, seal_number || null)
@@ -183,17 +299,47 @@ export async function POST(request: NextRequest) {
       .input('details', sql.NVarChar, JSON.stringify({
         eir_number: eirNumber, container_number, transaction_type,
         driver_name, truck_plate,
+        ...(assignedLocation ? { assigned_location: assignedLocation } : {}),
       }))
       .query(`
         INSERT INTO AuditLog (yard_id, action, entity_type, entity_id, details, created_at)
         VALUES (@yardId, @action, @entityType, @entityId, @details, GETDATE())
       `);
 
+    // === Auto-create Work Order for forklift driver ===
+    if (transaction_type === 'gate_in' && assignedLocation) {
+      try {
+        await db.request()
+          .input('woYardId', sql.Int, yard_id)
+          .input('woOrderType', sql.NVarChar, 'move')
+          .input('woContainerId', sql.Int, finalContainerId)
+          .input('woToZoneId', sql.Int, assignedLocation.zone_id)
+          .input('woToBay', sql.Int, assignedLocation.bay)
+          .input('woToRow', sql.Int, assignedLocation.row)
+          .input('woToTier', sql.Int, assignedLocation.tier)
+          .input('woNotes', sql.NVarChar, `Gate-In → ย้ายตู้ ${container_number} ไปวางที่ Zone ${assignedLocation.zone_name} B${assignedLocation.bay}-R${assignedLocation.row}-T${assignedLocation.tier} (${assignedLocation.reason})`)
+          .input('woPriority', sql.Int, 2) // ด่วน
+          .query(`
+            INSERT INTO WorkOrders (yard_id, order_type, container_id,
+              to_zone_id, to_bay, to_row, to_tier,
+              priority, notes, status)
+            VALUES (@woYardId, @woOrderType, @woContainerId,
+              @woToZoneId, @woToBay, @woToRow, @woToTier,
+              @woPriority, @woNotes, 'pending')
+          `);
+      } catch (woErr) {
+        console.error('⚠️ Auto work order creation failed:', woErr);
+        // Don't fail the gate-in if work order creation fails
+      }
+    }
+    // Note: gate_out work order is created by the frontend (Phase 1 of 2-phase gate-out)
+
     return NextResponse.json({
       success: true,
       transaction: txResult.recordset[0],
       eir_number: eirNumber,
       container_id: finalContainerId,
+      ...(assignedLocation ? { assigned_location: assignedLocation } : {}),
     });
 
   } catch (error: unknown) {

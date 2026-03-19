@@ -251,13 +251,46 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
 }
 
-/* ===================================
-   Print Styles
-   =================================== */
-
 @media print {
-  .no-print { display: none !important; }
-  body { background: white !important; }
+  @page {
+    size: A3 landscape;
+    margin: 8mm;
+  }
+
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide sidebar, topbar, and other non-print elements */
+  .no-print,
+  aside,
+  nav,
+  header {
+    display: none !important;
+  }
+
+  /* Hide the backdrop overlay but keep EIR content */
+  #eir-print-area {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+    z-index: 99999 !important;
+  }
+
+  /* Ensure QR code and badges print with color */
+  * {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
 }
 
 /* ===================================

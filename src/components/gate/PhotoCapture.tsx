@@ -1,18 +1,31 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { Camera, Upload, X, RotateCcw, ImageIcon } from 'lucide-react';
+import { Camera, Upload, X, Loader2 } from 'lucide-react';
 
 interface PhotoCaptureProps {
   label: string;
   required?: boolean;
-  onCapture: (dataUrl: string) => void;
+  onCapture: (url: string) => void;
   value?: string;
+  folder?: string;
 }
 
-export default function PhotoCapture({ label, required, onCapture, value }: PhotoCaptureProps) {
+async function uploadPhoto(dataUrl: string, folder: string): Promise<string> {
+  const res = await fetch('/api/uploads', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: dataUrl, folder }),
+  });
+  const data = await res.json();
+  if (data.success) return data.url;
+  throw new Error(data.error || 'Upload failed');
+}
+
+export default function PhotoCapture({ label, required, onCapture, value, folder = 'photos' }: PhotoCaptureProps) {
   const [preview, setPreview] = useState<string>(value || '');
   const [streaming, setStreaming] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -40,16 +53,31 @@ export default function PhotoCapture({ label, required, onCapture, value }: Phot
     setStreaming(false);
   }, []);
 
+  const processAndUpload = useCallback(async (dataUrl: string) => {
+    setPreview(dataUrl); // Show preview immediately
+    setUploading(true);
+    try {
+      const url = await uploadPhoto(dataUrl, folder);
+      setPreview(url); // Switch to server URL
+      onCapture(url);
+    } catch (err) {
+      console.error('Upload failed:', err);
+      // Fallback: use base64 if upload fails
+      onCapture(dataUrl);
+    } finally {
+      setUploading(false);
+    }
+  }, [folder, onCapture]);
+
   const capture = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
     const v = videoRef.current, c = canvasRef.current;
     c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d')!.drawImage(v, 0, 0);
     const dataUrl = c.toDataURL('image/jpeg', 0.7);
-    setPreview(dataUrl);
-    onCapture(dataUrl);
     stopCamera();
-  }, [onCapture, stopCamera]);
+    processAndUpload(dataUrl);
+  }, [stopCamera, processAndUpload]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -57,8 +85,7 @@ export default function PhotoCapture({ label, required, onCapture, value }: Phot
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      setPreview(result);
-      onCapture(result);
+      processAndUpload(result);
     };
     reader.readAsDataURL(file);
   };
@@ -74,10 +101,19 @@ export default function PhotoCapture({ label, required, onCapture, value }: Phot
       {preview ? (
         <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
           <img src={preview} alt={label} className="w-full h-40 object-cover" />
-          <button onClick={clear}
-            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500">
-            <X size={14} />
-          </button>
+          {uploading && (
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+              <div className="flex items-center gap-2 text-white text-xs font-medium">
+                <Loader2 size={16} className="animate-spin" /> กำลังอัปโหลด...
+              </div>
+            </div>
+          )}
+          {!uploading && (
+            <button onClick={clear}
+              className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500">
+              <X size={14} />
+            </button>
+          )}
         </div>
       ) : streaming ? (
         <div className="relative rounded-xl overflow-hidden border border-blue-300">

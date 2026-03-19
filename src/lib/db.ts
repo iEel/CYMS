@@ -10,6 +10,7 @@ const config: sql.config = {
     encrypt: false,
     trustServerCertificate: true,
     instanceName: process.env.DB_INSTANCE || undefined,
+    useUTC: false,
   },
   pool: {
     max: 10,

@@ -13,6 +13,7 @@ import CameraOCR from '@/components/gate/CameraOCR';
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import SignaturePad from '@/components/gate/SignaturePad';
 import ContainerInspection from '@/components/gate/ContainerInspection';
+import EIRDocument from '@/components/gate/EIRDocument';
 
 interface Transaction {
   transaction_id: number;
@@ -36,6 +37,7 @@ interface ContainerResult {
   shipping_line: string;
   status: string;
   zone_name?: string;
+  zone_id?: number;
   bay?: number;
   row?: number;
   tier?: number;
@@ -64,7 +66,7 @@ export default function GatePage() {
   const [transferLoading, setTransferLoading] = useState(false);
   const [transferResult, setTransferResult] = useState<{ success: boolean; message: string } | null>(null);
   const [gateInLoading, setGateInLoading] = useState(false);
-  const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string } | null>(null);
+  const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string; assigned_location?: { zone_name: string; bay: number; row: number; tier: number; reason: string } } | null>(null);
 
   // Gate-Out
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,6 +78,9 @@ export default function GatePage() {
   const [gateOutLoading, setGateOutLoading] = useState(false);
   const [gateOutResult, setGateOutResult] = useState<{ success: boolean; message: string; eir_number?: string } | null>(null);
   const [searching, setSearching] = useState(false);
+  const [gateOutPhotos, setGateOutPhotos] = useState<string[]>([]);
+  const [gateOutPhase, setGateOutPhase] = useState<'search' | 'pending_pickup' | 'confirm_release'>('search');
+  const [releaseLoading, setReleaseLoading] = useState(false);
 
   // History
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -118,7 +123,7 @@ export default function GatePage() {
       });
       const data = await res.json();
       if (data.success) {
-        setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number });
+        setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', booking_ref: '', notes: '' });
       } else {
         setGateInResult({ success: false, message: `❌ ${data.error}` });
@@ -139,7 +144,77 @@ export default function GatePage() {
     finally { setSearching(false); }
   };
 
-  // Gate-Out submit
+  // Select container for gate-out + check if work order already exists
+  const selectContainerForGateOut = async (c: ContainerResult) => {
+    setSelectedContainer(c);
+    setGateOutPhase('search'); // default
+    try {
+      const res = await fetch(`/api/operations?yard_id=${yardId}`);
+      const data = await res.json();
+      // Find any Gate-Out work order for this container (active or completed)
+      const gateOutOrders = (data.orders || []).filter(
+        (o: { container_number: string; notes?: string; status: string }) =>
+          o.container_number === c.container_number &&
+          o.notes?.includes('Gate-Out') &&
+          o.status !== 'cancelled'
+      );
+      if (gateOutOrders.length > 0) {
+        // Check if any active work order exists
+        const activeWO = gateOutOrders.find(
+          (o: { status: string }) => ['pending', 'assigned', 'in_progress'].includes(o.status)
+        );
+        if (activeWO) {
+          setGateOutPhase('pending_pickup');
+        } else {
+          setGateOutPhase('confirm_release');
+        }
+        // Restore driver info from localStorage
+        try {
+          const saved = localStorage.getItem(`gateout_driver_${c.container_number}`);
+          if (saved) {
+            setGateOutForm(JSON.parse(saved));
+          }
+        } catch { /* ignore */ }
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  // Phase 1: Request release (create Work Order for forklift)
+  const handleRequestRelease = async () => {
+    if (!selectedContainer) return;
+    setReleaseLoading(true);
+    try {
+      const res = await fetch('/api/operations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yard_id: yardId,
+          order_type: 'move',
+          container_id: selectedContainer.container_id,
+          from_zone_id: selectedContainer.zone_id,
+          from_bay: selectedContainer.bay,
+          from_row: selectedContainer.row,
+          from_tier: selectedContainer.tier,
+          priority: 2,
+          notes: `Gate-Out → ดึงตู้ ${selectedContainer.container_number} จาก Zone ${selectedContainer.zone_name || '-'} B${selectedContainer.bay}-R${selectedContainer.row}-T${selectedContainer.tier} ไปที่ประตู`,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Save driver info to localStorage for Phase 3
+        try {
+          localStorage.setItem(
+            `gateout_driver_${selectedContainer.container_number}`,
+            JSON.stringify(gateOutForm)
+          );
+        } catch { /* ignore */ }
+        setGateOutPhase('pending_pickup');
+      }
+    } catch (err) { console.error(err); }
+    finally { setReleaseLoading(false); }
+  };
+
+  // Phase 2: Confirm release (gate_out + EIR)
   const handleGateOut = async () => {
     if (!selectedContainer) return;
     setGateOutLoading(true);
@@ -153,6 +228,7 @@ export default function GatePage() {
           yard_id: yardId,
           container_id: selectedContainer.container_id,
           container_number: selectedContainer.container_number,
+          ...(gateOutPhotos.length > 0 ? { damage_report: { exit_photos: gateOutPhotos } } : {}),
           ...gateOutForm,
         }),
       });
@@ -163,6 +239,10 @@ export default function GatePage() {
         setSearchResults([]);
         setSearchQuery('');
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
+        setGateOutPhotos([]);
+        setGateOutPhase('search');
+        // Clear localStorage
+        try { localStorage.removeItem(`gateout_driver_${selectedContainer.container_number}`); } catch { /* ignore */ }
       } else {
         setGateOutResult({ success: false, message: `❌ ${data.error}` });
       }
@@ -448,6 +528,15 @@ export default function GatePage() {
             {gateInResult && (
               <div className={`p-4 rounded-xl text-sm ${gateInResult.success ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400'}`}>
                 <p className="font-medium">{gateInResult.message}</p>
+                {gateInResult.assigned_location && (
+                  <div className="mt-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300">
+                    <p className="text-xs font-semibold text-blue-500 dark:text-blue-400 uppercase mb-1">📍 วางตู้ที่</p>
+                    <p className="text-base font-bold">
+                      {gateInResult.assigned_location.zone_name} — Bay {gateInResult.assigned_location.bay}, Row {gateInResult.assigned_location.row}, Tier {gateInResult.assigned_location.tier}
+                    </p>
+                    <p className="text-[11px] text-blue-500 dark:text-blue-400 mt-0.5">{gateInResult.assigned_location.reason}</p>
+                  </div>
+                )}
                 {gateInResult.eir_number && (
                   <div className="mt-2 flex items-center gap-2">
                     <span className="text-xs">EIR: <span className="font-mono font-bold">{gateInResult.eir_number}</span></span>
@@ -499,7 +588,7 @@ export default function GatePage() {
               <div className="space-y-1.5">
                 <p className="text-xs text-slate-400">พบ {searchResults.length} ตู้ — กดเลือกตู้ที่จะปล่อยออก</p>
                 {searchResults.map(c => (
-                  <button key={c.container_id} onClick={() => setSelectedContainer(c)}
+                  <button key={c.container_id} onClick={() => selectContainerForGateOut(c)}
                     className="w-full text-left p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600">
@@ -516,55 +605,146 @@ export default function GatePage() {
               </div>
             )}
 
-            {/* Selected Container + Gate-Out Form */}
+            {/* Selected Container + 2-Phase Gate-Out */}
             {selectedContainer && (
               <div className="space-y-4">
+                {/* Step Indicator */}
+                <div className="flex items-center gap-2">
+                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
+                    gateOutPhase === 'search' ? 'bg-blue-500 text-white' : 'bg-emerald-100 text-emerald-600'
+                  }`}>
+                    {gateOutPhase === 'search' ? '①' : '✓'} ขอดึงตู้
+                  </div>
+                  <div className="w-6 h-0.5 bg-slate-200" />
+                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
+                    gateOutPhase === 'pending_pickup' ? 'bg-amber-500 text-white animate-pulse' :
+                    gateOutPhase === 'confirm_release' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    {gateOutPhase === 'confirm_release' ? '②' : gateOutPhase === 'pending_pickup' ? '⏳' : '②'} รอรถยก
+                  </div>
+                  <div className="w-6 h-0.5 bg-slate-200" />
+                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
+                    gateOutPhase === 'confirm_release' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    ③ ปล่อยตู้ + EIR
+                  </div>
+                </div>
+
+                {/* Container Info Card */}
                 <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-blue-500 font-medium mb-1">ตู้ที่จะปล่อยออก</p>
                       <p className="font-mono font-bold text-lg text-slate-800 dark:text-white">{selectedContainer.container_number}</p>
-                      <p className="text-sm text-slate-500">{selectedContainer.size}&apos;{selectedContainer.type} • {selectedContainer.shipping_line || '-'} • {selectedContainer.zone_name ? `Zone ${selectedContainer.zone_name}` : ''}</p>
+                      <p className="text-sm text-slate-500">{selectedContainer.size}&apos;{selectedContainer.type} • {selectedContainer.shipping_line || '-'} • {selectedContainer.zone_name ? `Zone ${selectedContainer.zone_name} B${selectedContainer.bay}-R${selectedContainer.row}-T${selectedContainer.tier}` : ''}</p>
                     </div>
-                    <button onClick={() => setSelectedContainer(null)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                    <button onClick={() => { setSelectedContainer(null); setGateOutPhase('search'); }} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
                   </div>
                 </div>
 
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2"><User size={12} /> ข้อมูลคนขับ / รถ</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {/* ===== PHASE 1: ขอดึงตู้ ===== */}
+                {gateOutPhase === 'search' && (
+                  <div className="space-y-4">
                     <div>
-                      <label className={labelClass}>ชื่อคนขับ</label>
-                      <input type="text" value={gateOutForm.driver_name} onChange={e => setGateOutForm({ ...gateOutForm, driver_name: e.target.value })} className={inputClass} placeholder="ชื่อ-นามสกุล" />
+                      <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2"><User size={12} /> ข้อมูลคนขับ / รถ</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className={labelClass}>ชื่อคนขับ</label>
+                          <input type="text" value={gateOutForm.driver_name} onChange={e => setGateOutForm({ ...gateOutForm, driver_name: e.target.value })} className={inputClass} placeholder="ชื่อ-นามสกุล" />
+                        </div>
+                        <div>
+                          <label className={labelClass}>เลขใบขับขี่</label>
+                          <input type="text" value={gateOutForm.driver_license} onChange={e => setGateOutForm({ ...gateOutForm, driver_license: e.target.value })} className={inputClass} placeholder="1234567890" />
+                        </div>
+                        <div>
+                          <label className={labelClass}>ทะเบียนรถ</label>
+                          <input type="text" value={gateOutForm.truck_plate} onChange={e => setGateOutForm({ ...gateOutForm, truck_plate: e.target.value })} className={inputClass} placeholder="1กก 1234" />
+                        </div>
+                        <div>
+                          <label className={labelClass}>เลขซีล</label>
+                          <input type="text" value={gateOutForm.seal_number} onChange={e => setGateOutForm({ ...gateOutForm, seal_number: e.target.value })} className={`${inputClass} font-mono`} placeholder="SEAL123456" />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Booking Ref</label>
+                          <input type="text" value={gateOutForm.booking_ref} onChange={e => setGateOutForm({ ...gateOutForm, booking_ref: e.target.value })} className={inputClass} placeholder="BK-123456" />
+                        </div>
+                        <div>
+                          <label className={labelClass}>หมายเหตุ</label>
+                          <input type="text" value={gateOutForm.notes} onChange={e => setGateOutForm({ ...gateOutForm, notes: e.target.value })} className={inputClass} placeholder="หมายเหตุ..." />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className={labelClass}>เลขใบขับขี่</label>
-                      <input type="text" value={gateOutForm.driver_license} onChange={e => setGateOutForm({ ...gateOutForm, driver_license: e.target.value })} className={inputClass} placeholder="1234567890" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>ทะเบียนรถ</label>
-                      <input type="text" value={gateOutForm.truck_plate} onChange={e => setGateOutForm({ ...gateOutForm, truck_plate: e.target.value })} className={inputClass} placeholder="1กก 1234" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>เลขซีล</label>
-                      <input type="text" value={gateOutForm.seal_number} onChange={e => setGateOutForm({ ...gateOutForm, seal_number: e.target.value })} className={`${inputClass} font-mono`} placeholder="SEAL123456" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Booking Ref</label>
-                      <input type="text" value={gateOutForm.booking_ref} onChange={e => setGateOutForm({ ...gateOutForm, booking_ref: e.target.value })} className={inputClass} placeholder="BK-123456" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>หมายเหตุ</label>
-                      <input type="text" value={gateOutForm.notes} onChange={e => setGateOutForm({ ...gateOutForm, notes: e.target.value })} className={inputClass} placeholder="หมายเหตุ..." />
-                    </div>
-                  </div>
-                </div>
 
-                <button onClick={handleGateOut} disabled={gateOutLoading}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all">
-                  {gateOutLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowUpFromLine size={16} />}
-                  ปล่อยตู้ออก + ออก EIR
-                </button>
+                    <button onClick={handleRequestRelease} disabled={releaseLoading}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-50 transition-all w-full justify-center">
+                      {releaseLoading ? <Loader2 size={16} className="animate-spin" /> : <Truck size={16} />}
+                      ขอดึงตู้ → สร้างคำสั่งรถยก
+                    </button>
+                  </div>
+                )}
+
+                {/* ===== PHASE 2: รอรถยกมาส่ง ===== */}
+                {gateOutPhase === 'pending_pickup' && (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 text-center">
+                      <div className="text-3xl mb-2">🚛</div>
+                      <h4 className="font-bold text-amber-700 dark:text-amber-400">รอรถยกนำตู้มาที่ประตู...</h4>
+                      <p className="text-xs text-amber-500 mt-1">คำสั่งงานถูกส่งไปหน้าปฏิบัติการแล้ว กรุณารอจนกว่าตู้จะมาถึง</p>
+                    </div>
+
+                    <button onClick={() => setGateOutPhase('confirm_release')}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-all w-full justify-center">
+                      <CheckCircle2 size={16} /> ตู้ถึงประตูแล้ว → ตรวจสภาพ & ปล่อยออก
+                    </button>
+                  </div>
+                )}
+
+                {/* ===== PHASE 3: ตรวจสภาพ + ปล่อยตู้ + ออก EIR ===== */}
+                {gateOutPhase === 'confirm_release' && (
+                  <div className="space-y-4">
+                    {/* Driver Info Summary */}
+                    {(gateOutForm.driver_name || gateOutForm.truck_plate) && (
+                      <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800">
+                        <h4 className="text-[10px] font-semibold text-emerald-500 uppercase mb-2">ข้อมูลคนขับ (จากขั้นตอนที่ 1)</h4>
+                        <div className="grid grid-cols-3 gap-2 text-xs text-slate-600 dark:text-slate-300">
+                          <div><span className="text-slate-400">ชื่อ:</span> {gateOutForm.driver_name || '-'}</div>
+                          <div><span className="text-slate-400">ใบขับขี่:</span> {gateOutForm.driver_license || '-'}</div>
+                          <div><span className="text-slate-400">ทะเบียน:</span> {gateOutForm.truck_plate || '-'}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Exit Photos (optional) */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2">
+                        📸 ถ่ายรูปตู้ขาออก <span className="text-[10px] font-normal text-slate-400">(ไม่บังคับ — เพื่อบันทึกสภาพตู้ก่อนออก)</span>
+                      </h4>
+                      {gateOutPhotos.length > 0 && (
+                        <div className="flex gap-2 mb-3 flex-wrap">
+                          {gateOutPhotos.map((photo, i) => (
+                            <div key={i} className="relative">
+                              <img src={photo} alt={`Exit photo ${i + 1}`} className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
+                              <button onClick={() => setGateOutPhotos(gateOutPhotos.filter((_, idx) => idx !== i))}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {gateOutPhotos.length < 4 && (
+                        <PhotoCapture
+                          onCapture={(photo: string) => setGateOutPhotos([...gateOutPhotos, photo])}
+                          label={`ถ่ายรูปตู้ขาออก (${gateOutPhotos.length}/4)`}
+                        />
+                      )}
+                    </div>
+
+                    <button onClick={handleGateOut} disabled={gateOutLoading}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all w-full justify-center">
+                      {gateOutLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowUpFromLine size={16} />}
+                      ✅ ยืนยันปล่อยตู้ออก + ออก EIR
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -753,63 +933,18 @@ export default function GatePage() {
         />
       )}
 
-      {/* =================== EIR MODAL =================== */}
-      {showEIR && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                <FileText size={18} /> Equipment Interchange Receipt (EIR)
-              </h3>
-              <div className="flex items-center gap-2">
-                <button onClick={() => window.print()} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors">
-                  <Printer size={12} /> พิมพ์
-                </button>
-                <button onClick={() => { setShowEIR(null); setEirData(null); }} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
-              </div>
-            </div>
-
-            {!eirData ? (
-              <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
-            ) : (
-              <div className="p-5 space-y-4 text-sm" id="eir-print">
-                <div className="text-center mb-4">
-                  <h2 className="text-lg font-bold text-slate-800 dark:text-white">CYMS — EIR</h2>
-                  <p className="text-xs text-slate-400">{(eirData.transaction_type as string) === 'gate_in' ? '📥 Gate-In Receipt' : '📤 Gate-Out Receipt'}</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: 'EIR No.', value: eirData.eir_number, mono: true },
-                    { label: 'วันที่', value: eirData.date ? formatDateTime(eirData.date as string) : '-' },
-                    { label: 'เลขตู้', value: eirData.container_number, mono: true },
-                    { label: 'ขนาด/ประเภท', value: `${eirData.size}'${eirData.type}` },
-                    { label: 'สายเรือ', value: eirData.shipping_line || '-' },
-                    { label: 'เลขซีล', value: eirData.seal_number || '-', mono: true },
-                    { label: 'สถานะ', value: eirData.is_laden ? '📦 มีสินค้า' : '📭 ตู้เปล่า' },
-                    { label: 'Booking Ref', value: eirData.booking_ref || '-' },
-                    { label: 'คนขับ', value: eirData.driver_name || '-' },
-                    { label: 'เลขใบขับขี่', value: eirData.driver_license || '-' },
-                    { label: 'ทะเบียนรถ', value: eirData.truck_plate || '-', mono: true },
-                    { label: 'ลาน', value: eirData.yard_name || '-' },
-                    { label: 'โซน/พิกัด', value: eirData.zone_name ? `Zone ${eirData.zone_name} B${eirData.bay}-R${eirData.row}-T${eirData.tier}` : '-' },
-                    { label: 'ผู้ดำเนินการ', value: eirData.processed_by || '-' },
-                  ].map((item, i) => (
-                    <div key={i} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900/30">
-                      <p className="text-[10px] text-slate-400 uppercase font-semibold">{item.label}</p>
-                      <p className={`text-slate-800 dark:text-white font-medium ${item.mono ? 'font-mono' : ''}`}>{item.value as string}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {eirData.notes && (
-                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
-                    <p className="text-[10px] text-amber-500 uppercase font-semibold mb-1">หมายเหตุ</p>
-                    <p className="text-slate-600 dark:text-slate-300">{eirData.notes as string}</p>
-                  </div>
-                )}
-              </div>
-            )}
+      {/* =================== EIR MODAL (A3) =================== */}
+      {showEIR && eirData && (
+        <EIRDocument
+          data={eirData as any}
+          onClose={() => { setShowEIR(null); setEirData(null); }}
+        />
+      )}
+      {showEIR && !eirData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-8 shadow-2xl">
+            <Loader2 size={32} className="animate-spin mx-auto text-blue-500" />
+            <p className="text-sm text-slate-500 mt-3">กำลังโหลด EIR...</p>
           </div>
         </div>
       )}

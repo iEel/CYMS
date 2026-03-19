@@ -43,6 +43,36 @@ export async function GET(request: NextRequest) {
 
     const row = result.recordset[0];
 
+    // Parse damage report
+    let damageReport = null;
+    let containerCondition: 'sound' | 'damage' = 'sound';
+    let containerGrade = 'A';
+
+    if (row.damage_report) {
+      try {
+        damageReport = JSON.parse(row.damage_report);
+        // Determine condition from damage points
+        if (damageReport && Array.isArray(damageReport.points) && damageReport.points.length > 0) {
+          containerCondition = 'damage';
+        }
+        // Use grade from inspection report if available
+        if (damageReport && damageReport.condition_grade) {
+          containerGrade = damageReport.condition_grade;
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
+    // Fetch company info
+    let company = null;
+    try {
+      const companyResult = await db.request().query(
+        'SELECT TOP 1 company_name, address, phone, email, logo_url, tax_id FROM CompanyProfile'
+      );
+      if (companyResult.recordset.length > 0) {
+        company = companyResult.recordset[0];
+      }
+    } catch { /* ignore if table doesn't exist */ }
+
     const eirData = {
       eir_number: row.eir_number,
       transaction_type: row.transaction_type,
@@ -64,8 +94,12 @@ export async function GET(request: NextRequest) {
       row: row.row,
       tier: row.tier,
       processed_by: row.processed_by_name || 'ระบบ',
-      damage_report: row.damage_report ? JSON.parse(row.damage_report) : null,
+      damage_report: damageReport,
       notes: row.notes,
+      // New fields
+      container_condition: containerCondition,
+      container_grade: containerGrade,
+      company,
     };
 
     return NextResponse.json({ eir: eirData });

@@ -17,6 +17,7 @@ interface WorkOrderRow {
   shipping_line: string;
   from_zone_name: string;
   from_bay: number; from_row: number; from_tier: number;
+  to_zone_id: number;
   to_zone_name: string;
   to_bay: number; to_row: number; to_tier: number;
   priority: number;
@@ -85,6 +86,10 @@ export default function OperationsPage() {
   const [shiftResult, setShiftResult] = useState<ShiftResult | null>(null);
   const [shiftLoading, setShiftLoading] = useState(false);
 
+  // Position edit for complete action
+  const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
+  const [editPos, setEditPos] = useState({ zone_id: 0, bay: 0, row: 0, tier: 0 });
+
   const yardId = session?.activeYardId || 1;
 
   const fetchOrders = useCallback(async () => {
@@ -112,22 +117,21 @@ export default function OperationsPage() {
     } catch (err) { console.error(err); }
   };
 
-  // Fetch zones
+  // Fetch zones (needed for create, shifting, and queue position edit)
   useEffect(() => {
-    if (activeTab === 'create' || activeTab === 'shifting') {
-      fetch(`/api/settings/zones?yard_id=${yardId}`)
-        .then(r => r.json()).then(d => setZones(d.zones || [])).catch(() => {});
-    }
-  }, [activeTab, yardId]);
+    fetch(`/api/settings/zones?yard_id=${yardId}`)
+      .then(r => r.json()).then(d => setZones(d.zones || [])).catch(() => {});
+  }, [yardId]);
 
   // Update work order status
-  const updateOrder = async (orderId: number, action: string) => {
+  const updateOrder = async (orderId: number, action: string, posOverride?: { to_zone_id: number; to_bay: number; to_row: number; to_tier: number }) => {
     try {
       await fetch('/api/operations', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: orderId, action }),
+        body: JSON.stringify({ order_id: orderId, action, ...posOverride }),
       });
+      setEditingOrderId(null);
       fetchOrders();
     } catch (err) { console.error(err); }
   };
@@ -288,23 +292,24 @@ export default function OperationsPage() {
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${statusLabels[order.status]?.color}`}>
                         {statusLabels[order.status]?.icon} {statusLabels[order.status]?.label}
                       </span>
-                      {order.status === 'pending' && (
-                        <button onClick={() => updateOrder(order.order_id, 'assign')}
-                          className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-xs font-medium hover:bg-blue-100">
-                          รับงาน
-                        </button>
-                      )}
-                      {order.status === 'assigned' && (
-                        <button onClick={() => updateOrder(order.order_id, 'start')}
-                          className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 text-xs font-medium hover:bg-emerald-100 flex items-center gap-1">
-                          <Play size={10} /> เริ่ม
+                      {(order.status === 'pending' || order.status === 'assigned') && (
+                        <button onClick={() => updateOrder(order.order_id, 'accept')}
+                          className="px-3 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-medium hover:bg-blue-600 flex items-center gap-1">
+                          <Play size={10} /> รับงาน
                         </button>
                       )}
                       {order.status === 'in_progress' && (
-                        <button onClick={() => updateOrder(order.order_id, 'complete')}
-                          className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 flex items-center gap-1">
-                          <CheckCircle2 size={10} /> เสร็จ
-                        </button>
+                        editingOrderId === order.order_id ? (
+                          <button onClick={() => setEditingOrderId(null)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-xs font-medium text-slate-600 dark:text-slate-300">
+                            ยกเลิก
+                          </button>
+                        ) : (
+                          <button onClick={() => { setEditingOrderId(order.order_id); setEditPos({ zone_id: order.to_zone_id || 0, bay: order.to_bay || 0, row: order.to_row || 0, tier: order.to_tier || 0 }); }}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 flex items-center gap-1">
+                            <CheckCircle2 size={10} /> เสร็จ
+                          </button>
+                        )
                       )}
                       {['pending', 'assigned'].includes(order.status) && (
                         <button onClick={() => updateOrder(order.order_id, 'cancel')}
@@ -326,11 +331,11 @@ export default function OperationsPage() {
 
                   {/* Mobile/Tablet: Large action buttons (glove-friendly, min 48px) */}
                   <div className="md:hidden mt-3 grid grid-cols-2 gap-2">
-                    {order.status === 'pending' && (
+                    {(order.status === 'pending' || order.status === 'assigned') && (
                       <>
-                        <button onClick={() => updateOrder(order.order_id, 'assign')}
+                        <button onClick={() => updateOrder(order.order_id, 'accept')}
                           className="flex items-center justify-center gap-2 py-4 rounded-xl bg-blue-500 text-white text-sm font-bold active:scale-95 transition-transform shadow-sm">
-                          <User size={20} /> รับงาน
+                          <Play size={20} /> รับงาน
                         </button>
                         <button onClick={() => updateOrder(order.order_id, 'cancel')}
                           className="flex items-center justify-center gap-2 py-4 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500 text-sm font-bold active:scale-95 transition-transform">
@@ -338,21 +343,60 @@ export default function OperationsPage() {
                         </button>
                       </>
                     )}
-                    {order.status === 'assigned' && (
-                      <>
-                        <button onClick={() => updateOrder(order.order_id, 'start')}
-                          className="flex items-center justify-center gap-2 py-4 rounded-xl bg-emerald-500 text-white text-sm font-bold active:scale-95 transition-transform shadow-sm col-span-2">
-                          <Play size={22} /> เริ่มงาน
-                        </button>
-                      </>
-                    )}
-                    {order.status === 'in_progress' && (
-                      <button onClick={() => updateOrder(order.order_id, 'complete')}
+                    {order.status === 'in_progress' && editingOrderId !== order.order_id && (
+                      <button onClick={() => { setEditingOrderId(order.order_id); setEditPos({ zone_id: order.to_zone_id || 0, bay: order.to_bay || 0, row: order.to_row || 0, tier: order.to_tier || 0 }); }}
                         className="flex items-center justify-center gap-2 py-4 rounded-xl bg-emerald-600 text-white text-base font-bold active:scale-95 transition-transform shadow-md col-span-2">
                         <CheckCircle2 size={24} /> ✅ เสร็จแล้ว
                       </button>
                     )}
                   </div>
+
+                  {/* Inline position edit form */}
+                  {editingOrderId === order.order_id && (
+                    <div className="mt-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 space-y-3">
+                      <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                        <MapPin size={12} /> ตำแหน่งวางตู้จริง (แก้ไขได้)
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-medium">Zone</label>
+                          <select value={editPos.zone_id} onChange={e => setEditPos({...editPos, zone_id: parseInt(e.target.value)})}
+                            className="w-full h-10 md:h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-700 dark:text-white">
+                            <option value={0}>-</option>
+                            {zones.map(z => <option key={z.zone_id} value={z.zone_id}>{z.zone_name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-medium">Bay</label>
+                          <input type="number" min={1} value={editPos.bay || ''} onChange={e => setEditPos({...editPos, bay: parseInt(e.target.value) || 0})}
+                            className="w-full h-10 md:h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-700 dark:text-white text-center" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-medium">Row</label>
+                          <input type="number" min={1} value={editPos.row || ''} onChange={e => setEditPos({...editPos, row: parseInt(e.target.value) || 0})}
+                            className="w-full h-10 md:h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-700 dark:text-white text-center" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-medium">Tier</label>
+                          <input type="number" min={1} value={editPos.tier || ''} onChange={e => setEditPos({...editPos, tier: parseInt(e.target.value) || 0})}
+                            className="w-full h-10 md:h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-700 dark:text-white text-center" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => updateOrder(order.order_id, 'complete', {
+                            to_zone_id: editPos.zone_id, to_bay: editPos.bay, to_row: editPos.row, to_tier: editPos.tier
+                          })}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 md:py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 active:scale-95 transition-transform">
+                          <CheckCircle2 size={16} /> ยืนยันเสร็จสิ้น
+                        </button>
+                        <button onClick={() => setEditingOrderId(null)}
+                          className="px-4 py-3 md:py-2 rounded-xl bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 text-sm font-medium">
+                          ยกเลิก
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

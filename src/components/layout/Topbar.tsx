@@ -27,7 +27,7 @@ export default function Topbar() {
   const [isHighContrast, setIsHighContrast] = useState(false);
   const [yardDropdownOpen, setYardDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<{ id: string; label: string; type: string }[]>([]);
+  const [searchResults, setSearchResults] = useState<{ id: string; label: string; type: string; location?: string; status?: string }[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const yardRef = useRef<HTMLDivElement>(null);
@@ -78,21 +78,34 @@ export default function Topbar() {
     }
   };
 
-  // Instant search demo
+  // Real API search with debounce
   useEffect(() => {
-    if (searchQuery.length >= 2) {
-      // จำลองผลค้นหา (จะเปลี่ยนเป็น API จริงภายหลัง)
-      const results = [
-        { id: 'TCLU1234567', label: 'TCLU 123456-7', type: 'ตู้คอนเทนเนอร์' },
-        { id: 'MSCU7654321', label: 'MSCU 765432-1', type: 'ตู้คอนเทนเนอร์' },
-      ].filter(r => r.id.toLowerCase().includes(searchQuery.toLowerCase()));
-      setSearchResults(results);
-      setShowSearch(true);
-    } else {
+    if (searchQuery.length < 2) {
       setSearchResults([]);
       setShowSearch(false);
+      return;
     }
-  }, [searchQuery]);
+    const timer = setTimeout(async () => {
+      try {
+        const yardId = session?.activeYardId || 1;
+        const res = await fetch(`/api/containers?yard_id=${yardId}&search=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        const results = (Array.isArray(data) ? data : []).slice(0, 8).map((c: {
+          container_id: number; container_number: string; size: string; type: string;
+          shipping_line?: string; zone_name?: string; bay?: number; row?: number; tier?: number; status: string;
+        }) => ({
+          id: String(c.container_id),
+          label: c.container_number,
+          type: `${c.size}'${c.type} • ${c.shipping_line || '-'}`,
+          location: c.zone_name ? `Zone ${c.zone_name} B${c.bay}-R${c.row}-T${c.tier}` : '',
+          status: c.status,
+        }));
+        setSearchResults(results);
+        setShowSearch(results.length > 0);
+      } catch (err) { console.error(err); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, session?.activeYardId]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -109,6 +122,13 @@ export default function Topbar() {
   }, []);
 
   const activeYard = DEMO_YARDS.find(y => y.yard_id === session?.activeYardId);
+
+  const statusLabel: Record<string, { text: string; color: string }> = {
+    in_yard: { text: 'ในลาน', color: 'bg-emerald-100 text-emerald-700' },
+    released: { text: 'ออกแล้ว', color: 'bg-slate-100 text-slate-500' },
+    damaged: { text: 'ชำรุด', color: 'bg-rose-100 text-rose-600' },
+    reserved: { text: 'จอง', color: 'bg-amber-100 text-amber-700' },
+  };
 
   return (
     <header className="sticky top-0 z-30 h-16 bg-white dark:bg-[#1E293B] border-b border-slate-200 dark:border-slate-700 flex items-center px-4 gap-4">
@@ -138,22 +158,35 @@ export default function Topbar() {
 
         {/* Search Results Dropdown */}
         {showSearch && searchResults.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden z-50">
-            {searchResults.map((result) => (
-              <button
-                key={result.id}
-                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
-                onClick={() => { setShowSearch(false); setSearchQuery(''); }}
-              >
-                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-                  <Search size={14} className="text-[#3B82F6]" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">{result.label}</p>
-                  <p className="text-xs text-slate-400">{result.type}</p>
-                </div>
-              </button>
-            ))}
+          <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden z-50 max-h-80 overflow-y-auto">
+            <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700">
+              <p className="text-[10px] text-slate-400 font-medium">พบ {searchResults.length} ผลลัพธ์</p>
+            </div>
+            {searchResults.map((result) => {
+              const st = statusLabel[result.status || ''] || { text: result.status || '-', color: 'bg-slate-100 text-slate-400' };
+              return (
+                <a
+                  key={result.id}
+                  href="/yard"
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
+                  onClick={() => { setShowSearch(false); setSearchQuery(''); }}
+                >
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                    <Search size={14} className="text-[#3B82F6]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">{result.label}</p>
+                    <p className="text-xs text-slate-400 truncate">{result.type}{result.location ? ` • ${result.location}` : ''}</p>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${st.color}`}>{st.text}</span>
+                </a>
+              );
+            })}
+          </div>
+        )}
+        {showSearch && searchResults.length === 0 && searchQuery.length >= 2 && (
+          <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 z-50 p-4 text-center">
+            <p className="text-sm text-slate-400">ไม่พบผลลัพธ์สำหรับ &quot;{searchQuery}&quot;</p>
           </div>
         )}
       </div>
@@ -203,7 +236,7 @@ export default function Topbar() {
         {/* Notification Bell */}
         <button className="relative w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center
           text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200"
-          data-tooltip="การแจ้งเตือน"
+
         >
           <Bell size={18} />
           <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#EF4444]" />
@@ -214,7 +247,6 @@ export default function Topbar() {
           onClick={toggleDarkMode}
           className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center
             text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200"
-          data-tooltip={isDark ? 'โหมดสว่าง' : 'โหมดมืด'}
         >
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
@@ -227,15 +259,12 @@ export default function Topbar() {
               ? 'bg-yellow-400 text-black ring-2 ring-yellow-500'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
           }`}
-          data-tooltip={isHighContrast ? 'ปิดโหมดกลางแจ้ง' : 'โหมดกลางแจ้ง (สู้แสงแดด)'}
         >
           <SunDim size={18} />
         </button>
 
         {/* User Avatar */}
-        <div className="w-10 h-10 rounded-xl bg-[#3B82F6] flex items-center justify-center text-white"
-          data-tooltip={session?.fullName || 'ผู้ใช้'}
-        >
+        <div className="w-10 h-10 rounded-xl bg-[#3B82F6] flex items-center justify-center text-white">
           <User size={18} />
         </div>
       </div>

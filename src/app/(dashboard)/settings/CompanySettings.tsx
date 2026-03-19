@@ -89,13 +89,34 @@ export default function CompanySettings() {
     }
   };
 
-  const handleFileSelect = (file: File) => {
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  const handleFileSelect = async (file: File) => {
     if (!file.type.startsWith('image/')) return;
     if (file.size > 5 * 1024 * 1024) { alert('ไฟล์ใหญ่เกิน 5MB'); return; }
 
+    // Read as base64 first for preview
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setData({ ...data, logo_url: reader.result as string });
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+      setData(d => ({ ...d, logo_url: base64 })); // preview immediately
+      setLogoUploading(true);
+      try {
+        const res = await fetch('/api/uploads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: base64, folder: 'logos', filename_prefix: 'logo' }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          setData(d => ({ ...d, logo_url: json.url }));
+        }
+      } catch (err) {
+        console.error('Logo upload failed:', err);
+        // Keep base64 as fallback
+      } finally {
+        setLogoUploading(false);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -158,7 +179,7 @@ export default function CompanySettings() {
           </label>
           <div className="flex items-start gap-5">
             {/* Preview */}
-            <div className="shrink-0 w-28 h-28 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center overflow-hidden">
+            <div className="shrink-0 w-28 h-28 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center overflow-hidden relative">
               {data.logo_url ? (
                 <img
                   src={data.logo_url}
@@ -169,6 +190,11 @@ export default function CompanySettings() {
                 <div className="text-center">
                   <ImageIcon size={28} className="mx-auto text-slate-300 dark:text-slate-500" />
                   <p className="text-[10px] text-slate-400 mt-1">ไม่มีโลโก้</p>
+                </div>
+              )}
+              {logoUploading && (
+                <div className="absolute inset-0 bg-white/70 dark:bg-slate-800/70 flex items-center justify-center">
+                  <Loader2 size={20} className="animate-spin text-blue-500" />
                 </div>
               )}
             </div>

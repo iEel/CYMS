@@ -115,6 +115,10 @@ export async function PUT(request: NextRequest) {
     const req = db.request().input('orderId', sql.Int, order_id);
 
     switch (action) {
+      case 'accept':
+        // 2-button workflow: pending → in_progress (skip assigned)
+        updateQuery = `UPDATE WorkOrders SET status = 'in_progress', started_at = GETDATE() WHERE order_id = @orderId AND status IN ('pending', 'assigned')`;
+        break;
       case 'assign':
         req.input('assignedTo', sql.Int, assigned_to);
         updateQuery = `UPDATE WorkOrders SET status = 'assigned', assigned_to = @assignedTo WHERE order_id = @orderId`;
@@ -124,6 +128,17 @@ export async function PUT(request: NextRequest) {
         break;
       case 'complete':
         updateQuery = `UPDATE WorkOrders SET status = 'completed', completed_at = GETDATE() WHERE order_id = @orderId`;
+
+        // If driver provided a new destination, update the work order first
+        if (body.to_zone_id) {
+          await db.request()
+            .input('oid2', sql.Int, order_id)
+            .input('newZone', sql.Int, body.to_zone_id)
+            .input('newBay', sql.Int, body.to_bay || null)
+            .input('newRow', sql.Int, body.to_row || null)
+            .input('newTier', sql.Int, body.to_tier || null)
+            .query(`UPDATE WorkOrders SET to_zone_id = @newZone, to_bay = @newBay, to_row = @newRow, to_tier = @newTier WHERE order_id = @oid2`);
+        }
 
         // Also move container if it's a move/shift order
         const orderCheck = await db.request()
