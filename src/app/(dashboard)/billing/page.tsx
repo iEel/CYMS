@@ -7,6 +7,7 @@ import {
   Loader2, Calculator, Receipt, CreditCard, FileText, Plus, Search,
   CheckCircle2, XCircle, Clock, RotateCcw, DollarSign, TrendingUp,
   AlertTriangle, Lock, Unlock, Ban, ArrowDownToLine,
+  Printer, FileDown, Zap, FileSpreadsheet,
 } from 'lucide-react';
 
 interface TariffRow {
@@ -36,7 +37,7 @@ const UNIT_LABELS: Record<string, string> = {
 
 export default function BillingPage() {
   const { session } = useAuth();
-  const [activeTab, setActiveTab] = useState<'invoices' | 'create' | 'tariffs' | 'hold'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export'>('invoices');
   const yardId = session?.activeYardId || 1;
 
   // Invoices
@@ -56,6 +57,11 @@ export default function BillingPage() {
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Auto-calc
+  const [autoCalcContainer, setAutoCalcContainer] = useState('');
+  const [autoCalcLoading, setAutoCalcLoading] = useState(false);
+  const [autoCalcResult, setAutoCalcResult] = useState<{ container: Record<string, unknown>; dwell_days: number; charges: Array<{ charge_type: string; description: string; quantity: number; unit_price: number; subtotal: number }>; summary: { total_before_vat: number; vat_amount: number; grand_total: number } } | null>(null);
 
   // Tariff create
   const [tariffForm, setTariffForm] = useState({
@@ -189,8 +195,10 @@ export default function BillingPage() {
         {[
           { id: 'invoices' as const, label: 'ใบแจ้งหนี้', icon: <Receipt size={14} /> },
           { id: 'create' as const, label: 'สร้างบิล', icon: <Plus size={14} /> },
-          { id: 'tariffs' as const, label: 'ตั้งค่า Tariff', icon: <Calculator size={14} /> },
-          { id: 'hold' as const, label: 'Hold/Release', icon: <Lock size={14} /> },
+          { id: 'tariffs' as const, label: 'Tariff', icon: <Calculator size={14} /> },
+          { id: 'hold' as const, label: 'Hold', icon: <Lock size={14} /> },
+          { id: 'documents' as const, label: 'เอกสาร', icon: <Printer size={14} /> },
+          { id: 'export' as const, label: 'ERP', icon: <FileDown size={14} /> },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition-all ${
@@ -419,6 +427,165 @@ export default function BillingPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* =================== DOCUMENTS TAB (Statement, Receipt, Print) =================== */}
+      {activeTab === 'documents' && (
+        <div className="space-y-4">
+          {/* Billing Statement */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+              <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><FileText size={16} /> ใบวางบิล (Billing Statement)</h3>
+              <p className="text-xs text-slate-400 mt-0.5">รวมยอดค้างชำระตามลูกค้า</p>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {(() => {
+                const grouped: Record<string, { customer: string; invoices: InvoiceRow[]; total: number }> = {};
+                invoices.filter(i => ['issued', 'overdue'].includes(i.status)).forEach(inv => {
+                  const key = inv.customer_name || 'ไม่ระบุลูกค้า';
+                  if (!grouped[key]) grouped[key] = { customer: key, invoices: [], total: 0 };
+                  grouped[key].invoices.push(inv);
+                  grouped[key].total += inv.grand_total;
+                });
+                const entries = Object.values(grouped);
+                if (entries.length === 0) return <div className="p-8 text-center text-sm text-slate-400">ไม่มีบิลค้างชำระ</div>;
+                return entries.map(g => (
+                  <div key={g.customer} className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-sm text-slate-800 dark:text-white">{g.customer}</span>
+                      <span className="font-bold text-blue-600">฿{g.total.toLocaleString()}</span>
+                    </div>
+                    <div className="space-y-1">
+                      {g.invoices.map(inv => (
+                        <div key={inv.invoice_id} className="flex items-center justify-between text-xs text-slate-500">
+                          <span className="font-mono">{inv.invoice_number} — {inv.description}</span>
+                          <span>฿{inv.grand_total.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => window.print()} className="mt-2 text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"><Printer size={10} /> พิมพ์ Statement</button>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+
+          {/* Receipt */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+              <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500" /> ใบเสร็จรับเงิน (Receipt)</h3>
+              <p className="text-xs text-slate-400 mt-0.5">บิลที่ชำระแล้ว สามารถออกใบเสร็จ</p>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {invoices.filter(i => i.status === 'paid').length === 0 ? (
+                <div className="p-8 text-center text-sm text-slate-400">ยังไม่มีบิลที่ชำระแล้ว</div>
+              ) : invoices.filter(i => i.status === 'paid').slice(0, 20).map(inv => (
+                <div key={inv.invoice_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">{inv.invoice_number}</span>
+                        <span className="text-xs bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">ชำระแล้ว</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">{inv.customer_name} • {inv.description} • ฿{inv.grand_total.toLocaleString()}</p>
+                    </div>
+                    <button onClick={() => {
+                      const receiptWin = window.open('', '_blank');
+                      if (receiptWin) {
+                        receiptWin.document.write(`<html><head><title>Receipt ${inv.invoice_number}</title>
+                          <style>body{font-family:sans-serif;padding:40px;max-width:600px;margin:auto}
+                          h1{font-size:18px;border-bottom:2px solid #000;padding-bottom:8px}
+                          table{width:100%;border-collapse:collapse;margin:20px 0}
+                          td,th{padding:8px;text-align:left;border-bottom:1px solid #ddd}
+                          .total{font-size:16px;font-weight:bold}
+                          .footer{margin-top:40px;text-align:center;font-size:11px;color:#888}
+                          @media print{button{display:none}}</style></head><body>
+                          <h1>ใบเสร็จรับเงิน / Receipt</h1>
+                          <p><b>เลขที่:</b> ${inv.invoice_number}</p>
+                          <p><b>ลูกค้า:</b> ${inv.customer_name}</p>
+                          <p><b>วันที่ชำระ:</b> ${inv.paid_at ? new Date(inv.paid_at).toLocaleDateString('th-TH') : '-'}</p>
+                          <table><tr><th>รายการ</th><th>จำนวน</th><th>หน่วยละ</th><th>รวม</th></tr>
+                          <tr><td>${inv.description}</td><td>${inv.quantity}</td><td>฿${inv.unit_price.toLocaleString()}</td><td>฿${inv.total_amount.toLocaleString()}</td></tr>
+                          <tr><td colspan="3">VAT 7%</td><td>฿${inv.vat_amount.toLocaleString()}</td></tr>
+                          <tr class="total"><td colspan="3">รวมสุทธิ</td><td>฿${inv.grand_total.toLocaleString()}</td></tr></table>
+                          <p class="footer">CYMS - Container Yard Management System</p>
+                          <button onclick="window.print()" style="padding:8px 20px;background:#3B82F6;color:#fff;border:none;border-radius:8px;cursor:pointer;margin-top:20px">🖨️ พิมพ์</button>
+                          </body></html>`);
+                        receiptWin.document.close();
+                      }
+                    }} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 flex items-center gap-1">
+                      <Printer size={12} /> พิมพ์ใบเสร็จ
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================== ERP EXPORT TAB =================== */}
+      {activeTab === 'export' && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="p-5 border-b border-slate-100 dark:border-slate-700">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center text-violet-600"><FileSpreadsheet size={20} /></div>
+              <div>
+                <h3 className="font-semibold text-slate-800 dark:text-white">ส่งออก ERP (Debit/Credit Export)</h3>
+                <p className="text-xs text-slate-400">ส่งออกข้อมูลใบแจ้งหนี้เป็น CSV สำหรับโหลดเข้าระบบบัญชี</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">สถานะ</label>
+                <select defaultValue="paid" className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm" id="erp-status">
+                  <option value="paid">ชำระแล้ว</option>
+                  <option value="issued">แจ้งหนี้</option>
+                  <option value="">ทุกสถานะ</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">จากวันที่</label>
+                <input type="date" className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm" id="erp-from" />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">ถึงวันที่</label>
+                <input type="date" className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm" id="erp-to" />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => {
+                const status = (document.getElementById('erp-status') as HTMLSelectElement)?.value || '';
+                const from = (document.getElementById('erp-from') as HTMLInputElement)?.value || '';
+                const to = (document.getElementById('erp-to') as HTMLInputElement)?.value || '';
+                let url = `/api/billing/erp-export?yard_id=${yardId}&format=csv`;
+                if (status) url += `&status=${status}`;
+                if (from) url += `&date_from=${from}`;
+                if (to) url += `&date_to=${to}`;
+                window.open(url, '_blank');
+              }} className="flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-all">
+                <FileDown size={16} /> ดาวน์โหลด CSV
+              </button>
+              <button onClick={async () => {
+                const status = (document.getElementById('erp-status') as HTMLSelectElement)?.value || '';
+                const from = (document.getElementById('erp-from') as HTMLInputElement)?.value || '';
+                const to = (document.getElementById('erp-to') as HTMLInputElement)?.value || '';
+                let url = `/api/billing/erp-export?yard_id=${yardId}&format=json`;
+                if (status) url += `&status=${status}`;
+                if (from) url += `&date_from=${from}`;
+                if (to) url += `&date_to=${to}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                // Show summary alert
+                alert(`ERP Export สำเร็จ\n\nรายการ: ${data.total_entries}\nDebit: ฿${data.total_debit?.toLocaleString()}\nCredit: ฿${data.total_credit?.toLocaleString()}`);
+              }} className="flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
+                <Search size={16} /> ดูตัวอย่าง JSON
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

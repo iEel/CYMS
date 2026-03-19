@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 19 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1 สมบูรณ์
+> ส่งมอบงาน: 19 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-4 สมบูรณ์ (75%)
 
 ---
 
@@ -14,10 +14,10 @@
 |-----|-----------|-------|
 | **เฟส 1** | วางรากฐาน — โปรเจค, Design System, DB Schema | ✅ เสร็จ |
 | **เฟส 2** | ล็อกอิน, Dashboard, ตั้งค่าระบบ, RBAC | ✅ เสร็จ |
-| **เฟส 3** | จัดการลาน, 3D Viewer, Auto-Allocation, ค้นหาตู้, Yard Audit | ✅ เสร็จ |
+| **เฟส 3** | จัดการลาน, 3D Viewer, Auto-Allocation, ค้นหาตู้, Yard Audit, **PWA Card View** | ✅ เสร็จ |
 | **เฟส 4** | Gate In/Out, EIR, ตรวจสภาพตู้, OCR, Seal Photo, Signature, Inter-Yard Transfer | ✅ เสร็จ |
-| **เฟส 5** | ปฏิบัติการ, Job Queue, Smart Shifting | ✅ เสร็จ |
-| **เฟส 6** | EDI, Booking/Manifest, Seal Validation | ✅ เสร็จ |
+| **เฟส 5** | ปฏิบัติการ, Job Queue, Smart Shifting, **Tablet-optimized buttons** | ✅ เสร็จ |
+| **เฟส 6** | EDI, Booking/Manifest, Seal Validation, **CSV/Excel file import** | ✅ เสร็จ |
 | **เฟส 7** | ซ่อมบำรุง M&R, EOR, CEDEX | ✅ เสร็จ |
 | **เฟส 8** | บัญชี Billing, Tariff, Hold/Release | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
@@ -35,6 +35,8 @@
 | **3D Rendering** | Three.js | latest |
 | **Database** | MS SQL Server (แยก Server) | ผ่าน `mssql` package |
 | **Auth** | JWT + bcrypt | `jsonwebtoken` + `bcryptjs` |
+| **OCR** | Tesseract.js | `tesseract.js` |
+| **Excel/CSV** | SheetJS | `xlsx` |
 | **Package Manager** | npm | - |
 
 ---
