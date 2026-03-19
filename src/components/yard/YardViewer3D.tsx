@@ -98,22 +98,21 @@ function createContainerMesh(ctr: ContainerBlock, _scene: THREE.Scene): THREE.Gr
     shininess: 25,
     specular: 0x333333,
     flatShading: true,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.castShadow = true;
   body.receiveShadow = true;
   group.add(body);
 
-  // === เส้นขอบ — depthTest:false ป้องกัน z-fight 100% ===
+  // === เส้นขอบ — polygonOffset บน body ดัน body ถอยหลัง edges จะชนะเสมอ ===
   const edgesGeo = new THREE.EdgesGeometry(bodyGeo);
   const edgesMat = new THREE.LineBasicMaterial({
     color: new THREE.Color(baseColor).multiplyScalar(0.4),
-    depthTest: false,
-    transparent: true,
-    opacity: 0.6,
   });
   const edges = new THREE.LineSegments(edgesGeo, edgesMat);
-  edges.renderOrder = 1;
   group.add(edges);
 
   // === Handle bars (ยื่นออก 0.04 จากผิว — ไม่ z-fight) ===
