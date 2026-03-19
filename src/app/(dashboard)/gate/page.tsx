@@ -82,6 +82,24 @@ export default function GatePage() {
   const [gateOutPhase, setGateOutPhase] = useState<'search' | 'pending_pickup' | 'confirm_release'>('search');
   const [releaseLoading, setReleaseLoading] = useState(false);
 
+  // Billing at Gate-Out
+  interface BillingCharge { charge_type: string; description: string; quantity: number; unit_price: number; subtotal: number; free_days: number; billable_days: number; }
+  interface BillingData {
+    container: Record<string, unknown>;
+    customer: { customer_id: number; customer_name: string; credit_term: number } | null;
+    is_credit: boolean;
+    credit_term: number;
+    charges: BillingCharge[];
+    summary: { total_before_vat: number; vat_rate: number; vat_amount: number; grand_total: number };
+    existing_invoices: { invoice_id: number; invoice_number: string; grand_total: number; status: string }[];
+    has_hold: boolean;
+  }
+  const [billingData, setBillingData] = useState<BillingData | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'credit'>('cash');
+  const [billingPaid, setBillingPaid] = useState(false);
+  const [billingInvoiceNumber, setBillingInvoiceNumber] = useState('');
+
   // History
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -147,11 +165,29 @@ export default function GatePage() {
   // Select container for gate-out + check if work order already exists
   const selectContainerForGateOut = async (c: ContainerResult) => {
     setSelectedContainer(c);
-    setGateOutPhase('search'); // default
+    setGateOutPhase('search');
+    setBillingData(null);
+    setBillingPaid(false);
+    setBillingInvoiceNumber('');
+
+    // Fetch billing info
+    setBillingLoading(true);
+    try {
+      const billRes = await fetch('/api/billing/gate-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yard_id: yardId, container_id: c.container_id }),
+      });
+      const billData = await billRes.json();
+      setBillingData(billData);
+      if (billData.is_credit) setPaymentMethod('credit');
+    } catch (err) { console.error(err); }
+    finally { setBillingLoading(false); }
+
+    // Check existing work orders
     try {
       const res = await fetch(`/api/operations?yard_id=${yardId}`);
       const data = await res.json();
-      // Find any Gate-Out work order for this container (active or completed)
       const gateOutOrders = (data.orders || []).filter(
         (o: { container_number: string; notes?: string; status: string }) =>
           o.container_number === c.container_number &&
@@ -159,7 +195,6 @@ export default function GatePage() {
           o.status !== 'cancelled'
       );
       if (gateOutOrders.length > 0) {
-        // Check if any active work order exists
         const activeWO = gateOutOrders.find(
           (o: { status: string }) => ['pending', 'assigned', 'in_progress'].includes(o.status)
         );
@@ -168,12 +203,9 @@ export default function GatePage() {
         } else {
           setGateOutPhase('confirm_release');
         }
-        // Restore driver info from localStorage
         try {
           const saved = localStorage.getItem(`gateout_driver_${c.container_number}`);
-          if (saved) {
-            setGateOutForm(JSON.parse(saved));
-          }
+          if (saved) setGateOutForm(JSON.parse(saved));
         } catch { /* ignore */ }
       }
     } catch (err) { console.error(err); }
@@ -675,7 +707,166 @@ export default function GatePage() {
                       </div>
                     </div>
 
-                    <button onClick={handleRequestRelease} disabled={releaseLoading}
+                    {/* ===== BILLING CARD ===== */}
+                    {billingLoading ? (
+                      <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 text-sm text-slate-400">
+                        <Loader2 size={16} className="animate-spin" /> กำลังคำนวณค่าบริการ...
+                      </div>
+                    ) : billingData && billingData.charges.length > 0 ? (
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        {/* Header */}
+                        <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-900/10 dark:to-blue-900/10 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-700 dark:text-white flex items-center gap-2">
+                            💰 ค่าบริการ ({billingData.container.dwell_days as number} วัน)
+                          </h4>
+                          {billingData.is_credit && billingData.customer && (
+                            <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold">
+                              🏢 เครดิต {billingData.credit_term} วัน • {billingData.customer.customer_name}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Charges Table */}
+                        <div className="px-4 py-2 divide-y divide-slate-100 dark:divide-slate-700/50">
+                          {billingData.charges.map((ch, i) => (
+                            <div key={i} className="py-2 flex items-center justify-between text-sm">
+                              <div>
+                                <p className="text-slate-700 dark:text-slate-200">{ch.description}</p>
+                                <p className="text-[10px] text-slate-400">
+                                  {ch.billable_days > 0 ? `${ch.quantity} วัน × ฿${ch.unit_price.toLocaleString()} (ฟรี ${ch.free_days} วัน)` : `${ch.quantity} × ฿${ch.unit_price.toLocaleString()}`}
+                                </p>
+                              </div>
+                              <span className="font-mono font-semibold text-slate-800 dark:text-white">฿{ch.subtotal.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Summary */}
+                        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/30 border-t border-slate-200 dark:border-slate-700 space-y-1">
+                          <div className="flex justify-between text-xs text-slate-400">
+                            <span>รวมก่อน VAT</span>
+                            <span>฿{billingData.summary.total_before_vat.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-slate-400">
+                            <span>VAT 7%</span>
+                            <span>฿{billingData.summary.vat_amount.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between text-base font-bold text-slate-800 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-600">
+                            <span>ยอดรวมทั้งสิ้น</span>
+                            <span className="text-emerald-600">฿{billingData.summary.grand_total.toLocaleString()}</span>
+                          </div>
+                        </div>
+
+                        {/* Payment Action */}
+                        {!billingPaid && (
+                          <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                            {billingData.is_credit ? (
+                              /* Credit Customer → Auto Invoice */
+                              <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/10 rounded-lg p-3">
+                                <div>
+                                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">🏢 ลูกค้าเครดิต — วางบิลอัตโนมัติ</p>
+                                  <p className="text-[10px] text-blue-500">สร้างใบแจ้งหนี้ (pending) → ปล่อยตู้ได้เลย</p>
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    if (!selectedContainer || !billingData?.customer) return;
+                                    try {
+                                      const res = await fetch('/api/billing/invoices', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          yard_id: yardId,
+                                          customer_id: billingData.customer.customer_id,
+                                          container_id: selectedContainer.container_id,
+                                          charge_type: 'storage',
+                                          description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน)`,
+                                          quantity: 1,
+                                          unit_price: billingData.summary.total_before_vat,
+                                          due_date: new Date(Date.now() + billingData.credit_term * 86400000).toISOString(),
+                                        }),
+                                      });
+                                      const data = await res.json();
+                                      if (data.success) {
+                                        setBillingPaid(true);
+                                        setBillingInvoiceNumber(data.invoice_number || '');
+                                      }
+                                    } catch (err) { console.error(err); }
+                                  }}
+                                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 whitespace-nowrap"
+                                >📄 วางบิล</button>
+                              </div>
+                            ) : (
+                              /* Cash Customer → Pay at Gate */
+                              <>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-500 whitespace-nowrap">วิธีชำระ:</span>
+                                  {(['cash', 'transfer'] as const).map(m => (
+                                    <button key={m} onClick={() => setPaymentMethod(m)}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                        paymentMethod === m ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
+                                      }`}>
+                                      {m === 'cash' ? '💵 เงินสด' : '💳 โอน'}
+                                    </button>
+                                  ))}
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    if (!selectedContainer || !billingData) return;
+                                    try {
+                                      // Find or create customer from shipping_line
+                                      let custId = billingData.customer?.customer_id;
+                                      if (!custId) {
+                                        // Use a default general customer
+                                        custId = 1;
+                                      }
+                                      const res = await fetch('/api/billing/invoices', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          yard_id: yardId,
+                                          customer_id: custId,
+                                          container_id: selectedContainer.container_id,
+                                          charge_type: 'storage',
+                                          description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน) — ชำระ ${paymentMethod === 'cash' ? 'เงินสด' : 'โอน'}`,
+                                          quantity: 1,
+                                          unit_price: billingData.summary.total_before_vat,
+                                        }),
+                                      });
+                                      const data = await res.json();
+                                      if (data.success) {
+                                        // Mark as paid immediately
+                                        await fetch('/api/billing/invoices', {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ invoice_id: data.invoice.invoice_id, action: 'pay' }),
+                                        });
+                                        setBillingPaid(true);
+                                        setBillingInvoiceNumber(data.invoice_number || '');
+                                      }
+                                    } catch (err) { console.error(err); }
+                                  }}
+                                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all"
+                                >💰 รับชำระเงิน ฿{billingData.summary.grand_total.toLocaleString()}</button>
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Paid Confirmation */}
+                        {billingPaid && (
+                          <div className="px-4 py-3 border-t border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10 flex items-center gap-2 text-xs text-emerald-600 font-bold">
+                            <CheckCircle2 size={14} /> {billingData.is_credit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'} — {billingInvoiceNumber}
+                          </div>
+                        )}
+                      </div>
+                    ) : billingData && billingData.charges.length === 0 ? (
+                      <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-600 flex items-center gap-2">
+                        <CheckCircle2 size={14} /> ไม่มีค่าบริการ (อยู่ในช่วง Free Days หรือไม่มี Tariff)
+                      </div>
+                    ) : null}
+
+                    <button onClick={handleRequestRelease}
+                      disabled={releaseLoading || !!(billingData && billingData.charges.length > 0 && !billingPaid && !billingData.is_credit)}
                       className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-50 transition-all w-full justify-center">
                       {releaseLoading ? <Loader2 size={16} className="animate-spin" /> : <Truck size={16} />}
                       ขอดึงตู้ → สร้างคำสั่งรถยก
