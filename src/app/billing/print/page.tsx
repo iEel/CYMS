@@ -13,6 +13,7 @@ interface InvoiceData {
   customer_tax_id?: string; customer_address?: string;
   customer_branch_type?: string; customer_branch_number?: string;
   notes?: string;
+  container_id?: number; yard_id?: number;
 }
 
 interface CompanyData {
@@ -63,6 +64,8 @@ export default function PrintInvoicePage() {
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [chargeLines, setChargeLines] = useState<{ description: string; quantity: number; unit_price: number; subtotal: number }[]>([]);
+
   useEffect(() => {
     if (!invoiceId) return;
     const load = async () => {
@@ -70,15 +73,48 @@ export default function PrintInvoicePage() {
         // Fetch invoice detail
         const invRes = await fetch(`/api/billing/invoices?invoice_id=${invoiceId}`);
         const invData = await invRes.json();
-        if (invData.invoices?.length > 0) {
-          setInvoice(invData.invoices[0]);
+        const inv = invData.invoices?.[0];
+        if (inv) {
+          setInvoice(inv);
+
+          // Try to parse charges from notes
+          let parsed = false;
+          try {
+            if (inv.notes) {
+              const notesData = JSON.parse(inv.notes);
+              if (notesData.charges?.length > 0) {
+                setChargeLines(notesData.charges.filter((c: { subtotal: number }) => c.subtotal > 0));
+                parsed = true;
+              }
+            }
+          } catch { /* ignore */ }
+
+          // Fallback: call gate-check to get live breakdown
+          if (!parsed && inv.container_id && inv.yard_id) {
+            try {
+              const gcRes = await fetch('/api/billing/gate-check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ yard_id: inv.yard_id, container_id: inv.container_id }),
+              });
+              const gcData = await gcRes.json();
+              if (gcData.charges?.length > 0) {
+                setChargeLines(gcData.charges.filter((c: { subtotal: number }) => c.subtotal > 0));
+                parsed = true;
+              }
+            } catch { /* ignore */ }
+          }
+
+          // Final fallback: single line
+          if (!parsed) {
+            setChargeLines([{ description: inv.description || inv.charge_type, quantity: inv.quantity, unit_price: inv.unit_price, subtotal: inv.total_amount }]);
+          }
         }
+
         // Fetch company profile
         const compRes = await fetch('/api/settings/company');
         const compData = await compRes.json();
-        if (compData && compData.company_name) {
-          setCompany(compData);
-        }
+        if (compData && compData.company_name) setCompany(compData);
       } catch (err) { console.error(err); }
       finally { setLoading(false); }
     };
@@ -184,58 +220,28 @@ export default function PrintInvoicePage() {
         </div>
 
         {/* Items Table */}
-        {(() => {
-          // Parse charges from notes JSON
-          let chargeLines: { description: string; quantity: number; unit_price: number; subtotal: number }[] = [];
-          try {
-            if (invoice.notes) {
-              const parsed = JSON.parse(invoice.notes);
-              if (parsed.charges && Array.isArray(parsed.charges)) {
-                chargeLines = parsed.charges.filter((c: { subtotal: number }) => c.subtotal > 0).map((c: { description: string; quantity: number; unit_price: number; subtotal: number }) => ({
-                  description: c.description,
-                  quantity: c.quantity,
-                  unit_price: c.unit_price,
-                  subtotal: c.subtotal,
-                }));
-              }
-            }
-          } catch { /* ignore parse errors */ }
-
-          // Fallback to single line if no detailed charges
-          if (chargeLines.length === 0) {
-            chargeLines = [{
-              description: invoice.description || invoice.charge_type,
-              quantity: invoice.quantity,
-              unit_price: invoice.unit_price,
-              subtotal: invoice.total_amount,
-            }];
-          }
-
-          return (
-            <table className="w-full text-sm border-collapse mb-6">
-              <thead>
-                <tr className="border-y-2 border-slate-800">
-                  <th className="text-left py-2 w-8">ลำดับ</th>
-                  <th className="text-left py-2">รายการ</th>
-                  <th className="text-right py-2 w-20">จำนวน</th>
-                  <th className="text-right py-2 w-28">ราคาต่อหน่วย</th>
-                  <th className="text-right py-2 w-28">รวม</th>
-                </tr>
-              </thead>
-              <tbody>
-                {chargeLines.map((line, idx) => (
-                  <tr key={idx} className="border-b border-slate-200">
-                    <td className="py-2">{idx + 1}</td>
-                    <td className="py-2">{line.description}</td>
-                    <td className="py-2 text-right">{line.quantity}</td>
-                    <td className="py-2 text-right font-mono">฿{line.unit_price?.toLocaleString()}</td>
-                    <td className="py-2 text-right font-mono">฿{line.subtotal?.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          );
-        })()}
+        <table className="w-full text-sm border-collapse mb-6">
+          <thead>
+            <tr className="border-y-2 border-slate-800">
+              <th className="text-left py-2 w-8">ลำดับ</th>
+              <th className="text-left py-2">รายการ</th>
+              <th className="text-right py-2 w-20">จำนวน</th>
+              <th className="text-right py-2 w-28">ราคาต่อหน่วย</th>
+              <th className="text-right py-2 w-28">รวม</th>
+            </tr>
+          </thead>
+          <tbody>
+            {chargeLines.map((line, idx) => (
+              <tr key={idx} className="border-b border-slate-200">
+                <td className="py-2">{idx + 1}</td>
+                <td className="py-2">{line.description}</td>
+                <td className="py-2 text-right">{line.quantity}</td>
+                <td className="py-2 text-right font-mono">฿{line.unit_price?.toLocaleString()}</td>
+                <td className="py-2 text-right font-mono">฿{line.subtotal?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
         {/* Summary */}
         <div className="flex justify-end mb-6">
