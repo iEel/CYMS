@@ -2,12 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 
+// Auto-migrate: add branch columns if missing
+async function ensureBranchColumns(db: Awaited<ReturnType<typeof getDb>>) {
+  try {
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Yards') AND name = 'branch_type')
+        ALTER TABLE Yards ADD branch_type NVARCHAR(20) DEFAULT 'head_office';
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Yards') AND name = 'branch_number')
+        ALTER TABLE Yards ADD branch_number NVARCHAR(10) DEFAULT '00000';
+    `);
+  } catch { /* columns may already exist */ }
+}
+
 // GET — ดึงรายชื่อลานทั้งหมด
 export async function GET() {
   try {
     const db = await getDb();
+    await ensureBranchColumns(db);
     const result = await db.request().query(`
-      SELECT y.*, 
+      SELECT y.*,
+        ISNULL(y.branch_type, 'head_office') as branch_type,
+        ISNULL(y.branch_number, '00000') as branch_number,
         (SELECT COUNT(*) FROM YardZones z WHERE z.yard_id = y.yard_id) as zone_count
       FROM Yards y
       ORDER BY y.yard_id
@@ -24,6 +39,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    await ensureBranchColumns(db);
 
     const result = await db.request()
       .input('yardName', sql.NVarChar, body.yard_name)
@@ -32,10 +48,12 @@ export async function POST(request: NextRequest) {
       .input('latitude', sql.Decimal(10, 7), body.latitude || null)
       .input('longitude', sql.Decimal(10, 7), body.longitude || null)
       .input('geofenceRadius', sql.Int, body.geofence_radius || 500)
+      .input('branchType', sql.NVarChar, body.branch_type || 'head_office')
+      .input('branchNumber', sql.NVarChar, body.branch_number || '00000')
       .query(`
-        INSERT INTO Yards (yard_name, yard_code, address, latitude, longitude, geofence_radius)
+        INSERT INTO Yards (yard_name, yard_code, address, latitude, longitude, geofence_radius, branch_type, branch_number)
         OUTPUT INSERTED.*
-        VALUES (@yardName, @yardCode, @address, @latitude, @longitude, @geofenceRadius)
+        VALUES (@yardName, @yardCode, @address, @latitude, @longitude, @geofenceRadius, @branchType, @branchNumber)
       `);
 
     return NextResponse.json({ success: true, data: result.recordset[0] });
@@ -61,11 +79,14 @@ export async function PUT(request: NextRequest) {
       .input('latitude', sql.Decimal(10, 7), body.latitude || null)
       .input('longitude', sql.Decimal(10, 7), body.longitude || null)
       .input('geofenceRadius', sql.Int, body.geofence_radius || 500)
+      .input('branchType', sql.NVarChar, body.branch_type || 'head_office')
+      .input('branchNumber', sql.NVarChar, body.branch_number || '00000')
       .input('isActive', sql.Bit, body.is_active ?? true)
       .query(`
         UPDATE Yards SET
           yard_name = @yardName, yard_code = @yardCode, address = @address,
           latitude = @latitude, longitude = @longitude, geofence_radius = @geofenceRadius,
+          branch_type = @branchType, branch_number = @branchNumber,
           is_active = @isActive, updated_at = GETDATE()
         WHERE yard_id = @yardId
       `);

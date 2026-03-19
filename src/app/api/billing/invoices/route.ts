@@ -21,10 +21,17 @@ export async function GET(request: NextRequest) {
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const result = await req.query(`
-      SELECT i.*, c.customer_name, ct.container_number
+      SELECT i.*, c.customer_name, c.tax_id as customer_tax_id,
+             ISNULL(c.branch_type, 'head_office') as customer_branch_type,
+             ISNULL(c.branch_number, '00000') as customer_branch_number,
+             ct.container_number,
+             y.yard_name, y.yard_code,
+             ISNULL(y.branch_type, 'head_office') as yard_branch_type,
+             ISNULL(y.branch_number, '00000') as yard_branch_number
       FROM Invoices i
       LEFT JOIN Customers c ON i.customer_id = c.customer_id
       LEFT JOIN Containers ct ON i.container_id = ct.container_id
+      LEFT JOIN Yards y ON i.yard_id = y.yard_id
       ${where}
       ORDER BY i.created_at DESC
     `);

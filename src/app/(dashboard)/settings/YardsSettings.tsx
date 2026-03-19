@@ -11,6 +11,8 @@ interface Yard {
   latitude: number | null;
   longitude: number | null;
   geofence_radius: number;
+  branch_type: string;
+  branch_number: string;
   is_active: boolean;
   zone_count: number;
 }
@@ -47,12 +49,12 @@ export default function YardsSettings() {
   const [saving, setSaving] = useState(false);
 
   // Form states
-  const [yardForm, setYardForm] = useState({ yard_name: '', yard_code: '', address: '', geofence_radius: 500 });
+  const [yardForm, setYardForm] = useState({ yard_name: '', yard_code: '', address: '', geofence_radius: 500, branch_type: 'head_office', branch_number: '00000' });
   const [zoneForm, setZoneForm] = useState({ zone_name: '', zone_type: 'dry', max_tier: 5, max_bay: 20, max_row: 10, size_restriction: 'any', has_reefer_plugs: false });
 
   // Edit states
   const [editingYardId, setEditingYardId] = useState<number | null>(null);
-  const [editYardForm, setEditYardForm] = useState({ yard_name: '', yard_code: '', address: '' });
+  const [editYardForm, setEditYardForm] = useState({ yard_name: '', yard_code: '', address: '', branch_type: 'head_office', branch_number: '00000' });
   const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
   const [editZoneForm, setEditZoneForm] = useState({ zone_name: '', zone_type: 'dry', max_tier: 5, max_bay: 20, max_row: 10, size_restriction: 'any', has_reefer_plugs: false });
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -96,7 +98,7 @@ export default function YardsSettings() {
       const json = await res.json();
       if (json.success) {
         setShowAddYard(false);
-        setYardForm({ yard_name: '', yard_code: '', address: '', geofence_radius: 500 });
+        setYardForm({ yard_name: '', yard_code: '', address: '', geofence_radius: 500, branch_type: 'head_office', branch_number: '00000' });
         fetchYards();
       }
     } catch (err) { console.error(err); }
@@ -223,6 +225,27 @@ export default function YardsSettings() {
             <input type="text" placeholder="ที่อยู่" value={yardForm.address} onChange={e => setYardForm({...yardForm, address: e.target.value})}
               className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#10B981]" />
           </div>
+          <div className="mt-3">
+            <label className="block text-xs text-slate-500 mb-1.5">ประเภทสาขา</label>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" checked={yardForm.branch_type === 'head_office'}
+                  onChange={() => setYardForm({...yardForm, branch_type: 'head_office', branch_number: '00000'})}
+                  className="accent-emerald-600" />
+                <span className="text-sm text-slate-700 dark:text-slate-300">สำนักงานใหญ่</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" checked={yardForm.branch_type === 'branch'}
+                  onChange={() => setYardForm({...yardForm, branch_type: 'branch', branch_number: ''})}
+                  className="accent-emerald-600" />
+                <span className="text-sm text-slate-700 dark:text-slate-300">สาขาที่</span>
+              </label>
+              {yardForm.branch_type === 'branch' && (
+                <input type="text" value={yardForm.branch_number} onChange={e => setYardForm({...yardForm, branch_number: e.target.value})}
+                  placeholder="00001" className="h-9 w-24 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm font-mono text-slate-800 dark:text-white outline-none focus:border-emerald-500" />
+              )}
+            </div>
+          </div>
           <div className="flex justify-end mt-4">
             <button onClick={handleAddYard} disabled={saving || !yardForm.yard_name || !yardForm.yard_code}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#10B981] text-white text-sm font-medium hover:bg-[#059669] disabled:opacity-50 transition-all">
@@ -245,6 +268,9 @@ export default function YardsSettings() {
                 <h3 className="font-semibold text-slate-800 dark:text-white">{yard.yard_name}</h3>
                 <p className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
                   <span className="font-mono bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">{yard.yard_code}</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${yard.branch_type === 'head_office' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30' : 'bg-amber-50 text-amber-600 dark:bg-amber-900/30'}`}>
+                    {yard.branch_type === 'head_office' ? 'สำนักงานใหญ่' : `สาขาที่ ${yard.branch_number}`}
+                  </span>
                   {yard.address && <span>• {yard.address}</span>}
                   <span>• {yard.zone_count} โซน</span>
                 </p>
@@ -269,7 +295,7 @@ export default function YardsSettings() {
                 </>
               ) : (
                 <>
-                  <button onClick={(e) => { e.stopPropagation(); setEditingYardId(yard.yard_id); setEditYardForm({ yard_name: yard.yard_name, yard_code: yard.yard_code, address: yard.address || '' }); }}
+                  <button onClick={(e) => { e.stopPropagation(); setEditingYardId(yard.yard_id); setEditYardForm({ yard_name: yard.yard_name, yard_code: yard.yard_code, address: yard.address || '', branch_type: yard.branch_type || 'head_office', branch_number: yard.branch_number || '00000' }); }}
                     className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-blue-50 hover:text-blue-500 transition-colors" title="แก้ไข">
                     <Pencil size={14} />
                   </button>
