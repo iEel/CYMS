@@ -77,7 +77,7 @@ const SHIPPING_COLORS: Record<string, number> = {
   'PIL':        0xE31937,
 };
 
-// สร้าง container mesh — สวยงาม + ไม่กระพริบ
+// สร้าง container mesh — NO edges, NO z-fighting
 function createContainerMesh(ctr: ContainerBlock, _scene: THREE.Scene): THREE.Group {
   const is40 = ctr.size === '40' || ctr.size === '45';
   const w = is40 ? CW_40 : CW_20;
@@ -91,34 +91,23 @@ function createContainerMesh(ctr: ContainerBlock, _scene: THREE.Scene): THREE.Gr
   if (ctr.status === 'hold') baseColor = 0xF59E0B;
   if (ctr.status === 'repair') baseColor = 0xEF4444;
 
-  // === ตัวตู้หลัก ===
+  // === ตัวตู้ — single box, single material ===
   const bodyGeo = new THREE.BoxGeometry(w, h, d);
-  const bodyMat = new THREE.MeshPhongMaterial({
+  const bodyMat = new THREE.MeshStandardMaterial({
     color: baseColor,
-    shininess: 25,
-    specular: 0x333333,
-    flatShading: true,
-    polygonOffset: true,
-    polygonOffsetFactor: 2,
-    polygonOffsetUnits: 2,
+    roughness: 0.6,
+    metalness: 0.3,
   });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.castShadow = true;
   body.receiveShadow = true;
   group.add(body);
 
-  // === เส้นขอบ — polygonOffset บน body ดัน body ถอยหลัง ===
-  const edgesGeo = new THREE.EdgesGeometry(bodyGeo);
-  const edgesMat = new THREE.LineBasicMaterial({
-    color: new THREE.Color(baseColor).multiplyScalar(0.4),
-  });
-  const edges = new THREE.LineSegments(edgesGeo, edgesMat);
-  group.add(edges);
-
-  // === Handle bars (ยื่นออก 0.04 จากผิว — ไม่ z-fight) ===
-  const handleMat = new THREE.MeshPhongMaterial({
+  // === Handle bars (ยื่นออก 0.04 — ไม่ z-fight) ===
+  const handleMat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(baseColor).multiplyScalar(0.35),
-    shininess: 50,
+    roughness: 0.3,
+    metalness: 0.6,
   });
   for (const zOff of [-d * 0.18, d * 0.18]) {
     const handleGeo = new THREE.CylinderGeometry(0.018, 0.018, h * 0.7, 6);
@@ -302,7 +291,11 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
 
         const containerGroup = createContainerMesh(ctr, scene);
 
-        const x = zoneOffsetX + (ctr.bay - 1) * (CW_20 + GAP_X) + cw / 2;
+        // 40ft ตู้ใหญ่กินพื้นที่ 2 bays — ต้องชดเชย offset ให้ยาวขึ้น
+        const baySlot = CW_20 + GAP_X;
+        const x = is40
+          ? zoneOffsetX + (ctr.bay - 1) * baySlot + baySlot  // center across 2 slots
+          : zoneOffsetX + (ctr.bay - 1) * baySlot + CW_20 / 2;
         const y = (ctr.tier - 1) * (ch + GAP_Y) + ch / 2;
         const z = (ctr.row - 1) * (CD + GAP_Z) + CD / 2;
 
