@@ -13,10 +13,11 @@ interface CompanyData {
   phone: string;
   email: string;
   logo_url: string;
+  labor_rate: number;
 }
 
 const emptyCompany: CompanyData = {
-  company_name: '', tax_id: '', branch_type: 'head_office', branch_number: '00000', address: '', phone: '', email: '', logo_url: '',
+  company_name: '', tax_id: '', branch_type: 'head_office', branch_number: '00000', address: '', phone: '', email: '', logo_url: '', labor_rate: 350,
 };
 
 export default function CompanySettings() {
@@ -42,6 +43,7 @@ export default function CompanySettings() {
           phone: json.phone ?? '',
           email: json.email ?? '',
           logo_url: json.logo_url ?? '',
+          labor_rate: json.labor_rate ?? 350,
         });
       }
     } catch (err) {
@@ -75,6 +77,7 @@ export default function CompanySettings() {
           phone: d.phone ?? '',
           email: d.email ?? '',
           logo_url: d.logo_url ?? '',
+          labor_rate: d.labor_rate ?? 350,
         });
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
@@ -259,6 +262,21 @@ export default function CompanySettings() {
                 className="h-11 w-28 px-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm font-mono text-slate-800 dark:text-white outline-none focus:border-blue-500" />
             )}
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            อัตราแรงงาน (฿/ชม.)
+          </label>
+          <input
+            type="number"
+            step="10"
+            value={data.labor_rate}
+            onChange={(e) => setData({ ...data, labor_rate: parseFloat(e.target.value) || 0 })}
+            placeholder="350"
+            className={inputClass}
+          />
+          <p className="text-[10px] text-slate-400 mt-1">ใช้คำนวณค่าซ่อม CEDEX ในหน้าซ่อมบำรุง M&R</p>
         </div>
 
         <div>

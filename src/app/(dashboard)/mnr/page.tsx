@@ -59,6 +59,14 @@ export default function MnRPage() {
     code: '', component: '', damage: '', repair: '', labor_hours: 0, material_cost: 0,
   });
   const [cedexSaving, setCedexSaving] = useState(false);
+  const [laborRate, setLaborRate] = useState(350);
+
+  // Load labor rate from company settings
+  useEffect(() => {
+    fetch('/api/settings/company').then(r => r.json()).then(d => {
+      if (d?.labor_rate) setLaborRate(d.labor_rate);
+    }).catch(() => {});
+  }, []);
 
   const fetchCedexCodes = useCallback(async () => {
     setCedexLoading(true);
@@ -96,7 +104,7 @@ export default function MnRPage() {
 
   const estimatedCost = selectedCodes.reduce((sum, code) => {
     const c = cedexCodes.find(cx => cx.code === code);
-    return sum + (c ? c.labor_hours * 350 + c.material_cost : 0);
+    return sum + (c ? c.labor_hours * laborRate + c.material_cost : 0);
   }, 0);
 
   const handleCreate = async () => {
@@ -342,7 +350,7 @@ export default function MnRPage() {
                       className="rounded border-slate-300" />
                     <span className="font-mono text-violet-600 font-semibold w-10">{c.code}</span>
                     <span className="flex-1 text-slate-700 dark:text-slate-300">{c.component} — {c.damage} → {c.repair}</span>
-                    <span className="text-slate-400">฿{(c.labor_hours * 350 + c.material_cost).toLocaleString()}</span>
+                    <span className="text-slate-400">฿{(c.labor_hours * laborRate + c.material_cost).toLocaleString()}</span>
                   </label>
                 ))}
               </div>
@@ -465,7 +473,7 @@ export default function MnRPage() {
                   ยกเลิก
                 </button>
                 <span className="text-xs text-slate-400 ml-2">
-                  รวม: ฿{(cedexForm.labor_hours * 350 + cedexForm.material_cost).toLocaleString()}
+                  รวม: ฿{(cedexForm.labor_hours * laborRate + cedexForm.material_cost).toLocaleString()}
                 </span>
               </div>
             </div>
@@ -497,7 +505,7 @@ export default function MnRPage() {
                       <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{c.repair}</td>
                       <td className="px-4 py-2.5 text-right text-slate-500">{c.labor_hours}</td>
                       <td className="px-4 py-2.5 text-right text-slate-500">฿{c.material_cost.toLocaleString()}</td>
-                      <td className="px-4 py-2.5 text-right font-semibold text-slate-800 dark:text-white">฿{(c.labor_hours * 350 + c.material_cost).toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-slate-800 dark:text-white">฿{(c.labor_hours * laborRate + c.material_cost).toLocaleString()}</td>
                       <td className="px-4 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => startEditCedex(c)}
@@ -520,7 +528,7 @@ export default function MnRPage() {
             </div>
           )}
           <div className="p-3 border-t border-slate-100 dark:border-slate-700 text-[10px] text-slate-400">
-            ทั้งหมด {cedexCodes.length} รายการ | อัตราแรงงาน 350 ฿/ชม.
+            ทั้งหมด {cedexCodes.length} รายการ | อัตราแรงงาน {laborRate.toLocaleString()} ฿/ชม. (ตั้งค่าได้ที่หน้าตั้งค่าระบบ)
           </div>
         </div>
       )}
