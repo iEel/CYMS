@@ -216,7 +216,7 @@ export default function OperationsPage() {
           { id: 'shifting' as const, label: 'Smart Shifting', icon: <Shuffle size={14} /> },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3.5 md:py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.id
                 ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -255,13 +255,14 @@ export default function OperationsPage() {
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-700">
               {orders.map(order => (
-                <div key={order.order_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                <div key={order.order_id} className="p-4 md:p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                  {/* Container Info */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="text-lg">{orderTypeLabels[order.order_type]?.split(' ')[0] || '📦'}</div>
+                      <div className="text-2xl md:text-lg">{orderTypeLabels[order.order_type]?.split(' ')[0] || '📦'}</div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-semibold text-sm text-slate-800 dark:text-white">{order.container_number}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-bold text-base md:text-sm text-slate-800 dark:text-white">{order.container_number}</span>
                           <span className="text-xs text-slate-400">{order.size}&apos;{order.type}</span>
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${priorityLabels[order.priority]?.color}`}>
                             {priorityLabels[order.priority]?.label}
@@ -282,12 +283,11 @@ export default function OperationsPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    {/* Desktop: inline status + action buttons */}
+                    <div className="hidden md:flex items-center gap-2">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${statusLabels[order.status]?.color}`}>
                         {statusLabels[order.status]?.icon} {statusLabels[order.status]?.label}
                       </span>
-
-                      {/* Action buttons */}
                       {order.status === 'pending' && (
                         <button onClick={() => updateOrder(order.order_id, 'assign')}
                           className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-xs font-medium hover:bg-blue-100">
@@ -313,8 +313,46 @@ export default function OperationsPage() {
                         </button>
                       )}
                     </div>
+
+                    {/* Mobile: status badge only */}
+                    <div className="md:hidden">
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold ${statusLabels[order.status]?.color}`}>
+                        {statusLabels[order.status]?.icon} {statusLabels[order.status]?.label}
+                      </span>
+                    </div>
                   </div>
-                  {order.notes && <p className="text-xs text-slate-400 mt-1 ml-9">💬 {order.notes}</p>}
+
+                  {order.notes && <p className="text-xs text-slate-400 mt-1 ml-11 md:ml-9">💬 {order.notes}</p>}
+
+                  {/* Mobile/Tablet: Large action buttons (glove-friendly, min 48px) */}
+                  <div className="md:hidden mt-3 grid grid-cols-2 gap-2">
+                    {order.status === 'pending' && (
+                      <>
+                        <button onClick={() => updateOrder(order.order_id, 'assign')}
+                          className="flex items-center justify-center gap-2 py-4 rounded-xl bg-blue-500 text-white text-sm font-bold active:scale-95 transition-transform shadow-sm">
+                          <User size={20} /> รับงาน
+                        </button>
+                        <button onClick={() => updateOrder(order.order_id, 'cancel')}
+                          className="flex items-center justify-center gap-2 py-4 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500 text-sm font-bold active:scale-95 transition-transform">
+                          <XCircle size={20} /> ยกเลิก
+                        </button>
+                      </>
+                    )}
+                    {order.status === 'assigned' && (
+                      <>
+                        <button onClick={() => updateOrder(order.order_id, 'start')}
+                          className="flex items-center justify-center gap-2 py-4 rounded-xl bg-emerald-500 text-white text-sm font-bold active:scale-95 transition-transform shadow-sm col-span-2">
+                          <Play size={22} /> เริ่มงาน
+                        </button>
+                      </>
+                    )}
+                    {order.status === 'in_progress' && (
+                      <button onClick={() => updateOrder(order.order_id, 'complete')}
+                        className="flex items-center justify-center gap-2 py-4 rounded-xl bg-emerald-600 text-white text-base font-bold active:scale-95 transition-transform shadow-md col-span-2">
+                        <CheckCircle2 size={24} /> ✅ เสร็จแล้ว
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
