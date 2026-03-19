@@ -18,6 +18,7 @@ import {
 import CompanySettings from './CompanySettings';
 import YardsSettings from './YardsSettings';
 import UsersSettings from './UsersSettings';
+import CustomerMaster from './CustomerMaster';
 import ApprovalHierarchy from './ApprovalHierarchy';
 import EDIConfiguration from './EDIConfiguration';
 import SealMaster from './SealMaster';
@@ -29,6 +30,7 @@ const tabs = [
   { id: 'company', label: 'องค์กร', icon: <Building2 size={18} />, color: '#3B82F6' },
   { id: 'yards', label: 'ลาน/โซน', icon: <MapPin size={18} />, color: '#10B981' },
   { id: 'users', label: 'ผู้ใช้/สิทธิ์', icon: <Users size={18} />, color: '#8B5CF6' },
+  { id: 'customers', label: 'ลูกค้า', icon: <Receipt size={18} />, color: '#EC4899' },
   { id: 'approval', label: 'อนุมัติ', icon: <ShieldCheck size={18} />, color: '#F59E0B' },
   { id: 'edi', label: 'EDI', icon: <Globe size={18} />, color: '#0EA5E9' },
   { id: 'seal', label: 'ซีล', icon: <Lock size={18} />, color: '#EF4444' },
@@ -76,6 +78,7 @@ export default function SettingsPage() {
         {activeTab === 'company' && <CompanySettings />}
         {activeTab === 'yards' && <YardsSettings />}
         {activeTab === 'users' && <UsersSettings />}
+        {activeTab === 'customers' && <CustomerMaster />}
         {activeTab === 'approval' && <ApprovalHierarchy />}
         {activeTab === 'edi' && <EDIConfiguration />}
         {activeTab === 'seal' && <SealMaster />}

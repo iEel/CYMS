@@ -57,6 +57,7 @@ export default function BillingPage() {
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [customers, setCustomers] = useState<Array<{ customer_id: number; customer_name: string; customer_type: string }>>([]);
 
   // Auto-calc
   const [autoCalcContainer, setAutoCalcContainer] = useState('');
@@ -94,7 +95,12 @@ export default function BillingPage() {
   useEffect(() => {
     if (activeTab === 'invoices' || activeTab === 'hold') fetchInvoices();
     if (activeTab === 'tariffs') fetchTariffs();
-  }, [activeTab, fetchInvoices, fetchTariffs]);
+    if (activeTab === 'create' && customers.length === 0) {
+      fetch('/api/settings/customers').then(r => r.json()).then(d => {
+        if (Array.isArray(d)) setCustomers(d.filter((c: { is_active: boolean }) => c.is_active));
+      }).catch(() => {});
+    }
+  }, [activeTab, fetchInvoices, fetchTariffs, customers.length]);
 
   const updateInvoice = async (id: number, action: string) => {
     await fetch('/api/billing/invoices', {
@@ -288,7 +294,16 @@ export default function BillingPage() {
           </div>
           <div className="p-5 space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div><label className={labelClass}>รหัสลูกค้า *</label><input type="number" value={createForm.customer_id} onChange={e => setCreateForm({ ...createForm, customer_id: e.target.value })} className={inputClass} placeholder="Customer ID" /></div>
+              <div><label className={labelClass}>ลูกค้า *</label>
+                <select value={createForm.customer_id} onChange={e => setCreateForm({ ...createForm, customer_id: e.target.value })} className={inputClass}>
+                  <option value="">-- เลือกลูกค้า --</option>
+                  {customers.map(c => (
+                    <option key={c.customer_id} value={c.customer_id}>
+                      {c.customer_name} ({c.customer_type === 'shipping_line' ? 'สายเรือ' : c.customer_type === 'trucker' ? 'รถบรรทุก' : 'ทั่วไป'})
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div><label className={labelClass}>เลขตู้ (ถ้ามี)</label><input type="text" value={createForm.container_number} onChange={e => setCreateForm({ ...createForm, container_number: e.target.value })} className={`${inputClass} font-mono`} placeholder="ABCU1234567" /></div>
               <div><label className={labelClass}>ประเภทค่าบริการ</label>
                 <select value={createForm.charge_type} onChange={e => setCreateForm({ ...createForm, charge_type: e.target.value })} className={inputClass}>
