@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Building2, Save, Loader2, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Building2, Save, Loader2, CheckCircle, Upload, ImageIcon, X } from 'lucide-react';
 
 interface CompanyData {
   company_id?: number;
@@ -22,6 +22,8 @@ export default function CompanySettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -59,6 +61,29 @@ export default function CompanySettings() {
     }
   };
 
+  const handleFileSelect = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > 5 * 1024 * 1024) { alert('ไฟล์ใหญ่เกิน 5MB'); return; }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setData({ ...data, logo_url: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileSelect(file);
+  };
+
   if (loading) {
     return (
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-8">
@@ -68,6 +93,8 @@ export default function CompanySettings() {
       </div>
     );
   }
+
+  const inputClass = "w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-sm focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20 outline-none transition-all";
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
@@ -96,6 +123,67 @@ export default function CompanySettings() {
 
       {/* Form */}
       <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Logo Upload — full width */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            โลโก้บริษัท
+          </label>
+          <div className="flex items-start gap-5">
+            {/* Preview */}
+            <div className="shrink-0 w-28 h-28 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center overflow-hidden">
+              {data.logo_url ? (
+                <img
+                  src={data.logo_url}
+                  alt="Company Logo"
+                  className="w-full h-full object-contain p-1"
+                />
+              ) : (
+                <div className="text-center">
+                  <ImageIcon size={28} className="mx-auto text-slate-300 dark:text-slate-500" />
+                  <p className="text-[10px] text-slate-400 mt-1">ไม่มีโลโก้</p>
+                </div>
+              )}
+            </div>
+
+            {/* Upload Zone */}
+            <div className="flex-1">
+              <div
+                className={`relative rounded-xl border-2 border-dashed p-5 text-center transition-all cursor-pointer
+                  ${dragOver
+                    ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/10'
+                    : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 hover:bg-slate-50 dark:hover:bg-slate-700/30'
+                  }`}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={24} className={`mx-auto mb-2 ${dragOver ? 'text-blue-500' : 'text-slate-400'}`} />
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  <span className="font-semibold text-blue-600">คลิกเลือกไฟล์</span> หรือลากมาวาง
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">PNG, JPG, SVG — สูงสุด 5MB</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileInputChange}
+                />
+              </div>
+
+              {data.logo_url && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setData({ ...data, logo_url: '' }); }}
+                  className="mt-2 flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 transition-colors"
+                >
+                  <X size={12} /> ลบโลโก้
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="md:col-span-2">
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
             ชื่อบริษัท <span className="text-rose-500">*</span>
@@ -105,8 +193,7 @@ export default function CompanySettings() {
             value={data.company_name}
             onChange={(e) => setData({ ...data, company_name: e.target.value })}
             placeholder="บริษัท ตัวอย่าง จำกัด"
-            className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
-              text-slate-800 dark:text-white text-sm focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+            className={inputClass}
           />
         </div>
 
@@ -119,8 +206,7 @@ export default function CompanySettings() {
             value={data.tax_id}
             onChange={(e) => setData({ ...data, tax_id: e.target.value })}
             placeholder="0-0000-00000-00-0"
-            className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
-              text-slate-800 dark:text-white text-sm font-mono focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+            className={`${inputClass} font-mono`}
           />
         </div>
 
@@ -133,8 +219,7 @@ export default function CompanySettings() {
             value={data.phone}
             onChange={(e) => setData({ ...data, phone: e.target.value })}
             placeholder="02-xxx-xxxx"
-            className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
-              text-slate-800 dark:text-white text-sm focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+            className={inputClass}
           />
         </div>
 
@@ -147,22 +232,7 @@ export default function CompanySettings() {
             value={data.email}
             onChange={(e) => setData({ ...data, email: e.target.value })}
             placeholder="info@company.com"
-            className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
-              text-slate-800 dark:text-white text-sm focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-            URL โลโก้
-          </label>
-          <input
-            type="text"
-            value={data.logo_url}
-            onChange={(e) => setData({ ...data, logo_url: e.target.value })}
-            placeholder="https://example.com/logo.png"
-            className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
-              text-slate-800 dark:text-white text-sm focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+            className={inputClass}
           />
         </div>
 
@@ -183,3 +253,4 @@ export default function CompanySettings() {
     </div>
   );
 }
+
