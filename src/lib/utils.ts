@@ -5,35 +5,48 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Date/Time formatting — dd/mm/yyyy, Asia/Bangkok (UTC+7), 24-hour
+ */
+const TZ = 'Asia/Bangkok';
+
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('th-TH', {
+  return d.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+    timeZone: TZ,
+  }); // → 19/03/2026
 }
 
 export function formatDateTime(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleString('th-TH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
+  const datePart = d.toLocaleDateString('en-GB', {
+    day: '2-digit', month: '2-digit', year: 'numeric', timeZone: TZ,
   });
+  const timePart = d.toLocaleTimeString('en-GB', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ,
+  });
+  return `${datePart} ${timePart}`; // → 19/03/2026 14:30
 }
 
 export function formatTime(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleTimeString('th-TH', {
+  return d.toLocaleTimeString('en-GB', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
-  });
+    timeZone: TZ,
+  }); // → 14:30:00
+}
+
+export function formatShortDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('th-TH', {
+    day: 'numeric', month: 'short', year: '2-digit', timeZone: TZ,
+  }); // → 19 มี.ค. 69
 }
 
 export function formatContainerNumber(num: string): string {

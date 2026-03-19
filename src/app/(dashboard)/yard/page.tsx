@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { formatShortDate } from '@/lib/utils';
 import ContainerSearch from '@/components/yard/ContainerSearch';
 import YardAudit from '@/components/yard/YardAudit';
 import {
@@ -388,7 +389,7 @@ export default function YardPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-400">
-                          {c.gate_in_date ? new Date(c.gate_in_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+                          {c.gate_in_date ? formatShortDate(c.gate_in_date) : '—'}
                         </td>
                       </tr>
                     );

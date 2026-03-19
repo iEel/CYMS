@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { formatTime, formatDateTime } from '@/lib/utils';
 import {
   DoorOpen, LogOut, History, Loader2, Search, CheckCircle2, Truck,
   FileText, Plus, ArrowDownToLine, ArrowUpFromLine, Package, User,
@@ -481,7 +482,7 @@ export default function GatePage() {
                   {transactions.map(tx => (
                     <tr key={tx.transaction_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                       <td className="px-4 py-3 text-slate-500 text-xs">
-                        {new Date(tx.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                        {formatTime(tx.created_at).slice(0, 5)}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${
@@ -541,7 +542,7 @@ export default function GatePage() {
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { label: 'EIR No.', value: eirData.eir_number, mono: true },
-                    { label: 'วันที่', value: eirData.date ? new Date(eirData.date as string).toLocaleString('th-TH') : '-' },
+                    { label: 'วันที่', value: eirData.date ? formatDateTime(eirData.date as string) : '-' },
                     { label: 'เลขตู้', value: eirData.container_number, mono: true },
                     { label: 'ขนาด/ประเภท', value: `${eirData.size}'${eirData.type}` },
                     { label: 'สายเรือ', value: eirData.shipping_line || '-' },

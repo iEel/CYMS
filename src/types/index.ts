@@ -236,3 +236,65 @@ export interface WorkOrder {
   assigned_name?: string;
   created_name?: string;
 }
+
+// ===================================
+// Booking Types (EDI)
+// ===================================
+export type BookingType = 'import' | 'export' | 'empty_pickup' | 'empty_return';
+export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
+
+export interface Booking {
+  booking_id: number;
+  booking_number: string;
+  yard_id: number;
+  customer_id?: number;
+  booking_type: BookingType;
+  vessel_name?: string;
+  voyage_number?: string;
+  container_count: number;
+  container_size?: string;
+  container_type?: string;
+  eta?: string;
+  status: BookingStatus;
+  seal_number?: string;
+  notes?: string;
+  created_at: string;
+  // Joined
+  customer_name?: string;
+}
+
+// ===================================
+// Repair Order Types (M&R)
+// ===================================
+export type EORStatus = 'draft' | 'pending_approval' | 'approved' | 'in_repair' | 'completed' | 'rejected';
+
+export interface RepairOrder {
+  eor_id: number;
+  eor_number: string;
+  container_id: number;
+  yard_id: number;
+  customer_id?: number;
+  damage_details?: string; // JSON
+  estimated_cost: number;
+  actual_cost?: number;
+  status: EORStatus;
+  approved_by?: string;
+  approved_at?: string;
+  created_by?: number;
+  created_at: string;
+  // Joined
+  container_number?: string;
+  size?: string;
+  type?: string;
+  customer_name?: string;
+  created_name?: string;
+}
+
+export interface CEDEXCode {
+  code: string;
+  component: string;
+  damage: string;
+  repair: string;
+  labor_hours: number;
+  material_cost: number;
+}
