@@ -64,7 +64,18 @@ export default function CompanySettings() {
       });
       const json = await res.json();
       if (json.success) {
-        setData(json.data);
+        const d = json.data;
+        setData({
+          company_id: d.company_id,
+          company_name: d.company_name ?? '',
+          tax_id: d.tax_id ?? '',
+          branch_type: d.branch_type ?? 'head_office',
+          branch_number: d.branch_number ?? '00000',
+          address: d.address ?? '',
+          phone: d.phone ?? '',
+          email: d.email ?? '',
+          logo_url: d.logo_url ?? '',
+        });
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
       }
