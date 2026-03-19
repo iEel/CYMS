@@ -270,6 +270,9 @@ export default function BillingPage() {
                           <button onClick={() => updateInvoice(inv.invoice_id, 'pay')}
                             className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 flex items-center gap-1"><CreditCard size={10} /> ชำระ</button>
                         )}
+                        {/* Print: invoice for unpaid, receipt for paid */}
+                        <button onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=${inv.status === 'paid' ? 'receipt' : 'invoice'}`, '_blank')}
+                          className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-100 flex items-center gap-1"><Printer size={10} /> พิมพ์</button>
                         {['draft', 'issued'].includes(inv.status) && (
                           <button onClick={() => updateInvoice(inv.invoice_id, 'cancel')} className="px-1 py-1 text-slate-400 hover:text-red-500"><XCircle size={14} /></button>
                         )}
@@ -567,31 +570,8 @@ export default function BillingPage() {
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">{inv.customer_name} • {inv.description} • ฿{inv.grand_total.toLocaleString()}</p>
                     </div>
-                    <button onClick={() => {
-                      const receiptWin = window.open('', '_blank');
-                      if (receiptWin) {
-                        receiptWin.document.write(`<html><head><title>Receipt ${inv.invoice_number}</title>
-                          <style>body{font-family:sans-serif;padding:40px;max-width:600px;margin:auto}
-                          h1{font-size:18px;border-bottom:2px solid #000;padding-bottom:8px}
-                          table{width:100%;border-collapse:collapse;margin:20px 0}
-                          td,th{padding:8px;text-align:left;border-bottom:1px solid #ddd}
-                          .total{font-size:16px;font-weight:bold}
-                          .footer{margin-top:40px;text-align:center;font-size:11px;color:#888}
-                          @media print{button{display:none}}</style></head><body>
-                          <h1>ใบเสร็จรับเงิน / Receipt</h1>
-                          <p><b>เลขที่:</b> ${inv.invoice_number}</p>
-                          <p><b>ลูกค้า:</b> ${inv.customer_name}</p>
-                          <p><b>วันที่ชำระ:</b> ${inv.paid_at ? new Date(inv.paid_at).toLocaleDateString('th-TH') : '-'}</p>
-                          <table><tr><th>รายการ</th><th>จำนวน</th><th>หน่วยละ</th><th>รวม</th></tr>
-                          <tr><td>${inv.description}</td><td>${inv.quantity}</td><td>฿${inv.unit_price.toLocaleString()}</td><td>฿${inv.total_amount.toLocaleString()}</td></tr>
-                          <tr><td colspan="3">VAT 7%</td><td>฿${inv.vat_amount.toLocaleString()}</td></tr>
-                          <tr class="total"><td colspan="3">รวมสุทธิ</td><td>฿${inv.grand_total.toLocaleString()}</td></tr></table>
-                          <p class="footer">CYMS - Container Yard Management System</p>
-                          <button onclick="window.print()" style="padding:8px 20px;background:#3B82F6;color:#fff;border:none;border-radius:8px;cursor:pointer;margin-top:20px">🖨️ พิมพ์</button>
-                          </body></html>`);
-                        receiptWin.document.close();
-                      }
-                    }} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 flex items-center gap-1">
+                    <button onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=receipt`, '_blank')}
+                      className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 flex items-center gap-1">
                       <Printer size={12} /> พิมพ์ใบเสร็จ
                     </button>
                   </div>

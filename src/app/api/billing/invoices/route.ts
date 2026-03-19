@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const yardId = searchParams.get('yard_id');
     const status = searchParams.get('status');
     const customerId = searchParams.get('customer_id');
+    const invoiceId = searchParams.get('invoice_id');
 
     const db = await getDb();
     const req = db.request();
@@ -17,11 +18,13 @@ export async function GET(request: NextRequest) {
     if (yardId) { conditions.push('i.yard_id = @yardId'); req.input('yardId', sql.Int, parseInt(yardId)); }
     if (status) { conditions.push('i.status = @status'); req.input('status', sql.NVarChar, status); }
     if (customerId) { conditions.push('i.customer_id = @customerId'); req.input('customerId', sql.Int, parseInt(customerId)); }
+    if (invoiceId) { conditions.push('i.invoice_id = @invoiceId'); req.input('invoiceId', sql.Int, parseInt(invoiceId)); }
 
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const result = await req.query(`
       SELECT i.*, c.customer_name, c.tax_id as customer_tax_id,
+             c.address as customer_address,
              ISNULL(c.branch_type, 'head_office') as customer_branch_type,
              ISNULL(c.branch_number, '00000') as customer_branch_number,
              ct.container_number,
