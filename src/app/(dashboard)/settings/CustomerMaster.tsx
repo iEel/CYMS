@@ -170,24 +170,48 @@ export default function CustomerMaster() {
             <button onClick={() => setShowAdd(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input type="text" value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })}
-              placeholder="ชื่อลูกค้า *" className={inputClass} />
-            <select value={form.customer_type} onChange={e => setForm({ ...form, customer_type: e.target.value })}
-              className={inputClass}>
-              {TYPE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <input type="text" value={form.tax_id} onChange={e => setForm({ ...form, tax_id: e.target.value })}
-              placeholder="เลขประจำตัวผู้เสียภาษี" className={`${inputClass} font-mono`} />
-            <input type="text" value={form.contact_name} onChange={e => setForm({ ...form, contact_name: e.target.value })}
-              placeholder="ผู้ติดต่อ" className={inputClass} />
-            <input type="text" value={form.contact_phone} onChange={e => setForm({ ...form, contact_phone: e.target.value })}
-              placeholder="โทรศัพท์" className={inputClass} />
-            <input type="email" value={form.contact_email} onChange={e => setForm({ ...form, contact_email: e.target.value })}
-              placeholder="อีเมล" className={inputClass} />
-            <input type="text" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
-              placeholder="ที่อยู่" className={`${inputClass} md:col-span-2`} />
-            <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
-              placeholder="วันเครดิต" className={inputClass} />
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">ชื่อลูกค้า *</label>
+              <input type="text" value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })}
+                placeholder="ชื่อลูกค้า" className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">ประเภท</label>
+              <select value={form.customer_type} onChange={e => setForm({ ...form, customer_type: e.target.value })}
+                className={inputClass}>
+                {TYPE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">เลขประจำตัวผู้เสียภาษี</label>
+              <input type="text" value={form.tax_id} onChange={e => setForm({ ...form, tax_id: e.target.value })}
+                placeholder="0-0000-00000-00-0" className={`${inputClass} font-mono`} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">ผู้ติดต่อ</label>
+              <input type="text" value={form.contact_name} onChange={e => setForm({ ...form, contact_name: e.target.value })}
+                placeholder="ชื่อผู้ติดต่อ" className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">โทรศัพท์</label>
+              <input type="text" value={form.contact_phone} onChange={e => setForm({ ...form, contact_phone: e.target.value })}
+                placeholder="0xx-xxx-xxxx" className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">อีเมล</label>
+              <input type="email" value={form.contact_email} onChange={e => setForm({ ...form, contact_email: e.target.value })}
+                placeholder="email@example.com" className={inputClass} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs text-slate-500 mb-1">ที่อยู่</label>
+              <input type="text" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
+                placeholder="ที่อยู่บริษัท" className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">วันเครดิต (Credit Term)</label>
+              <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
+                placeholder="0" className={inputClass} />
+            </div>
           </div>
           <div className="flex justify-end gap-2 mt-3">
             <button onClick={() => setShowAdd(false)}
@@ -228,8 +252,11 @@ export default function CustomerMaster() {
                       </select>
                       <input type="text" value={form.contact_phone} onChange={e => setForm({ ...form, contact_phone: e.target.value })}
                         className={inputClass} placeholder="โทร" />
-                      <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
-                        className={inputClass} placeholder="วันเครดิต" />
+                      <div className="relative">
+                        <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
+                          className={inputClass} placeholder="วันเครดิต" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">วัน</span>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3 flex-1 min-w-0">
