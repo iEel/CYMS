@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { AlertTriangle, CheckCircle2, X, Camera, ImageIcon } from 'lucide-react';
 
 interface DamagePoint {
   id: string;
@@ -11,10 +11,11 @@ interface DamagePoint {
   type: string;
   severity: 'minor' | 'major' | 'severe';
   note: string;
+  photo?: string;
 }
 
 interface ContainerInspectionProps {
-  onComplete: (report: { points: DamagePoint[]; condition_grade: string; inspector_notes: string }) => void;
+  onComplete: (report: { points: DamagePoint[]; condition_grade: string; inspector_notes: string; photos: string[] }) => void;
   onCancel: () => void;
 }
 
@@ -48,6 +49,10 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
   const [selectedType, setSelectedType] = useState('dent');
   const [selectedSeverity, setSelectedSeverity] = useState<'minor' | 'major' | 'severe'>('minor');
   const [inspectorNotes, setInspectorNotes] = useState('');
+  const [overviewPhotos, setOverviewPhotos] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const damageFileRef = useRef<HTMLInputElement>(null);
+  const [activePhotoPointId, setActivePhotoPointId] = useState<string | null>(null);
 
   // Click on panel to add damage point
   const handlePanelClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -142,44 +147,144 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
       </div>
 
       {/* Inspection Panel */}
-      <div className="relative bg-slate-100 dark:bg-slate-900 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 overflow-hidden cursor-crosshair"
-        style={{ height: 240 }} onClick={handlePanelClick}>
+      <div className="relative rounded-xl overflow-hidden cursor-crosshair"
+        style={{ height: 280 }} onClick={handlePanelClick}>
 
-        {/* Container drawing */}
-        <div className="absolute inset-4 border-2 border-slate-400/40 dark:border-slate-500/40 rounded-lg">
-          <div className="absolute top-1 left-1 text-[10px] text-slate-400 font-medium uppercase">
+        {/* Background gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-sky-100 to-slate-200 dark:from-slate-900 dark:to-slate-800" />
+
+        {/* SVG Container Drawing per side */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 600 280" preserveAspectRatio="xMidYMid meet">
+          {/* Side label */}
+          <text x="300" y="20" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600" fontFamily="sans-serif">
             {SIDES.find(s => s.key === activeSide)?.label}
-          </div>
-          {/* Container structural lines */}
-          {activeSide !== 'top' && activeSide !== 'floor' && (
-            <>
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="absolute border-b border-slate-300/30 dark:border-slate-600/30 w-full" style={{ top: `${(i + 1) * 14.28}%` }} />
+          </text>
+
+          {activeSide === 'front' && (
+            <g>
+              {/* Container body */}
+              <rect x="80" y="30" width="440" height="230" rx="3" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
+              {/* Left door */}
+              <rect x="85" y="35" width="213" height="220" rx="2" fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="1.5" />
+              {/* Right door */}
+              <rect x="302" y="35" width="213" height="220" rx="2" fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="1.5" />
+              {/* Door hinges */}
+              {[70, 130, 190].map(y => (
+                <g key={`lh${y}`}>
+                  <rect x="85" y={y} width="8" height="16" rx="2" fill="#94A3B8" />
+                  <rect x="507" y={y} width="8" height="16" rx="2" fill="#94A3B8" />
+                </g>
               ))}
-            </>
+              {/* Door handles */}
+              <rect x="280" y="110" width="6" height="60" rx="3" fill="#64748B" />
+              <rect x="314" y="110" width="6" height="60" rx="3" fill="#64748B" />
+              {/* Lock rods */}
+              <line x1="270" y1="45" x2="270" y2="245" stroke="#CBD5E1" strokeWidth="1" />
+              <line x1="330" y1="45" x2="330" y2="245" stroke="#CBD5E1" strokeWidth="1" />
+              {/* Seal position */}
+              <circle cx="300" cy="170" r="8" fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeDasharray="3,2" />
+              <text x="300" y="195" textAnchor="middle" fill="#3B82F6" fontSize="8" fontFamily="sans-serif">ซีล</text>
+              {/* Corner castings */}
+              <rect x="80" y="30" width="20" height="20" fill="#94A3B8" rx="2" />
+              <rect x="500" y="30" width="20" height="20" fill="#94A3B8" rx="2" />
+              <rect x="80" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
+              <rect x="500" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
+            </g>
           )}
-          {/* Grid lines */}
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="absolute border-r border-slate-300/20 dark:border-slate-600/20 h-full" style={{ left: `${(i + 1) * 20}%` }} />
-          ))}
-        </div>
+
+          {activeSide === 'back' && (
+            <g>
+              <rect x="80" y="30" width="440" height="230" rx="3" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
+              {/* Corrugated wall - horizontal ribs */}
+              {Array.from({ length: 18 }, (_, i) => (
+                <line key={i} x1="85" y1={40 + i * 12.5} x2="515" y2={40 + i * 12.5} stroke="#CBD5E1" strokeWidth="1" />
+              ))}
+              {/* Corner castings */}
+              <rect x="80" y="30" width="20" height="20" fill="#94A3B8" rx="2" />
+              <rect x="500" y="30" width="20" height="20" fill="#94A3B8" rx="2" />
+              <rect x="80" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
+              <rect x="500" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
+              <text x="300" y="145" textAnchor="middle" fill="#94A3B8" fontSize="14" fontFamily="sans-serif" fontWeight="600">ผนังด้านหลัง</text>
+            </g>
+          )}
+
+          {(activeSide === 'left' || activeSide === 'right') && (
+            <g>
+              <rect x="40" y="30" width="520" height="230" rx="3" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
+              {/* Corrugated wall - horizontal ribs */}
+              {Array.from({ length: 18 }, (_, i) => (
+                <line key={i} x1="45" y1={40 + i * 12.5} x2="555" y2={40 + i * 12.5} stroke="#CBD5E1" strokeWidth="1" />
+              ))}
+              {/* Vertical posts */}
+              {[160, 300, 440].map(x => (
+                <line key={x} x1={x} y1="30" x2={x} y2="260" stroke="#B0BEC5" strokeWidth="2" />
+              ))}
+              {/* Corner castings */}
+              <rect x="40" y="30" width="20" height="20" fill="#94A3B8" rx="2" />
+              <rect x="540" y="30" width="20" height="20" fill="#94A3B8" rx="2" />
+              <rect x="40" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
+              <rect x="540" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
+              {/* Arrow for direction */}
+              <text x="300" y="275" textAnchor="middle" fill="#94A3B8" fontSize="9" fontFamily="sans-serif">
+                {activeSide === 'left' ? '← หน้า                                                    หลัง →' : '← หลัง                                                    หน้า →'}
+              </text>
+            </g>
+          )}
+
+          {activeSide === 'top' && (
+            <g>
+              <rect x="40" y="50" width="520" height="180" rx="3" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
+              {/* Roof lines */}
+              {Array.from({ length: 10 }, (_, i) => (
+                <line key={i} x1={90 + i * 48} y1="50" x2={90 + i * 48} y2="230" stroke="#CBD5E1" strokeWidth="1" />
+              ))}
+              {/* Center ridge */}
+              <line x1="40" y1="140" x2="560" y2="140" stroke="#B0BEC5" strokeWidth="2" strokeDasharray="8,4" />
+              {/* Corner castings */}
+              <rect x="40" y="50" width="20" height="16" fill="#94A3B8" rx="2" />
+              <rect x="540" y="50" width="20" height="16" fill="#94A3B8" rx="2" />
+              <rect x="40" y="214" width="20" height="16" fill="#94A3B8" rx="2" />
+              <rect x="540" y="214" width="20" height="16" fill="#94A3B8" rx="2" />
+              <text x="300" y="42" textAnchor="middle" fill="#94A3B8" fontSize="9" fontFamily="sans-serif">← หน้า                                                    หลัง →</text>
+            </g>
+          )}
+
+          {activeSide === 'floor' && (
+            <g>
+              <rect x="40" y="50" width="520" height="180" rx="3" fill="#DDD6C8" stroke="#A89F91" strokeWidth="2" />
+              {/* Wooden floorboards */}
+              {Array.from({ length: 8 }, (_, i) => (
+                <line key={i} x1="40" y1={73 + i * 22} x2="560" y2={73 + i * 22} stroke="#C4B99A" strokeWidth="1" />
+              ))}
+              {/* Cross beams */}
+              {[160, 300, 440].map(x => (
+                <rect key={x} x={x - 4} y="50" width="8" height="180" fill="#B7AD9A" rx="1" opacity="0.5" />
+              ))}
+              {/* Fork pockets */}
+              <rect x="120" y="232" width="80" height="16" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1" />
+              <rect x="400" y="232" width="80" height="16" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1" />
+              <text x="160" y="244" textAnchor="middle" fill="#FFF" fontSize="7" fontFamily="sans-serif">Fork Pocket</text>
+              <text x="440" y="244" textAnchor="middle" fill="#FFF" fontSize="7" fontFamily="sans-serif">Fork Pocket</text>
+              <text x="300" y="42" textAnchor="middle" fill="#94A3B8" fontSize="9" fontFamily="sans-serif">← หน้า                                                    หลัง →</text>
+            </g>
+          )}
+        </svg>
 
         {/* Damage points */}
         {currentSidePoints.map(point => (
-          <div key={point.id} className={`absolute w-5 h-5 rounded-full ${SEVERITY_COLORS[point.severity].bg} shadow-lg border-2 border-white dark:border-slate-800 cursor-pointer z-10 flex items-center justify-center animate-pulse`}
-            style={{ left: `${point.x}%`, top: `${point.y}%`, transform: 'translate(-50%, -50%)' }}
+          <div key={point.id} className={`absolute w-6 h-6 rounded-full ${SEVERITY_COLORS[point.severity].bg} shadow-lg border-2 border-white dark:border-slate-800 cursor-pointer z-10 flex items-center justify-center`}
+            style={{ left: `${point.x}%`, top: `${point.y}%`, transform: 'translate(-50%, -50%)', animation: 'pulse 2s infinite' }}
             onClick={(e) => { e.stopPropagation(); removePoint(point.id); }}
             title={`${DAMAGE_TYPES.find(d => d.value === point.type)?.label} — กดเพื่อลบ`}>
-            <span className="text-[8px] text-white font-bold">✕</span>
+            <span className="text-[9px] text-white font-bold">✕</span>
           </div>
         ))}
 
         {/* Click hint */}
         {currentSidePoints.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-xs pointer-events-none">
-            <div className="text-center">
-              <AlertTriangle size={20} className="mx-auto mb-1 opacity-40" />
-              <p>กดตำแหน่งที่พบความเสียหาย</p>
+          <div className="absolute inset-0 flex items-end justify-center pb-3 pointer-events-none">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/30 backdrop-blur-sm text-white text-[10px]">
+              <AlertTriangle size={12} /> กดตำแหน่งบนตู้ตรงจุดที่พบความเสียหาย
             </div>
           </div>
         )}
@@ -190,19 +295,79 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
         <div className="space-y-1.5">
           <p className="text-xs text-slate-400 font-semibold">จุดเสียหาย ({totalPoints} จุด)</p>
           {points.map(p => (
-            <div key={p.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/40 text-xs">
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${SEVERITY_COLORS[p.severity].bg}`} />
-                <span className="text-slate-600 dark:text-slate-300">
-                  {SIDES.find(s => s.key === p.side)?.icon} {DAMAGE_TYPES.find(d => d.value === p.type)?.label}
-                </span>
-                <span className="text-slate-400">@ ({p.x.toFixed(0)}%, {p.y.toFixed(0)}%)</span>
+            <div key={p.id} className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900/40 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${SEVERITY_COLORS[p.severity].bg}`} />
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {SIDES.find(s => s.key === p.side)?.icon} {DAMAGE_TYPES.find(d => d.value === p.type)?.label}
+                  </span>
+                  <span className="text-slate-400">@ ({p.x.toFixed(0)}%, {p.y.toFixed(0)}%)</span>
+                </div>
+                <button onClick={() => removePoint(p.id)} className="text-slate-400 hover:text-red-500"><X size={12} /></button>
               </div>
-              <button onClick={() => removePoint(p.id)} className="text-slate-400 hover:text-red-500"><X size={12} /></button>
+              {/* Damage photo */}
+              <div className="flex items-center gap-2">
+                {p.photo ? (
+                  <div className="relative">
+                    <img src={p.photo} alt="damage" className="w-16 h-12 rounded object-cover border border-slate-200" />
+                    <button onClick={() => setPoints(pts => pts.map(pt => pt.id === p.id ? { ...pt, photo: undefined } : pt))}
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[8px]">✕</button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setActivePhotoPointId(p.id); damageFileRef.current?.click(); }}
+                    className="flex items-center gap-1 px-2 py-1 rounded border border-dashed border-slate-300 dark:border-slate-600 text-slate-400 hover:border-blue-400 hover:text-blue-500">
+                    <Camera size={10} /> ถ่ายรูปความเสียหาย
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Overview Photos */}
+      <div className="space-y-2">
+        <p className="text-xs text-slate-400 font-semibold flex items-center gap-1">
+          <ImageIcon size={12} /> รูปถ่ายภาพรวมสภาพตู้ ({overviewPhotos.length} รูป)
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          {overviewPhotos.map((photo, i) => (
+            <div key={i} className="relative">
+              <img src={photo} alt={`overview ${i + 1}`} className="w-20 h-16 rounded-lg object-cover border border-slate-200" />
+              <button onClick={() => setOverviewPhotos(prev => prev.filter((_, j) => j !== i))}
+                className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px]">✕</button>
+            </div>
+          ))}
+          <button onClick={() => fileInputRef.current?.click()}
+            className="w-20 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-colors">
+            <Camera size={16} /> <span className="text-[8px] mt-0.5">เพิ่มรูป</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Hidden file inputs */}
+      <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => setOverviewPhotos(prev => [...prev, reader.result as string]);
+          reader.readAsDataURL(file);
+          e.target.value = '';
+        }} />
+      <input ref={damageFileRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0];
+          if (!file || !activePhotoPointId) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            setPoints(pts => pts.map(pt => pt.id === activePhotoPointId ? { ...pt, photo: reader.result as string } : pt));
+            setActivePhotoPointId(null);
+          };
+          reader.readAsDataURL(file);
+          e.target.value = '';
+        }} />
 
       {/* Condition Grade */}
       <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700">
@@ -232,7 +397,7 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
 
       {/* Actions */}
       <div className="flex gap-2">
-        <button onClick={() => onComplete({ points, condition_grade: getConditionGrade(), inspector_notes: inspectorNotes })}
+        <button onClick={() => onComplete({ points, condition_grade: getConditionGrade(), inspector_notes: inspectorNotes, photos: overviewPhotos })}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-all">
           <CheckCircle2 size={16} /> บันทึกผลตรวจ
         </button>

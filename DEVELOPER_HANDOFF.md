@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 19 มีนาคม 2569 | เวอร์ชัน: เฟส 1-3 สมบูรณ์
+> ส่งมอบงาน: 19 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1 สมบูรณ์
 
 ---
 
@@ -15,7 +15,7 @@
 | **เฟส 1** | วางรากฐาน — โปรเจค, Design System, DB Schema | ✅ เสร็จ |
 | **เฟส 2** | ล็อกอิน, Dashboard, ตั้งค่าระบบ, RBAC | ✅ เสร็จ |
 | **เฟส 3** | จัดการลาน, 3D Viewer, Auto-Allocation, ค้นหาตู้, Yard Audit | ✅ เสร็จ |
-| **เฟส 4** | Gate In/Out, EIR, ตรวจสภาพตู้ | ✅ เสร็จ |
+| **เฟส 4** | Gate In/Out, EIR, ตรวจสภาพตู้, OCR, Seal Photo, Signature, Inter-Yard Transfer | ✅ เสร็จ |
 | **เฟส 5** | ปฏิบัติการ, Job Queue, Smart Shifting | ✅ เสร็จ |
 | **เฟส 6** | EDI, Booking/Manifest, Seal Validation | ✅ เสร็จ |
 | **เฟส 7** | ซ่อมบำรุง M&R, EOR, CEDEX | ✅ เสร็จ |
@@ -134,7 +134,7 @@ container-yard-system/
 │   │   │   ├── layout.tsx        # Dashboard layout (sidebar + topbar + auth check)
 │   │   │   ├── dashboard/page.tsx   # หน้า Dashboard (KPI cards)
 │   │   │   ├── yard/page.tsx     # หน้าจัดการลาน (4 tabs: ภาพรวม/ค้นหา/จัดวางตู้/ตรวจนับ)
-│   │   │   ├── gate/page.tsx     # หน้า Gate (3 tabs: Gate-In/Gate-Out/ประวัติ + EIR Modal)
+│   │   │   ├── gate/page.tsx     # หน้า Gate (4 tabs: Gate-In/Gate-Out/ประวัติ/ย้ายข้ามลาน + EIR Modal)
 │   │   │   ├── operations/page.tsx # หน้าปฏิบัติการ (3 tabs: Job Queue/สร้างงาน/Shifting)
 │   │   │   ├── edi/page.tsx      # หน้า EDI (3 tabs: Bookings/นำเข้า/ตรวจซีล)
 │   │   │   ├── mnr/page.tsx      # หน้า M&R (3 tabs: EOR/สร้าง EOR/CEDEX)
@@ -151,7 +151,8 @@ container-yard-system/
 │   │       ├── containers/route.ts         # GET/POST/PUT + position check
 │   │       ├── gate/
 │   │       │   ├── route.ts                # GET/POST gate transactions
-│   │       │   └── eir/route.ts            # GET EIR data for display/print
+│   │       │   ├── eir/route.ts            # GET EIR data for display/print
+│   │       │   └── transfer/route.ts       # POST inter-yard transfer
 │   │       ├── operations/
 │   │       │   ├── route.ts                # GET/POST/PUT work orders
 │   │       │   └── shift/route.ts          # POST smart shifting (LIFO)
@@ -179,13 +180,17 @@ container-yard-system/
 │   │   │   ├── Sidebar.tsx       # Left sidebar (collapsible + role-based menus)
 │   │   │   └── Topbar.tsx        # Top header (search, yard switcher, notifications)
 │   │   ├── providers/
-│   │   │   └── AuthProvider.tsx  # Auth context (login/logout/session)
-│   │   └── yard/
-│   │       ├── YardViewer3D.tsx      # Three.js 3D yard viewer
-│   │       ├── ContainerSearch.tsx   # Instant search + detail panel
-│   │       └── YardAudit.tsx         # Audit checklist per zone/bay
-│   │   ├── gate/
-│   │   │   └── ContainerInspection.tsx  # 6-side damage marking + grade
+│   │   │   ├── AuthProvider.tsx  # Auth context (login/logout/session)
+│   │   │   └── ToastProvider.tsx # Toast notifications (success/error/warning/info)
+│   │   ├── yard/
+│   │   │   ├── YardViewer3D.tsx      # Three.js 3D yard viewer
+│   │   │   ├── ContainerSearch.tsx   # Instant search + detail panel
+│   │   │   └── YardAudit.tsx         # Audit checklist per zone/bay
+│   │   └── gate/
+│   │       ├── ContainerInspection.tsx  # 6-side SVG damage marking + photo + grade
+│   │       ├── CameraOCR.tsx            # Camera + Tesseract.js OCR scanning
+│   │       ├── PhotoCapture.tsx         # Camera/upload photo capture (seal, damage)
+│   │       └── SignaturePad.tsx         # Canvas digital signature pad
 │   │
 │   ├── types/
 │   │   ├── index.ts             # Shared TypeScript interfaces

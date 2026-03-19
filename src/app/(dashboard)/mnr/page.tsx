@@ -5,7 +5,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import {
   Loader2, Search, Wrench, FileCheck2, Plus, Package, CheckCircle2,
   XCircle, Clock, AlertTriangle, RotateCcw, Send, ThumbsUp, Play,
-  DollarSign, Ban, BookOpen,
+  DollarSign, Ban, BookOpen, Camera, ImageIcon,
 } from 'lucide-react';
 
 interface EORRow {
@@ -48,6 +48,7 @@ export default function MnRPage() {
   const [containers, setContainers] = useState<ContainerOption[]>([]);
   const [selectedContainer, setSelectedContainer] = useState<ContainerOption | null>(null);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
+  const [repairPhotos, setRepairPhotos] = useState<string[]>([]);
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -92,8 +93,8 @@ export default function MnRPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setCreateResult({ success: true, message: `✅ สร้าง EOR ${data.eor_number} สำเร็จ — ราคาประเมิน ฿${estimatedCost.toLocaleString()}` });
-        setSelectedContainer(null); setSelectedCodes([]);
+        setCreateResult({ success: true, message: `✅ สร้าง EOR ${data.eor_number} สำเร็จ — ราคาประเมิน ฿${estimatedCost.toLocaleString()} (พร้อมรูปถ่าย ${repairPhotos.length} รูป)` });
+        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]);
       } else {
         setCreateResult({ success: false, message: `❌ ${data.error}` });
       }
@@ -285,6 +286,35 @@ export default function MnRPage() {
                 <span className="text-lg font-bold text-amber-700">฿{estimatedCost.toLocaleString()}</span>
               </div>
             )}
+
+            {/* Repair Photos */}
+            <div className="space-y-2">
+              <label className={labelClass}>รูปถ่ายความเสียหาย / ประกอบ EOR</label>
+              <div className="flex gap-2 flex-wrap">
+                {repairPhotos.map((photo, i) => (
+                  <div key={i} className="relative">
+                    <img src={photo} alt={`repair ${i + 1}`} className="w-20 h-16 rounded-lg object-cover border border-slate-200" />
+                    <button onClick={() => setRepairPhotos(prev => prev.filter((_, j) => j !== i))}
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px]">✕</button>
+                  </div>
+                ))}
+                <label className="w-20 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:border-violet-400 hover:text-violet-500 cursor-pointer transition-colors">
+                  <Camera size={16} /> <span className="text-[8px] mt-0.5">เพิ่มรูป</span>
+                  <input type="file" accept="image/*" capture="environment" className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => setRepairPhotos(prev => [...prev, reader.result as string]);
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }} />
+                </label>
+              </div>
+              {repairPhotos.length > 0 && (
+                <p className="text-[10px] text-slate-400 flex items-center gap-1"><ImageIcon size={10} /> {repairPhotos.length} รูปแนบ</p>
+              )}
+            </div>
 
             <button onClick={handleCreate} disabled={createLoading || !selectedContainer || selectedCodes.length === 0}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-all">

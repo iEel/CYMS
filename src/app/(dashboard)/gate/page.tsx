@@ -7,7 +7,12 @@ import {
   DoorOpen, LogOut, History, Loader2, Search, CheckCircle2, Truck,
   FileText, Plus, ArrowDownToLine, ArrowUpFromLine, Package, User,
   CreditCard, Hash, ClipboardCheck, Printer, X, ChevronDown,
+  ScanLine, ArrowRightLeft,
 } from 'lucide-react';
+import CameraOCR from '@/components/gate/CameraOCR';
+import PhotoCapture from '@/components/gate/PhotoCapture';
+import SignaturePad from '@/components/gate/SignaturePad';
+import ContainerInspection from '@/components/gate/ContainerInspection';
 
 interface Transaction {
   transaction_id: number;
@@ -38,7 +43,7 @@ interface ContainerResult {
 
 export default function GatePage() {
   const { session } = useAuth();
-  const [activeTab, setActiveTab] = useState<'gate_in' | 'gate_out' | 'history'>('gate_in');
+  const [activeTab, setActiveTab] = useState<'gate_in' | 'gate_out' | 'history' | 'transfer'>('gate_in');
 
   // Gate-In form
   const [gateInForm, setGateInForm] = useState({
@@ -46,6 +51,18 @@ export default function GatePage() {
     is_laden: false, seal_number: '', driver_name: '', driver_license: '',
     truck_plate: '', booking_ref: '', notes: '',
   });
+  const [sealPhoto, setSealPhoto] = useState('');
+  const [driverSignature, setDriverSignature] = useState('');
+  const [showOCR, setShowOCR] = useState<'container' | 'plate' | 'seal' | null>(null);
+  const [showInspection, setShowInspection] = useState(false);
+  const [inspectionReport, setInspectionReport] = useState<{ points: unknown[]; condition_grade: string; inspector_notes: string; photos: string[] } | null>(null);
+
+  // Transfer
+  const [transferForm, setTransferForm] = useState({ container_search: '', to_yard_id: '', driver_name: '', truck_plate: '', notes: '' });
+  const [transferResults, setTransferResults] = useState<ContainerResult[]>([]);
+  const [selectedTransfer, setSelectedTransfer] = useState<ContainerResult | null>(null);
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferResult, setTransferResult] = useState<{ success: boolean; message: string } | null>(null);
   const [gateInLoading, setGateInLoading] = useState(false);
   const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string } | null>(null);
 
@@ -163,6 +180,55 @@ export default function GatePage() {
     } catch (err) { console.error(err); }
   };
 
+  // OCR callback
+  const handleOCRResult = (text: string) => {
+    if (showOCR === 'container') setGateInForm(f => ({ ...f, container_number: text }));
+    else if (showOCR === 'plate') setGateInForm(f => ({ ...f, truck_plate: text }));
+    else if (showOCR === 'seal') setGateInForm(f => ({ ...f, seal_number: text }));
+    setShowOCR(null);
+  };
+
+  // Transfer search
+  const searchTransfer = async () => {
+    if (!transferForm.container_search) return;
+    try {
+      const res = await fetch(`/api/containers?yard_id=${yardId}&status=in_yard&search=${transferForm.container_search}`);
+      const data = await res.json();
+      setTransferResults(Array.isArray(data) ? data : []);
+    } catch (err) { console.error(err); }
+  };
+
+  // Transfer submit
+  const handleTransfer = async () => {
+    if (!selectedTransfer || !transferForm.to_yard_id) return;
+    setTransferLoading(true);
+    setTransferResult(null);
+    try {
+      const res = await fetch('/api/gate/transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          container_id: selectedTransfer.container_id,
+          from_yard_id: yardId,
+          to_yard_id: parseInt(transferForm.to_yard_id),
+          driver_name: transferForm.driver_name,
+          truck_plate: transferForm.truck_plate,
+          notes: transferForm.notes,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTransferResult({ success: true, message: data.message });
+        setSelectedTransfer(null);
+        setTransferResults([]);
+        setTransferForm({ container_search: '', to_yard_id: '', driver_name: '', truck_plate: '', notes: '' });
+      } else {
+        setTransferResult({ success: false, message: `❌ ${data.error}` });
+      }
+    } catch { setTransferResult({ success: false, message: '❌ เกิดข้อผิดพลาด' }); }
+    finally { setTransferLoading(false); }
+  };
+
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
 
@@ -180,6 +246,7 @@ export default function GatePage() {
           { id: 'gate_in' as const, label: 'Gate-In (รับเข้า)', icon: <ArrowDownToLine size={14} />, color: 'emerald' },
           { id: 'gate_out' as const, label: 'Gate-Out (ปล่อยออก)', icon: <ArrowUpFromLine size={14} />, color: 'blue' },
           { id: 'history' as const, label: 'ประวัติวันนี้', icon: <History size={14} />, color: 'slate' },
+          { id: 'transfer' as const, label: 'ย้ายข้ามลาน', icon: <ArrowRightLeft size={14} />, color: 'purple' },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -214,9 +281,14 @@ export default function GatePage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="md:col-span-2">
                   <label className={labelClass}>เลขตู้ *</label>
-                  <input type="text" placeholder="ABCU1234567" value={gateInForm.container_number}
-                    onChange={e => setGateInForm({ ...gateInForm, container_number: e.target.value.toUpperCase() })}
-                    className={`${inputClass} font-mono`} />
+                  <div className="flex gap-1">
+                    <input type="text" placeholder="ABCU1234567" value={gateInForm.container_number}
+                      onChange={e => setGateInForm({ ...gateInForm, container_number: e.target.value.toUpperCase() })}
+                      className={`${inputClass} font-mono flex-1`} />
+                    <button onClick={() => setShowOCR('container')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs flex items-center gap-1 border border-blue-200 dark:border-blue-800" title="สแกน OCR">
+                      <ScanLine size={14} />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className={labelClass}>ขนาด</label>
@@ -244,8 +316,13 @@ export default function GatePage() {
                 </div>
                 <div>
                   <label className={labelClass}>เลขซีล</label>
-                  <input type="text" placeholder="SEAL123456" value={gateInForm.seal_number}
-                    onChange={e => setGateInForm({ ...gateInForm, seal_number: e.target.value.toUpperCase() })} className={`${inputClass} font-mono`} />
+                  <div className="flex gap-1">
+                    <input type="text" placeholder="SEAL123456" value={gateInForm.seal_number}
+                      onChange={e => setGateInForm({ ...gateInForm, seal_number: e.target.value.toUpperCase() })} className={`${inputClass} font-mono flex-1`} />
+                    <button onClick={() => setShowOCR('seal')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs flex items-center gap-1 border border-blue-200 dark:border-blue-800" title="สแกน OCR">
+                      <ScanLine size={14} />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className={labelClass}>สถานะตู้</label>
@@ -284,11 +361,72 @@ export default function GatePage() {
                 </div>
                 <div>
                   <label className={labelClass}>ทะเบียนรถ</label>
-                  <input type="text" placeholder="1กก 1234" value={gateInForm.truck_plate}
-                    onChange={e => setGateInForm({ ...gateInForm, truck_plate: e.target.value })} className={inputClass} />
+                  <div className="flex gap-1">
+                    <input type="text" placeholder="1กก 1234" value={gateInForm.truck_plate}
+                      onChange={e => setGateInForm({ ...gateInForm, truck_plate: e.target.value })} className={`${inputClass} flex-1`} />
+                    <button onClick={() => setShowOCR('plate')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs flex items-center gap-1 border border-blue-200 dark:border-blue-800" title="สแกน OCR">
+                      <ScanLine size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Seal Photo (required for Laden) */}
+            {gateInForm.is_laden && (
+              <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
+                <PhotoCapture label="ถ่ายรูปซีล (บังคับสำหรับตู้ Laden)" required onCapture={setSealPhoto} value={sealPhoto} />
+              </div>
+            )}
+
+            {/* Container Inspection */}
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2"><ClipboardCheck size={12} /> ตรวจสภาพตู้</h4>
+              {!showInspection && !inspectionReport && (
+                <button onClick={() => setShowInspection(true)}
+                  className="w-full py-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-all text-sm flex items-center justify-center gap-2">
+                  <ClipboardCheck size={16} /> เปิดแบบฟอร์มตรวจสภาพตู้
+                </button>
+              )}
+              {showInspection && (
+                <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
+                  <ContainerInspection
+                    onComplete={(report) => {
+                      setInspectionReport(report);
+                      setShowInspection(false);
+                    }}
+                    onCancel={() => setShowInspection(false)}
+                  />
+                </div>
+              )}
+              {inspectionReport && (
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold ${
+                        inspectionReport.condition_grade === 'A' ? 'bg-emerald-500' :
+                        inspectionReport.condition_grade === 'B' ? 'bg-amber-500' :
+                        inspectionReport.condition_grade === 'C' ? 'bg-orange-500' : 'bg-red-600'
+                      }`}>{inspectionReport.condition_grade}</div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-white">✅ ตรวจแล้ว — เกรด {inspectionReport.condition_grade}</p>
+                        <p className="text-[10px] text-slate-400">พบ {inspectionReport.points.length} จุดเสียหาย · {inspectionReport.photos.length} รูปถ่าย</p>
+                      </div>
+                    </div>
+                    <button onClick={() => { setInspectionReport(null); setShowInspection(true); }}
+                      className="text-xs text-blue-500 hover:text-blue-700">ตรวจใหม่</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Driver Signature */}
+            <SignaturePad label="ลายเซ็นคนขับรับมอบ" onComplete={setDriverSignature} />
+            {driverSignature && (
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 text-xs">
+                <CheckCircle2 size={14} /> ลงลายเซ็นแล้ว
+              </div>
+            )}
 
             {/* Notes */}
             <div>
@@ -512,6 +650,107 @@ export default function GatePage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* =================== TRANSFER TAB =================== */}
+      {activeTab === 'transfer' && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="p-5 border-b border-slate-100 dark:border-slate-700">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-purple-600">
+                <ArrowRightLeft size={20} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800 dark:text-white">ย้ายตู้ข้ามสาขา (Inter-Yard Transfer)</h3>
+                <p className="text-xs text-slate-400">เลือกตู้ → ระบุลานปลายทาง → สถานะเปลี่ยนเป็น In-Transit</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <div>
+              <label className={labelClass}>ค้นหาตู้ในลาน</label>
+              <div className="flex gap-2">
+                <input type="text" placeholder="พิมพ์เลขตู้..." value={transferForm.container_search}
+                  onChange={e => setTransferForm({ ...transferForm, container_search: e.target.value })}
+                  onKeyDown={e => e.key === 'Enter' && searchTransfer()}
+                  className={`${inputClass} flex-1 font-mono`} />
+                <button onClick={searchTransfer}
+                  className="px-4 h-10 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 flex items-center gap-1">
+                  <Search size={14} /> ค้นหา
+                </button>
+              </div>
+            </div>
+
+            {transferResults.length > 0 && (
+              <div className="space-y-1.5">
+                {transferResults.map(c => (
+                  <button key={c.container_id} onClick={() => setSelectedTransfer(c)}
+                    className={`w-full text-left p-3 rounded-lg border transition-all text-sm ${
+                      selectedTransfer?.container_id === c.container_id
+                        ? 'border-purple-400 bg-purple-50 dark:bg-purple-900/20'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-purple-300'
+                    }`}>
+                    <span className="font-mono font-semibold text-slate-800 dark:text-white">{c.container_number}</span>
+                    <span className="text-slate-400 ml-2">{c.size}&apos;{c.type} · {c.shipping_line}</span>
+                    {c.zone_name && <span className="text-slate-400 ml-2">@ {c.zone_name} B{c.bay}-R{c.row}-T{c.tier}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedTransfer && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className={labelClass}>ลานปลายทาง *</label>
+                    <select value={transferForm.to_yard_id} onChange={e => setTransferForm({ ...transferForm, to_yard_id: e.target.value })} className={inputClass}>
+                      <option value="">เลือกลาน...</option>
+                      <option value="1">ลานตู้สาขาหลัก</option>
+                      <option value="2">ลานตู้สาขา 2</option>
+                      <option value="3">ลานตู้สาขา 3</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>คนขับ</label>
+                    <input type="text" placeholder="ชื่อ-นามสกุล" value={transferForm.driver_name}
+                      onChange={e => setTransferForm({ ...transferForm, driver_name: e.target.value })} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>ทะเบียนรถ</label>
+                    <input type="text" placeholder="1กก 1234" value={transferForm.truck_plate}
+                      onChange={e => setTransferForm({ ...transferForm, truck_plate: e.target.value })} className={inputClass} />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClass}>หมายเหตุ</label>
+                  <input type="text" placeholder="เหตุผลในการย้าย..." value={transferForm.notes}
+                    onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })} className={inputClass} />
+                </div>
+                <button onClick={handleTransfer} disabled={transferLoading || !transferForm.to_yard_id}
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-all">
+                  {transferLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRightLeft size={16} />}
+                  ย้ายตู้ข้ามสาขา
+                </button>
+              </>
+            )}
+
+            {transferResult && (
+              <div className={`p-4 rounded-xl text-sm ${transferResult.success ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700'}`}>
+                <p className="font-medium">{transferResult.message}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =================== OCR MODAL =================== */}
+      {showOCR && (
+        <CameraOCR
+          label={showOCR === 'container' ? 'สแกนเลขตู้' : showOCR === 'plate' ? 'สแกนทะเบียนรถ' : 'สแกนเลขซีล'}
+          onResult={handleOCRResult}
+          onClose={() => setShowOCR(null)}
+        />
       )}
 
       {/* =================== EIR MODAL =================== */}
