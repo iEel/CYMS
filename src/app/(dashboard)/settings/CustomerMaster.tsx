@@ -17,6 +17,8 @@ interface Customer {
   contact_email: string;
   credit_term: number;
   is_active: boolean;
+  branch_type: string;
+  branch_number: string;
 }
 
 const TYPE_OPTIONS = [
@@ -28,6 +30,7 @@ const TYPE_OPTIONS = [
 const emptyForm = {
   customer_name: '', customer_type: 'general', tax_id: '', address: '',
   contact_name: '', contact_phone: '', contact_email: '', credit_term: 0,
+  branch_type: 'head_office', branch_number: '00000',
 };
 
 export default function CustomerMaster() {
@@ -110,6 +113,7 @@ export default function CustomerMaster() {
       tax_id: c.tax_id || '', address: c.address || '',
       contact_name: c.contact_name || '', contact_phone: c.contact_phone || '',
       contact_email: c.contact_email || '', credit_term: c.credit_term || 0,
+      branch_type: c.branch_type || 'head_office', branch_number: c.branch_number || '00000',
     });
   };
 
@@ -212,6 +216,27 @@ export default function CustomerMaster() {
               <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
                 placeholder="0" className={inputClass} />
             </div>
+            <div className="md:col-span-3">
+              <label className="block text-xs text-slate-500 mb-1">ประเภทสาขา</label>
+              <div className="flex items-center gap-4 h-10">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="branch_type" value="head_office" checked={form.branch_type === 'head_office'}
+                    onChange={() => setForm({ ...form, branch_type: 'head_office', branch_number: '00000' })}
+                    className="accent-violet-600" />
+                  <span className="text-sm text-slate-700 dark:text-slate-300">สำนักงานใหญ่</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="branch_type" value="branch" checked={form.branch_type === 'branch'}
+                    onChange={() => setForm({ ...form, branch_type: 'branch', branch_number: '' })}
+                    className="accent-violet-600" />
+                  <span className="text-sm text-slate-700 dark:text-slate-300">สาขาที่</span>
+                </label>
+                {form.branch_type === 'branch' && (
+                  <input type="text" value={form.branch_number} onChange={e => setForm({ ...form, branch_number: e.target.value })}
+                    placeholder="00001" className="h-10 w-28 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm font-mono text-slate-800 dark:text-white outline-none focus:border-violet-500" />
+                )}
+              </div>
+            </div>
           </div>
           <div className="flex justify-end gap-2 mt-3">
             <button onClick={() => setShowAdd(false)}
@@ -274,6 +299,7 @@ export default function CustomerMaster() {
                           {c.contact_name && <span> • {c.contact_name}</span>}
                           {c.contact_phone && <span> • {c.contact_phone}</span>}
                           {c.credit_term > 0 && <span> • เครดิต {c.credit_term} วัน</span>}
+                          <span> • {c.branch_type === 'head_office' ? 'สำนักงานใหญ่' : `สาขาที่ ${c.branch_number}`}</span>
                         </p>
                       </div>
                     </div>
