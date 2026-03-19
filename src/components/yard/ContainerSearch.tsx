@@ -104,12 +104,14 @@ export default function ContainerSearch({ yardId, onLocate }: Props) {
                   <MapPin size={10} className="inline mr-1" />
                   Zone {c.zone_name} • B{c.bay}-R{c.row}-T{c.tier}
                 </p>
-                <button
+                <span
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => { e.stopPropagation(); handleSelect(c); }}
-                  className="mt-1 text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5 ml-auto"
+                  className="mt-1 text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5 ml-auto cursor-pointer"
                 >
                   <Sparkles size={10} /> ค้นหาตำแหน่ง 3D
-                </button>
+                </span>
               </div>
             </div>
           </button>
