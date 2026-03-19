@@ -9,19 +9,32 @@ import {
   Wrench,
   Receipt,
   Cog,
+  ShieldCheck,
+  Lock,
+  TrendingUp,
+  Layers,
+  Truck,
 } from 'lucide-react';
 import CompanySettings from './CompanySettings';
 import YardsSettings from './YardsSettings';
 import UsersSettings from './UsersSettings';
+import ApprovalHierarchy from './ApprovalHierarchy';
+import EDIConfiguration from './EDIConfiguration';
+import SealMaster from './SealMaster';
+import TieredStorageRate from './TieredStorageRate';
+import AutoAllocationRules from './AutoAllocationRules';
+import EquipmentRulesConfig from './EquipmentRulesConfig';
 
 const tabs = [
-  { id: 'company', label: 'ข้อมูลองค์กร', icon: <Building2 size={18} />, color: '#3B82F6' },
-  { id: 'yards', label: 'สาขาลานและโซน', icon: <MapPin size={18} />, color: '#10B981' },
-  { id: 'users', label: 'ผู้ใช้งานและสิทธิ์', icon: <Users size={18} />, color: '#8B5CF6' },
-  { id: 'customers', label: 'ลูกค้าและ EDI', icon: <Globe size={18} />, color: '#F59E0B' },
-  { id: 'mnr', label: 'ซ่อมบำรุง', icon: <Wrench size={18} />, color: '#EF4444' },
-  { id: 'billing', label: 'บัญชีการเงิน', icon: <Receipt size={18} />, color: '#0EA5E9' },
-  { id: 'automation', label: 'กฎอัตโนมัติ', icon: <Cog size={18} />, color: '#64748B' },
+  { id: 'company', label: 'องค์กร', icon: <Building2 size={18} />, color: '#3B82F6' },
+  { id: 'yards', label: 'ลาน/โซน', icon: <MapPin size={18} />, color: '#10B981' },
+  { id: 'users', label: 'ผู้ใช้/สิทธิ์', icon: <Users size={18} />, color: '#8B5CF6' },
+  { id: 'approval', label: 'อนุมัติ', icon: <ShieldCheck size={18} />, color: '#F59E0B' },
+  { id: 'edi', label: 'EDI', icon: <Globe size={18} />, color: '#0EA5E9' },
+  { id: 'seal', label: 'ซีล', icon: <Lock size={18} />, color: '#EF4444' },
+  { id: 'storage', label: 'ค่าฝาก', icon: <TrendingUp size={18} />, color: '#06B6D4' },
+  { id: 'allocation', label: 'จัดตู้', icon: <Layers size={18} />, color: '#10B981' },
+  { id: 'equipment', label: 'เครื่องจักร', icon: <Truck size={18} />, color: '#F97316' },
 ];
 
 export default function SettingsPage() {
@@ -43,7 +56,7 @@ export default function SettingsPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200
+            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200
               ${activeTab === tab.id
                 ? 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
@@ -63,23 +76,14 @@ export default function SettingsPage() {
         {activeTab === 'company' && <CompanySettings />}
         {activeTab === 'yards' && <YardsSettings />}
         {activeTab === 'users' && <UsersSettings />}
-        {activeTab === 'customers' && <ComingSoon title="ลูกค้าและ EDI" phase={6} />}
-        {activeTab === 'mnr' && <ComingSoon title="มาตรฐานซ่อมบำรุง" phase={7} />}
-        {activeTab === 'billing' && <ComingSoon title="บัญชีและการเงิน" phase={8} />}
-        {activeTab === 'automation' && <ComingSoon title="กฎการทำงานอัตโนมัติ" phase={9} />}
+        {activeTab === 'approval' && <ApprovalHierarchy />}
+        {activeTab === 'edi' && <EDIConfiguration />}
+        {activeTab === 'seal' && <SealMaster />}
+        {activeTab === 'storage' && <TieredStorageRate />}
+        {activeTab === 'allocation' && <AutoAllocationRules />}
+        {activeTab === 'equipment' && <EquipmentRulesConfig />}
       </div>
     </div>
   );
 }
 
-function ComingSoon({ title, phase }: { title: string; phase: number }) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center mx-auto mb-4">
-        <Cog size={28} className="text-slate-400" />
-      </div>
-      <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-2">{title}</h3>
-      <p className="text-sm text-slate-400">จะเปิดใช้งานในเฟส {phase} — เร็วๆ นี้</p>
-    </div>
-  );
-}
