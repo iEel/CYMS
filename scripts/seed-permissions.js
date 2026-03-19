@@ -65,6 +65,12 @@ const PERMISSIONS = [
   { module: 'settings', action: 'read', description: 'ดูการตั้งค่าระบบ' },
   { module: 'settings', action: 'update', description: 'แก้ไขการตั้งค่า' },
   { module: 'settings', action: 'delete', description: 'ลบการตั้งค่า' },
+
+  // Customer Management
+  { module: 'customers', action: 'create', description: 'เพิ่มข้อมูลลูกค้า' },
+  { module: 'customers', action: 'read', description: 'ดูข้อมูลลูกค้า' },
+  { module: 'customers', action: 'update', description: 'แก้ไขข้อมูลลูกค้า' },
+  { module: 'customers', action: 'delete', description: 'ลบข้อมูลลูกค้า' },
 ];
 
 // สิทธิ์เริ่มต้นตาม Role
@@ -75,6 +81,7 @@ const ROLE_PERMISSIONS = {
     'gate:create', 'gate:read', 'gate:update',
     'yard:read',
     'edi:read',
+    'customers:read',
   ],
   surveyor: [
     'dashboard:read',
@@ -93,6 +100,7 @@ const ROLE_PERMISSIONS = {
     'billing:create', 'billing:read', 'billing:update',
     'mnr:create', 'mnr:read', 'mnr:update',
     'yard:read',
+    'customers:create', 'customers:read', 'customers:update', 'customers:delete',
   ],
   customer: [
     'dashboard:read',

@@ -24,6 +24,7 @@ const MODULE_LABELS: Record<string, { label: string; color: string }> = {
   edi:        { label: 'EDI & ข้อมูลล่วงหน้า', color: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' },
   mnr:        { label: 'ซ่อมบำรุง M&R',    color: 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' },
   billing:    { label: 'บัญชี & การเงิน',   color: 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  customers:  { label: 'จัดการลูกค้า',      color: 'bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
   settings:   { label: 'ตั้งค่าระบบ',       color: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
 };
 
