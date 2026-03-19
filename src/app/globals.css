@@ -346,3 +346,40 @@ input:focus, select:focus, textarea:focus {
 .high-contrast .bg-rose-50 { background-color: #FFCCCC !important; color: #330000 !important; }
 .high-contrast .bg-blue-50 { background-color: #CCCCFF !important; color: #000033 !important; }
 
+/* Sidebar — force white bg + black text for readability */
+.high-contrast aside {
+  background-color: #FFFFFF !important;
+  border-right: 3px solid #000000 !important;
+}
+
+.high-contrast aside * {
+  color: #000000 !important;
+}
+
+.high-contrast aside a,
+.high-contrast aside button {
+  color: #000000 !important;
+  border: 1px solid #999999 !important;
+}
+
+.high-contrast aside a:hover,
+.high-contrast aside button:hover {
+  background-color: #E0E0E0 !important;
+}
+
+/* Active menu item in sidebar */
+.high-contrast aside a[class*="bg-"] {
+  background-color: #0000CC !important;
+  color: #FFFFFF !important;
+}
+
+.high-contrast aside a[class*="bg-"] * {
+  color: #FFFFFF !important;
+}
+
+/* Header/Topbar */
+.high-contrast header {
+  background-color: #FFFFFF !important;
+  border-bottom: 3px solid #000000 !important;
+}
+
