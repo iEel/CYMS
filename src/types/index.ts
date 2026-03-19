@@ -298,3 +298,46 @@ export interface CEDEXCode {
   labor_hours: number;
   material_cost: number;
 }
+
+// ===================================
+// Billing Types
+// ===================================
+export type ChargeType = 'storage' | 'lolo' | 'mnr' | 'washing' | 'pti' | 'reefer' | 'other';
+export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'overdue' | 'cancelled' | 'credit_note';
+
+export interface Tariff {
+  tariff_id: number;
+  yard_id: number;
+  charge_type: ChargeType;
+  description: string;
+  rate: number;
+  unit: string; // 'per_day','per_move','per_container','fixed'
+  free_days: number;
+  customer_id?: number;
+  is_active: boolean;
+  created_at: string;
+  customer_name?: string;
+}
+
+export interface Invoice {
+  invoice_id: number;
+  invoice_number: string;
+  yard_id: number;
+  customer_id: number;
+  container_id?: number;
+  charge_type: ChargeType;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
+  vat_amount: number;
+  grand_total: number;
+  status: InvoiceStatus;
+  due_date?: string;
+  paid_at?: string;
+  notes?: string;
+  created_at: string;
+  // Joined
+  customer_name?: string;
+  container_number?: string;
+}

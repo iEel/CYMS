@@ -1,0 +1,158 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/lib/db';
+import sql from 'mssql';
+
+// GET — ดึง Invoices
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const yardId = searchParams.get('yard_id');
+    const status = searchParams.get('status');
+    const customerId = searchParams.get('customer_id');
+
+    const db = await getDb();
+    const req = db.request();
+    const conditions: string[] = [];
+
+    if (yardId) { conditions.push('i.yard_id = @yardId'); req.input('yardId', sql.Int, parseInt(yardId)); }
+    if (status) { conditions.push('i.status = @status'); req.input('status', sql.NVarChar, status); }
+    if (customerId) { conditions.push('i.customer_id = @customerId'); req.input('customerId', sql.Int, parseInt(customerId)); }
+
+    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const result = await req.query(`
+      SELECT i.*, c.customer_name, ct.container_number
+      FROM Invoices i
+      LEFT JOIN Customers c ON i.customer_id = c.customer_id
+      LEFT JOIN Containers ct ON i.container_id = ct.container_id
+      ${where}
+      ORDER BY i.created_at DESC
+    `);
+
+    // Summary stats
+    const statsResult = await db.request()
+      .input('yardId2', sql.Int, parseInt(yardId || '1'))
+      .query(`
+        SELECT
+          ISNULL(SUM(CASE WHEN status = 'issued' THEN grand_total ELSE 0 END), 0) as total_outstanding,
+          ISNULL(SUM(CASE WHEN status = 'paid' THEN grand_total ELSE 0 END), 0) as total_paid,
+          ISNULL(SUM(CASE WHEN status = 'overdue' THEN grand_total ELSE 0 END), 0) as total_overdue,
+          COUNT(CASE WHEN status = 'issued' THEN 1 END) as pending_count
+        FROM Invoices WHERE yard_id = @yardId2
+      `);
+
+    return NextResponse.json({
+      invoices: result.recordset,
+      stats: statsResult.recordset[0],
+    });
+  } catch (error) {
+    console.error('❌ GET invoices error:', error);
+    return NextResponse.json({ error: 'ไม่สามารถดึงข้อมูลได้' }, { status: 500 });
+  }
+}
+
+// POST — สร้าง Invoice
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const db = await getDb();
+
+    // Generate invoice number
+    const countResult = await db.request()
+      .input('yardId', sql.Int, body.yard_id)
+      .query('SELECT COUNT(*) as cnt FROM Invoices WHERE yard_id = @yardId');
+    const invNumber = `INV-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}`;
+
+    const vatRate = 0.07;
+    const totalAmount = body.quantity * body.unit_price;
+    const vatAmount = totalAmount * vatRate;
+    const grandTotal = totalAmount + vatAmount;
+
+    const result = await db.request()
+      .input('invNumber', sql.NVarChar, invNumber)
+      .input('yardId', sql.Int, body.yard_id)
+      .input('customerId', sql.Int, body.customer_id)
+      .input('containerId', sql.Int, body.container_id || null)
+      .input('chargeType', sql.NVarChar, body.charge_type)
+      .input('description', sql.NVarChar, body.description)
+      .input('quantity', sql.Decimal(10, 2), body.quantity)
+      .input('unitPrice', sql.Decimal(12, 2), body.unit_price)
+      .input('totalAmount', sql.Decimal(12, 2), totalAmount)
+      .input('vatAmount', sql.Decimal(12, 2), vatAmount)
+      .input('grandTotal', sql.Decimal(12, 2), grandTotal)
+      .input('dueDate', sql.DateTime2, body.due_date || null)
+      .input('notes', sql.NVarChar, body.notes || null)
+      .query(`
+        INSERT INTO Invoices (invoice_number, yard_id, customer_id, container_id,
+          charge_type, description, quantity, unit_price, total_amount,
+          vat_amount, grand_total, due_date, notes)
+        OUTPUT INSERTED.*
+        VALUES (@invNumber, @yardId, @customerId, @containerId,
+          @chargeType, @description, @quantity, @unitPrice, @totalAmount,
+          @vatAmount, @grandTotal, @dueDate, @notes)
+      `);
+
+    return NextResponse.json({ success: true, invoice: result.recordset[0], invoice_number: invNumber });
+  } catch (error) {
+    console.error('❌ POST invoice error:', error);
+    return NextResponse.json({ error: 'ไม่สามารถสร้างใบแจ้งหนี้ได้' }, { status: 500 });
+  }
+}
+
+// PUT — อัปเดตสถานะ Invoice
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { invoice_id, action } = body;
+    const db = await getDb();
+
+    switch (action) {
+      case 'issue':
+        await db.request().input('id', sql.Int, invoice_id)
+          .query("UPDATE Invoices SET status = 'issued' WHERE invoice_id = @id");
+        break;
+      case 'pay':
+        await db.request().input('id', sql.Int, invoice_id)
+          .query("UPDATE Invoices SET status = 'paid', paid_at = GETDATE() WHERE invoice_id = @id");
+
+        // Auto-release hold if container has one
+        const invResult = await db.request().input('id2', sql.Int, invoice_id)
+          .query('SELECT container_id FROM Invoices WHERE invoice_id = @id2');
+        if (invResult.recordset[0]?.container_id) {
+          await db.request().input('cid', sql.Int, invResult.recordset[0].container_id)
+            .query("UPDATE Containers SET hold_status = NULL, updated_at = GETDATE() WHERE container_id = @cid AND hold_status = 'billing_hold'");
+        }
+        break;
+      case 'cancel':
+        await db.request().input('id', sql.Int, invoice_id)
+          .query("UPDATE Invoices SET status = 'cancelled' WHERE invoice_id = @id");
+        break;
+      case 'credit_note':
+        await db.request().input('id', sql.Int, invoice_id)
+          .query("UPDATE Invoices SET status = 'credit_note' WHERE invoice_id = @id");
+        break;
+      case 'hold':
+        // Put billing hold on container
+        const inv2 = await db.request().input('id3', sql.Int, invoice_id)
+          .query('SELECT container_id FROM Invoices WHERE invoice_id = @id3');
+        if (inv2.recordset[0]?.container_id) {
+          await db.request().input('cid2', sql.Int, inv2.recordset[0].container_id)
+            .query("UPDATE Containers SET hold_status = 'billing_hold', updated_at = GETDATE() WHERE container_id = @cid2");
+        }
+        break;
+      case 'release':
+        const inv3 = await db.request().input('id4', sql.Int, invoice_id)
+          .query('SELECT container_id FROM Invoices WHERE invoice_id = @id4');
+        if (inv3.recordset[0]?.container_id) {
+          await db.request().input('cid3', sql.Int, inv3.recordset[0].container_id)
+            .query("UPDATE Containers SET hold_status = NULL, updated_at = GETDATE() WHERE container_id = @cid3");
+        }
+        break;
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('❌ PUT invoice error:', error);
+    return NextResponse.json({ error: 'ไม่สามารถอัปเดตได้' }, { status: 500 });
+  }
+}
