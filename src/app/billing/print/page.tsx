@@ -112,7 +112,6 @@ export default function PrintInvoicePage() {
         @media print {
           body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
-          .print-page { page-break-after: always; }
         }
         @page { size: A4; margin: 15mm; }
         .doc-body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; }
@@ -128,22 +127,28 @@ export default function PrintInvoicePage() {
         </button>
       </div>
 
-      <div className="doc-body max-w-[210mm] mx-auto bg-white p-8 print-page" style={{ minHeight: '297mm' }}>
+      <div className="doc-body max-w-[210mm] mx-auto bg-white p-8">
         {/* Header */}
         <div className="flex items-start justify-between border-b-2 border-slate-800 pb-4 mb-6">
           <div className="flex-1">
-            {company?.logo_url && (
-              <img src={company.logo_url} alt="Logo" className="h-16 mb-2" style={{ maxWidth: '200px', objectFit: 'contain' }} />
-            )}
-            <h2 className="text-lg font-bold text-slate-800">{company?.company_name || 'บริษัท ลานตู้คอนเทนเนอร์ จำกัด'}</h2>
-            <p className="text-xs text-slate-500 mt-0.5">{company?.address || ''}</p>
-            <p className="text-xs text-slate-500">
-              โทร: {company?.phone || '-'} | อีเมล: {company?.email || '-'}
-            </p>
-            <p className="text-xs text-slate-500">
-              เลขประจำตัวผู้เสียภาษี: {company?.tax_id || '-'}
-              {company?.branch_type === 'head_office' ? ' (สำนักงานใหญ่)' : company?.branch_number ? ` (สาขา ${company.branch_number})` : ''}
-            </p>
+            <div className="flex items-start gap-3 mb-1">
+              {company?.logo_url && (
+                <img src={company.logo_url} alt="Logo" className="h-12 w-12 object-contain flex-shrink-0" />
+              )}
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">
+                  {company?.company_name || 'บริษัท ลานตู้คอนเทนเนอร์ จำกัด'}
+                  {company?.branch_type === 'head_office' ? ' (สำนักงานใหญ่)' : company?.branch_number ? ` (สาขา ${company.branch_number})` : ''}
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">{company?.address || ''}</p>
+                <p className="text-xs text-slate-500">
+                  เลขประจำตัวผู้เสียภาษี: {company?.tax_id || '-'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  โทร: {company?.phone || '-'} | อีเมล: {company?.email || '-'}
+                </p>
+              </div>
+            </div>
           </div>
           <div className="text-right">
             <h1 className="text-2xl font-bold" style={{ color: isReceipt ? '#059669' : '#2563eb' }}>
@@ -166,13 +171,14 @@ export default function PrintInvoicePage() {
         {/* Customer Info */}
         <div className="mb-6 p-4 bg-slate-50 rounded-lg">
           <p className="text-xs text-slate-400 font-semibold uppercase mb-1">ข้อมูลลูกค้า</p>
-          <p className="text-sm font-semibold text-slate-800">{invoice.customer_name || 'ลูกค้าทั่วไป'}</p>
-          {invoice.customer_tax_id && (
-            <p className="text-xs text-slate-500">เลขผู้เสียภาษี: {invoice.customer_tax_id}
-              {invoice.customer_branch_type === 'head_office' ? ' (สำนักงานใหญ่)' : invoice.customer_branch_number ? ` (สาขา ${invoice.customer_branch_number})` : ''}
-            </p>
-          )}
+          <p className="text-sm font-semibold text-slate-800">
+            {invoice.customer_name || 'ลูกค้าทั่วไป'}
+            {invoice.customer_branch_type === 'head_office' ? ' (สำนักงานใหญ่)' : invoice.customer_branch_number ? ` (สาขา ${invoice.customer_branch_number})` : ''}
+          </p>
           {invoice.customer_address && <p className="text-xs text-slate-500">{invoice.customer_address}</p>}
+          {invoice.customer_tax_id && (
+            <p className="text-xs text-slate-500">เลขประจำตัวผู้เสียภาษี: {invoice.customer_tax_id}</p>
+          )}
           {invoice.container_number && <p className="text-xs text-slate-500 mt-1">เลขตู้: <strong className="font-mono">{invoice.container_number}</strong></p>}
         </div>
 
@@ -231,7 +237,7 @@ export default function PrintInvoicePage() {
         )}
 
         {/* Footer */}
-        <div className="mt-auto pt-8" style={{ marginTop: '80px' }}>
+        <div className="mt-auto pt-8" style={{ marginTop: '30px' }}>
           <div className="grid grid-cols-2 gap-8">
             <div className="text-center">
               <div className="border-b border-slate-300 mb-1 h-12"></div>
