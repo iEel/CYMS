@@ -256,3 +256,90 @@ input:focus, select:focus, textarea:focus {
   .no-print { display: none !important; }
   body { background: white !important; }
 }
+
+/* ===================================
+   High Contrast Theme (NFR3b — สู้แสงแดด)
+   Activated by adding class 'high-contrast' to <html>
+   Maximizes contrast for outdoor/sunlight use
+   =================================== */
+
+.high-contrast body {
+  background: #FFFFFF !important;
+  color: #000000 !important;
+}
+
+.high-contrast * {
+  border-color: #000000 !important;
+}
+
+.high-contrast .bg-white,
+.high-contrast .bg-slate-50,
+.high-contrast .bg-slate-100 {
+  background-color: #FFFFFF !important;
+}
+
+.high-contrast .bg-slate-800,
+.high-contrast .bg-slate-900 {
+  background-color: #000000 !important;
+  color: #FFFFFF !important;
+}
+
+.high-contrast .text-slate-400,
+.high-contrast .text-slate-500,
+.high-contrast .text-slate-600 {
+  color: #333333 !important;
+}
+
+.high-contrast .text-slate-700,
+.high-contrast .text-slate-800 {
+  color: #000000 !important;
+}
+
+.high-contrast .border-slate-200,
+.high-contrast .border-slate-100 {
+  border-color: #666666 !important;
+}
+
+/* High-contrast buttons */
+.high-contrast button,
+.high-contrast select,
+.high-contrast input {
+  border: 2px solid #000000 !important;
+  font-weight: 700 !important;
+}
+
+/* Large text for sunlight readability */
+.high-contrast .text-xs { font-size: 14px !important; }
+.high-contrast .text-sm { font-size: 16px !important; }
+.high-contrast .text-base { font-size: 18px !important; }
+
+/* High-vis accent colors */
+.high-contrast .text-blue-500,
+.high-contrast .text-blue-600 {
+  color: #0000CC !important;
+}
+
+.high-contrast .bg-blue-600,
+.high-contrast .bg-blue-500 {
+  background-color: #0000CC !important;
+  color: #FFFFFF !important;
+}
+
+.high-contrast .bg-emerald-600,
+.high-contrast .bg-emerald-500 {
+  background-color: #006600 !important;
+  color: #FFFFFF !important;
+}
+
+.high-contrast .bg-rose-500,
+.high-contrast .bg-red-500 {
+  background-color: #CC0000 !important;
+  color: #FFFFFF !important;
+}
+
+/* Status badges — high contrast */
+.high-contrast .bg-emerald-50 { background-color: #CCFFCC !important; color: #003300 !important; }
+.high-contrast .bg-amber-50 { background-color: #FFFFCC !important; color: #333300 !important; }
+.high-contrast .bg-rose-50 { background-color: #FFCCCC !important; color: #330000 !important; }
+.high-contrast .bg-blue-50 { background-color: #CCCCFF !important; color: #000033 !important; }
+

@@ -11,7 +11,9 @@ import {
   MapPin,
   User,
   X,
+  SunDim,
 } from 'lucide-react';
+import { initOfflineSync } from '@/lib/offlineQueue';
 
 // ข้อมูลลานจำลอง
 const DEMO_YARDS = [
@@ -22,6 +24,7 @@ const DEMO_YARDS = [
 export default function Topbar() {
   const { session, switchYard } = useAuth();
   const [isDark, setIsDark] = useState(false);
+  const [isHighContrast, setIsHighContrast] = useState(false);
   const [yardDropdownOpen, setYardDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ id: string; label: string; type: string }[]>([]);
@@ -32,10 +35,17 @@ export default function Topbar() {
   // Dark mode toggle
   useEffect(() => {
     const saved = localStorage.getItem('cyms_dark_mode');
+    const savedHC = localStorage.getItem('cyms_high_contrast');
     if (saved === 'true') {
       setIsDark(true);
       document.documentElement.classList.add('dark');
     }
+    if (savedHC === 'true') {
+      setIsHighContrast(true);
+      document.documentElement.classList.add('high-contrast');
+    }
+    // NFR1 — Initialize offline sync
+    initOfflineSync();
   }, []);
 
   const toggleDarkMode = () => {
@@ -44,8 +54,27 @@ export default function Topbar() {
     localStorage.setItem('cyms_dark_mode', String(newVal));
     if (newVal) {
       document.documentElement.classList.add('dark');
+      // Turn off high contrast when entering dark mode
+      setIsHighContrast(false);
+      localStorage.setItem('cyms_high_contrast', 'false');
+      document.documentElement.classList.remove('high-contrast');
     } else {
       document.documentElement.classList.remove('dark');
+    }
+  };
+
+  const toggleHighContrast = () => {
+    const newVal = !isHighContrast;
+    setIsHighContrast(newVal);
+    localStorage.setItem('cyms_high_contrast', String(newVal));
+    if (newVal) {
+      document.documentElement.classList.add('high-contrast');
+      // Turn off dark mode when entering high contrast
+      setIsDark(false);
+      localStorage.setItem('cyms_dark_mode', 'false');
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.remove('high-contrast');
     }
   };
 
@@ -188,6 +217,19 @@ export default function Topbar() {
           data-tooltip={isDark ? 'โหมดสว่าง' : 'โหมดมืด'}
         >
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+
+        {/* High Contrast Toggle (NFR3b — สู้แสงแดด) */}
+        <button
+          onClick={toggleHighContrast}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
+            isHighContrast
+              ? 'bg-yellow-400 text-black ring-2 ring-yellow-500'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+          }`}
+          data-tooltip={isHighContrast ? 'ปิดโหมดกลางแจ้ง' : 'โหมดกลางแจ้ง (สู้แสงแดด)'}
+        >
+          <SunDim size={18} />
         </button>
 
         {/* User Avatar */}
