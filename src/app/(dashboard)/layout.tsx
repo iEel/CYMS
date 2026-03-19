@@ -1,0 +1,51 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/providers/AuthProvider';
+import Sidebar from '@/components/layout/Sidebar';
+import Topbar from '@/components/layout/Topbar';
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { session, isLoading } = useAuth();
+  const router = useRouter();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && !session) {
+      router.replace('/login');
+    }
+  }, [session, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0F172A]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-3 border-[#3B82F6]/30 border-t-[#3B82F6] rounded-full animate-spin" />
+          <p className="text-slate-400 text-sm">กำลังโหลดระบบ...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) return null;
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A]">
+      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      <div
+        className="transition-all duration-300"
+        style={{ marginLeft: sidebarCollapsed ? '72px' : '260px' }}
+      >
+        <Topbar />
+        <main className="p-6 page-enter">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}

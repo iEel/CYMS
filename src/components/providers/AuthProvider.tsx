@@ -1,0 +1,80 @@
+'use client';
+
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import type { AuthSession } from '@/types';
+
+interface AuthContextType {
+  session: AuthSession | null;
+  isLoading: boolean;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => void;
+  switchYard: (yardId: number) => void;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth ต้องใช้ภายใน AuthProvider');
+  return ctx;
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('cyms_session');
+    if (saved) {
+      try {
+        setSession(JSON.parse(saved));
+      } catch {
+        localStorage.removeItem('cyms_session');
+      }
+    }
+    setIsLoading(false);
+  }, []);
+
+  const login = useCallback(async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'เกิดข้อผิดพลาด' };
+      }
+
+      setSession(data.session);
+      localStorage.setItem('cyms_session', JSON.stringify(data.session));
+      return { success: true };
+
+    } catch {
+      return { success: false, error: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้' };
+    }
+  }, []);
+
+  const logout = useCallback(() => {
+    setSession(null);
+    localStorage.removeItem('cyms_session');
+  }, []);
+
+  const switchYard = useCallback((yardId: number) => {
+    setSession(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, activeYardId: yardId };
+      localStorage.setItem('cyms_session', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ session, isLoading, login, logout, switchYard }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}

@@ -1,0 +1,146 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/lib/db';
+import sql from 'mssql';
+
+// GET — ดึง containers ตาม yard_id + filter, หรือ check_position (conflict detection)
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const yardId = searchParams.get('yard_id');
+    const zoneId = searchParams.get('zone_id');
+    const status = searchParams.get('status');
+    const search = searchParams.get('search');
+    const checkPosition = searchParams.get('check_position');
+    const bay = searchParams.get('bay');
+    const row = searchParams.get('row');
+    const tier = searchParams.get('tier');
+
+    const db = await getDb();
+
+    // Position check mode — ตรวจว่ามีตู้ที่ตำแหน่งนี้ไหม
+    if (checkPosition === '1' && zoneId && bay && row && tier) {
+      const checkReq = db.request()
+        .input('zoneId', sql.Int, parseInt(zoneId))
+        .input('bay', sql.Int, parseInt(bay))
+        .input('row', sql.Int, parseInt(row))
+        .input('tier', sql.Int, parseInt(tier));
+      if (yardId) checkReq.input('yardId', sql.Int, parseInt(yardId));
+
+      const checkResult = await checkReq.query(`
+        SELECT container_id, container_number FROM Containers
+        WHERE zone_id = @zoneId AND bay = @bay AND [row] = @row AND tier = @tier AND status = 'in_yard'
+        ${yardId ? 'AND yard_id = @yardId' : ''}
+      `);
+
+      return NextResponse.json({
+        conflict: checkResult.recordset.length > 0 ? checkResult.recordset[0] : null,
+      });
+    }
+
+    // Normal listing mode
+    const conditions: string[] = [];
+    const req = db.request();
+
+    if (yardId) {
+      conditions.push('c.yard_id = @yardId');
+      req.input('yardId', sql.Int, parseInt(yardId));
+    }
+    if (zoneId) {
+      conditions.push('c.zone_id = @zoneId');
+      req.input('zoneId', sql.Int, parseInt(zoneId));
+    }
+    if (status) {
+      conditions.push('c.status = @status');
+      req.input('status', sql.NVarChar, status);
+    }
+    if (search) {
+      conditions.push('(c.container_number LIKE @search OR c.shipping_line LIKE @search)');
+      req.input('search', sql.NVarChar, `%${search}%`);
+    }
+
+    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const result = await req.query(`
+      SELECT c.*, y.yard_name, z.zone_name, z.zone_type
+      FROM Containers c
+      LEFT JOIN Yards y ON c.yard_id = y.yard_id
+      LEFT JOIN YardZones z ON c.zone_id = z.zone_id
+      ${where}
+      ORDER BY c.updated_at DESC
+    `);
+
+    return NextResponse.json(result.recordset);
+  } catch (error) {
+    console.error('❌ GET containers error:', error);
+    return NextResponse.json({ error: 'ไม่สามารถดึงข้อมูลตู้ได้' }, { status: 500 });
+  }
+}
+
+// POST — เพิ่มตู้ใหม่ (Gate-In)
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const db = await getDb();
+
+    const result = await db.request()
+      .input('containerNumber', sql.NVarChar, body.container_number)
+      .input('size', sql.NVarChar, body.size)
+      .input('type', sql.NVarChar, body.type)
+      .input('status', sql.NVarChar, body.status || 'in_yard')
+      .input('yardId', sql.Int, body.yard_id || null)
+      .input('zoneId', sql.Int, body.zone_id || null)
+      .input('bay', sql.Int, body.bay || null)
+      .input('row', sql.Int, body.row || null)
+      .input('tier', sql.Int, body.tier || null)
+      .input('shippingLine', sql.NVarChar, body.shipping_line || null)
+      .input('isLaden', sql.Bit, body.is_laden || false)
+      .input('sealNumber', sql.NVarChar, body.seal_number || null)
+      .input('gateInDate', sql.DateTime2, new Date())
+      .query(`
+        INSERT INTO Containers (container_number, size, type, status, yard_id, zone_id,
+          bay, [row], tier, shipping_line, is_laden, seal_number, gate_in_date)
+        OUTPUT INSERTED.*
+        VALUES (@containerNumber, @size, @type, @status, @yardId, @zoneId,
+          @bay, @row, @tier, @shippingLine, @isLaden, @sealNumber, @gateInDate)
+      `);
+
+    return NextResponse.json({ success: true, data: result.recordset[0] });
+  } catch (error: unknown) {
+    console.error('❌ POST container error:', error);
+    const msg = error instanceof Error && error.message.includes('UNIQUE')
+      ? 'หมายเลขตู้นี้มีอยู่ในระบบแล้ว' : 'ไม่สามารถเพิ่มตู้ได้';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+// PUT — อัปเดตตู้ (ย้ายตำแหน่ง, เปลี่ยนสถานะ)
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const db = await getDb();
+
+    await db.request()
+      .input('containerId', sql.Int, body.container_id)
+      .input('status', sql.NVarChar, body.status)
+      .input('yardId', sql.Int, body.yard_id || null)
+      .input('zoneId', sql.Int, body.zone_id || null)
+      .input('bay', sql.Int, body.bay || null)
+      .input('row', sql.Int, body.row || null)
+      .input('tier', sql.Int, body.tier || null)
+      .input('sealNumber', sql.NVarChar, body.seal_number || null)
+      .input('gateOutDate', sql.DateTime2, body.status === 'released' ? new Date() : null)
+      .query(`
+        UPDATE Containers SET
+          status = @status, yard_id = @yardId, zone_id = @zoneId,
+          bay = @bay, [row] = @row, tier = @tier,
+          seal_number = @sealNumber, gate_out_date = @gateOutDate,
+          updated_at = GETDATE()
+        WHERE container_id = @containerId
+      `);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('❌ PUT container error:', error);
+    return NextResponse.json({ error: 'ไม่สามารถอัปเดตตู้ได้' }, { status: 500 });
+  }
+}

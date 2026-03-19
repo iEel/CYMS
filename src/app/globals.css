@@ -1,26 +1,215 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ===================================
+   CYMS Design System — Industrial Tech
+   =================================== */
+
+@theme {
+  /* Primary Colors */
+  --color-navy-900: #0F172A;
+  --color-navy-800: #1E293B;
+  --color-navy-700: #334155;
+  --color-navy-600: #475569;
+  --color-navy-500: #64748B;
+
+  /* Background */
+  --color-surface-50: #F8FAFC;
+  --color-surface-100: #F1F5F9;
+  --color-surface-200: #E2E8F0;
+  --color-surface-300: #CBD5E1;
+
+  /* Accent */
+  --color-accent-400: #60A5FA;
+  --color-accent-500: #3B82F6;
+  --color-accent-600: #2563EB;
+  --color-accent-700: #1D4ED8;
+
+  /* Semantic – Success */
+  --color-success-400: #34D399;
+  --color-success-500: #10B981;
+  --color-success-600: #059669;
+
+  /* Semantic – Danger */
+  --color-danger-400: #F87171;
+  --color-danger-500: #EF4444;
+  --color-danger-600: #DC2626;
+
+  /* Semantic – Warning */
+  --color-warning-400: #FBBF24;
+  --color-warning-500: #F59E0B;
+  --color-warning-600: #D97706;
+
+  /* Fonts */
+  --font-sans: 'Inter', 'Sarabun', system-ui, sans-serif;
+  --font-thai: 'Sarabun', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-dropdown: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.15);
+
+  /* Animation Durations */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 350ms;
+
+  /* Sidebar Width */
+  --sidebar-width: 260px;
+  --sidebar-collapsed: 72px;
+  --topbar-height: 64px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ===================================
+   Base Styles
+   =================================== */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-surface-50);
+  color: var(--color-navy-800);
+}
+
+/* ===================================
+   Dark Mode
+   =================================== */
+
+.dark body,
+.dark {
+  --color-surface-50: #0F172A;
+  --color-surface-100: #1E293B;
+  --color-surface-200: #334155;
+  --color-surface-300: #475569;
+  --color-navy-800: #F1F5F9;
+  --color-navy-900: #F8FAFC;
+}
+
+.dark body {
+  background-color: #0F172A;
+  color: #F1F5F9;
+}
+
+/* ===================================
+   Skeleton Loading Animation
+   =================================== */
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-200) 25%,
+    var(--color-surface-100) 50%,
+    var(--color-surface-200) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+.dark .skeleton {
+  background: linear-gradient(
+    90deg,
+    #1E293B 25%,
+    #334155 50%,
+    #1E293B 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* ===================================
+   Glassmorphism
+   =================================== */
+
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ===================================
+   Scrollbar Custom
+   =================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-navy-500);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-navy-600);
+}
+
+/* ===================================
+   Tooltip Style
+   =================================== */
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  padding: 6px 12px;
+  background: var(--color-navy-800);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: all var(--duration-fast) ease;
+  z-index: 50;
+}
+
+.dark [data-tooltip]::after {
+  background: var(--color-surface-200);
+  color: #F8FAFC;
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ===================================
+   Page Transition
+   =================================== */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: fadeIn var(--duration-normal) ease-out;
 }
