@@ -57,7 +57,10 @@ export default function BillingPage() {
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [customers, setCustomers] = useState<Array<{ customer_id: number; customer_name: string; customer_type: string }>>([]);
+  const [customers, setCustomers] = useState<Array<{ customer_id: number; customer_name: string; customer_type: string; tax_id?: string; branch_type?: string; branch_number?: string }>>([]);
+  const [custSearch, setCustSearch] = useState('');
+  const [custOpen, setCustOpen] = useState(false);
+  const [selectedCust, setSelectedCust] = useState<{ customer_id: number; customer_name: string; customer_type: string; tax_id?: string; branch_type?: string; branch_number?: string } | null>(null);
 
   // Auto-calc
   const [autoCalcContainer, setAutoCalcContainer] = useState('');
@@ -294,15 +297,59 @@ export default function BillingPage() {
           </div>
           <div className="p-5 space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div><label className={labelClass}>ลูกค้า *</label>
-                <select value={createForm.customer_id} onChange={e => setCreateForm({ ...createForm, customer_id: e.target.value })} className={inputClass}>
-                  <option value="">-- เลือกลูกค้า --</option>
-                  {customers.map(c => (
-                    <option key={c.customer_id} value={c.customer_id}>
-                      {c.customer_name} ({c.customer_type === 'shipping_line' ? 'สายเรือ' : c.customer_type === 'trucker' ? 'รถบรรทุก' : 'ทั่วไป'})
-                    </option>
-                  ))}
-                </select>
+              <div className="relative"><label className={labelClass}>ลูกค้า *</label>
+                {selectedCust ? (
+                  <div className="flex items-center gap-2 h-11 px-3 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20">
+                    <span className="flex-1 text-sm text-slate-800 dark:text-white truncate">
+                      {selectedCust.customer_name}
+                      <span className="text-xs text-slate-400 ml-1">
+                        ({selectedCust.customer_type === 'shipping_line' ? 'สายเรือ' : selectedCust.customer_type === 'trucker' ? 'รถบรรทุก' : 'ทั่วไป'})
+                      </span>
+                    </span>
+                    <button type="button" onClick={() => { setSelectedCust(null); setCreateForm({ ...createForm, customer_id: '' }); setCustSearch(''); }}
+                      className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-500 flex items-center justify-center hover:bg-rose-200 hover:text-rose-600 text-xs">×</button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input type="text" value={custSearch}
+                      onChange={e => { setCustSearch(e.target.value); setCustOpen(true); }}
+                      onFocus={() => setCustOpen(true)}
+                      placeholder="พิมพ์ชื่อลูกค้า หรือเลขภาษี..."
+                      className={inputClass} autoComplete="off" />
+                    {custOpen && custSearch.length > 0 && (() => {
+                      const q = custSearch.toLowerCase();
+                      const filtered = customers.filter(c =>
+                        c.customer_name.toLowerCase().includes(q) ||
+                        (c.tax_id && c.tax_id.includes(custSearch))
+                      );
+                      return filtered.length > 0 ? (
+                        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                          {filtered.map(c => (
+                            <button key={c.customer_id} type="button"
+                              onClick={() => {
+                                setSelectedCust(c);
+                                setCreateForm({ ...createForm, customer_id: String(c.customer_id) });
+                                setCustSearch('');
+                                setCustOpen(false);
+                              }}
+                              className="w-full text-left px-4 py-2.5 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0">
+                              <div className="text-sm font-medium text-slate-800 dark:text-white">{c.customer_name}</div>
+                              <div className="text-[11px] text-slate-400">
+                                {c.customer_type === 'shipping_line' ? '🚢 สายเรือ' : c.customer_type === 'trucker' ? '🚛 รถบรรทุก' : '🏢 ทั่วไป'}
+                                {c.tax_id && <span> • {c.tax_id}</span>}
+                                {c.branch_type === 'head_office' ? ' • สำนักงานใหญ่' : c.branch_number ? ` • สาขา ${c.branch_number}` : ''}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl px-4 py-3 text-xs text-slate-400">
+                          ไม่พบลูกค้า &quot;{custSearch}&quot;
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
               <div><label className={labelClass}>เลขตู้ (ถ้ามี)</label><input type="text" value={createForm.container_number} onChange={e => setCreateForm({ ...createForm, container_number: e.target.value })} className={`${inputClass} font-mono`} placeholder="ABCU1234567" /></div>
               <div><label className={labelClass}>ประเภทค่าบริการ</label>
