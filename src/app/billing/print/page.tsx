@@ -159,7 +159,7 @@ export default function PrintInvoicePage() {
         </button>
       </div>
 
-      <div className="doc-body max-w-[210mm] mx-auto bg-white p-8">
+      <div className="doc-body mx-auto bg-white p-8" style={{ maxWidth: '210mm' }}>
         {/* Header */}
         <div className="flex items-start justify-between border-b-2 border-slate-800 pb-4 mb-6">
           <div className="flex-1">
