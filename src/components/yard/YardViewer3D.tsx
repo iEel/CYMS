@@ -97,6 +97,9 @@ function createContainerMesh(ctr: ContainerBlock, scene: THREE.Scene): THREE.Gro
     color: baseColor,
     roughness: 0.55,
     metalness: 0.35,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.castShadow = true;
@@ -123,15 +126,15 @@ function createContainerMesh(ctr: ContainerBlock, scene: THREE.Scene): THREE.Gro
   for (let i = 1; i < corrCount; i++) {
     const xPos = -w / 2 + (w * i / corrCount);
     const lineGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(xPos, -h / 2 + 0.04, d / 2 + 0.001),
-      new THREE.Vector3(xPos, h / 2 - 0.04, d / 2 + 0.001),
+      new THREE.Vector3(xPos, -h / 2 + 0.04, d / 2 + 0.005),
+      new THREE.Vector3(xPos, h / 2 - 0.04, d / 2 + 0.005),
     ]);
     const line = new THREE.Line(lineGeo, corrugationMat);
     group.add(line);
     // back side
     const lineBack = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(xPos, -h / 2 + 0.04, -d / 2 - 0.001),
-      new THREE.Vector3(xPos, h / 2 - 0.04, -d / 2 - 0.001),
+      new THREE.Vector3(xPos, -h / 2 + 0.04, -d / 2 - 0.005),
+      new THREE.Vector3(xPos, h / 2 - 0.04, -d / 2 - 0.005),
     ]);
     group.add(new THREE.Line(lineBack, corrugationMat));
   }
@@ -144,13 +147,13 @@ function createContainerMesh(ctr: ContainerBlock, scene: THREE.Scene): THREE.Gro
   });
   // เส้นแบ่งประตู 2 บาน (แนวตั้งกลาง)
   const doorCenter = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(w / 2 + 0.001, -h / 2 + 0.06, -d * 0.35),
-    new THREE.Vector3(w / 2 + 0.001, h / 2 - 0.06, -d * 0.35),
+    new THREE.Vector3(w / 2 + 0.005, -h / 2 + 0.06, -d * 0.35),
+    new THREE.Vector3(w / 2 + 0.005, h / 2 - 0.06, -d * 0.35),
   ]);
   group.add(new THREE.Line(doorCenter, doorMat));
   const doorCenter2 = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(w / 2 + 0.001, -h / 2 + 0.06, d * 0.35),
-    new THREE.Vector3(w / 2 + 0.001, h / 2 - 0.06, d * 0.35),
+    new THREE.Vector3(w / 2 + 0.005, -h / 2 + 0.06, d * 0.35),
+    new THREE.Vector3(w / 2 + 0.005, h / 2 - 0.06, d * 0.35),
   ]);
   group.add(new THREE.Line(doorCenter2, doorMat));
 
@@ -547,11 +550,11 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       const intensity = 0.4 + Math.sin(glowTime * 3) * 0.4;
       const beaconPulse = 0.5 + Math.sin(glowTime * 4) * 0.3;
 
-      // Glow the highlighted container
+      // Glow the highlighted container (smooth, non-flickering)
       (targetMesh as THREE.Group).children.forEach(child => {
         if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
           child.material.emissive.setHex(0xFFFF00);
-          child.material.emissiveIntensity = intensity;
+          child.material.emissiveIntensity = 0.3 + Math.sin(glowTime * 1.5) * 0.15;
           child.material.transparent = false;
           child.material.opacity = 1;
         }
