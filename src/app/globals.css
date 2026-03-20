@@ -257,40 +257,31 @@ input:focus, select:focus, textarea:focus {
     margin: 3mm;
   }
 
-  body {
-    background: white !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    visibility: hidden !important;
-  }
-
-  /* Hide sidebar, topbar, controls */
-  .no-print,
-  aside,
-  nav,
-  header {
+  /* Hide controls */
+  .no-print {
     display: none !important;
   }
 
-  /* Show EIR overlay — override fixed/scroll to static */
+  /* EIR overlay — fixed on top of everything, white background, no scrollbar */
   #eir-overlay {
-    visibility: visible !important;
-    position: static !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     background: white !important;
     padding: 0 !important;
     margin: 0 !important;
     overflow: hidden !important;
     backdrop-filter: none !important;
-    inset: auto !important;
-    z-index: auto !important;
-    width: 100% !important;
-    height: auto !important;
+    z-index: 99999 !important;
   }
 
-  /* The EIR print area */
+  /* EIR content — scale to fit A5 */
   #eir-print-area {
-    visibility: visible !important;
-    position: static !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -301,17 +292,10 @@ input:focus, select:focus, textarea:focus {
     transform: scale(0.82);
     transform-origin: top left;
     width: 122% !important;
-    max-height: 138mm !important;
     overflow: hidden !important;
-    page-break-inside: avoid !important;
-    page-break-after: avoid !important;
   }
 
-  #eir-print-area * {
-    visibility: visible !important;
-  }
-
-  /* Ensure QR code and badges print with color */
+  /* Ensure colors print */
   * {
     print-color-adjust: exact !important;
     -webkit-print-color-adjust: exact !important;
