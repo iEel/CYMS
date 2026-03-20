@@ -101,6 +101,24 @@ export default function GatePage() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'credit'>('cash');
   const [billingPaid, setBillingPaid] = useState(false);
   const [billingInvoiceNumber, setBillingInvoiceNumber] = useState('');
+  const [selectedCharges, setSelectedCharges] = useState<Set<number>>(new Set());
+
+  // Auto-check essential charges, uncheck optional ones
+  const OPTIONAL_CHARGES = ['washing', 'pti', 'reefer', 'mnr'];
+  const initSelectedCharges = (charges: BillingCharge[]) => {
+    const selected = new Set<number>();
+    charges.forEach((ch, i) => {
+      if (!OPTIONAL_CHARGES.includes(ch.charge_type)) selected.add(i);
+    });
+    setSelectedCharges(selected);
+  };
+
+  // Recalculate totals from selected charges
+  const selectedTotal = billingData ? billingData.charges
+    .filter((_, i) => selectedCharges.has(i))
+    .reduce((s, c) => s + c.subtotal, 0) : 0;
+  const selectedVat = Math.round(selectedTotal * 0.07 * 100) / 100;
+  const selectedGrand = selectedTotal + selectedVat;
 
   // History
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -189,6 +207,7 @@ export default function GatePage() {
       });
       const billData = await billRes.json();
       setBillingData(billData);
+      if (billData.charges) initSelectedCharges(billData.charges);
       if (billData.is_credit) setPaymentMethod('credit');
       // If already paid, skip payment flow
       if (billData.already_paid) {
@@ -740,11 +759,23 @@ export default function GatePage() {
                           )}
                         </div>
 
-                        {/* Charges Table */}
+                        {/* Charges Table — toggleable */}
                         <div className="px-4 py-2 divide-y divide-slate-100 dark:divide-slate-700/50">
                           {billingData.charges.map((ch, i) => (
-                            <div key={i} className="py-2 flex items-center justify-between text-sm">
-                              <div>
+                            <div key={i} className={`py-2 flex items-center gap-3 text-sm transition-opacity ${!selectedCharges.has(i) ? 'opacity-40' : ''}`}>
+                              <input
+                                type="checkbox"
+                                checked={selectedCharges.has(i)}
+                                onChange={() => {
+                                  setSelectedCharges(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(i)) next.delete(i); else next.add(i);
+                                    return next;
+                                  });
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                              />
+                              <div className="flex-1">
                                 <p className="text-slate-700 dark:text-slate-200">{ch.description}</p>
                                 <p className="text-[10px] text-slate-400">
                                   {ch.billable_days > 0 ? `${ch.quantity} วัน × ฿${ch.unit_price.toLocaleString()} (ฟรี ${ch.free_days} วัน)` : `${ch.quantity} × ฿${ch.unit_price.toLocaleString()}`}
@@ -755,19 +786,19 @@ export default function GatePage() {
                           ))}
                         </div>
 
-                        {/* Summary */}
+                        {/* Summary — recalculated from selected */}
                         <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/30 border-t border-slate-200 dark:border-slate-700 space-y-1">
                           <div className="flex justify-between text-xs text-slate-400">
-                            <span>รวมก่อน VAT</span>
-                            <span>฿{billingData.summary.total_before_vat.toLocaleString()}</span>
+                            <span>รวมก่อน VAT ({selectedCharges.size}/{billingData.charges.length} รายการ)</span>
+                            <span>฿{selectedTotal.toLocaleString()}</span>
                           </div>
                           <div className="flex justify-between text-xs text-slate-400">
                             <span>VAT 7%</span>
-                            <span>฿{billingData.summary.vat_amount.toLocaleString()}</span>
+                            <span>฿{selectedVat.toLocaleString()}</span>
                           </div>
                           <div className="flex justify-between text-base font-bold text-slate-800 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-600">
                             <span>ยอดรวมทั้งสิ้น</span>
-                            <span className="text-emerald-600">฿{billingData.summary.grand_total.toLocaleString()}</span>
+                            <span className="text-emerald-600">฿{selectedGrand.toLocaleString()}</span>
                           </div>
                         </div>
 
@@ -795,9 +826,9 @@ export default function GatePage() {
                                           charge_type: 'storage',
                                           description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน)`,
                                           quantity: 1,
-                                          unit_price: billingData.summary.total_before_vat,
+                                          unit_price: selectedTotal,
                                           due_date: new Date(Date.now() + billingData.credit_term * 86400000).toISOString(),
-                                          notes: JSON.stringify({ charges: billingData.charges, dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
+                                          notes: JSON.stringify({ charges: billingData.charges.filter((_, i) => selectedCharges.has(i)), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
                                         }),
                                       });
                                       const data = await res.json();
@@ -844,8 +875,8 @@ export default function GatePage() {
                                           charge_type: 'storage',
                                           description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน) — ชำระ ${paymentMethod === 'cash' ? 'เงินสด' : 'โอน'}`,
                                           quantity: 1,
-                                          unit_price: billingData.summary.total_before_vat,
-                                          notes: JSON.stringify({ charges: billingData.charges, dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
+                                          unit_price: selectedTotal,
+                                          notes: JSON.stringify({ charges: billingData.charges.filter((_, i) => selectedCharges.has(i)), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
                                         }),
                                       });
                                       const data = await res.json();
@@ -862,7 +893,7 @@ export default function GatePage() {
                                     } catch (err) { console.error(err); }
                                   }}
                                   className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all"
-                                >💰 รับชำระเงิน ฿{billingData.summary.grand_total.toLocaleString()}</button>
+                                >💰 รับชำระเงิน ฿{selectedGrand.toLocaleString()}</button>
                               </>
                             )}
                           </div>
