@@ -257,8 +257,9 @@ input:focus, select:focus, textarea:focus {
     margin: 3mm;
   }
 
-  /* Hide controls */
-  .no-print {
+  /* Hide controls and damage report */
+  .no-print,
+  #eir-damage-section {
     display: none !important;
   }
 

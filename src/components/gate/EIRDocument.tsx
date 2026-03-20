@@ -215,7 +215,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
 
           {/* Row 4: Damage Summary — hidden on print, viewable via QR */}
           {damagePoints.length > 0 && (
-            <div className="border border-slate-200 rounded-xl overflow-hidden no-print">
+            <div id="eir-damage-section" className="border border-slate-200 rounded-xl overflow-hidden no-print">
               <div className="bg-red-50 px-3 py-1 border-b border-slate-200">
                 <h3 className="text-[9px] font-bold text-red-600 uppercase tracking-wider">
                   ⚠️ ความเสียหาย — {damagePoints.length} จุด
