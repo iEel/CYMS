@@ -797,6 +797,18 @@ export default function GatePage() {
                                       });
                                       const data = await res.json();
                                       if (data.success) {
+                                        // Auto gate-out the container
+                                        await fetch('/api/gate', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({
+                                            transaction_type: 'gate_out',
+                                            yard_id: yardId,
+                                            container_id: selectedContainer.container_id,
+                                            container_number: selectedContainer.container_number,
+                                            ...gateOutForm,
+                                          }),
+                                        });
                                         setBillingPaid(true);
                                         setBillingInvoiceNumber(data.invoice_number || '');
                                       }
@@ -850,6 +862,18 @@ export default function GatePage() {
                                           method: 'PUT',
                                           headers: { 'Content-Type': 'application/json' },
                                           body: JSON.stringify({ invoice_id: data.invoice.invoice_id, action: 'pay' }),
+                                        });
+                                        // Auto gate-out the container
+                                        await fetch('/api/gate', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({
+                                            transaction_type: 'gate_out',
+                                            yard_id: yardId,
+                                            container_id: selectedContainer.container_id,
+                                            container_number: selectedContainer.container_number,
+                                            ...gateOutForm,
+                                          }),
                                         });
                                         setBillingPaid(true);
                                         setBillingInvoiceNumber(data.invoice_number || '');
