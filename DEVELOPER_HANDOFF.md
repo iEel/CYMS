@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 20 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A3 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt** (99%)
+> ส่งมอบงาน: 20 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A3 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Gate History Search** (99%)
 
 ---
 
@@ -14,7 +14,7 @@
 |-----|-----------|-------|
 | **เฟส 1** | วางรากฐาน — โปรเจค, Design System, DB Schema | ✅ เสร็จ |
 | **เฟส 2** | ล็อกอิน, Dashboard, ตั้งค่าระบบ, RBAC | ✅ เสร็จ |
-| **เฟส 3** | จัดการลาน, 3D Viewer, Auto-Allocation, ค้นหาตู้, Yard Audit, **PWA Card View** | ✅ เสร็จ |
+| **เฟส 3** | จัดการลาน, 3D Viewer, **Bay Cross-Section View**, Auto-Allocation, ค้นหาตู้ + **3D Highlight**, Yard Audit, **PWA Card View** | ✅ เสร็จ |
 | **เฟส 4** | Gate In/Out, EIR, ตรวจสภาพตู้, OCR, Seal Photo, Signature, Inter-Yard Transfer | ✅ เสร็จ |
 | **เฟส 5** | ปฏิบัติการ, Job Queue, Smart Shifting, **Tablet-optimized buttons** | ✅ เสร็จ |
 | **เฟส 6** | EDI, Booking/Manifest, Seal Validation, **CSV/Excel file import** | ✅ เสร็จ |
@@ -214,7 +214,8 @@ container-yard-system/
 │   │   │   ├── AuthProvider.tsx  # Auth context (login/logout/session)
 │   │   │   └── ToastProvider.tsx # Toast notifications (success/error/warning/info)
 │   │   ├── yard/
-│   │   │   ├── YardViewer3D.tsx      # Three.js 3D yard viewer
+│   │   │   ├── YardViewer3D.tsx      # Three.js 3D yard viewer (+ X-Ray highlight + floating label)
+│   │   │   ├── BayCrossSection.tsx   # Bay Cross-Section view (Row×Tier grid per bay)
 │   │   │   ├── ContainerSearch.tsx   # Instant search + detail panel
 │   │   │   └── YardAudit.tsx         # Audit checklist per zone/bay
 │   │   └── gate/
@@ -312,7 +313,7 @@ container-yard-system/
 
 | Method | Endpoint | คำอธิบาย |
 |--------|----------|---------|
-| GET | `/api/gate?yard_id=X&type=gate_in&date=today` | ดึงรายการ gate transactions |
+| GET | `/api/gate?yard_id=X&type=gate_in&date=today&search=` | ดึงรายการ gate transactions (date: `today` หรือ `YYYY-MM-DD`, search: เลขตู้/คนขับ/ทะเบียน/EIR) |
 | POST | `/api/gate` | Gate-In/Gate-Out — `{ transaction_type, container_number, ... }` → **auto-allocate** + EIR + **auto Work Order** |
 | GET | `/api/gate/eir?eir_number=X` | ดึงข้อมูล EIR (+ condition/grade/company info) |
 
@@ -392,14 +393,15 @@ container-yard-system/
 
 #### แท็บ "ภาพรวม"
 - สถิติ 5 การ์ด (ตู้ทั้งหมด, ในลาน, ค้างจ่าย, ซ่อม, อัตราเต็ม)
-- 2D/3D toggle
+- **2D / Bay / 3D** toggle (3 มุมมอง)
 - **2D**: Zone cards + occupancy bars
+- **Bay**: (**ใหม่**) Bay Cross-Section — แสดง Row×Tier grid แยกตาม Bay + เลือก Zone + สี shipping line/status + hover tooltip + click detail + legend
 - **3D**: Three.js — ตู้สมจริง (สัดส่วนจริง 20ft/40ft/45ft)
 - ตารางตู้ + filter + search + **pagination** (25 ตู้/หน้า + ปุ่มเลขหน้า + รีเซ็ตอัตโนมัติเมื่อเปลี่ยน filter)
 
 #### แท็บ "ค้นหาตู้" (Split Screen)
-- **ซ้าย**: Instant search → รายชื่อตู้ + รายละเอียด
-- **ขวา**: 3D Viewer — **X-Ray Mode** (ตู้อื่นโปร่งใส) + **Beacon สีเหลือง** + กล้องซูม smooth
+- **ซ้าย**: Instant search → รายชื่อตู้ + รายละเอียด + ปุ่ม "📍 ระบุตำแหน่ง"
+- **ขวา**: 3D Viewer — **X-Ray Mode** (ตู้อื่น opacity 60%) + **Beacon สีเหลือง** + **Floating Label** (เลขตู้ + พิกัด + สายเรือ) + วงแหวนบนพื้น + กล้องซูม smooth
 
 #### แท็บ "จัดวางตู้" (Smart Auto-Allocation)
 - ฟอร์มระบุตู้ (เลขตู้, ขนาด, ประเภท, สายเรือ)
@@ -448,8 +450,11 @@ container-yard-system/
 - ลูกค้าเครดิต → สร้างใบแจ้งหนี้ (pending) ปล่อยตู้ได้เลย
 - หลังชำระ → ปุ่ม **"🖨️ พิมพ์ใบเสร็จ"** ขึ้นมาทันที
 
-#### แท็บ "ประวัติวันนี้"
-- ตาราง transactions วันนี้ + ลิงก์ดู EIR ทุกรายการ
+#### แท็บ "ประวัติ Gate"
+- ตาราง transactions + ลิงก์ดู EIR ทุกรายการ
+- **Date picker**: เลือกดูประวัติวันไหนก็ได้ + ปุ่ม "วันนี้" สำหรับกลับมาวันปัจจุบัน
+- **ช่องค้นหา**: ค้นหาด้วยเลขตู้, ชื่อคนขับ, ทะเบียนรถ, เลข EIR (กด Enter)
+- แสดงวันที่+เวลา + จำนวนรายการ
 
 ### 7.6 EIR (Equipment Interchange Receipt) — A3 Print
 - **A3 Landscape** print layout พร้อมปุ่ม "พิมพ์ A3"
@@ -513,7 +518,7 @@ container-yard-system/
 
 #### แท็บ "Smart Shifting" (LIFO)
 - ค้นหาตู้ล่างที่ต้องดึงออก
-- ระบบวิเคราะห์ตู้ที่ซ้อนข้างบน (LIFO)
+- ระบบวิเคราะห์ตู้ที่ซ้อนข้างบน (LIFO) — **รวมทุกสถานะ** (in_yard, repair, hold ฯลฯ) ยกเว้น gated_out
 - แสดง: ตู้ที่ต้องหลบ + ตำแหน่งพักชั่วคราว + total moves
 
 ### 7.9 3D Yard Viewer (Three.js)
@@ -527,7 +532,7 @@ container-yard-system/
 | **รายละเอียดตู้** | Edge lines, corrugation (ลอนคลื่น), door lines + handles, corner posts 4 มุม, top rail |
 | **Hover tooltip** | เลขตู้ \| ขนาด \| สายเรือ \| สถานะ \| พิกัด |
 | **Click** | เลือกตู้ → detail panel |
-| **X-Ray Mode** | ตู้อื่น opacity 8% + beacon สีเหลือง + วงแหวนบนพื้น |
+| **X-Ray Mode** | ตู้อื่น opacity 60% + beacon สีเหลือง + วงแหวนบนพื้น + **floating label** (billboard) |
 | **Camera** | OrbitControls + smooth lerp zoom (cubic easing) |
 | **Stack** | Ground-up stacking — ไม่มีตู้ลอย |
 
