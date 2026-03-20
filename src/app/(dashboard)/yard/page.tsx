@@ -72,7 +72,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   in_yard:    { label: 'ในลาน', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' },
   hold:       { label: 'ค้างจ่าย', color: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' },
   repair:     { label: 'ซ่อม', color: 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400' },
-  released:   { label: 'ปล่อยแล้ว', color: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
+  gated_out:  { label: 'ปล่อยแล้ว', color: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
   available:  { label: 'ว่าง', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
 };
 
@@ -114,8 +114,7 @@ export default function YardPage() {
       const ctrs = await containersRes.json();
       setZones(stats.zones || []);
       setSummary(stats.summary || {});
-      // Exclude containers that have left the yard
-      setContainers((ctrs || []).filter((c: ContainerData) => c.status !== 'gated_out'));
+      setContainers(ctrs || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [yardId]);
@@ -127,7 +126,12 @@ export default function YardPage() {
     if (search && !c.container_number.toLowerCase().includes(search.toLowerCase())
         && !c.shipping_line?.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterZone && String(c.zone_name) !== filterZone) return false;
-    if (filterStatus && c.status !== filterStatus) return false;
+    if (filterStatus) {
+      if (c.status !== filterStatus) return false;
+    } else {
+      // By default, hide gated_out containers
+      if (c.status === 'gated_out') return false;
+    }
     return true;
   });
 
