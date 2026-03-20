@@ -808,15 +808,24 @@ export default function GatePage() {
                               <div className="flex-1">
                                 <p className="text-slate-700 dark:text-slate-200">{ch.description}</p>
                                 <p className="text-[10px] text-slate-400">
-                                  {ch.billable_days > 0 ? `${ch.quantity} วัน × ฿${ch.unit_price.toLocaleString()} (ฟรี ${ch.free_days} วัน)` : `${ch.quantity} × ฿${ch.unit_price.toLocaleString()}`}
+                                  {ch.billable_days > 0
+                                    ? `${ch.quantity} วัน × ฿${ch.unit_price.toLocaleString()} (ฟรี ${ch.free_days} วัน)`
+                                    : ch.free_days > 0
+                                      ? `${ch.quantity} วัน — อยู่ในช่วงฟรี`
+                                      : `${ch.quantity} × ฿${ch.unit_price.toLocaleString()}`
+                                  }
                                 </p>
                               </div>
-                              <input
-                                type="number"
-                                value={i in chargeOverrides ? chargeOverrides[i] : ch.subtotal}
-                                onChange={(e) => setChargeOverrides(prev => ({ ...prev, [i]: parseFloat(e.target.value) || 0 }))}
-                                className="w-24 h-7 px-2 text-right font-mono font-semibold text-sm rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:border-blue-500"
-                              />
+                              {ch.subtotal === 0 && ch.free_days > 0 ? (
+                                <span className="w-24 h-7 flex items-center justify-end px-2 text-emerald-500 text-xs font-bold">✅ ฟรี</span>
+                              ) : (
+                                <input
+                                  type="number"
+                                  value={i in chargeOverrides ? chargeOverrides[i] : ch.subtotal}
+                                  onChange={(e) => setChargeOverrides(prev => ({ ...prev, [i]: parseFloat(e.target.value) || 0 }))}
+                                  className="w-24 h-7 px-2 text-right font-mono font-semibold text-sm rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                                />
+                              )}
                             </div>
                           ))}
 
@@ -1033,7 +1042,7 @@ export default function GatePage() {
                     ) : null}
 
                     <button onClick={handleRequestRelease}
-                      disabled={releaseLoading || !!(billingData && billingData.charges.length > 0 && !billingPaid && !billingData.is_credit)}
+                      disabled={releaseLoading || !!(billingData && billingData.charges.length > 0 && selectedGrand > 0 && !billingPaid && !billingData.is_credit)}
                       className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-50 transition-all w-full justify-center">
                       {releaseLoading ? <Loader2 size={16} className="animate-spin" /> : <Truck size={16} />}
                       ขอดึงตู้ → สร้างคำสั่งรถยก

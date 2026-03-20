@@ -96,9 +96,9 @@ export async function POST(request: NextRequest) {
       billable_days: number;
     }> = [];
 
-    if (tiers.length > 0 && dwellDays > 0) {
-      // Calculate per-tier charges
-      let remainingDays = dwellDays;
+    if (tiers.length > 0) {
+      // Calculate per-tier charges (even if dwellDays=0, show free tier info)
+      let remainingDays = Math.max(dwellDays, 0);
 
       for (const tier of tiers) {
         if (remainingDays <= 0) break;
