@@ -254,7 +254,7 @@ input:focus, select:focus, textarea:focus {
 @media print {
   @page {
     size: A5 landscape;
-    margin: 5mm;
+    margin: 3mm;
   }
 
   body {
@@ -290,6 +290,20 @@ input:focus, select:focus, textarea:focus {
   * {
     print-color-adjust: exact !important;
     -webkit-print-color-adjust: exact !important;
+  }
+
+  /* Force EIR to fit on one A5 page */
+  #eir-print-area {
+    font-size: 9px !important;
+    transform: scale(0.88);
+    transform-origin: top left;
+    width: 114% !important;
+    page-break-inside: avoid !important;
+    overflow: hidden !important;
+  }
+
+  #eir-print-area * {
+    page-break-inside: avoid !important;
   }
 }
 

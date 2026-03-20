@@ -146,8 +146,8 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
 
           {/* Row 2: Container Info */}
           <div className="border border-slate-200 rounded-xl overflow-hidden">
-            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">📦 ข้อมูลตู้คอนเทนเนอร์ (Container Information)</h3>
+            <div className="bg-slate-50 px-3 py-1 border-b border-slate-200">
+              <h3 className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">📦 ข้อมูลตู้ (Container Information)</h3>
             </div>
             <div className="grid grid-cols-5 gap-0 divide-x divide-slate-200">
               <InfoCell label="เลขตู้" value={data.container_number} mono bold className="p-2" />
@@ -216,29 +216,29 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
           {/* Row 4: Damage Summary (if any) */}
           {damagePoints.length > 0 && (
             <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <div className="bg-red-50 px-4 py-2 border-b border-slate-200">
-                <h3 className="text-xs font-bold text-red-600 uppercase tracking-wider">
-                  ⚠️ รายงานความเสียหาย (Damage Report) — {damagePoints.length} จุด
+              <div className="bg-red-50 px-3 py-1 border-b border-slate-200">
+                <h3 className="text-[9px] font-bold text-red-600 uppercase tracking-wider">
+                  ⚠️ ความเสียหาย — {damagePoints.length} จุด
                 </h3>
               </div>
-              <table className="w-full text-xs">
+              <table className="w-full text-[9px]">
                 <thead>
-                  <tr className="bg-slate-50 text-left text-[10px] text-slate-500 uppercase">
-                    <th className="px-3 py-2 w-8">#</th>
-                    <th className="px-3 py-2">ตำแหน่ง (Position)</th>
-                    <th className="px-3 py-2">ประเภท (Type)</th>
-                    <th className="px-3 py-2">ความรุนแรง (Severity)</th>
-                    <th className="px-3 py-2">พิกัด</th>
+                  <tr className="bg-slate-50 text-left text-[8px] text-slate-500 uppercase">
+                    <th className="px-2 py-1 w-6">#</th>
+                    <th className="px-2 py-1">ตำแหน่ง</th>
+                    <th className="px-2 py-1">ประเภท</th>
+                    <th className="px-2 py-1">ความรุนแรง</th>
+                    <th className="px-2 py-1">พิกัด</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {damagePoints.map((point, i) => (
                     <tr key={point.id || i} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 text-slate-400 font-mono">{i + 1}</td>
-                      <td className="px-3 py-2">{SIDE_LABELS[point.side] || point.side}</td>
-                      <td className="px-3 py-2">{DAMAGE_LABELS[point.type] || point.type}</td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
+                      <td className="px-2 py-1 text-slate-400 font-mono">{i + 1}</td>
+                      <td className="px-2 py-1">{SIDE_LABELS[point.side] || point.side}</td>
+                      <td className="px-2 py-1">{DAMAGE_LABELS[point.type] || point.type}</td>
+                      <td className="px-2 py-1">
+                        <span className={`inline-flex px-1.5 py-0 rounded text-[8px] font-bold ${
                           point.severity === 'severe' ? 'bg-red-100 text-red-700' :
                           point.severity === 'major' ? 'bg-orange-100 text-orange-700' :
                           'bg-amber-100 text-amber-700'
@@ -246,7 +246,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
                           {SEVERITY_LABELS[point.severity] || point.severity}
                         </span>
                       </td>
-                      <td className="px-3 py-2 font-mono text-slate-400">
+                      <td className="px-2 py-1 font-mono text-slate-400">
                         ({point.x?.toFixed(0)}%, {point.y?.toFixed(0)}%)
                       </td>
                     </tr>
