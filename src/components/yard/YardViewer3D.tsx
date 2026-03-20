@@ -351,7 +351,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     const restoreAll = () => {
       for (const [, entry] of containerMeshesRef.current) {
         (entry.mesh as THREE.Group).children.forEach(child => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
             child.material.opacity = 1;
             child.material.transparent = false;
             child.material.emissive.setHex(0x000000);
@@ -389,7 +389,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     for (const [, entry] of containerMeshesRef.current) {
       if (entry.mesh === targetMesh) continue;
       (entry.mesh as THREE.Group).children.forEach(child => {
-        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
           child.material.transparent = true;
           child.material.opacity = 0.08;
           child.material.depthWrite = false;
@@ -462,7 +462,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
 
       // Glow the highlighted container (smooth, non-flickering)
       (targetMesh as THREE.Group).children.forEach(child => {
-        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
           child.material.emissive.setHex(0xFFFF00);
           child.material.emissiveIntensity = 0.3 + Math.sin(glowTime * 1.5) * 0.15;
           child.material.transparent = false;
@@ -528,7 +528,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       const prevEntry = findContainerEntry(hoveredRef.current);
       if (prevEntry) {
         (prevEntry.mesh as THREE.Group).children.forEach(child => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
             child.material.emissive.setHex(0x000000);
           }
         });
@@ -542,7 +542,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       if (entry) {
         // Highlight all child meshes
         (entry.mesh as THREE.Group).children.forEach(child => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhongMaterial) {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
             child.material.emissive.setHex(0x222222);
           }
         });
