@@ -119,24 +119,43 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const db = await getDb();
 
-    await db.request()
-      .input('containerId', sql.Int, body.container_id)
-      .input('status', sql.NVarChar, body.status)
-      .input('yardId', sql.Int, body.yard_id || null)
-      .input('zoneId', sql.Int, body.zone_id || null)
-      .input('bay', sql.Int, body.bay || null)
-      .input('row', sql.Int, body.row || null)
-      .input('tier', sql.Int, body.tier || null)
-      .input('sealNumber', sql.NVarChar, body.seal_number || null)
-      .input('gateOutDate', sql.DateTime2, body.status === 'released' ? new Date() : null)
-      .query(`
-        UPDATE Containers SET
-          status = @status, yard_id = @yardId, zone_id = @zoneId,
-          bay = @bay, [row] = @row, tier = @tier,
-          seal_number = @sealNumber, gate_out_date = @gateOutDate,
-          updated_at = GETDATE()
-        WHERE container_id = @containerId
-      `);
+    // Build dynamic SET clauses — only update fields that are provided
+    const setClauses: string[] = ['updated_at = GETDATE()'];
+    const req = db.request().input('containerId', sql.Int, body.container_id);
+
+    if (body.status !== undefined) {
+      setClauses.push('status = @status');
+      req.input('status', sql.NVarChar, body.status);
+    }
+    if (body.yard_id !== undefined) {
+      setClauses.push('yard_id = @yardId');
+      req.input('yardId', sql.Int, body.yard_id);
+    }
+    if (body.zone_id !== undefined) {
+      setClauses.push('zone_id = @zoneId');
+      req.input('zoneId', sql.Int, body.zone_id);
+    }
+    if (body.bay !== undefined) {
+      setClauses.push('bay = @bay');
+      req.input('bay', sql.Int, body.bay);
+    }
+    if (body.row !== undefined) {
+      setClauses.push('[row] = @row');
+      req.input('row', sql.Int, body.row);
+    }
+    if (body.tier !== undefined) {
+      setClauses.push('tier = @tier');
+      req.input('tier', sql.Int, body.tier);
+    }
+    if (body.seal_number !== undefined) {
+      setClauses.push('seal_number = @sealNumber');
+      req.input('sealNumber', sql.NVarChar, body.seal_number);
+    }
+    if (body.status === 'released') {
+      setClauses.push('gate_out_date = GETDATE()');
+    }
+
+    await req.query(`UPDATE Containers SET ${setClauses.join(', ')} WHERE container_id = @containerId`);
 
     return NextResponse.json({ success: true });
   } catch (error) {

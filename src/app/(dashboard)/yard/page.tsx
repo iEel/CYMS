@@ -8,6 +8,7 @@ import ContainerSearch from '@/components/yard/ContainerSearch';
 import YardAudit from '@/components/yard/YardAudit';
 import ContainerCardPWA from '@/components/yard/ContainerCardPWA';
 import BayCrossSection from '@/components/yard/BayCrossSection';
+import ContainerDetailModal from '@/components/yard/ContainerDetailModal';
 import {
   MapPin, Search, Filter, ChevronDown, Cuboid, ClipboardCheck, SearchIcon,
   Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star,
@@ -90,6 +91,7 @@ export default function YardPage() {
   const [selectedContainer, setSelectedContainer] = useState<ContainerData | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'search' | 'allocate' | 'audit'>('overview');
   const [highlightNumber, setHighlightNumber] = useState<string>('');
+  const [detailContainerId, setDetailContainerId] = useState<number | null>(null);
 
   // Allocate state
   const [allocForm, setAllocForm] = useState({ size: '20', type: 'GP', shipping_line: '', container_number: '' });
@@ -385,7 +387,7 @@ export default function YardPage() {
                   {paginated.map((c) => {
                     const st = STATUS_LABELS[c.status] || STATUS_LABELS.available;
                     return (
-                      <tr key={c.container_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                      <tr key={c.container_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer" onClick={() => setDetailContainerId(c.container_id)}>
                         <td className="px-4 py-3">
                           <span className="font-mono font-semibold text-slate-800 dark:text-white">
                             {c.container_number}
@@ -705,6 +707,14 @@ export default function YardPage() {
         }))} />
       )}
 
+      {/* Container Detail Modal */}
+      {detailContainerId && (
+        <ContainerDetailModal
+          containerId={detailContainerId}
+          onClose={() => setDetailContainerId(null)}
+          onRefresh={fetchData}
+        />
+      )}
     </div>
   );
 }
