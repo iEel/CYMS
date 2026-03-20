@@ -101,6 +101,7 @@ export default function GatePage() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'credit'>('cash');
   const [billingPaid, setBillingPaid] = useState(false);
   const [billingInvoiceNumber, setBillingInvoiceNumber] = useState('');
+  const [billingInvoiceId, setBillingInvoiceId] = useState<number | null>(null);
   const [selectedCharges, setSelectedCharges] = useState<Set<number>>(new Set());
   const [chargeOverrides, setChargeOverrides] = useState<Record<number, number>>({});
   const [customCharges, setCustomCharges] = useState<BillingCharge[]>([]);
@@ -224,6 +225,7 @@ export default function GatePage() {
     setBillingData(null);
     setBillingPaid(false);
     setBillingInvoiceNumber('');
+    setBillingInvoiceId(null);
 
     // Fetch billing info
     setBillingLoading(true);
@@ -939,6 +941,7 @@ export default function GatePage() {
                                       if (data.success) {
                                         setBillingPaid(true);
                                         setBillingInvoiceNumber(data.invoice_number || '');
+                                        setBillingInvoiceId(data.invoice?.invoice_id || null);
                                       }
                                     } catch (err) { console.error(err); }
                                   }}
@@ -993,6 +996,7 @@ export default function GatePage() {
                                         });
                                         setBillingPaid(true);
                                         setBillingInvoiceNumber(data.invoice_number || '');
+                                        setBillingInvoiceId(data.invoice?.invoice_id || null);
                                       }
                                     } catch (err) { console.error(err); }
                                   }}
@@ -1004,16 +1008,20 @@ export default function GatePage() {
                         )}
 
                         {/* Paid Confirmation */}
-                        {billingPaid && (
+                            {billingPaid && (
                           <div className="px-4 py-3 border-t border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10 flex items-center justify-between">
                             <span className="flex items-center gap-2 text-xs text-emerald-600 font-bold">
                               <CheckCircle2 size={14} /> {billingData.is_credit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'} — {billingInvoiceNumber}
                             </span>
-                            {billingData.paid_invoices?.[0]?.invoice_id && (
+                            {(billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id) && (
                               <button
-                                onClick={() => window.open(`/billing/print?id=${billingData.paid_invoices![0].invoice_id}&type=receipt`, '_blank')}
+                                onClick={() => {
+                                  const invId = billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id;
+                                  const printType = billingData.is_credit ? 'invoice' : 'receipt';
+                                  window.open(`/billing/print?id=${invId}&type=${printType}`, '_blank');
+                                }}
                                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"
-                              >🖨️ พิมพ์ใบเสร็จ</button>
+                              >🖨️ {billingData.is_credit ? 'พิมพ์ใบแจ้งหนี้' : 'พิมพ์ใบเสร็จ'}</button>
                             )}
                           </div>
                         )}
