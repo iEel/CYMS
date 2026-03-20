@@ -34,22 +34,41 @@ export async function POST(request: NextRequest) {
     const containerSize = parseInt(container.size) || 20; // 20, 40, 45
 
     // 2. Find matching customer by shipping_line → check credit_term
+    //    Priority: shipping_line_code (exact) > customer_name (match)
     let customer = null;
     let isCredit = false;
     let creditTerm = 0;
 
     if (container.shipping_line) {
-      const custResult = await db.request()
-        .input('shippingLine', sql.NVarChar, container.shipping_line)
+      // First try matching by shipping_line_code (more accurate)
+      const codeResult = await db.request()
+        .input('slCode', sql.NVarChar, container.shipping_line)
         .query(`
-          SELECT TOP 1 customer_id, customer_name, customer_type, credit_term, tax_id, address
+          SELECT TOP 1 customer_id, customer_name, customer_type, credit_term, tax_id, address, shipping_line_code
           FROM Customers
-          WHERE customer_name = @shippingLine AND is_active = 1
+          WHERE shipping_line_code = @slCode AND is_active = 1
           ORDER BY customer_id
         `);
 
-      if (custResult.recordset.length > 0) {
-        customer = custResult.recordset[0];
+      if (codeResult.recordset.length > 0) {
+        customer = codeResult.recordset[0];
+      } else {
+        // Fallback: match by customer_name (like or exact)
+        const nameResult = await db.request()
+          .input('shippingLine', sql.NVarChar, container.shipping_line)
+          .query(`
+            SELECT TOP 1 customer_id, customer_name, customer_type, credit_term, tax_id, address, shipping_line_code
+            FROM Customers
+            WHERE (customer_name = @shippingLine OR customer_name LIKE '%' + @shippingLine + '%') AND is_active = 1
+            ORDER BY CASE WHEN customer_name = @shippingLine THEN 0 ELSE 1 END, customer_id
+          `);
+
+        if (nameResult.recordset.length > 0) {
+          customer = nameResult.recordset[0];
+        }
+      }
+
+      if (customer) {
         creditTerm = customer.credit_term || 0;
         isCredit = creditTerm > 0;
       }

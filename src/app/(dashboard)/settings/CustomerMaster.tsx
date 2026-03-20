@@ -19,6 +19,7 @@ interface Customer {
   is_active: boolean;
   branch_type: string;
   branch_number: string;
+  shipping_line_code: string;
 }
 
 const TYPE_OPTIONS = [
@@ -30,7 +31,7 @@ const TYPE_OPTIONS = [
 const emptyForm = {
   customer_name: '', customer_type: 'general', tax_id: '', address: '',
   contact_name: '', contact_phone: '', contact_email: '', credit_term: 0,
-  branch_type: 'head_office', branch_number: '00000',
+  branch_type: 'head_office', branch_number: '00000', shipping_line_code: '',
 };
 
 export default function CustomerMaster() {
@@ -114,12 +115,14 @@ export default function CustomerMaster() {
       contact_name: c.contact_name || '', contact_phone: c.contact_phone || '',
       contact_email: c.contact_email || '', credit_term: c.credit_term || 0,
       branch_type: c.branch_type || 'head_office', branch_number: c.branch_number || '00000',
+      shipping_line_code: c.shipping_line_code || '',
     });
   };
 
   const filtered = customers.filter(c =>
     c.customer_name.toLowerCase().includes(search.toLowerCase()) ||
     c.tax_id?.includes(search) ||
+    c.shipping_line_code?.toLowerCase().includes(search.toLowerCase()) ||
     c.contact_name?.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -216,6 +219,11 @@ export default function CustomerMaster() {
               <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
                 placeholder="0" className={inputClass} />
             </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">รหัสสายเรือ (Shipping Line Code)</label>
+              <input type="text" value={form.shipping_line_code} onChange={e => setForm({ ...form, shipping_line_code: e.target.value })}
+                placeholder="เช่น COSCO, MSC, EMC" className={`${inputClass} font-mono uppercase`} />
+            </div>
             <div className="md:col-span-3">
               <label className="block text-xs text-slate-500 mb-1">ประเภทสาขา</label>
               <div className="flex items-center gap-4 h-10">
@@ -295,6 +303,7 @@ export default function CustomerMaster() {
                         </div>
                         <p className="text-xs text-slate-400 truncate">
                           {typeOpt.label}
+                          {c.shipping_line_code && <span className="font-mono text-blue-500"> • {c.shipping_line_code}</span>}
                           {c.tax_id && <span> • {c.tax_id}</span>}
                           {c.contact_name && <span> • {c.contact_name}</span>}
                           {c.contact_phone && <span> • {c.contact_phone}</span>}
