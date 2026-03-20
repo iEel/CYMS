@@ -7,6 +7,7 @@ import { formatShortDate } from '@/lib/utils';
 import ContainerSearch from '@/components/yard/ContainerSearch';
 import YardAudit from '@/components/yard/YardAudit';
 import ContainerCardPWA from '@/components/yard/ContainerCardPWA';
+import BayCrossSection from '@/components/yard/BayCrossSection';
 import {
   MapPin, Search, Filter, ChevronDown, Cuboid, ClipboardCheck, SearchIcon,
   Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star,
@@ -85,7 +86,7 @@ export default function YardPage() {
   const [search, setSearch] = useState('');
   const [filterZone, setFilterZone] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
-  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
+  const [viewMode, setViewMode] = useState<'2d' | '3d' | 'bay'>('2d');
   const [selectedContainer, setSelectedContainer] = useState<ContainerData | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'search' | 'allocate' | 'audit'>('overview');
   const [highlightNumber, setHighlightNumber] = useState<string>('');
@@ -174,6 +175,12 @@ export default function YardPage() {
               viewMode === '2d' ? 'bg-[#3B82F6] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}>
             <LayoutGrid size={16} /> 2D
+          </button>
+          <button onClick={() => setViewMode('bay')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              viewMode === 'bay' ? 'bg-[#10B981] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}>
+            <Layers size={16} /> Bay
           </button>
           <button onClick={() => setViewMode('3d')}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -266,6 +273,12 @@ export default function YardPage() {
                 ))}
               </div>
             </div>
+          ) : viewMode === 'bay' ? (
+            /* Bay Cross-Section View */
+            <BayCrossSection
+              yardId={yardId}
+              onSelectContainer={(c) => setSelectedContainer(c as ContainerData | null)}
+            />
           ) : (
             /* 2D Zone Map — Visual Cards */
             <div>
