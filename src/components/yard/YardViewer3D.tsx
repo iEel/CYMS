@@ -395,7 +395,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       (entry.mesh as THREE.Group).children.forEach(child => {
         if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
           child.material.transparent = true;
-          child.material.opacity = 0.20;
+          child.material.opacity = 0.50;
           child.material.depthWrite = false;
         }
       });
