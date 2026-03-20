@@ -102,6 +102,9 @@ export default function GatePage() {
   const [billingPaid, setBillingPaid] = useState(false);
   const [billingInvoiceNumber, setBillingInvoiceNumber] = useState('');
   const [selectedCharges, setSelectedCharges] = useState<Set<number>>(new Set());
+  const [chargeOverrides, setChargeOverrides] = useState<Record<number, number>>({});
+  const [customCharges, setCustomCharges] = useState<BillingCharge[]>([]);
+  const [selectedCustom, setSelectedCustom] = useState<Set<number>>(new Set());
 
   // Auto-check essential charges, uncheck optional ones
   const OPTIONAL_CHARGES = ['washing', 'pti', 'reefer', 'mnr'];
@@ -111,14 +114,37 @@ export default function GatePage() {
       if (!OPTIONAL_CHARGES.includes(ch.charge_type)) selected.add(i);
     });
     setSelectedCharges(selected);
+    setChargeOverrides({});
+    setCustomCharges([]);
+    setSelectedCustom(new Set());
   };
 
-  // Recalculate totals from selected charges
-  const selectedTotal = billingData ? billingData.charges
-    .filter((_, i) => selectedCharges.has(i))
-    .reduce((s, c) => s + c.subtotal, 0) : 0;
+  // Get effective subtotal (with override)
+  const getChargeSubtotal = (i: number) => {
+    if (i in chargeOverrides) return chargeOverrides[i];
+    return billingData?.charges[i]?.subtotal ?? 0;
+  };
+
+  // Recalculate totals from selected charges + custom charges
+  const selectedTotal = (billingData ? billingData.charges
+    .reduce((s, _, i) => s + (selectedCharges.has(i) ? getChargeSubtotal(i) : 0), 0) : 0)
+    + customCharges.filter((_, i) => selectedCustom.has(i)).reduce((s, c) => s + c.subtotal, 0);
   const selectedVat = Math.round(selectedTotal * 0.07 * 100) / 100;
   const selectedGrand = selectedTotal + selectedVat;
+
+  // Build final charges list for invoice
+  const buildFinalCharges = () => {
+    const final: BillingCharge[] = [];
+    if (billingData) {
+      billingData.charges.forEach((ch, i) => {
+        if (selectedCharges.has(i)) {
+          final.push({ ...ch, subtotal: getChargeSubtotal(i), unit_price: i in chargeOverrides ? chargeOverrides[i] : ch.unit_price });
+        }
+      });
+    }
+    customCharges.forEach((ch, i) => { if (selectedCustom.has(i)) final.push(ch); });
+    return final;
+  };
 
   // History
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -759,10 +785,10 @@ export default function GatePage() {
                           )}
                         </div>
 
-                        {/* Charges Table — toggleable */}
+                        {/* Charges Table — toggleable + editable */}
                         <div className="px-4 py-2 divide-y divide-slate-100 dark:divide-slate-700/50">
                           {billingData.charges.map((ch, i) => (
-                            <div key={i} className={`py-2 flex items-center gap-3 text-sm transition-opacity ${!selectedCharges.has(i) ? 'opacity-40' : ''}`}>
+                            <div key={`t-${i}`} className={`py-2 flex items-center gap-3 text-sm transition-opacity ${!selectedCharges.has(i) ? 'opacity-40' : ''}`}>
                               <input
                                 type="checkbox"
                                 checked={selectedCharges.has(i)}
@@ -781,10 +807,86 @@ export default function GatePage() {
                                   {ch.billable_days > 0 ? `${ch.quantity} วัน × ฿${ch.unit_price.toLocaleString()} (ฟรี ${ch.free_days} วัน)` : `${ch.quantity} × ฿${ch.unit_price.toLocaleString()}`}
                                 </p>
                               </div>
-                              <span className="font-mono font-semibold text-slate-800 dark:text-white">฿{ch.subtotal.toLocaleString()}</span>
+                              <input
+                                type="number"
+                                value={i in chargeOverrides ? chargeOverrides[i] : ch.subtotal}
+                                onChange={(e) => setChargeOverrides(prev => ({ ...prev, [i]: parseFloat(e.target.value) || 0 }))}
+                                className="w-24 h-7 px-2 text-right font-mono font-semibold text-sm rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                              />
+                            </div>
+                          ))}
+
+                          {/* Custom charges */}
+                          {customCharges.map((ch, i) => (
+                            <div key={`c-${i}`} className={`py-2 flex items-center gap-3 text-sm transition-opacity ${!selectedCustom.has(i) ? 'opacity-40' : ''}`}>
+                              <input
+                                type="checkbox"
+                                checked={selectedCustom.has(i)}
+                                onChange={() => {
+                                  setSelectedCustom(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(i)) next.delete(i); else next.add(i);
+                                    return next;
+                                  });
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                              />
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  value={ch.description}
+                                  onChange={(e) => {
+                                    const arr = [...customCharges];
+                                    arr[i] = { ...arr[i], description: e.target.value };
+                                    setCustomCharges(arr);
+                                  }}
+                                  className="w-full h-7 px-2 text-sm rounded border border-dashed border-slate-300 dark:border-slate-600 bg-transparent text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500"
+                                  placeholder="ชื่อรายการ"
+                                />
+                              </div>
+                              <input
+                                type="number"
+                                value={ch.subtotal}
+                                onChange={(e) => {
+                                  const arr = [...customCharges];
+                                  const val = parseFloat(e.target.value) || 0;
+                                  arr[i] = { ...arr[i], subtotal: val, unit_price: val };
+                                  setCustomCharges(arr);
+                                }}
+                                className="w-24 h-7 px-2 text-right font-mono font-semibold text-sm rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                              />
+                              <button onClick={() => {
+                                setCustomCharges(prev => prev.filter((_, j) => j !== i));
+                                setSelectedCustom(prev => {
+                                  const next = new Set<number>();
+                                  prev.forEach(v => { if (v < i) next.add(v); else if (v > i) next.add(v - 1); });
+                                  return next;
+                                });
+                              }} className="text-red-400 hover:text-red-600 text-xs">✕</button>
                             </div>
                           ))}
                         </div>
+
+                        {/* Add custom charge */}
+                        <div className="px-4 py-2 border-t border-dashed border-slate-200 dark:border-slate-700">
+                          <button
+                            onClick={() => {
+                              const newCharge: BillingCharge = {
+                                charge_type: 'custom',
+                                description: '',
+                                quantity: 1,
+                                unit_price: 0,
+                                subtotal: 0,
+                                free_days: 0,
+                                billable_days: 0,
+                              };
+                              setCustomCharges(prev => [...prev, newCharge]);
+                              setSelectedCustom(prev => new Set([...prev, customCharges.length]));
+                            }}
+                            className="w-full py-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-xs text-slate-400 hover:text-blue-500 hover:border-blue-400 transition-colors flex items-center justify-center gap-1"
+                          >+ เพิ่มรายการค่าบริการ</button>
+                        </div>
+
 
                         {/* Summary — recalculated from selected */}
                         <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/30 border-t border-slate-200 dark:border-slate-700 space-y-1">
@@ -828,7 +930,7 @@ export default function GatePage() {
                                           quantity: 1,
                                           unit_price: selectedTotal,
                                           due_date: new Date(Date.now() + billingData.credit_term * 86400000).toISOString(),
-                                          notes: JSON.stringify({ charges: billingData.charges.filter((_, i) => selectedCharges.has(i)), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
+                                          notes: JSON.stringify({ charges: buildFinalCharges(), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
                                         }),
                                       });
                                       const data = await res.json();
@@ -876,7 +978,7 @@ export default function GatePage() {
                                           description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน) — ชำระ ${paymentMethod === 'cash' ? 'เงินสด' : 'โอน'}`,
                                           quantity: 1,
                                           unit_price: selectedTotal,
-                                          notes: JSON.stringify({ charges: billingData.charges.filter((_, i) => selectedCharges.has(i)), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
+                                          notes: JSON.stringify({ charges: buildFinalCharges(), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
                                         }),
                                       });
                                       const data = await res.json();
