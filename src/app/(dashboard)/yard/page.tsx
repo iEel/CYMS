@@ -114,7 +114,8 @@ export default function YardPage() {
       const ctrs = await containersRes.json();
       setZones(stats.zones || []);
       setSummary(stats.summary || {});
-      setContainers(ctrs || []);
+      // Exclude containers that have left the yard
+      setContainers((ctrs || []).filter((c: ContainerData) => c.status !== 'gated_out'));
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [yardId]);
