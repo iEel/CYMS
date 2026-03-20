@@ -263,6 +263,11 @@ input:focus, select:focus, textarea:focus {
     padding: 0 !important;
   }
 
+  /* Hide everything by default */
+  body > * {
+    display: none !important;
+  }
+
   /* Hide sidebar, topbar, and other non-print elements */
   .no-print,
   aside,
@@ -271,11 +276,20 @@ input:focus, select:focus, textarea:focus {
     display: none !important;
   }
 
-  /* Hide the backdrop overlay but keep EIR content */
+  /* Show only the EIR overlay, but hide its backdrop */
+  body > div:has(#eir-print-area) {
+    display: block !important;
+    position: static !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    backdrop-filter: none !important;
+  }
+
+  /* The EIR print area itself */
   #eir-print-area {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+    position: static !important;
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
@@ -283,27 +297,20 @@ input:focus, select:focus, textarea:focus {
     box-shadow: none !important;
     border-radius: 0 !important;
     border: none !important;
-    z-index: 99999 !important;
+    font-size: 8.5px !important;
+    transform: scale(0.82);
+    transform-origin: top left;
+    width: 122% !important;
+    max-height: 138mm !important;
+    overflow: hidden !important;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
   }
 
   /* Ensure QR code and badges print with color */
   * {
     print-color-adjust: exact !important;
     -webkit-print-color-adjust: exact !important;
-  }
-
-  /* Force EIR to fit on one A5 page */
-  #eir-print-area {
-    font-size: 9px !important;
-    transform: scale(0.88);
-    transform-origin: top left;
-    width: 114% !important;
-    page-break-inside: avoid !important;
-    overflow: hidden !important;
-  }
-
-  #eir-print-area * {
-    page-break-inside: avoid !important;
   }
 }
 
