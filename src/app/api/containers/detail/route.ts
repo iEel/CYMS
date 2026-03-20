@@ -62,10 +62,10 @@ export async function GET(request: NextRequest) {
     const gateIn = gateInResult.recordset[0] || null;
     const gateOut = gateOutResult.recordset[0] || null;
 
-    // Calculate dwell days
-    const gateInDate = gateIn?.created_at ? new Date(gateIn.created_at) : null;
-    const dwellDays = gateInDate
-      ? Math.ceil((Date.now() - gateInDate.getTime()) / (1000 * 60 * 60 * 24))
+    // Calculate dwell days — use gate_in_date from container, or gate transaction date, or created_at
+    const dwellStart = container.gate_in_date || gateIn?.created_at || container.created_at;
+    const dwellDays = dwellStart
+      ? Math.max(1, Math.ceil((Date.now() - new Date(dwellStart).getTime()) / (1000 * 60 * 60 * 24)))
       : 0;
 
     return NextResponse.json({
