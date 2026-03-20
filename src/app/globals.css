@@ -257,43 +257,36 @@ input:focus, select:focus, textarea:focus {
     margin: 3mm;
   }
 
-  /* Hide controls and damage report */
+  /* Hide everything except EIR overlay (rendered via Portal as direct body child) */
+  body > *:not(#eir-overlay) {
+    display: none !important;
+  }
+
+  /* Hide controls and damage report from EIR */
   .no-print,
   #eir-damage-section {
     display: none !important;
   }
 
-  /* EIR overlay — fixed on top of everything, white background, no scrollbar */
+  /* EIR overlay — static layout, white bg, no scrollbar */
   #eir-overlay {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
+    position: static !important;
     background: white !important;
     padding: 0 !important;
     margin: 0 !important;
     overflow: hidden !important;
     backdrop-filter: none !important;
-    z-index: 99999 !important;
+    inset: auto !important;
   }
 
   /* EIR content — scale to fit A5 */
   #eir-print-area {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
     border-radius: 0 !important;
     border: none !important;
-    font-size: 8.5px !important;
-    transform: scale(0.82);
-    transform-origin: top left;
-    width: 122% !important;
-    overflow: hidden !important;
   }
 
   /* Ensure colors print */

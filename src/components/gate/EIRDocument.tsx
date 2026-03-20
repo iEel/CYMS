@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatDateTime } from '@/lib/utils';
 
@@ -76,7 +77,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
   const damagePoints = data.damage_report?.points || [];
   const hasDamage = data.container_condition === 'damage';
 
-  return (
+  const content = (
     <div id="eir-overlay" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm overflow-y-auto p-4">
       {/* Print & Close Controls — hidden on print */}
       <div className="max-w-[1100px] mx-auto mb-3 flex items-center justify-between no-print">
@@ -295,6 +296,10 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
       </div>
     </div>
   );
+
+  // Portal renders EIR as direct child of <body> for clean printing
+  if (typeof document === 'undefined') return content;
+  return createPortal(content, document.body);
 }
 
 // Reusable info cell
