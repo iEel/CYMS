@@ -159,6 +159,14 @@ export async function PUT(request: NextRequest) {
                   zone_id = @tz, bay = @tb, [row] = @tr, tier = @tt, updated_at = GETDATE()
                 WHERE container_id = @cid
               `);
+          } else if (order.order_type === 'move' && !order.to_zone_id) {
+            // Gate-Out work order: container moved to gate area — clear position
+            await db.request()
+              .input('cid2', sql.Int, order.container_id)
+              .query(`
+                UPDATE Containers SET bay = NULL, [row] = NULL, tier = NULL, updated_at = GETDATE()
+                WHERE container_id = @cid2
+              `);
           }
         }
         break;
