@@ -343,7 +343,7 @@ export default function YardPage() {
                   <option value="in_yard">ในลาน</option>
                   <option value="hold">ค้างจ่าย</option>
                   <option value="repair">ซ่อม</option>
-                  <option value="released">ปล่อยแล้ว</option>
+                  <option value="gated_out">ปล่อยแล้ว</option>
                 </select>
                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
