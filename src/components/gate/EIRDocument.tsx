@@ -214,53 +214,6 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
             </div>
           </div>
 
-          {/* Row 4: Damage Summary — hidden on print, viewable via QR */}
-          {damagePoints.length > 0 && (
-            <div id="eir-damage-section" className="border border-slate-200 rounded-xl overflow-hidden no-print">
-              <div className="bg-red-50 px-3 py-1 border-b border-slate-200">
-                <h3 className="text-[9px] font-bold text-red-600 uppercase tracking-wider">
-                  ⚠️ ความเสียหาย — {damagePoints.length} จุด
-                </h3>
-              </div>
-              <table className="w-full text-[9px]">
-                <thead>
-                  <tr className="bg-slate-50 text-left text-[8px] text-slate-500 uppercase">
-                    <th className="px-2 py-1 w-6">#</th>
-                    <th className="px-2 py-1">ตำแหน่ง</th>
-                    <th className="px-2 py-1">ประเภท</th>
-                    <th className="px-2 py-1">ความรุนแรง</th>
-                    <th className="px-2 py-1">พิกัด</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {damagePoints.map((point, i) => (
-                    <tr key={point.id || i} className="hover:bg-slate-50">
-                      <td className="px-2 py-1 text-slate-400 font-mono">{i + 1}</td>
-                      <td className="px-2 py-1">{SIDE_LABELS[point.side] || point.side}</td>
-                      <td className="px-2 py-1">{DAMAGE_LABELS[point.type] || point.type}</td>
-                      <td className="px-2 py-1">
-                        <span className={`inline-flex px-1.5 py-0 rounded text-[8px] font-bold ${
-                          point.severity === 'severe' ? 'bg-red-100 text-red-700' :
-                          point.severity === 'major' ? 'bg-orange-100 text-orange-700' :
-                          'bg-amber-100 text-amber-700'
-                        }`}>
-                          {SEVERITY_LABELS[point.severity] || point.severity}
-                        </span>
-                      </td>
-                      <td className="px-2 py-1 font-mono text-slate-400">
-                        ({point.x?.toFixed(0)}%, {point.y?.toFixed(0)}%)
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {data.damage_report?.inspector_notes && (
-                <div className="px-4 py-2 border-t border-slate-200 bg-amber-50 text-xs text-amber-800">
-                  <span className="font-semibold">บันทึกผู้ตรวจ:</span> {data.damage_report.inspector_notes}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Row 5: Notes */}
           {data.notes && (
