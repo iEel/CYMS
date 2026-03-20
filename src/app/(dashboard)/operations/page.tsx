@@ -299,7 +299,13 @@ export default function OperationsPage() {
                         </button>
                       )}
                       {order.status === 'in_progress' && (
-                        editingOrderId === order.order_id ? (
+                        order.notes?.includes('Gate-Out') ? (
+                          /* Gate-Out order: complete directly without position form */
+                          <button onClick={() => updateOrder(order.order_id, 'complete')}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 flex items-center gap-1">
+                            <CheckCircle2 size={10} /> เสร็จ
+                          </button>
+                        ) : editingOrderId === order.order_id ? (
                           <button onClick={() => setEditingOrderId(null)}
                             className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-xs font-medium text-slate-600 dark:text-slate-300">
                             ยกเลิก
@@ -344,10 +350,18 @@ export default function OperationsPage() {
                       </>
                     )}
                     {order.status === 'in_progress' && editingOrderId !== order.order_id && (
-                      <button onClick={() => { setEditingOrderId(order.order_id); setEditPos({ zone_id: order.to_zone_id || 0, bay: order.to_bay || 0, row: order.to_row || 0, tier: order.to_tier || 0 }); }}
-                        className="flex items-center justify-center gap-2 py-4 rounded-xl bg-emerald-600 text-white text-base font-bold active:scale-95 transition-transform shadow-md col-span-2">
-                        <CheckCircle2 size={24} /> ✅ เสร็จแล้ว
-                      </button>
+                      order.notes?.includes('Gate-Out') ? (
+                        /* Gate-Out order: complete directly */
+                        <button onClick={() => updateOrder(order.order_id, 'complete')}
+                          className="flex items-center justify-center gap-2 py-4 rounded-xl bg-emerald-600 text-white text-base font-bold active:scale-95 transition-transform shadow-md col-span-2">
+                          <CheckCircle2 size={24} /> ✅ เสร็จแล้ว
+                        </button>
+                      ) : (
+                        <button onClick={() => { setEditingOrderId(order.order_id); setEditPos({ zone_id: order.to_zone_id || 0, bay: order.to_bay || 0, row: order.to_row || 0, tier: order.to_tier || 0 }); }}
+                          className="flex items-center justify-center gap-2 py-4 rounded-xl bg-emerald-600 text-white text-base font-bold active:scale-95 transition-transform shadow-md col-span-2">
+                          <CheckCircle2 size={24} /> ✅ เสร็จแล้ว
+                        </button>
+                      )
                     )}
                   </div>
 
