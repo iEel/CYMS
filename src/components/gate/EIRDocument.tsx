@@ -77,7 +77,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
   const hasDamage = data.container_condition === 'damage';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm overflow-y-auto p-4 print:p-0 print:bg-white print:backdrop-blur-none">
+    <div id="eir-overlay" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm overflow-y-auto p-4 print:!fixed print:!inset-0 print:!static print:!overflow-hidden print:!p-0 print:!bg-white print:!backdrop-blur-none">
       {/* Print & Close Controls — hidden on print */}
       <div className="max-w-[1100px] mx-auto mb-3 flex items-center justify-between no-print">
         <div className="flex items-center gap-3">

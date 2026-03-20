@@ -261,14 +261,10 @@ input:focus, select:focus, textarea:focus {
     background: white !important;
     margin: 0 !important;
     padding: 0 !important;
+    visibility: hidden !important;
   }
 
-  /* Hide everything by default */
-  body > * {
-    display: none !important;
-  }
-
-  /* Hide sidebar, topbar, and other non-print elements */
+  /* Hide sidebar, topbar, controls */
   .no-print,
   aside,
   nav,
@@ -276,21 +272,25 @@ input:focus, select:focus, textarea:focus {
     display: none !important;
   }
 
-  /* Show only the EIR overlay, but hide its backdrop */
-  body > div:has(#eir-print-area) {
-    display: block !important;
+  /* Show EIR overlay — override fixed/scroll to static */
+  #eir-overlay {
+    visibility: visible !important;
     position: static !important;
     background: white !important;
     padding: 0 !important;
     margin: 0 !important;
-    overflow: visible !important;
+    overflow: hidden !important;
     backdrop-filter: none !important;
+    inset: auto !important;
+    z-index: auto !important;
+    width: 100% !important;
+    height: auto !important;
   }
 
-  /* The EIR print area itself */
+  /* The EIR print area */
   #eir-print-area {
+    visibility: visible !important;
     position: static !important;
-    width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -305,6 +305,10 @@ input:focus, select:focus, textarea:focus {
     overflow: hidden !important;
     page-break-inside: avoid !important;
     page-break-after: avoid !important;
+  }
+
+  #eir-print-area * {
+    visibility: visible !important;
   }
 
   /* Ensure QR code and badges print with color */
