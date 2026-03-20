@@ -353,6 +353,9 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
         entry.mesh.visible = true;
         (entry.mesh as THREE.Group).children.forEach(child => {
           if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+            child.material.transparent = false;
+            child.material.opacity = 1;
+            child.material.depthWrite = true;
             child.material.emissive.setHex(0x000000);
             child.material.emissiveIntensity = 1;
           }
@@ -386,10 +389,16 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     const targetMesh = foundEntry.mesh;
     prevHighlightRef.current = targetMesh;
 
-    // === Hide all other containers completely ===
+    // === X-Ray Mode: ตู้อื่นโปร่งแสง เห็น context ===
     for (const [, entry] of containerMeshesRef.current) {
       if (entry.mesh === targetMesh) continue;
-      entry.mesh.visible = false;
+      (entry.mesh as THREE.Group).children.forEach(child => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+          child.material.transparent = true;
+          child.material.opacity = 0.12;
+          child.material.depthWrite = false;
+        }
+      });
     }
 
     // Get world position of the container
