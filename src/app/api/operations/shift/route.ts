@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find all containers stacked above this one (same zone, bay, row, higher tier)
+    // Include ALL statuses (except gated_out) — physically present containers must be moved regardless of status
     const above = await db.request()
       .input('zoneId', sql.Int, targetContainer.zone_id)
       .input('bay', sql.Int, targetContainer.bay)
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
           AND c.bay = @bay
           AND c.[row] = @row
           AND c.tier > @tier
-          AND c.status = 'in_yard'
+          AND c.status != 'gated_out'
         ORDER BY c.tier DESC
       `);
 
