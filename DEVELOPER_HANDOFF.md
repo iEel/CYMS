@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 20 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A3 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Gate History Search** (99%)
+> ส่งมอบงาน: 20 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Gate History Search + Container Detail Modal + Search Detail Panel** (99%)
 
 ---
 
@@ -14,7 +14,7 @@
 |-----|-----------|-------|
 | **เฟส 1** | วางรากฐาน — โปรเจค, Design System, DB Schema | ✅ เสร็จ |
 | **เฟส 2** | ล็อกอิน, Dashboard, ตั้งค่าระบบ, RBAC | ✅ เสร็จ |
-| **เฟส 3** | จัดการลาน, 3D Viewer, **Bay Cross-Section View**, Auto-Allocation, ค้นหาตู้ + **3D Highlight**, Yard Audit, **PWA Card View** | ✅ เสร็จ |
+| **เฟส 3** | จัดการลาน, 3D Viewer, **Bay Cross-Section View**, Auto-Allocation, ค้นหาตู้ + **3D Highlight + Detail Panel**, Yard Audit, **PWA Card View**, **Container Detail Modal** | ✅ เสร็จ |
 | **เฟส 4** | Gate In/Out, EIR, ตรวจสภาพตู้, OCR, Seal Photo, Signature, Inter-Yard Transfer | ✅ เสร็จ |
 | **เฟส 5** | ปฏิบัติการ, Job Queue, Smart Shifting, **Tablet-optimized buttons** | ✅ เสร็จ |
 | **เฟส 6** | EDI, Booking/Manifest, Seal Validation, **CSV/Excel file import** | ✅ เสร็จ |
@@ -172,7 +172,9 @@ container-yard-system/
 │   │   │
 │   │   └── api/
 │   │       ├── auth/login/route.ts         # POST login → JWT
-│   │       ├── containers/route.ts         # GET/POST/PUT + position check
+│   │       ├── containers/
+│       │   ├── route.ts               # GET/POST/PUT (dynamic fields) + position check
+│       │   └── detail/route.ts        # GET container detail + gate-in/out + damage_report + dwell days
 │   │       ├── gate/
 │   │       │   ├── route.ts                # GET/POST gate transactions + **auto-allocation**
 │   │       │   ├── eir/route.ts            # GET EIR data (+ condition/grade/company info)
@@ -216,10 +218,11 @@ container-yard-system/
 │   │   ├── yard/
 │   │   │   ├── YardViewer3D.tsx      # Three.js 3D yard viewer (+ X-Ray highlight + floating label)
 │   │   │   ├── BayCrossSection.tsx   # Bay Cross-Section view (Row×Tier grid per bay)
-│   │   │   ├── ContainerSearch.tsx   # Instant search + detail panel
+│   │   │   ├── ContainerSearch.tsx   # Instant search + detail panel + photos + EIR link
+│   │   │   ├── ContainerDetailModal.tsx  # Container detail modal (SVG inspection, photos, actions)
 │   │   │   └── YardAudit.tsx         # Audit checklist per zone/bay
 │   │   └── gate/
-│   │       ├── EIRDocument.tsx         # EIR A3 print component (QR, condition, grade, signatures)
+│   │       ├── EIRDocument.tsx         # EIR A5 print (Portal, QR, condition, grade, signatures)
 │   │       ├── ContainerInspection.tsx  # 6-side SVG damage marking + photo + grade
 │   │       ├── CameraOCR.tsx            # Camera + Tesseract.js OCR scanning
 │   │       ├── PhotoCapture.tsx         # Camera/upload photo → **auto-upload to server** (URL, not base64)
@@ -295,8 +298,9 @@ container-yard-system/
 |--------|----------|-------------|----------|
 | GET | `/api/containers` | `?yard_id=1&zone_id=&status=&search=` | `ContainerData[]` |
 | GET | `/api/containers` | `?check_position=1&zone_id=X&bay=Y&row=Z&tier=W` | Conflict check — `{ conflict: {...} \| null }` |
+| GET | `/api/containers/detail` | `?container_id=X` | Container + gate-in/out + damage_report + dwell_days |
 | POST | `/api/containers` | `{ container_number, size, type, yard_id, zone_id, bay, row, tier, ... }` | Gate-In record |
-| PUT | `/api/containers` | `{ container_id, bay, row, tier, status }` | Move/status update |
+| PUT | `/api/containers` | `{ container_id, status?, zone_id?, bay?, ... }` | **Dynamic update** — เฉพาะ fields ที่ส่งมา (ไม่ null ค่าอื่น) |
 
 ### Yard Management
 
@@ -398,9 +402,18 @@ container-yard-system/
 - **Bay**: (**ใหม่**) Bay Cross-Section — แสดง Row×Tier grid แยกตาม Bay + เลือก Zone + สี shipping line/status + hover tooltip + click detail + legend
 - **3D**: Three.js — ตู้สมจริง (สัดส่วนจริง 20ft/40ft/45ft)
 - ตารางตู้ + filter + search + **pagination** (25 ตู้/หน้า + ปุ่มเลขหน้า + รีเซ็ตอัตโนมัติเมื่อเปลี่ยน filter)
+- **คลิกแถวตู้ → Container Detail Modal** (popup ตรงกลาง)
+
+#### Container Detail Modal (คลิกแถวตู้)
+- **ข้อมูลตู้**: เลขตู้, ขนาด/ประเภท, สายเรือ, ซีล, พิกัด, จำนวนวันในลาน
+- **Gate-In**: วันที่, คนขับ, ทะเบียนรถ, เลข EIR (กดเปิด tab ใหม่)
+- **แผนผังตรวจสภาพ (Read-Only SVG)**: 6 ด้าน + เกรด + จุดเสียหายกดดูรูป+รายละเอียด
+- **รูปถ่าย**: gallery รูปตรวจสภาพ + จุดเสียหาย + ขาออก (กดขยายเต็มจอ)
+- **Gate-Out** (ถ้ามี): วันที่, คนขับ, เลข EIR
+- **Actions**: เปลี่ยนสถานะ (in_yard/hold/repair), ดู EIR
 
 #### แท็บ "ค้นหาตู้" (Split Screen)
-- **ซ้าย**: Instant search → รายชื่อตู้ + รายละเอียด + ปุ่ม "📍 ระบุตำแหน่ง"
+- **ซ้าย**: Instant search → รายชื่อ → **Detail Panel** (gate-in, เกรด, จุดเสียหาย, 📸 รูปถ่าย, ลิงก์ EIR)
 - **ขวา**: 3D Viewer — **X-Ray Mode** (ตู้อื่น opacity 60%) + **Beacon สีเหลือง** + **Floating Label** (เลขตู้ + พิกัด + สายเรือ) + วงแหวนบนพื้น + กล้องซูม smooth
 
 #### แท็บ "จัดวางตู้" (Smart Auto-Allocation)
@@ -460,17 +473,18 @@ container-yard-system/
 - **ช่องค้นหา**: ค้นหาด้วยเลขตู้, ชื่อคนขับ, ทะเบียนรถ, เลข EIR (กด Enter)
 - แสดงวันที่+เวลา + จำนวนรายการ
 
-### 7.6 EIR (Equipment Interchange Receipt) — A3 Print
-- **A3 Landscape** print layout พร้อมปุ่ม "พิมพ์ A3"
+### 7.6 EIR (Equipment Interchange Receipt) — A5 Print
+- **A5 Landscape** print layout พร้อมปุ่ม "พิมพ์ A5"
+- **React Portal**: render เป็น direct child ของ `<body>` — ป้องกัน print ซ้ำหลายหน้า
 - เลข EIR ออกอัตโนมัติ (EIR-IN-YYYY-XXXXXX / EIR-OUT-YYYY-XXXXXX)
 - ข้อมูลครบ: ตู้, คนขับ, รถ, ซีล, ลาน, พิกัด, ผู้ดำเนินการ
 - **Company Header**: ชื่อบริษัท + (สำนักงานใหญ่) + ที่อยู่ + เลขประจำตัวผู้เสียภาษี + เบอร์โทร + โลโก้
 - **สภาพตู้ (Container Condition)**: ✅ Sound / ⚠️ Damage (คำนวณจาก damage_report)
 - **เกรดตู้ (Container Grade)**: A (สภาพดี) / B (สภาพพอใช้) / C (ใส่ของทั่วไป) / D (ห้ามใช้งาน)
-- **QR Code**: สแกนเปิดหน้า `/eir/{eir_number}` บนมือถือ → ดูรูปถ่ายความเสียหายแบบ HD (ไม่ต้อง login)
-- **Damage Summary Table**: ตารางจุดเสียหาย (ตำแหน่ง, ประเภท, ความรุนแรง)
+- **QR Code**: สแกนเปิดหน้า `/eir/{eir_number}` → ดูรูปถ่าย + **รายงานความเสียหาย** (ไม่แสดงในเอกสาร)
 - **ช่องลายเซ็น 3 ช่อง**: ผู้ตรวจสภาพตู้ / คนขับรถ / ผู้อนุมัติ
-- **Public EIR Page** (`/eir/[id]`): หน้าสาธารณะ mobile-friendly สำหรับ QR scan — แสดงข้อมูลตู้ + รูปถ่ายกดขยายดูเต็มจอ
+- **Print CSS**: `body > *:not(#eir-overlay) { display: none }` + Portal render
+- **Public EIR Page** (`/eir/[id]`): หน้าสาธารณะ mobile-friendly — ข้อมูลตู้ + รูปถ่าย + รายงานความเสียหาย (กดขยายเต็มจอ)
 
 ### 7.7 ตรวจสภาพตู้ (Container Inspection)
 - แผนผัง 6 ด้าน: Front, Back, Left, Right, Top, Floor
