@@ -108,7 +108,7 @@ export default function YardPage() {
     try {
       const [statsRes, containersRes] = await Promise.all([
         fetch(`/api/yard/stats?yard_id=${yardId}`),
-        fetch(`/api/containers?yard_id=${yardId}`),
+        fetch(`/api/containers?yard_id=${yardId}&status=in_yard`),
       ]);
       const stats = await statsRes.json();
       const ctrs = await containersRes.json();
