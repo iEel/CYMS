@@ -105,6 +105,8 @@ export default function GatePage() {
   // History
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyDate, setHistoryDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [historySearch, setHistorySearch] = useState<string>('');
 
   // EIR Preview
   const [showEIR, setShowEIR] = useState<string | null>(null);
@@ -115,12 +117,15 @@ export default function GatePage() {
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const res = await fetch(`/api/gate?yard_id=${yardId}&date=today`);
+      const params = new URLSearchParams({ yard_id: String(yardId) });
+      if (historyDate) params.set('date', historyDate);
+      if (historySearch.trim()) params.set('search', historySearch.trim());
+      const res = await fetch(`/api/gate?${params}`);
       const data = await res.json();
       setTransactions(data.transactions || []);
     } catch (err) { console.error(err); }
     finally { setHistoryLoading(false); }
-  }, [yardId]);
+  }, [yardId, historyDate, historySearch]);
 
   useEffect(() => {
     if (activeTab === 'history') fetchHistory();
@@ -366,7 +371,7 @@ export default function GatePage() {
         {[
           { id: 'gate_in' as const, label: 'Gate-In (รับเข้า)', icon: <ArrowDownToLine size={14} />, color: 'emerald' },
           { id: 'gate_out' as const, label: 'Gate-Out (ปล่อยออก)', icon: <ArrowUpFromLine size={14} />, color: 'blue' },
-          { id: 'history' as const, label: 'ประวัติวันนี้', icon: <History size={14} />, color: 'slate' },
+          { id: 'history' as const, label: 'ประวัติ Gate', icon: <History size={14} />, color: 'slate' },
           { id: 'transfer' as const, label: 'ย้ายข้ามลาน', icon: <ArrowRightLeft size={14} />, color: 'purple' },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -980,17 +985,45 @@ export default function GatePage() {
       {/* =================== HISTORY TAB =================== */}
       {activeTab === 'history' && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-              <History size={18} /> ประวัติ Gate วันนี้
-            </h3>
-            <button onClick={fetchHistory} className="text-xs text-blue-500 hover:text-blue-700 font-medium">รีเฟรช</button>
+          <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                <History size={18} /> ประวัติ Gate
+              </h3>
+              <button onClick={fetchHistory} className="text-xs text-blue-500 hover:text-blue-700 font-medium">รีเฟรช</button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="ค้นหาเลขตู้, คนขับ, ทะเบียน, EIR..."
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchHistory()}
+                  className="w-full h-10 pl-9 pr-4 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
+                    text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                />
+              </div>
+              <input
+                type="date"
+                value={historyDate}
+                onChange={(e) => setHistoryDate(e.target.value)}
+                className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
+                  text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={() => setHistoryDate(new Date().toISOString().slice(0, 10))}
+                className="h-10 px-4 rounded-lg bg-slate-100 dark:bg-slate-600 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-500 font-medium transition-all"
+              >วันนี้</button>
+              <span className="text-xs text-slate-400">{transactions.length} รายการ</span>
+            </div>
           </div>
 
           {historyLoading ? (
             <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
           ) : transactions.length === 0 ? (
-            <div className="p-8 text-center text-sm text-slate-400">ยังไม่มีรายการวันนี้</div>
+            <div className="p-8 text-center text-sm text-slate-400">ไม่พบรายการ</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -1010,6 +1043,7 @@ export default function GatePage() {
                   {transactions.map(tx => (
                     <tr key={tx.transaction_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                       <td className="px-4 py-3 text-slate-500 text-xs">
+                        {new Date(tx.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short' })}{' '}
                         {formatTime(tx.created_at).slice(0, 5)}
                       </td>
                       <td className="px-4 py-3">

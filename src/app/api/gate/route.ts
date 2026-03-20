@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const yardId = searchParams.get('yard_id');
     const type = searchParams.get('type');
     const date = searchParams.get('date'); // 'today' or 'YYYY-MM-DD'
+    const search = searchParams.get('search');
 
     const db = await getDb();
     const req = db.request();
@@ -27,6 +28,10 @@ export async function GET(request: NextRequest) {
     } else if (date) {
       conditions.push('CAST(g.created_at AS DATE) = @date');
       req.input('date', sql.Date, date);
+    }
+    if (search) {
+      conditions.push('(c.container_number LIKE @search OR g.driver_name LIKE @search OR g.truck_plate LIKE @search OR g.eir_number LIKE @search)');
+      req.input('search', sql.NVarChar, `%${search}%`);
     }
 
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
