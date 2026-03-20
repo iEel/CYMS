@@ -361,11 +361,13 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       }
     };
 
-    // Remove any existing beacon
+    // Remove any existing beacon, ring, label
     const oldBeacon = sceneRef.current.getObjectByName('__highlight_beacon__');
     if (oldBeacon) sceneRef.current.remove(oldBeacon);
     const oldRing = sceneRef.current.getObjectByName('__highlight_ring__');
     if (oldRing) sceneRef.current.remove(oldRing);
+    const oldLabel = sceneRef.current.getObjectByName('__highlight_label__');
+    if (oldLabel) sceneRef.current.remove(oldLabel);
 
     cancelAnimationFrame(highlightAnimRef.current);
     restoreAll();
@@ -385,21 +387,48 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     const targetMesh = foundEntry.mesh;
     prevHighlightRef.current = targetMesh;
 
-    // === X-Ray Mode: ทำตู้อื่นโปร่งใส ===
+    // === X-Ray Mode: ซ่อนตู้อื่นเกือบหมด ===
     for (const [, entry] of containerMeshesRef.current) {
       if (entry.mesh === targetMesh) continue;
       (entry.mesh as THREE.Group).children.forEach(child => {
         if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
           child.material.transparent = true;
-          child.material.opacity = 0.08;
+          child.material.opacity = 0.03;
           child.material.depthWrite = false;
         }
       });
     }
 
+    // Scale up highlighted container for emphasis
+    targetMesh.scale.set(1.15, 1.15, 1.15);
+
     // Get world position of the container
     const targetPos = new THREE.Vector3();
     targetMesh.getWorldPosition(targetPos);
+
+    // === Label: ชื่อตู้ลอยเหนือตู้ ===
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 512; labelCanvas.height = 96;
+    const lCtx = labelCanvas.getContext('2d')!;
+    lCtx.fillStyle = 'rgba(0,0,0,0.7)';
+    lCtx.roundRect(0, 0, 512, 96, 16);
+    lCtx.fill();
+    lCtx.fillStyle = '#FFDD00';
+    lCtx.font = 'bold 36px monospace';
+    lCtx.textAlign = 'center';
+    lCtx.fillText(foundEntry.data.container_number, 256, 40);
+    lCtx.fillStyle = '#94A3B8';
+    lCtx.font = '24px sans-serif';
+    lCtx.fillText(`B${foundEntry.data.bay}-R${foundEntry.data.row}-T${foundEntry.data.tier} • ${foundEntry.data.shipping_line || '—'}`, 256, 76);
+    const labelTex = new THREE.CanvasTexture(labelCanvas);
+    const labelGeo = new THREE.PlaneGeometry(4, 0.75);
+    const labelMat = new THREE.MeshBasicMaterial({ map: labelTex, transparent: true, side: THREE.DoubleSide, depthTest: false });
+    const labelMesh = new THREE.Mesh(labelGeo, labelMat);
+    labelMesh.name = '__highlight_label__';
+    labelMesh.position.set(targetPos.x, targetPos.y + 2.5, targetPos.z);
+    // Billboard: always face camera
+    labelMesh.lookAt(cameraRef.current!.position);
+    sceneRef.current.add(labelMesh);
 
     // === Beacon: เสาแสงสีเหลืองชี้ตำแหน่ง ===
     const beaconHeight = 12;
@@ -428,17 +457,24 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     ring.position.set(targetPos.x, 0.05, targetPos.z);
     sceneRef.current.add(ring);
 
-    // === Animate camera to focus ===
+    // === Animate camera — position based on container's row/tier ===
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     const startTarget = controls.target.clone();
     const startPos = camera.position.clone();
 
     const endTarget = targetPos.clone();
+    // Camera comes from the side that best reveals the container:
+    // - High row (deep) → camera comes from behind (negative Z offset)
+    // - Low tier → camera stays lower
+    const rowDepth = foundEntry.data.row || 1;
+    const tierHeight = foundEntry.data.tier || 1;
+    const zOffset = rowDepth > 2 ? -4 : 4;      // behind for deep rows
+    const yOffset = Math.max(2, 5 - tierHeight); // lower for low tiers
     const endPos = new THREE.Vector3(
-      targetPos.x + 6,
-      targetPos.y + 5,
-      targetPos.z + 6,
+      targetPos.x + 4,
+      targetPos.y + yOffset,
+      targetPos.z + zOffset,
     );
 
     let progress = 0;
@@ -449,6 +485,8 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       camera.position.lerpVectors(startPos, endPos, t);
       controls.target.lerpVectors(startTarget, endTarget, t);
       controls.update();
+      // Keep label facing camera
+      if (labelMesh) labelMesh.lookAt(camera.position);
       if (progress < 1) requestAnimationFrame(animateCam);
     };
     animateCam();
@@ -483,14 +521,25 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     };
     animateGlow();
 
+    // Make label always face camera during orbit
+    const labelFaceCamera = () => {
+      if (labelMesh && cameraRef.current) labelMesh.lookAt(cameraRef.current.position);
+    };
+    controlsRef.current.addEventListener('change', labelFaceCamera);
+
     return () => {
       cancelAnimationFrame(highlightAnimRef.current);
+      // Restore scale
+      if (prevHighlightRef.current) prevHighlightRef.current.scale.set(1, 1, 1);
       restoreAll();
+      controlsRef.current?.removeEventListener('change', labelFaceCamera);
       if (sceneRef.current) {
         const b = sceneRef.current.getObjectByName('__highlight_beacon__');
         if (b) sceneRef.current.remove(b);
         const r = sceneRef.current.getObjectByName('__highlight_ring__');
         if (r) sceneRef.current.remove(r);
+        const l = sceneRef.current.getObjectByName('__highlight_label__');
+        if (l) sceneRef.current.remove(l);
       }
     };
   }, [highlightContainerNumber]);
