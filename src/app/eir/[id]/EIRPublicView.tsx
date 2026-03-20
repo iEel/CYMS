@@ -79,8 +79,10 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
 
   const damagePoints: DamagePoint[] = data?.damage_report?.points || [];
   const overviewPhotos: string[] = data?.damage_report?.photos || [];
+  const exitPhotos: string[] = data?.damage_report?.exit_photos || [];
   const allPhotos = [
     ...overviewPhotos.map((p: string, i: number) => ({ src: p, label: `ภาพรวม ${i + 1}` })),
+    ...exitPhotos.map((p: string, i: number) => ({ src: p, label: `ภาพขาออก ${i + 1}` })),
     ...damagePoints.filter((dp: DamagePoint) => dp.photo).map((dp: DamagePoint) => ({
       src: dp.photo!, label: `${SIDE_LABELS[dp.side] || dp.side} — ${DAMAGE_LABELS[dp.type] || dp.type}`,
     })),
@@ -152,7 +154,7 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
         {allPhotos.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 bg-red-50 border-b border-red-100">
-              <h3 className="text-sm font-bold text-red-700">📸 รูปถ่ายความเสียหาย ({allPhotos.length} รูป)</h3>
+              <h3 className="text-sm font-bold text-red-700">📸 รูปถ่าย ({allPhotos.length} รูป)</h3>
               <p className="text-[10px] text-red-400 mt-0.5">กดรูปเพื่อดูขนาดเต็ม</p>
             </div>
             <div className="p-4 grid grid-cols-2 gap-3">

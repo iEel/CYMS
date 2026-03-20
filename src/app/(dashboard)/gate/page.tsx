@@ -188,12 +188,14 @@ export default function GatePage() {
           transaction_type: 'gate_in',
           yard_id: yardId,
           ...gateInForm,
+          damage_report: inspectionReport || null,
         }),
       });
       const data = await res.json();
       if (data.success) {
         setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', booking_ref: '', notes: '' });
+        setInspectionReport(null);
       } else {
         setGateInResult({ success: false, message: `❌ ${data.error}` });
       }
