@@ -9,30 +9,37 @@ import sql from 'mssql';
  */
 export async function POST(request: NextRequest) {
   try {
-    const { yard_id, size, shipping_line } = await request.json();
+    const { yard_id, container_number, size, shipping_line } = await request.json();
     const db = await getDb();
     const containerSize = parseInt(size) || 20;
 
-    // 1. Find customer via PrefixMapping or shipping_line match
+    // 1. Find customer via PrefixMapping (container prefix) or shipping_line match
     let customer = null;
     let isCredit = false;
     let creditTerm = 0;
 
-    if (shipping_line) {
-      // Try PrefixMapping first (most accurate for gate-in)
+    // Extract 4-char prefix from container number (e.g. MSCU from MSCU1234566)
+    const prefix = container_number ? container_number.substring(0, 4).toUpperCase() : '';
+
+    if (prefix) {
+      // Try PrefixMapping first — most accurate for gate-in
       const prefixResult = await db.request()
-        .input('sl', sql.NVarChar, shipping_line)
+        .input('prefix', sql.NVarChar, prefix)
         .query(`
           SELECT TOP 1 c.customer_id, c.customer_name, c.customer_type, c.credit_term, c.tax_id, c.address
           FROM Customers c
           INNER JOIN PrefixMapping pm ON pm.customer_id = c.customer_id
-          WHERE pm.prefix_code IN (
-            SELECT TOP 1 prefix_code FROM PrefixMapping
-          ) AND c.is_active = 1
+          WHERE pm.prefix_code = @prefix AND c.is_active = 1
           ORDER BY c.customer_id
         `);
 
-      // Better approach: match by shipping_line_code or name
+      if (prefixResult.recordset.length > 0) {
+        customer = prefixResult.recordset[0];
+      }
+    }
+
+    // Fallback: match by shipping_line name
+    if (!customer && shipping_line) {
       const codeResult = await db.request()
         .input('slCode', sql.NVarChar, shipping_line)
         .query(`
@@ -44,14 +51,12 @@ export async function POST(request: NextRequest) {
 
       if (codeResult.recordset.length > 0) {
         customer = codeResult.recordset[0];
-      } else if (prefixResult.recordset.length > 0) {
-        customer = prefixResult.recordset[0];
       }
+    }
 
-      if (customer) {
-        creditTerm = customer.credit_term || 0;
-        isCredit = creditTerm > 0;
-      }
+    if (customer) {
+      creditTerm = customer.credit_term || 0;
+      isCredit = creditTerm > 0;
     }
 
     // 2. Get per-container charges from Tariffs (LOLO, gate, washing, PTI, reefer, etc.)

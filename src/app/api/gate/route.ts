@@ -155,6 +155,7 @@ export async function POST(request: NextRequest) {
       driver_name, driver_license, truck_plate, seal_number, booking_ref, notes,
       damage_report,
       container_id, // for gate_out (existing container)
+      user_id, // processed_by user
     } = body;
 
     const db = await getDb();
@@ -285,14 +286,15 @@ export async function POST(request: NextRequest) {
       .input('eirNumber', sql.NVarChar, eirNumber)
       .input('notes', sql.NVarChar, notes || null)
       .input('damageReport', sql.NVarChar, damage_report ? JSON.stringify(damage_report) : null)
+      .input('processedBy', sql.Int, user_id || null)
       .query(`
         INSERT INTO GateTransactions (container_id, yard_id, transaction_type,
           driver_name, driver_license, truck_plate, seal_number, booking_ref,
-          eir_number, notes, damage_report)
+          eir_number, notes, damage_report, processed_by)
         OUTPUT INSERTED.*
         VALUES (@containerId, @yardId, @transactionType,
           @driverName, @driverLicense, @truckPlate, @sealNumber, @bookingRef,
-          @eirNumber, @notes, @damageReport)
+          @eirNumber, @notes, @damageReport, @processedBy)
       `);
 
     // Audit log

@@ -343,6 +343,7 @@ export default function GatePage() {
         body: JSON.stringify({
           transaction_type: 'gate_in',
           yard_id: yardId,
+          user_id: session?.userId,
           ...gateInForm,
           damage_report: inspectionReport || null,
         }),
@@ -497,6 +498,7 @@ export default function GatePage() {
         body: JSON.stringify({
           transaction_type: 'gate_out',
           yard_id: yardId,
+          user_id: session?.userId,
           container_id: selectedContainer.container_id,
           container_number: selectedContainer.container_number,
           ...(gateOutPhotos.length > 0 ? { damage_report: { exit_photos: gateOutPhotos } } : {}),
