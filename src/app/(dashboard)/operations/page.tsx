@@ -120,7 +120,7 @@ export default function OperationsPage() {
   // Fetch zones (needed for create, shifting, and queue position edit)
   useEffect(() => {
     fetch(`/api/settings/zones?yard_id=${yardId}`)
-      .then(r => r.json()).then(d => setZones(d.zones || [])).catch(() => {});
+      .then(r => r.json()).then(d => setZones(Array.isArray(d) ? d : d.zones || [])).catch(() => {});
   }, [yardId]);
 
   // Update work order status
@@ -374,10 +374,10 @@ export default function OperationsPage() {
                       <div className="grid grid-cols-4 gap-2">
                         <div>
                           <label className="text-[10px] text-slate-400 font-medium">Zone</label>
-                          <select value={editPos.zone_id} onChange={e => setEditPos({...editPos, zone_id: parseInt(e.target.value)})}
+                          <select value={String(editPos.zone_id)} onChange={e => setEditPos({...editPos, zone_id: parseInt(e.target.value)})}
                             className="w-full h-10 md:h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-700 dark:text-white">
-                            <option value={0}>-</option>
-                            {zones.map(z => <option key={z.zone_id} value={z.zone_id}>{z.zone_name}</option>)}
+                            <option value="0">-</option>
+                            {zones.map(z => <option key={z.zone_id} value={String(z.zone_id)}>{z.zone_name}</option>)}
                           </select>
                         </div>
                         <div>

@@ -196,7 +196,7 @@ export default function PrintInvoicePage() {
             <h1 className="text-2xl font-bold" style={{ color: isReceipt ? '#059669' : '#2563eb' }}>
               {isReceipt ? 'ใบเสร็จรับเงิน' : 'ใบแจ้งหนี้'}
             </h1>
-            <p className="text-sm text-slate-500 mt-1">{isReceipt ? 'Receipt / Tax Invoice' : 'Invoice / Tax Invoice'}</p>
+            <p className="text-sm text-slate-500 mt-1">{isReceipt ? 'Receipt' : 'Invoice'}</p>
             <div className="mt-3 text-sm">
               <p><span className="text-slate-500">เลขที่:</span> <strong className="font-mono">{invoice.invoice_number}</strong></p>
               <p><span className="text-slate-500">วันที่:</span> {formatDate(invoice.created_at)}</p>
@@ -285,12 +285,12 @@ export default function PrintInvoicePage() {
           <div className="grid grid-cols-2 gap-8">
             <div className="text-center">
               <div className="border-b border-slate-300 mb-1 h-12"></div>
-              <p className="text-xs text-slate-500">ผู้รับเงิน / Received by</p>
+              <p className="text-xs text-slate-500">ผู้จ่าย / Paid by</p>
               <p className="text-xs text-slate-400 mt-0.5">วันที่ ____/____/____</p>
             </div>
             <div className="text-center">
               <div className="border-b border-slate-300 mb-1 h-12"></div>
-              <p className="text-xs text-slate-500">ผู้อนุมัติ / Authorized by</p>
+              <p className="text-xs text-slate-500">ผู้รับเงิน / Received by</p>
               <p className="text-xs text-slate-400 mt-0.5">วันที่ ____/____/____</p>
             </div>
           </div>
