@@ -1460,7 +1460,7 @@ export default function GatePage() {
 
 
                     <button onClick={handleRequestRelease}
-                      disabled={releaseLoading || !!(billingData && billingData.charges.length > 0 && selectedGrand > 0 && !billingPaid && !billingData.is_credit)}
+                      disabled={releaseLoading || !!(billingData && billingData.charges.length > 0 && selectedGrand > 0 && !billingPaid)}
                       className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-50 transition-all w-full justify-center">
                       {releaseLoading ? <Loader2 size={16} className="animate-spin" /> : <Truck size={16} />}
                       ขอดึงตู้ → สร้างคำสั่งรถยก
