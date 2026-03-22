@@ -42,6 +42,7 @@ interface ContainerResult {
   bay?: number;
   row?: number;
   tier?: number;
+  gate_in_date?: string;
 }
 
 export default function GatePage() {
@@ -419,15 +420,17 @@ export default function GatePage() {
     } catch (err) { console.error(err); }
     finally { setBillingLoading(false); }
 
-    // Check existing work orders
+    // Check existing work orders (only from current stay — after gate_in_date)
     try {
       const res = await fetch(`/api/operations?yard_id=${yardId}`);
       const data = await res.json();
+      const containerGateIn = c.gate_in_date ? new Date(c.gate_in_date) : null;
       const gateOutOrders = (data.orders || []).filter(
-        (o: { container_number: string; notes?: string; status: string }) =>
+        (o: { container_number: string; notes?: string; status: string; created_at?: string }) =>
           o.container_number === c.container_number &&
           o.notes?.includes('Gate-Out') &&
-          o.status !== 'cancelled'
+          o.status !== 'cancelled' &&
+          (!containerGateIn || !o.created_at || new Date(o.created_at) >= containerGateIn)
       );
       if (gateOutOrders.length > 0) {
         const activeWO = gateOutOrders.find(
