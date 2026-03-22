@@ -5,7 +5,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import {
   Loader2, Search, Truck, Package, ArrowRight, Play, CheckCircle2,
   XCircle, Clock, AlertTriangle, Plus, Layers, Shuffle, ChevronDown,
-  ArrowDown, ArrowUp, MapPin, User, ListOrdered, RotateCcw,
+  ArrowDown, ArrowUp, ArrowUpFromLine, ArrowDownToLine, MapPin, User, ListOrdered, RotateCcw,
 } from 'lucide-react';
 
 interface WorkOrderRow {
@@ -326,7 +326,19 @@ export default function OperationsPage() {
                   {/* Container Info */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="text-2xl md:text-lg">{orderTypeLabels[order.order_type]?.split(' ')[0] || '📦'}</div>
+                      {order.notes?.includes('Gate-Out') ? (
+                        <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                          <ArrowUpFromLine size={20} className="text-amber-600 dark:text-amber-400 md:w-4 md:h-4" />
+                        </div>
+                      ) : order.notes?.includes('Gate-In') ? (
+                        <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                          <ArrowDownToLine size={20} className="text-emerald-600 dark:text-emerald-400 md:w-4 md:h-4" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                          <Package size={20} className="text-blue-600 dark:text-blue-400 md:w-4 md:h-4" />
+                        </div>
+                      )}
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-base md:text-sm text-slate-800 dark:text-white">{order.container_number}</span>
@@ -340,17 +352,7 @@ export default function OperationsPage() {
                             {priorityLabels[order.priority]?.label}
                           </span>
                         </div>
-                        {/* Truck plate from notes */}
-                        {order.notes && (() => {
-                          const plateMatch = order.notes.match(/🚛\s*([^\s|]+)|ทะเบียน[:\s]*([^\s|]+)/);
-                          const plate = plateMatch?.[1] || plateMatch?.[2];
-                          return plate ? (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <Truck size={10} className="text-slate-400" />
-                              <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400">{plate}</span>
-                            </div>
-                          ) : null;
-                        })()}
+
                         <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-400">
                           <span>{orderTypeLabels[order.order_type]}</span>
                           {order.from_zone_name && (
