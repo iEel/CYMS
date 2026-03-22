@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 22 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Gate History Search + Container Detail Modal + Search Detail Panel + Boxtech API + ISO 6346 Check Digit + Prefix Mapping + Gate-In Billing** (99%)
+> ส่งมอบงาน: 23 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Gate History Search + Container Detail Modal + Search Detail Panel + Boxtech API + ISO 6346 Check Digit + Prefix Mapping + Gate-In Billing + Gate-Out Billing Fix + SSE Real-Time Operations** (99%)
 
 ---
 
@@ -190,6 +190,7 @@ container-yard-system/
 │   │       ├── notifications/route.ts      # GET activity feed (gate + work orders)
 │   │       ├── operations/
 │   │       │   ├── route.ts                # GET/POST/PUT work orders
+│   │       │   ├── stream/route.ts         # **GET SSE stream** — real-time work order updates (polls DB every 5s)
 │   │       │   └── shift/route.ts          # POST smart shifting (LIFO)
 │   │       ├── edi/
 │   │       │   ├── bookings/route.ts       # GET/POST/PUT bookings
@@ -457,7 +458,7 @@ container-yard-system/
 - กดรับตู้ → สร้าง Container + GateTransaction + **ออก EIR อัตโนมัติ**
 - **Auto Allocation**: ถ้าไม่ระบุ zone → ระบบจัดพิกัด zone/bay/row/tier อัตโนมัติ
 - แสดงพิกัดที่จัดให้ทันทีหลัง gate-in สำเร็จ
-- **Auto Work Order**: สร้างคำสั่งย้ายตู้อัตโนมัติให้คนขับรถยก (ลำดับ: ด่วน)
+- **Auto Work Order**: สร้างคำสั่งย้ายตู้อัตโนมัติให้คนขับรถยก (ลำดับ: ปกติ) — notes รวม 🚛 ทะเบียนรถ + 👤 ชื่อคนขับ
 - รองรับตู้ที่เคย gate-out ไปแล้วกลับเข้ามาใหม่ (re-enter)
 - **ISO 6346 Check Digit Validation** (**ใหม่**):
   - ตรวจ check digit real-time เมื่อพิมพ์ครบ 11 หลัก
@@ -482,12 +483,14 @@ container-yard-system/
   - **แยกปุ่มชัดเจน**: ชำระก่อน → จึงกด "รับตู้เข้าลาน + ออก EIR" (ปุ่มล็อกถ้ายังไม่ชำระ + แจ้งเตือน ⚠️)
   - ถ้าไม่มี Tariff charges → ปุ่ม Gate-In ใช้ได้เลยไม่ต้องชำระ
   - บันทึก `processed_by` (user_id) ลง GateTransactions — แสดงชื่อผู้ดำเนินการในประวัติ
+- **UX — Toast Banner**: หลัง Gate-In สำเร็จ → form reset ทันที (กรอกเลขตู้ใหม่ได้เลย) + toast banner เล็กๆ แสดง EIR number + ปุ่ม "พิมพ์ EIR" + ✕ ปิดได้ + auto-dismiss 15 วินาที
 
 #### แท็บ "Gate-Out (ปล่อยออก)" — **2-Phase Workflow**
 
 ขั้นตอนที่ 1 — **ขอดึงตู้**:
-- ค้นหาตู้ในลาน → เลือกตู้ → กรอกคนขับ/ทะเบียน → กดปุ่ม "ขอดึงตู้"
-- สร้าง Work Order ส่งไปหน้าปฏิบัติการ (**ยังไม่ออก EIR**)
+- ค้นหาตู้ในลาน → เลือกตู้ → กรอกคนขับ/ทะเบียน → **ชำระเงิน/วางบิลก่อน** → กดปุ่ม "ขอดึงตู้"
+- **ปุ่ม "ขอดึงตู้" ล็อก** จนกว่าจะชำระเงิน (เงินสด) หรือวางบิล (ลูกค้าเครดิต) เสร็จ
+- สร้าง Work Order ส่งไปหน้าปฏิบัติการ (**ยังไม่ออก EIR**) — notes รวม 🚛 ทะเบียนรถ + 👤 ชื่อคนขับ
 - บันทึกข้อมูลคนขับลง localStorage (persist ข้ามหน้า)
 
 ขั้นตอนที่ 2 — **รอรถยก**:
@@ -501,14 +504,18 @@ container-yard-system/
 
 **💰 Gate-Out Billing**:
 - เลือกตู้ → คำนวณค่าบริการอัตโนมัติจาก **Tiered Storage Rates** (ตามวันที่อยู่ + ขนาดตู้ 20'/40'/45')
+- **Billing Card แสดงทุก Phase**: ไม่ว่าจะเป็น Phase 1/2/3 → billing card แสดงเสมอ
 - **Checkbox เลือกรายการ**: storage/LOLO/gate เปิดอัตโนมัติ, ค่าล้าง/PTI/reefer/M&R ปิดไว้ — ติ๊กเลือกตามจริง
 - **แก้ไขราคาได้**: ทุกรายการมีช่องกรอกราคา แก้ได้ทันที — ยอดรวม+VAT คำนวณใหม่ real-time
 - **เพิ่มรายการเอง**: ปุ่ม "+ เพิ่มรายการค่าบริการ" → กรอกชื่อ + ราคา + ลบได้ (✕)
-- ตรวจ paid invoices อัตโนมัติ → ถ้าชำระแล้วแสดง "✅ ชำระเงินแล้ว" ไม่ต้องจ่ายซ้ำ
+- **แยก Invoice ขาเข้า/ขาออก**: Gate-Out ไม่ดึง invoice ขาเข้ามาบล็อก — สร้าง invoice ใหม่ได้เสมอ
+- **เช็คเครดิตลูกค้าผ่าน PrefixMapping**: ดึง prefix 4 ตัวแรก → PrefixMapping → Customers → ตรวจ `credit_term`
 - รองรับ 2 วิธีจ่าย: 💵 เงินสด / 💳 โอน 
-- ลูกค้าเครดิต → สร้างใบแจ้งหนี้ (pending) ปล่อยตู้ได้เลย
+- **ลูกค้าเครดิต → ต้องวางบิลก่อน** กดขอดึงตู้ (ปุ่มขอดึงตู้ล็อกจนกว่าวางบิลเสร็จ)
 - หลังชำระ → ปุ่ม **"🖨️ พิมพ์ใบเสร็จ"** ขึ้นมาทันที
 - ใบเสร็จ/ใบแจ้งหนี้บันทึก **เฉพาะรายการที่เลือก** + ราคาที่แก้ไข
+- **UX — Toast Banner**: หลัง Gate-Out สำเร็จ → form reset ทันที + toast banner แสดง EIR print + auto-dismiss 15 วินาที
+- **WO กรองเฉพาะรอบปัจจุบัน**: ดูเฉพาะ Work Orders ที่สร้างหลัง gate_in_date — ไม่ดึง WO เก่ามาข้าม Phase
 
 #### แท็บ "ประวัติ Gate"
 - ตาราง transactions + ลิงก์ดู EIR ทุกรายการ
@@ -568,6 +575,9 @@ container-yard-system/
 - ตาราง Work Orders + **2-button workflow** สำหรับคนขับรถยก:
   - 📥 **รับงาน** (pending → in_progress — ข้าม assigned)
   - ✅ **เสร็จ** (in_progress → completed + อัพเดทพิกัดตู้อัตโนมัติ)
+- **SSE Real-Time** (**ใหม่**): เชื่อมต่อ `/api/operations/stream` ผ่าน EventSource — งานใหม่ขึ้นอัตโนมัติไม่ต้อง refresh + 🟢 Live indicator + auto-reconnect
+- **Direction Badge** (**ใหม่**): 📤 ส่งออก (Gate-Out) / 📥 รับเข้า (Gate-In) แสดงชัดเจนบนการ์ดงาน
+- **Truck/Driver Info** (**ใหม่**): 🚛 ทะเบียนรถ + 👤 ชื่อคนขับ แสดงในแต่ละ WO (ดึงจาก notes)
 - **เปลี่ยนตำแหน่งวางตู้ได้**: กดเสร็จ → แสดงฟอร์มแก้ข Zone/Bay/Row/Tier (pre-fill ตำแหน่งเดิม, **Zone dropdown โหลดจาก API ถูกต้อง**) → ยืนยันเสร็จสิ้น
 - Filter ตาม status
 - ปุ่มยกเลิกสำหรับงานที่ยังไม่เริ่ม
