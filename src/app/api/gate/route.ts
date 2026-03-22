@@ -324,7 +324,7 @@ export async function POST(request: NextRequest) {
           .input('woToBay', sql.Int, assignedLocation.bay)
           .input('woToRow', sql.Int, assignedLocation.row)
           .input('woToTier', sql.Int, assignedLocation.tier)
-          .input('woNotes', sql.NVarChar, `Gate-In → ย้ายตู้ ${container_number} ไปวางที่ Zone ${assignedLocation.zone_name} B${assignedLocation.bay}-R${assignedLocation.row}-T${assignedLocation.tier} (${assignedLocation.reason})`)
+          .input('woNotes', sql.NVarChar, `Gate-In → ย้ายตู้ ${container_number} ไปวางที่ Zone ${assignedLocation.zone_name} B${assignedLocation.bay}-R${assignedLocation.row}-T${assignedLocation.tier} (${assignedLocation.reason})${truck_plate ? ` | 🚛 ${truck_plate}` : ''}${driver_name ? ` | 👤 ${driver_name}` : ''}`)
           .input('woPriority', sql.Int, 2) // ด่วน
           .query(`
             INSERT INTO WorkOrders (yard_id, order_type, container_id,
