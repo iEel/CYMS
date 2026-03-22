@@ -375,6 +375,8 @@ export default function GatePage() {
         setInspectionReport(null);
         setBoxtechResult(null);
         setContainerValid(null);
+        // Auto-clear success message after 5 seconds
+        setTimeout(() => setGateInResult(null), 5000);
       } else {
         setGateInResult({ success: false, message: `❌ ${data.error}` });
       }
@@ -512,8 +514,14 @@ export default function GatePage() {
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
         setGateOutPhotos([]);
         setGateOutPhase('search');
+        setBillingData(null);
+        setBillingPaid(false);
+        setBillingInvoiceNumber('');
+        setBillingInvoiceId(null);
         // Clear localStorage
         try { localStorage.removeItem(`gateout_driver_${selectedContainer.container_number}`); } catch { /* ignore */ }
+        // Auto-clear success message after 5 seconds
+        setTimeout(() => setGateOutResult(null), 5000);
       } else {
         setGateOutResult({ success: false, message: `❌ ${data.error}` });
       }
