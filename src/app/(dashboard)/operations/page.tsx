@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import {
   Loader2, Search, Truck, Package, ArrowRight, Play, CheckCircle2,
@@ -91,6 +91,8 @@ export default function OperationsPage() {
   const [editPos, setEditPos] = useState({ zone_id: 0, bay: 0, row: 0, tier: 0 });
 
   const yardId = session?.activeYardId || 1;
+  const [sseConnected, setSseConnected] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const fetchOrders = useCallback(async () => {
     setQueueLoading(true);
@@ -104,9 +106,63 @@ export default function OperationsPage() {
     finally { setQueueLoading(false); }
   }, [yardId, statusFilter]);
 
+  // SSE real-time connection
   useEffect(() => {
-    if (activeTab === 'queue') fetchOrders();
-  }, [activeTab, fetchOrders]);
+    if (activeTab !== 'queue') {
+      // Close SSE when not on queue tab
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+        setSseConnected(false);
+      }
+      return;
+    }
+
+    // Initial fetch
+    fetchOrders();
+
+    // Connect SSE
+    const connectSSE = () => {
+      const es = new EventSource(`/api/operations/stream?yard_id=${yardId}`);
+      eventSourceRef.current = es;
+
+      es.addEventListener('connected', () => {
+        setSseConnected(true);
+      });
+
+      es.addEventListener('orders', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          let filtered = data.orders || [];
+          if (statusFilter) {
+            filtered = filtered.filter((o: WorkOrderRow) => o.status === statusFilter);
+          }
+          setOrders(filtered);
+          setQueueLoading(false);
+        } catch { /* ignore parse errors */ }
+      });
+
+      es.onerror = () => {
+        setSseConnected(false);
+        es.close();
+        // Reconnect after 3 seconds
+        setTimeout(() => {
+          if (activeTab === 'queue') connectSSE();
+        }, 3000);
+      };
+    };
+
+    connectSSE();
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+        setSseConnected(false);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, yardId, statusFilter]);
 
   // Fetch containers for create form
   const searchContainersForCreate = async () => {
@@ -249,6 +305,11 @@ export default function OperationsPage() {
               <button onClick={fetchOrders} className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1">
                 <RotateCcw size={12} /> รีเฟรช
               </button>
+              {sseConnected && (
+                <span className="flex items-center gap-1 text-[10px] text-emerald-500 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+                </span>
+              )}
             </div>
           </div>
 
@@ -268,10 +329,26 @@ export default function OperationsPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-base md:text-sm text-slate-800 dark:text-white">{order.container_number}</span>
                           <span className="text-xs text-slate-400">{order.size}&apos;{order.type}</span>
+                          {order.notes?.includes('Gate-Out') ? (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">📤 ส่งออก</span>
+                          ) : order.notes?.includes('Gate-In') ? (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">📥 รับเข้า</span>
+                          ) : null}
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${priorityLabels[order.priority]?.color}`}>
                             {priorityLabels[order.priority]?.label}
                           </span>
                         </div>
+                        {/* Truck plate from notes */}
+                        {order.notes && (() => {
+                          const plateMatch = order.notes.match(/🚛\s*([^\s|]+)|ทะเบียน[:\s]*([^\s|]+)/);
+                          const plate = plateMatch?.[1] || plateMatch?.[2];
+                          return plate ? (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <Truck size={10} className="text-slate-400" />
+                              <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400">{plate}</span>
+                            </div>
+                          ) : null;
+                        })()}
                         <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-400">
                           <span>{orderTypeLabels[order.order_type]}</span>
                           {order.from_zone_name && (
