@@ -1160,6 +1160,276 @@ export default function GatePage() {
                   </div>
                 </div>
 
+                {/* ===== BILLING CARD ===== */}
+                {billingLoading ? (
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 text-sm text-slate-400">
+                    <Loader2 size={16} className="animate-spin" /> กำลังคำนวณค่าบริการ...
+                  </div>
+                ) : billingData && billingData.charges.length > 0 ? (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    {/* Header */}
+                    <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-900/10 dark:to-blue-900/10 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-700 dark:text-white flex items-center gap-2">
+                        💰 ค่าบริการ ({billingData.container.dwell_days as number} วัน)
+                      </h4>
+                      {billingData.is_credit && billingData.customer && (
+                        <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold">
+                          🏢 เครดิต {billingData.credit_term} วัน • {billingData.customer.customer_name}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Charges Table — toggleable + editable */}
+                    <div className="px-4 py-2 divide-y divide-slate-100 dark:divide-slate-700/50">
+                      {billingData.charges.map((ch, i) => (
+                        <div key={`t-${i}`} className={`py-2 flex items-center gap-3 text-sm transition-opacity ${!selectedCharges.has(i) ? 'opacity-40' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedCharges.has(i)}
+                            onChange={() => {
+                              setSelectedCharges(prev => {
+                                const next = new Set(prev);
+                                if (next.has(i)) next.delete(i); else next.add(i);
+                                return next;
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <div className="flex-1">
+                            <p className="text-slate-700 dark:text-slate-200">{ch.description}</p>
+                            <p className="text-[10px] text-slate-400">
+                              {ch.billable_days > 0
+                                ? `${ch.quantity} วัน × ฿${ch.unit_price.toLocaleString()} (ฟรี ${ch.free_days} วัน)`
+                                : ch.free_days > 0
+                                  ? `${ch.quantity} วัน — อยู่ในช่วงฟรี`
+                                  : `${ch.quantity} × ฿${ch.unit_price.toLocaleString()}`
+                              }
+                            </p>
+                          </div>
+                          {ch.subtotal === 0 && ch.free_days > 0 ? (
+                            <span className="w-24 h-7 flex items-center justify-end px-2 text-emerald-500 text-xs font-bold">✅ ฟรี</span>
+                          ) : (
+                            <input
+                              type="number"
+                              value={i in chargeOverrides ? chargeOverrides[i] : ch.subtotal}
+                              onChange={(e) => setChargeOverrides(prev => ({ ...prev, [i]: parseFloat(e.target.value) || 0 }))}
+                              className="w-24 h-7 px-2 text-right font-mono font-semibold text-sm rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                            />
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Custom charges */}
+                      {customCharges.map((ch, i) => (
+                        <div key={`c-${i}`} className={`py-2 flex items-center gap-3 text-sm transition-opacity ${!selectedCustom.has(i) ? 'opacity-40' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedCustom.has(i)}
+                            onChange={() => {
+                              setSelectedCustom(prev => {
+                                const next = new Set(prev);
+                                if (next.has(i)) next.delete(i); else next.add(i);
+                                return next;
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={ch.description}
+                              onChange={(e) => {
+                                const arr = [...customCharges];
+                                arr[i] = { ...arr[i], description: e.target.value };
+                                setCustomCharges(arr);
+                              }}
+                              className="w-full h-7 px-2 text-sm rounded border border-dashed border-slate-300 dark:border-slate-600 bg-transparent text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500"
+                              placeholder="ชื่อรายการ"
+                            />
+                          </div>
+                          <input
+                            type="number"
+                            value={ch.subtotal}
+                            onChange={(e) => {
+                              const arr = [...customCharges];
+                              const val = parseFloat(e.target.value) || 0;
+                              arr[i] = { ...arr[i], subtotal: val, unit_price: val };
+                              setCustomCharges(arr);
+                            }}
+                            className="w-24 h-7 px-2 text-right font-mono font-semibold text-sm rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                          />
+                          <button onClick={() => {
+                            setCustomCharges(prev => prev.filter((_, j) => j !== i));
+                            setSelectedCustom(prev => {
+                              const next = new Set<number>();
+                              prev.forEach(v => { if (v < i) next.add(v); else if (v > i) next.add(v - 1); });
+                              return next;
+                            });
+                          }} className="text-red-400 hover:text-red-600 text-xs">✕</button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add custom charge */}
+                    <div className="px-4 py-2 border-t border-dashed border-slate-200 dark:border-slate-700">
+                      <button
+                        onClick={() => {
+                          const newCharge: BillingCharge = {
+                            charge_type: 'custom',
+                            description: '',
+                            quantity: 1,
+                            unit_price: 0,
+                            subtotal: 0,
+                            free_days: 0,
+                            billable_days: 0,
+                          };
+                          setCustomCharges(prev => [...prev, newCharge]);
+                          setSelectedCustom(prev => new Set([...prev, customCharges.length]));
+                        }}
+                        className="w-full py-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-xs text-slate-400 hover:text-blue-500 hover:border-blue-400 transition-colors flex items-center justify-center gap-1"
+                      >+ เพิ่มรายการค่าบริการ</button>
+                    </div>
+
+
+                    {/* Summary — recalculated from selected */}
+                    <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/30 border-t border-slate-200 dark:border-slate-700 space-y-1">
+                      <div className="flex justify-between text-xs text-slate-400">
+                        <span>รวมก่อน VAT ({selectedCharges.size}/{billingData.charges.length} รายการ)</span>
+                        <span>฿{selectedTotal.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-slate-400">
+                        <span>VAT 7%</span>
+                        <span>฿{selectedVat.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-base font-bold text-slate-800 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-600">
+                        <span>ยอดรวมทั้งสิ้น</span>
+                        <span className="text-emerald-600">฿{selectedGrand.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {/* Payment Action */}
+                    {!billingPaid && (
+                      <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                        {billingData.is_credit ? (
+                          /* Credit Customer → Auto Invoice */
+                          <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/10 rounded-lg p-3">
+                            <div>
+                              <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">🏢 ลูกค้าเครดิต — วางบิลอัตโนมัติ</p>
+                              <p className="text-[10px] text-blue-500">สร้างใบแจ้งหนี้ (pending) → ปล่อยตู้ได้เลย</p>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (!selectedContainer || !billingData?.customer) return;
+                                try {
+                                  const res = await fetch('/api/billing/invoices', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      yard_id: yardId,
+                                      customer_id: billingData.customer.customer_id,
+                                      container_id: selectedContainer.container_id,
+                                      charge_type: 'storage',
+                                      description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน)`,
+                                      quantity: 1,
+                                      unit_price: selectedTotal,
+                                      due_date: new Date(Date.now() + billingData.credit_term * 86400000).toISOString(),
+                                      notes: JSON.stringify({ charges: buildFinalCharges(), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    setBillingPaid(true);
+                                    setBillingInvoiceNumber(data.invoice_number || '');
+                                    setBillingInvoiceId(data.invoice?.invoice_id || null);
+                                  }
+                                } catch (err) { console.error(err); }
+                              }}
+                              className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 whitespace-nowrap"
+                            >📄 วางบิล</button>
+                          </div>
+                        ) : (
+                          /* Cash Customer → Pay at Gate */
+                          <>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-500 whitespace-nowrap">วิธีชำระ:</span>
+                              {(['cash', 'transfer'] as const).map(m => (
+                                <button key={m} onClick={() => setPaymentMethod(m)}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                    paymentMethod === m ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
+                                  }`}>
+                                  {m === 'cash' ? '💵 เงินสด' : '💳 โอน'}
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (!selectedContainer || !billingData) return;
+                                try {
+                                  // Find or create customer from shipping_line
+                                  let custId = billingData.customer?.customer_id;
+                                  if (!custId) {
+                                    // Use a default general customer
+                                    custId = 1;
+                                  }
+                                  const res = await fetch('/api/billing/invoices', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      yard_id: yardId,
+                                      customer_id: custId,
+                                      container_id: selectedContainer.container_id,
+                                      charge_type: 'storage',
+                                      description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน) — ชำระ ${paymentMethod === 'cash' ? 'เงินสด' : 'โอน'}`,
+                                      quantity: 1,
+                                      unit_price: selectedTotal,
+                                      notes: JSON.stringify({ charges: buildFinalCharges(), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    // Mark as paid immediately
+                                    await fetch('/api/billing/invoices', {
+                                      method: 'PUT',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ invoice_id: data.invoice.invoice_id, action: 'pay' }),
+                                    });
+                                    setBillingPaid(true);
+                                    setBillingInvoiceNumber(data.invoice_number || '');
+                                    setBillingInvoiceId(data.invoice?.invoice_id || null);
+                                  }
+                                } catch (err) { console.error(err); }
+                              }}
+                              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all"
+                            >💰 รับชำระเงิน ฿{selectedGrand.toLocaleString()}</button>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Paid Confirmation */}
+                        {billingPaid && (
+                      <div className="px-4 py-3 border-t border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10 flex items-center justify-between">
+                        <span className="flex items-center gap-2 text-xs text-emerald-600 font-bold">
+                          <CheckCircle2 size={14} /> {billingData.is_credit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'} — {billingInvoiceNumber}
+                        </span>
+                        {(billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id) && (
+                          <button
+                            onClick={() => {
+                              const invId = billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id;
+                              const printType = billingData.is_credit ? 'invoice' : 'receipt';
+                              window.open(`/billing/print?id=${invId}&type=${printType}`, '_blank');
+                            }}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"
+                          >🖨️ {billingData.is_credit ? 'พิมพ์ใบแจ้งหนี้' : 'พิมพ์ใบเสร็จ'}</button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : billingData && billingData.charges.length === 0 ? (
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-600 flex items-center gap-2">
+                    <CheckCircle2 size={14} /> ไม่มีค่าบริการ (อยู่ในช่วง Free Days หรือไม่มี Tariff)
+                  </div>
+                ) : null}
                 {/* ===== PHASE 1: ขอดึงตู้ ===== */}
                 {gateOutPhase === 'search' && (
                   <div className="space-y-4">
@@ -1193,276 +1463,6 @@ export default function GatePage() {
                       </div>
                     </div>
 
-                    {/* ===== BILLING CARD ===== */}
-                    {billingLoading ? (
-                      <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 text-sm text-slate-400">
-                        <Loader2 size={16} className="animate-spin" /> กำลังคำนวณค่าบริการ...
-                      </div>
-                    ) : billingData && billingData.charges.length > 0 ? (
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                        {/* Header */}
-                        <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-900/10 dark:to-blue-900/10 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-slate-700 dark:text-white flex items-center gap-2">
-                            💰 ค่าบริการ ({billingData.container.dwell_days as number} วัน)
-                          </h4>
-                          {billingData.is_credit && billingData.customer && (
-                            <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold">
-                              🏢 เครดิต {billingData.credit_term} วัน • {billingData.customer.customer_name}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Charges Table — toggleable + editable */}
-                        <div className="px-4 py-2 divide-y divide-slate-100 dark:divide-slate-700/50">
-                          {billingData.charges.map((ch, i) => (
-                            <div key={`t-${i}`} className={`py-2 flex items-center gap-3 text-sm transition-opacity ${!selectedCharges.has(i) ? 'opacity-40' : ''}`}>
-                              <input
-                                type="checkbox"
-                                checked={selectedCharges.has(i)}
-                                onChange={() => {
-                                  setSelectedCharges(prev => {
-                                    const next = new Set(prev);
-                                    if (next.has(i)) next.delete(i); else next.add(i);
-                                    return next;
-                                  });
-                                }}
-                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                              />
-                              <div className="flex-1">
-                                <p className="text-slate-700 dark:text-slate-200">{ch.description}</p>
-                                <p className="text-[10px] text-slate-400">
-                                  {ch.billable_days > 0
-                                    ? `${ch.quantity} วัน × ฿${ch.unit_price.toLocaleString()} (ฟรี ${ch.free_days} วัน)`
-                                    : ch.free_days > 0
-                                      ? `${ch.quantity} วัน — อยู่ในช่วงฟรี`
-                                      : `${ch.quantity} × ฿${ch.unit_price.toLocaleString()}`
-                                  }
-                                </p>
-                              </div>
-                              {ch.subtotal === 0 && ch.free_days > 0 ? (
-                                <span className="w-24 h-7 flex items-center justify-end px-2 text-emerald-500 text-xs font-bold">✅ ฟรี</span>
-                              ) : (
-                                <input
-                                  type="number"
-                                  value={i in chargeOverrides ? chargeOverrides[i] : ch.subtotal}
-                                  onChange={(e) => setChargeOverrides(prev => ({ ...prev, [i]: parseFloat(e.target.value) || 0 }))}
-                                  className="w-24 h-7 px-2 text-right font-mono font-semibold text-sm rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:border-blue-500"
-                                />
-                              )}
-                            </div>
-                          ))}
-
-                          {/* Custom charges */}
-                          {customCharges.map((ch, i) => (
-                            <div key={`c-${i}`} className={`py-2 flex items-center gap-3 text-sm transition-opacity ${!selectedCustom.has(i) ? 'opacity-40' : ''}`}>
-                              <input
-                                type="checkbox"
-                                checked={selectedCustom.has(i)}
-                                onChange={() => {
-                                  setSelectedCustom(prev => {
-                                    const next = new Set(prev);
-                                    if (next.has(i)) next.delete(i); else next.add(i);
-                                    return next;
-                                  });
-                                }}
-                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                              />
-                              <div className="flex-1">
-                                <input
-                                  type="text"
-                                  value={ch.description}
-                                  onChange={(e) => {
-                                    const arr = [...customCharges];
-                                    arr[i] = { ...arr[i], description: e.target.value };
-                                    setCustomCharges(arr);
-                                  }}
-                                  className="w-full h-7 px-2 text-sm rounded border border-dashed border-slate-300 dark:border-slate-600 bg-transparent text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500"
-                                  placeholder="ชื่อรายการ"
-                                />
-                              </div>
-                              <input
-                                type="number"
-                                value={ch.subtotal}
-                                onChange={(e) => {
-                                  const arr = [...customCharges];
-                                  const val = parseFloat(e.target.value) || 0;
-                                  arr[i] = { ...arr[i], subtotal: val, unit_price: val };
-                                  setCustomCharges(arr);
-                                }}
-                                className="w-24 h-7 px-2 text-right font-mono font-semibold text-sm rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:border-blue-500"
-                              />
-                              <button onClick={() => {
-                                setCustomCharges(prev => prev.filter((_, j) => j !== i));
-                                setSelectedCustom(prev => {
-                                  const next = new Set<number>();
-                                  prev.forEach(v => { if (v < i) next.add(v); else if (v > i) next.add(v - 1); });
-                                  return next;
-                                });
-                              }} className="text-red-400 hover:text-red-600 text-xs">✕</button>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Add custom charge */}
-                        <div className="px-4 py-2 border-t border-dashed border-slate-200 dark:border-slate-700">
-                          <button
-                            onClick={() => {
-                              const newCharge: BillingCharge = {
-                                charge_type: 'custom',
-                                description: '',
-                                quantity: 1,
-                                unit_price: 0,
-                                subtotal: 0,
-                                free_days: 0,
-                                billable_days: 0,
-                              };
-                              setCustomCharges(prev => [...prev, newCharge]);
-                              setSelectedCustom(prev => new Set([...prev, customCharges.length]));
-                            }}
-                            className="w-full py-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-xs text-slate-400 hover:text-blue-500 hover:border-blue-400 transition-colors flex items-center justify-center gap-1"
-                          >+ เพิ่มรายการค่าบริการ</button>
-                        </div>
-
-
-                        {/* Summary — recalculated from selected */}
-                        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/30 border-t border-slate-200 dark:border-slate-700 space-y-1">
-                          <div className="flex justify-between text-xs text-slate-400">
-                            <span>รวมก่อน VAT ({selectedCharges.size}/{billingData.charges.length} รายการ)</span>
-                            <span>฿{selectedTotal.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between text-xs text-slate-400">
-                            <span>VAT 7%</span>
-                            <span>฿{selectedVat.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between text-base font-bold text-slate-800 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-600">
-                            <span>ยอดรวมทั้งสิ้น</span>
-                            <span className="text-emerald-600">฿{selectedGrand.toLocaleString()}</span>
-                          </div>
-                        </div>
-
-                        {/* Payment Action */}
-                        {!billingPaid && (
-                          <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 space-y-3">
-                            {billingData.is_credit ? (
-                              /* Credit Customer → Auto Invoice */
-                              <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/10 rounded-lg p-3">
-                                <div>
-                                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">🏢 ลูกค้าเครดิต — วางบิลอัตโนมัติ</p>
-                                  <p className="text-[10px] text-blue-500">สร้างใบแจ้งหนี้ (pending) → ปล่อยตู้ได้เลย</p>
-                                </div>
-                                <button
-                                  onClick={async () => {
-                                    if (!selectedContainer || !billingData?.customer) return;
-                                    try {
-                                      const res = await fetch('/api/billing/invoices', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                          yard_id: yardId,
-                                          customer_id: billingData.customer.customer_id,
-                                          container_id: selectedContainer.container_id,
-                                          charge_type: 'storage',
-                                          description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน)`,
-                                          quantity: 1,
-                                          unit_price: selectedTotal,
-                                          due_date: new Date(Date.now() + billingData.credit_term * 86400000).toISOString(),
-                                          notes: JSON.stringify({ charges: buildFinalCharges(), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
-                                        }),
-                                      });
-                                      const data = await res.json();
-                                      if (data.success) {
-                                        setBillingPaid(true);
-                                        setBillingInvoiceNumber(data.invoice_number || '');
-                                        setBillingInvoiceId(data.invoice?.invoice_id || null);
-                                      }
-                                    } catch (err) { console.error(err); }
-                                  }}
-                                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 whitespace-nowrap"
-                                >📄 วางบิล</button>
-                              </div>
-                            ) : (
-                              /* Cash Customer → Pay at Gate */
-                              <>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-slate-500 whitespace-nowrap">วิธีชำระ:</span>
-                                  {(['cash', 'transfer'] as const).map(m => (
-                                    <button key={m} onClick={() => setPaymentMethod(m)}
-                                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                        paymentMethod === m ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
-                                      }`}>
-                                      {m === 'cash' ? '💵 เงินสด' : '💳 โอน'}
-                                    </button>
-                                  ))}
-                                </div>
-                                <button
-                                  onClick={async () => {
-                                    if (!selectedContainer || !billingData) return;
-                                    try {
-                                      // Find or create customer from shipping_line
-                                      let custId = billingData.customer?.customer_id;
-                                      if (!custId) {
-                                        // Use a default general customer
-                                        custId = 1;
-                                      }
-                                      const res = await fetch('/api/billing/invoices', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                          yard_id: yardId,
-                                          customer_id: custId,
-                                          container_id: selectedContainer.container_id,
-                                          charge_type: 'storage',
-                                          description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน) — ชำระ ${paymentMethod === 'cash' ? 'เงินสด' : 'โอน'}`,
-                                          quantity: 1,
-                                          unit_price: selectedTotal,
-                                          notes: JSON.stringify({ charges: buildFinalCharges(), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
-                                        }),
-                                      });
-                                      const data = await res.json();
-                                      if (data.success) {
-                                        // Mark as paid immediately
-                                        await fetch('/api/billing/invoices', {
-                                          method: 'PUT',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ invoice_id: data.invoice.invoice_id, action: 'pay' }),
-                                        });
-                                        setBillingPaid(true);
-                                        setBillingInvoiceNumber(data.invoice_number || '');
-                                        setBillingInvoiceId(data.invoice?.invoice_id || null);
-                                      }
-                                    } catch (err) { console.error(err); }
-                                  }}
-                                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all"
-                                >💰 รับชำระเงิน ฿{selectedGrand.toLocaleString()}</button>
-                              </>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Paid Confirmation */}
-                            {billingPaid && (
-                          <div className="px-4 py-3 border-t border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10 flex items-center justify-between">
-                            <span className="flex items-center gap-2 text-xs text-emerald-600 font-bold">
-                              <CheckCircle2 size={14} /> {billingData.is_credit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'} — {billingInvoiceNumber}
-                            </span>
-                            {(billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id) && (
-                              <button
-                                onClick={() => {
-                                  const invId = billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id;
-                                  const printType = billingData.is_credit ? 'invoice' : 'receipt';
-                                  window.open(`/billing/print?id=${invId}&type=${printType}`, '_blank');
-                                }}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"
-                              >🖨️ {billingData.is_credit ? 'พิมพ์ใบแจ้งหนี้' : 'พิมพ์ใบเสร็จ'}</button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : billingData && billingData.charges.length === 0 ? (
-                      <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-600 flex items-center gap-2">
-                        <CheckCircle2 size={14} /> ไม่มีค่าบริการ (อยู่ในช่วง Free Days หรือไม่มี Tariff)
-                      </div>
-                    ) : null}
 
                     <button onClick={handleRequestRelease}
                       disabled={releaseLoading || !!(billingData && billingData.charges.length > 0 && selectedGrand > 0 && !billingPaid && !billingData.is_credit)}
