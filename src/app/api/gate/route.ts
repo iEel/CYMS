@@ -325,7 +325,7 @@ export async function POST(request: NextRequest) {
           .input('woToRow', sql.Int, assignedLocation.row)
           .input('woToTier', sql.Int, assignedLocation.tier)
           .input('woNotes', sql.NVarChar, `Gate-In → ย้ายตู้ ${container_number} ไปวางที่ Zone ${assignedLocation.zone_name} B${assignedLocation.bay}-R${assignedLocation.row}-T${assignedLocation.tier} (${assignedLocation.reason})${truck_plate ? ` | 🚛 ${truck_plate}` : ''}${driver_name ? ` | 👤 ${driver_name}` : ''}`)
-          .input('woPriority', sql.Int, 2) // ด่วน
+          .input('woPriority', sql.Int, 3) // ปกติ
           .query(`
             INSERT INTO WorkOrders (yard_id, order_type, container_id,
               to_zone_id, to_bay, to_row, to_tier,
