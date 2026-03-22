@@ -376,7 +376,7 @@ export default function GatePage() {
         setBoxtechResult(null);
         setContainerValid(null);
         // Auto-clear success message after 5 seconds
-        setTimeout(() => setGateInResult(null), 5000);
+        setTimeout(() => setGateInResult(null), 15000);
       } else {
         setGateInResult({ success: false, message: `❌ ${data.error}` });
       }
@@ -521,7 +521,7 @@ export default function GatePage() {
         // Clear localStorage
         try { localStorage.removeItem(`gateout_driver_${selectedContainer.container_number}`); } catch { /* ignore */ }
         // Auto-clear success message after 5 seconds
-        setTimeout(() => setGateOutResult(null), 5000);
+        setTimeout(() => setGateOutResult(null), 15000);
       } else {
         setGateOutResult({ success: false, message: `❌ ${data.error}` });
       }
@@ -1048,28 +1048,29 @@ export default function GatePage() {
               )}
             </div>
 
-            {/* Result */}
+            {/* Result Toast — non-blocking */}
             {gateInResult && (
-              <div className={`p-4 rounded-xl text-sm ${gateInResult.success ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400'}`}>
-                <p className="font-medium">{gateInResult.message}</p>
-                {gateInResult.assigned_location && (
-                  <div className="mt-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300">
-                    <p className="text-xs font-semibold text-blue-500 dark:text-blue-400 uppercase mb-1">📍 วางตู้ที่</p>
-                    <p className="text-base font-bold">
-                      {gateInResult.assigned_location.zone_name} — Bay {gateInResult.assigned_location.bay}, Row {gateInResult.assigned_location.row}, Tier {gateInResult.assigned_location.tier}
-                    </p>
-                    <p className="text-[11px] text-blue-500 dark:text-blue-400 mt-0.5">{gateInResult.assigned_location.reason}</p>
-                  </div>
-                )}
-                {gateInResult.eir_number && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-xs">EIR: <span className="font-mono font-bold">{gateInResult.eir_number}</span></span>
-                    <button onClick={() => viewEIR(gateInResult.eir_number!)}
-                      className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs hover:bg-emerald-200 transition-colors">
-                      <FileText size={12} /> ดู EIR
-                    </button>
-                  </div>
-                )}
+              <div className={`p-3 rounded-xl text-sm flex items-center justify-between gap-3 ${gateInResult.success ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>
+                <div className="flex items-center gap-3 flex-wrap flex-1 min-w-0">
+                  <span className="font-medium text-xs">{gateInResult.message}</span>
+                  {gateInResult.assigned_location && (
+                    <span className="text-xs font-mono bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded">
+                      📍 {gateInResult.assigned_location.zone_name} B{gateInResult.assigned_location.bay}-R{gateInResult.assigned_location.row}-T{gateInResult.assigned_location.tier}
+                    </span>
+                  )}
+                  {gateInResult.eir_number && (
+                    <>
+                      <span className="text-xs font-mono">EIR: {gateInResult.eir_number}</span>
+                      <button onClick={() => viewEIR(gateInResult.eir_number!)}
+                        className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-700 transition-colors">
+                        <FileText size={12} /> พิมพ์ EIR
+                      </button>
+                    </>
+                  )}
+                </div>
+                <button onClick={() => setGateInResult(null)} className="text-slate-400 hover:text-slate-600 shrink-0">
+                  <X size={14} />
+                </button>
               </div>
             )}
           </div>
@@ -1544,19 +1545,24 @@ export default function GatePage() {
               </div>
             )}
 
-            {/* Result */}
+            {/* Result Toast — non-blocking */}
             {gateOutResult && (
-              <div className={`p-4 rounded-xl text-sm ${gateOutResult.success ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400'}`}>
-                <p className="font-medium">{gateOutResult.message}</p>
-                {gateOutResult.eir_number && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-xs">EIR: <span className="font-mono font-bold">{gateOutResult.eir_number}</span></span>
-                    <button onClick={() => viewEIR(gateOutResult.eir_number!)}
-                      className="flex items-center gap-1 px-2 py-1 rounded bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 text-xs hover:bg-blue-200 transition-colors">
-                      <FileText size={12} /> ดู EIR
-                    </button>
-                  </div>
-                )}
+              <div className={`p-3 rounded-xl text-sm flex items-center justify-between gap-3 ${gateOutResult.success ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>
+                <div className="flex items-center gap-3 flex-wrap flex-1 min-w-0">
+                  <span className="font-medium text-xs">{gateOutResult.message}</span>
+                  {gateOutResult.eir_number && (
+                    <>
+                      <span className="text-xs font-mono">EIR: {gateOutResult.eir_number}</span>
+                      <button onClick={() => viewEIR(gateOutResult.eir_number!)}
+                        className="flex items-center gap-1 px-2 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700 transition-colors">
+                        <FileText size={12} /> พิมพ์ EIR
+                      </button>
+                    </>
+                  )}
+                </div>
+                <button onClick={() => setGateOutResult(null)} className="text-slate-400 hover:text-slate-600 shrink-0">
+                  <X size={14} />
+                </button>
               </div>
             )}
           </div>
