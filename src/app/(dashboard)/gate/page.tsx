@@ -416,11 +416,6 @@ export default function GatePage() {
       setBillingData(billData);
       if (billData.charges) initSelectedCharges(billData.charges);
       if (billData.is_credit) setPaymentMethod('credit');
-      // If already paid, skip payment flow
-      if (billData.already_paid) {
-        setBillingPaid(true);
-        setBillingInvoiceNumber(billData.paid_invoices?.[0]?.invoice_number || 'ชำระแล้ว');
-      }
     } catch (err) { console.error(err); }
     finally { setBillingLoading(false); }
 
