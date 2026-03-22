@@ -226,18 +226,22 @@ export async function POST(request: NextRequest) {
     const vatAmount = Math.round(totalBeforeVat * 0.07 * 100) / 100;
     const grandTotal = totalBeforeVat + vatAmount;
 
-    // 5. Check existing invoices for this container (unpaid AND paid)
+    // 5. Check existing GATE-OUT invoices for this container (exclude Gate-In invoices)
     const existingInv = await db.request()
       .input('cid', sql.Int, container_id)
       .query(`
-        SELECT invoice_id, invoice_number, grand_total, status, paid_at
+        SELECT invoice_id, invoice_number, grand_total, status, paid_at, description
         FROM Invoices
-        WHERE container_id = @cid
+        WHERE container_id = @cid AND (description LIKE 'Gate-Out%' OR description NOT LIKE 'Gate-In%')
         ORDER BY created_at DESC
       `);
 
-    const paidInvoices = existingInv.recordset.filter((i: { status: string }) => i.status === 'paid');
-    const unpaidInvoices = existingInv.recordset.filter((i: { status: string }) => ['issued', 'draft'].includes(i.status));
+    // Only consider Gate-Out related invoices for already_paid check
+    const gateOutInvoices = existingInv.recordset.filter((i: { description?: string }) =>
+      !i.description || !i.description.startsWith('Gate-In')
+    );
+    const paidInvoices = gateOutInvoices.filter((i: { status: string }) => i.status === 'paid');
+    const unpaidInvoices = gateOutInvoices.filter((i: { status: string }) => ['issued', 'draft'].includes(i.status));
 
     return NextResponse.json({
       container: {
