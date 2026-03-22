@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 20 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Gate History Search + Container Detail Modal + Search Detail Panel** (99%)
+> ส่งมอบงาน: 22 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Gate History Search + Container Detail Modal + Search Detail Panel + Boxtech API + ISO 6346 Check Digit + Prefix Mapping** (99%)
 
 ---
 
@@ -38,6 +38,7 @@
 | **OCR** | Tesseract.js | `tesseract.js` |
 | **QR Code** | qrcode.react | `qrcode.react` |
 | **Excel/CSV** | SheetJS | `xlsx` |
+| **Boxtech API** | BIC Container DB (external) | REST API v2.0 |
 | **Package Manager** | npm | - |
 
 ---
@@ -77,6 +78,10 @@ NEXT_PUBLIC_DEFAULT_YARD_ID=1
 # File Storage
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=10485760
+
+# Boxtech API (BIC Container Database)
+BOXTECH_USERNAME=<email>
+BOXTECH_PASSWORD=<password>
 ```
 
 ### 3.3 Setup Database
@@ -142,13 +147,13 @@ container-yard-system/
 │   │   │   ├── dashboard/page.tsx   # หน้า Dashboard (KPI cards)
 │   │   │   ├── yard/page.tsx     # หน้าจัดการลาน (4 tabs: ภาพรวม/ค้นหา/จัดวางตู้/ตรวจนับ)
 │   │   │   ├── gate/page.tsx     # หน้า Gate (4 tabs: Gate-In/Gate-Out/ประวัติ/ย้ายข้ามลาน)
-│   │   │   │                     # Gate-In: auto-allocation zone/bay/row/tier
+│   │   │   │                     # Gate-In: auto-allocation + **ISO 6346 check digit** + **Boxtech auto-fill** + **prefix→customer**
 │   │   │   ├── operations/page.tsx # หน้าปฏิบัติการ (3 tabs: Job Queue/สร้างงาน/Shifting)
 │   │   │   ├── edi/page.tsx      # หน้า EDI (3 tabs: Bookings/นำเข้า/ตรวจซีล)
 │   │   │   ├── mnr/page.tsx      # หน้า M&R (3 tabs: EOR/สร้าง EOR/CEDEX)
 │   │   │   ├── billing/page.tsx  # หน้าบัญชี (6 tabs: ใบแจ้งหนี้/สร้างบิล/Tariff/Hold/เอกสาร/ERP)
 │   │   │   └── settings/
-│   │   │       ├── page.tsx              # หน้าตั้งค่า (10 tabs)
+│   │   │       ├── page.tsx              # หน้าตั้งค่า (11 tabs)
 │   │   │       ├── CompanySettings.tsx    # CRUD ข้อมูลองค์กร (+ logo upload + branch)
 │   │   │       ├── YardsSettings.tsx      # CRUD ลาน + โซน (+ branch สำนักงานใหญ่/สาขา)
 │   │   │       ├── CustomerMaster.tsx     # CRUD ลูกค้า (+ search + branch type)
@@ -159,7 +164,8 @@ container-yard-system/
 │   │   │       ├── SealMaster.tsx         # ประเภทซีล + prefix
 │   │   │       ├── TieredStorageRate.tsx  # อัตราค่าฝากขั้นบันได
 │   │   │       ├── AutoAllocationRules.tsx # 9 กฎจัดตู้อัตโนมัติ
-│   │   │       └── EquipmentRulesConfig.tsx # 8 กฎเครื่องจักร
+│   │   │       ├── EquipmentRulesConfig.tsx # 8 กฎเครื่องจักร
+│   │   │       └── PrefixMapping.tsx       # **Prefix→Customer mapping** (จับคู่ BIC prefix กับลูกค้า)
 │   │   │
 │   │   ├── billing/
 │   │   │   └── print/
@@ -172,6 +178,7 @@ container-yard-system/
 │   │   │
 │   │   └── api/
 │   │       ├── auth/login/route.ts         # POST login → JWT
+│   │       ├── boxtech/route.ts           # **GET Boxtech proxy** (token cache + BIC + container lookup + prefix→customer)
 │   │       ├── containers/
 │       │   ├── route.ts               # GET/POST/PUT (dynamic fields) + position check
 │       │   └── detail/route.ts        # GET container detail + gate-in/out + damage_report + dwell days
@@ -201,7 +208,8 @@ container-yard-system/
 │   │       │   ├── yards/route.ts          # GET/POST/PUT/DELETE yards (+ branch auto-migrate)
 │   │       │   ├── zones/route.ts          # GET/POST/PUT/DELETE zones
 │   │       │   ├── permissions/route.ts    # GET/PUT permission matrix
-│   │       │   └── storage-rates/route.ts  # GET/POST tiered storage rates (per-size pricing)
+│   │       │   ├── storage-rates/route.ts  # GET/POST tiered storage rates (per-size pricing)
+│   │       │   └── prefix-mapping/route.ts # **GET/POST/DELETE** prefix→customer mapping
 │   │       └── yard/
 │   │           ├── stats/route.ts          # GET yard statistics
 │   │           ├── allocate/route.ts       # POST auto-allocation (+ size_restriction)
@@ -236,6 +244,7 @@ container-yard-system/
 │       ├── db.ts                 # MS SQL connection pool (mssql, useUTC: false)
 │       ├── auth.ts               # JWT create/verify functions
 │       ├── utils.ts              # formatDateTime, formatTime, etc.
+│       ├── containerValidation.ts # **ISO 6346 check digit** validation + size/type parser
 │       ├── offlineQueue.ts       # NFR1: IndexedDB offline queue + auto-sync
 │       └── schema.sql            # SQL schema reference (14 tables)
 │
@@ -271,6 +280,7 @@ container-yard-system/
 | `StorageRateTiers` | tier_name, from_day, to_day, rate_20, rate_40, rate_45, sort_order | อัตราค่าฝากตู้ขั้นบันได (แยกราคาตามขนาดตู้) |
 | `Invoices` | invoice_number, customer_id, charge_type, grand_total, status, **notes (JSON charges)** | ใบแจ้งหนี้ |
 | `AuditLog` | user_id, action, details, timestamp | บันทึกการใช้งาน |
+| `PrefixMapping` | **prefix_code** (4 chars, UNIQUE), **customer_id** (FK→Customers), notes | จับคู่ BIC prefix กับลูกค้า (auto-create) |
 
 ### Zone Types
 
@@ -353,6 +363,7 @@ container-yard-system/
 | GET/POST/PUT/DELETE | `/api/settings/customers` | Customer CRUD (+ credit_term, branch) |
 | GET/PUT | `/api/settings/permissions` | Permission matrix toggle (33 perms × 6 roles) |
 | GET/POST | `/api/settings/storage-rates` | Tiered storage rate tiers (per-size: 20'/40'/45') |
+| GET/POST/DELETE | `/api/settings/prefix-mapping` | **Prefix→Customer mapping** (prefix_code 4 chars + customer_id) |
 
 ### Billing
 
@@ -362,6 +373,12 @@ container-yard-system/
 | GET/POST/PUT | `/api/billing/invoices` | CRUD ใบแจ้งหนี้ — supports `invoice_id` filter, stores charge breakdown in `notes` JSON |
 | GET/POST/PUT | `/api/billing/tariffs` | อัตราค่าบริการ (LOLO, gate, washing, etc.) |
 | GET | `/api/billing/erp-export` | ERP export (CSV/JSON debit-credit) |
+
+### Boxtech API (Container Database)
+
+| Method | Endpoint | คำอธิบาย |
+|--------|----------|---------|
+| GET | `/api/boxtech?container_number=XXXX1234567` | Boxtech proxy — BIC code + container lookup + prefix→customer mapping → `{ shipping_line, size, type, customer, source }` |
 
 ---
 
@@ -378,7 +395,7 @@ container-yard-system/
 - Quick Action buttons
 - Yard Status overview
 
-### 7.3 ตั้งค่าระบบ (Settings — 10 แท็บ)
+### 7.3 ตั้งค่าระบบ (Settings — 11 แท็บ)
 - **Company Profile**: CRUD → DB + **logo upload (local file storage → URL)** + **สาขา (สำนักงานใหญ่/สาขาที่)**
 - **User Management**: CRUD + role + yard access
 - **Permission Matrix**: **33 permissions × 6 roles**, toggle realtime (**รวม customers module**)
@@ -390,6 +407,7 @@ container-yard-system/
 - **Tiered Storage Rate**: อัตราขั้นบันได (Free→Standard→Extended→Penalty) 20'/40'/45'
 - **Auto-Allocation Rules**: 9 กฎ toggle (แยกสายเรือ/ขนาด/ประเภท, LIFO/FIFO, max tier)
 - **Equipment Rules Config**: 8 กฎ toggle (shift limit, weight, cooldown, maintenance)
+- **Prefix Mapping** (**ใหม่**): จับคู่ BIC prefix (4 ตัวอักษร เช่น MSCU, MEDU) กับลูกค้าในระบบ — รองรับหลาย prefix ต่อลูกค้า, auto-create table
 
 ### 7.4 จัดการลาน (Yard Management)
 
@@ -435,10 +453,23 @@ container-yard-system/
 #### แท็บ "Gate-In (รับเข้า)"
 - ฟอร์มกรอกข้อมูลตู้ (เลขตู้, ขนาด, ประเภท, สายเรือ, ซีล) + คนขับ/ทะเบียนรถ + Booking Ref
 - กดรับตู้ → สร้าง Container + GateTransaction + **ออก EIR อัตโนมัติ**
-- **Auto-Allocation**: ถ้าไม่ระบุ zone → ระบบจัดพิกัด zone/bay/row/tier อัตโนมัติ
+- **Auto Allocation**: ถ้าไม่ระบุ zone → ระบบจัดพิกัด zone/bay/row/tier อัตโนมัติ
 - แสดงพิกัดที่จัดให้ทันทีหลัง gate-in สำเร็จ
 - **Auto Work Order**: สร้างคำสั่งย้ายตู้อัตโนมัติให้คนขับรถยก (ลำดับ: ด่วน)
 - รองรับตู้ที่เคย gate-out ไปแล้วกลับเข้ามาใหม่ (re-enter)
+- **ISO 6346 Check Digit Validation** (**ใหม่**):
+  - ตรวจ check digit real-time เมื่อพิมพ์ครบ 11 หลัก
+  - 🟢 ถูก → ขอบเขียว + "Check Digit OK"
+  - 🔴 ผิด → ขอบแดง + แจ้งค่าที่ถูกต้อง + **บล็อกปุ่ม Gate-In**
+- **Boxtech API Auto-Fill** (**ใหม่**):
+  - เมื่อ check digit ผ่าน → เรียก Boxtech API ดึงข้อมูลสายเรือ/ขนาด/ประเภท
+  - Auto-fill ช่อง shipping_line, size, type + badge "✅ Boxtech"
+  - Token cache ฝั่ง server (auto-refresh)
+- **Prefix → Customer Mapping** (**ใหม่**):
+  - จับคู่ prefix กับลูกค้าจาก PrefixMapping table → แสดงชื่อลูกค้าทันที
+- **Fallback — ตู้ prefix ไม่รู้จัก** (**ใหม่**):
+  - ไม่บล็อก Gate-In — ปล่อยช่องสายเรือว่าง ให้พนักงานพิมพ์เอง
+  - บันทึก `unknown_prefix_alert` ลง AuditLog → Admin เห็นเตือนไปเพิ่ม prefix
 
 #### แท็บ "Gate-Out (ปล่อยออก)" — **2-Phase Workflow**
 
@@ -720,5 +751,5 @@ npm start
 ---
 
 > **ผู้สร้าง**: AI Assistant (Antigravity)  
-> **วันที่**: 20 มีนาคม 2569  
+> **วันที่**: 22 มีนาคม 2569  
 > **เอกสารเพิ่มเติม**: `src/lib/schema.sql` (SQL schema), `.env.local` (config)

@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Layers,
   Truck,
+  Link,
 } from 'lucide-react';
 import CompanySettings from './CompanySettings';
 import YardsSettings from './YardsSettings';
@@ -25,6 +26,7 @@ import SealMaster from './SealMaster';
 import TieredStorageRate from './TieredStorageRate';
 import AutoAllocationRules from './AutoAllocationRules';
 import EquipmentRulesConfig from './EquipmentRulesConfig';
+import PrefixMapping from './PrefixMapping';
 
 const tabs = [
   { id: 'company', label: 'องค์กร', icon: <Building2 size={18} />, color: '#3B82F6' },
@@ -37,6 +39,7 @@ const tabs = [
   { id: 'storage', label: 'ค่าฝาก', icon: <TrendingUp size={18} />, color: '#06B6D4' },
   { id: 'allocation', label: 'จัดตู้', icon: <Layers size={18} />, color: '#10B981' },
   { id: 'equipment', label: 'เครื่องจักร', icon: <Truck size={18} />, color: '#F97316' },
+  { id: 'prefix', label: 'Prefix', icon: <Link size={18} />, color: '#06B6D4' },
 ];
 
 export default function SettingsPage() {
@@ -85,6 +88,7 @@ export default function SettingsPage() {
         {activeTab === 'storage' && <TieredStorageRate />}
         {activeTab === 'allocation' && <AutoAllocationRules />}
         {activeTab === 'equipment' && <EquipmentRulesConfig />}
+        {activeTab === 'prefix' && <PrefixMapping />}
       </div>
     </div>
   );

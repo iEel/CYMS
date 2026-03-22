@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { formatTime, formatDateTime } from '@/lib/utils';
+import { validateContainerNumber } from '@/lib/containerValidation';
 import {
   DoorOpen, LogOut, History, Loader2, Search, CheckCircle2, Truck,
   FileText, Plus, ArrowDownToLine, ArrowUpFromLine, Package, User,
   CreditCard, Hash, ClipboardCheck, Printer, X, ChevronDown,
-  ScanLine, ArrowRightLeft,
+  ScanLine, ArrowRightLeft, AlertTriangle, Ship,
 } from 'lucide-react';
 import CameraOCR from '@/components/gate/CameraOCR';
 import PhotoCapture from '@/components/gate/PhotoCapture';
@@ -58,6 +59,17 @@ export default function GatePage() {
   const [showOCR, setShowOCR] = useState<'container' | 'plate' | 'seal' | null>(null);
   const [showInspection, setShowInspection] = useState(false);
   const [inspectionReport, setInspectionReport] = useState<{ points: unknown[]; condition_grade: string; inspector_notes: string; photos: string[] } | null>(null);
+
+  // Check Digit + Boxtech states
+  const [containerValid, setContainerValid] = useState<null | boolean>(null); // null=not yet, true=valid, false=invalid
+  const [checkDigitError, setCheckDigitError] = useState('');
+  const [boxtechLoading, setBoxtechLoading] = useState(false);
+  const [boxtechResult, setBoxtechResult] = useState<{
+    shipping_line?: string; size?: string; type?: string; source?: string;
+    customer?: { customer_id: number; customer_name: string; credit_term: number } | null;
+    unknown_prefix?: boolean;
+  } | null>(null);
+  const boxtechAbortRef = useRef<AbortController | null>(null);
 
   // Transfer
   const [transferForm, setTransferForm] = useState({ container_search: '', to_yard_id: '', driver_name: '', truck_plate: '', notes: '' });
@@ -176,9 +188,68 @@ export default function GatePage() {
     if (activeTab === 'history') fetchHistory();
   }, [activeTab, fetchHistory]);
 
+  // === Check Digit Validation + Boxtech Auto-Lookup ===
+  useEffect(() => {
+    const num = gateInForm.container_number.toUpperCase().replace(/[\s-]/g, '');
+    
+    // Reset when not 11 chars
+    if (num.length < 11) {
+      setContainerValid(null);
+      setCheckDigitError('');
+      setBoxtechResult(null);
+      return;
+    }
+    
+    // Validate check digit
+    const result = validateContainerNumber(num);
+    if (!result.valid) {
+      setContainerValid(false);
+      setCheckDigitError(result.error || 'Invalid');
+      setBoxtechResult(null);
+      return;
+    }
+    
+    // Check digit OK
+    setContainerValid(true);
+    setCheckDigitError('');
+    
+    // Abort previous Boxtech request
+    if (boxtechAbortRef.current) boxtechAbortRef.current.abort();
+    const controller = new AbortController();
+    boxtechAbortRef.current = controller;
+    
+    // Auto-lookup via Boxtech API
+    setBoxtechLoading(true);
+    fetch(`/api/boxtech?container_number=${num}`, { signal: controller.signal })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.success) {
+          setBoxtechResult(null);
+          return;
+        }
+        setBoxtechResult(data);
+        // Auto-fill fields (only if user hasn't manually changed them or they're empty)
+        setGateInForm(prev => ({
+          ...prev,
+          shipping_line: data.shipping_line || prev.shipping_line,
+          size: data.size || prev.size,
+          type: data.type || prev.type,
+        }));
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') console.error('Boxtech lookup error:', err);
+      })
+      .finally(() => setBoxtechLoading(false));
+    
+    return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gateInForm.container_number]);
+
   // Gate-In submit
   const handleGateIn = async () => {
     if (!gateInForm.container_number) return;
+    // Block if check digit is invalid
+    if (containerValid === false) return;
     setGateInLoading(true);
     setGateInResult(null);
     try {
@@ -194,9 +265,30 @@ export default function GatePage() {
       });
       const data = await res.json();
       if (data.success) {
+        // Log unknown prefix as alert in audit
+        if (boxtechResult?.unknown_prefix) {
+          fetch('/api/yard/audit-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              yard_id: yardId,
+              action: 'unknown_prefix_alert',
+              entity_type: 'container',
+              entity_id: data.container_id,
+              details: JSON.stringify({
+                prefix: gateInForm.container_number.substring(0, 4),
+                container_number: gateInForm.container_number,
+                message: `Prefix ${gateInForm.container_number.substring(0, 4)} ไม่มีในระบบ — กรุณาเพิ่มใน Settings > Prefix Mapping`,
+              }),
+            }),
+          }).catch(err => console.warn('Audit log for unknown prefix failed:', err));
+        }
+
         setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', booking_ref: '', notes: '' });
         setInspectionReport(null);
+        setBoxtechResult(null);
+        setContainerValid(null);
       } else {
         setGateInResult({ success: false, message: `❌ ${data.error}` });
       }
@@ -459,11 +551,46 @@ export default function GatePage() {
                   <div className="flex gap-1">
                     <input type="text" placeholder="ABCU1234567" value={gateInForm.container_number}
                       onChange={e => setGateInForm({ ...gateInForm, container_number: e.target.value.toUpperCase() })}
-                      className={`${inputClass} font-mono flex-1`} />
+                      className={`${inputClass} font-mono flex-1 ${
+                        containerValid === true ? '!border-emerald-400 ring-1 ring-emerald-200' :
+                        containerValid === false ? '!border-rose-400 ring-1 ring-rose-200' : ''
+                      }`} />
                     <button onClick={() => setShowOCR('container')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs flex items-center gap-1 border border-blue-200 dark:border-blue-800" title="สแกน OCR">
                       <ScanLine size={14} />
                     </button>
+                    {boxtechLoading && (
+                      <div className="flex items-center px-2 text-blue-500">
+                        <Loader2 size={16} className="animate-spin" />
+                      </div>
+                    )}
                   </div>
+                  {/* Check digit status */}
+                  {containerValid === true && (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[11px] text-emerald-600 flex items-center gap-1">
+                        <CheckCircle2 size={12} /> Check Digit OK
+                      </span>
+                      {boxtechResult?.source === 'boxtech' && (
+                        <span className="text-[10px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 px-1.5 py-0.5 rounded">✅ Boxtech</span>
+                      )}
+                      {boxtechResult?.customer && (
+                        <span className="text-[10px] bg-violet-50 dark:bg-violet-900/20 text-violet-600 px-1.5 py-0.5 rounded flex items-center gap-1">
+                          <Ship size={10} /> {boxtechResult.customer.customer_name}
+                          {boxtechResult.customer.credit_term > 0 && ` (เครดิต ${boxtechResult.customer.credit_term} วัน)`}
+                        </span>
+                      )}
+                      {boxtechResult?.unknown_prefix && (
+                        <span className="text-[10px] bg-amber-50 dark:bg-amber-900/20 text-amber-600 px-1.5 py-0.5 rounded flex items-center gap-1">
+                          <AlertTriangle size={10} /> ไม่รู้จัก prefix {gateInForm.container_number.substring(0, 4)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {containerValid === false && (
+                    <p className="text-[11px] text-rose-500 mt-1.5 flex items-center gap-1">
+                      <AlertTriangle size={12} /> {checkDigitError}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className={labelClass}>ขนาด</label>
@@ -612,7 +739,7 @@ export default function GatePage() {
 
             {/* Submit */}
             <div className="flex items-center gap-3 pt-2">
-              <button onClick={handleGateIn} disabled={gateInLoading || !gateInForm.container_number}
+              <button onClick={handleGateIn} disabled={gateInLoading || !gateInForm.container_number || containerValid === false}
                 className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
                 {gateInLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowDownToLine size={16} />}
                 รับตู้เข้าลาน + ออก EIR
