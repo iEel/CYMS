@@ -93,6 +93,8 @@ export default function OperationsPage() {
   const yardId = session?.activeYardId || 1;
   const [sseConnected, setSseConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const fetchOrders = useCallback(async () => {
     setQueueLoading(true);
@@ -319,7 +321,7 @@ export default function OperationsPage() {
             <div className="p-8 text-center text-sm text-slate-400">ไม่มีงาน — กดแท็บ &quot;สร้างงาน&quot; เพื่อเพิ่ม</div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-700">
-              {orders.map(order => (
+              {orders.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(order => (
                 <div key={order.order_id} className="p-4 md:p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                   {/* Container Info */}
                   <div className="flex items-center justify-between">
@@ -359,6 +361,19 @@ export default function OperationsPage() {
                           )}
                           {order.to_zone_name && (
                             <span className="font-mono">Z{order.to_zone_name} B{order.to_bay}-R{order.to_row}-T{order.to_tier}</span>
+                          )}
+                        </div>
+                        {/* DateTime */}
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Clock size={10} className="text-slate-400" />
+                          <span className="text-[10px] text-slate-400">
+                            {order.created_at ? new Date(order.created_at).toLocaleString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                          </span>
+                          {order.started_at && (
+                            <span className="text-[10px] text-blue-400 ml-1">▶ {new Date(order.started_at).toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+                          )}
+                          {order.completed_at && (
+                            <span className="text-[10px] text-emerald-400 ml-1">✅ {new Date(order.completed_at).toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
                           )}
                         </div>
                       </div>
@@ -490,6 +505,36 @@ export default function OperationsPage() {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {orders.length > pageSize && (
+            <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                แสดง {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, orders.length)} จาก {orders.length} รายการ
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2 py-1 rounded text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30"
+                >← ก่อนหน้า</button>
+                {Array.from({ length: Math.ceil(orders.length / pageSize) }, (_, i) => i + 1).map(page => (
+                  <button key={page} onClick={() => setCurrentPage(page)}
+                    className={`w-7 h-7 rounded text-xs font-medium ${
+                      page === currentPage
+                        ? 'bg-blue-500 text-white'
+                        : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >{page}</button>
+                ))}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(orders.length / pageSize), p + 1))}
+                  disabled={currentPage >= Math.ceil(orders.length / pageSize)}
+                  className="px-2 py-1 rounded text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30"
+                >ถัดไป →</button>
+              </div>
             </div>
           )}
         </div>
