@@ -33,14 +33,31 @@ export async function POST(request: NextRequest) {
     const dwellDays = container.dwell_days || 0;
     const containerSize = parseInt(container.size) || 20; // 20, 40, 45
 
-    // 2. Find matching customer by shipping_line → check credit_term
-    //    Priority: shipping_line_code (exact) > customer_name (match)
+    // 2. Find matching customer — Priority: PrefixMapping (container prefix) → shipping_line_code → customer_name
     let customer = null;
     let isCredit = false;
     let creditTerm = 0;
 
-    if (container.shipping_line) {
-      // First try matching by shipping_line_code (more accurate)
+    // Try PrefixMapping first (most reliable for prefix-mapped customers)
+    const prefix = container.container_number ? container.container_number.substring(0, 4).toUpperCase() : '';
+    if (prefix) {
+      const prefixResult = await db.request()
+        .input('prefix', sql.NVarChar, prefix)
+        .query(`
+          SELECT TOP 1 c.customer_id, c.customer_name, c.customer_type, c.credit_term, c.tax_id, c.address, c.shipping_line_code
+          FROM Customers c
+          INNER JOIN PrefixMapping pm ON pm.customer_id = c.customer_id
+          WHERE pm.prefix_code = @prefix AND c.is_active = 1
+          ORDER BY c.customer_id
+        `);
+
+      if (prefixResult.recordset.length > 0) {
+        customer = prefixResult.recordset[0];
+      }
+    }
+
+    // Fallback: match by shipping_line name
+    if (!customer && container.shipping_line) {
       const codeResult = await db.request()
         .input('slCode', sql.NVarChar, container.shipping_line)
         .query(`
@@ -53,7 +70,6 @@ export async function POST(request: NextRequest) {
       if (codeResult.recordset.length > 0) {
         customer = codeResult.recordset[0];
       } else {
-        // Fallback: match by customer_name (like or exact)
         const nameResult = await db.request()
           .input('shippingLine', sql.NVarChar, container.shipping_line)
           .query(`
@@ -67,11 +83,11 @@ export async function POST(request: NextRequest) {
           customer = nameResult.recordset[0];
         }
       }
+    }
 
-      if (customer) {
-        creditTerm = customer.credit_term || 0;
-        isCredit = creditTerm > 0;
-      }
+    if (customer) {
+      creditTerm = customer.credit_term || 0;
+      isCredit = creditTerm > 0;
     }
 
     // 3. Calculate storage charges using TIERED RATES (per-size pricing)
