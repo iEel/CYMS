@@ -12,6 +12,7 @@ import {
   Wrench,
   Receipt,
   Settings,
+  ClipboardList,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -72,6 +73,12 @@ const menuItems: MenuItem[] = [
     label: 'ตั้งค่าระบบ',
     href: '/settings',
     icon: <Settings size={20} />,
+    roles: ['yard_manager'],
+  },
+  {
+    label: 'ประวัติการใช้งาน',
+    href: '/audit-trail',
+    icon: <ClipboardList size={20} />,
     roles: ['yard_manager'],
   },
 ];
