@@ -8,6 +8,8 @@ const JWT_SECRET = new TextEncoder().encode(
 // Routes that don't require authentication
 const PUBLIC_PATHS = [
   '/api/auth/login',
+  '/api/gate/eir',            // EIR API — public QR scan access
+  '/api/uploads/',            // Uploaded images (EIR photos)
   '/eir/',                    // Public EIR page (QR scan)
 ];
 
