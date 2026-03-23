@@ -381,6 +381,7 @@ export default function YardPage() {
                     <th className="px-4 py-3">สถานะ</th>
                     <th className="px-4 py-3">สินค้า</th>
                     <th className="px-4 py-3">เข้าลานเมื่อ</th>
+                    <th className="px-4 py-3">อยู่ในลาน</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -428,6 +429,17 @@ export default function YardPage() {
                               </span>
                             </div>
                           ) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {c.gate_in_date ? (() => {
+                            const days = Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000);
+                            const color = days <= 7
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                              : days <= 14
+                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                            return <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${color}`}>{days} วัน</span>;
+                          })() : '—'}
                         </td>
                       </tr>
                     );
