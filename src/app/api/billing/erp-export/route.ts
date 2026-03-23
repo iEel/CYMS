@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import getPool from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 // FR6.5 — ERP Integration: Export invoices as debit/credit entries
 export async function GET(req: NextRequest) {
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status') || 'paid';
 
   try {
-    const pool = await getPool();
+    const pool = await getDb();
     let query = `
       SELECT i.invoice_id, i.invoice_number, i.charge_type, i.description,
              i.quantity, i.unit_price, i.total_amount, i.vat_amount, i.grand_total,
