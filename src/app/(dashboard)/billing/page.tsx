@@ -38,7 +38,14 @@ const UNIT_LABELS: Record<string, string> = {
 
 export default function BillingPage() {
   const { session } = useAuth();
-  const [activeTab, setActiveTab] = useState<'invoices' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging'>('invoices');
+
+  // Credit Note Modal
+  const [cnModal, setCnModal] = useState<{ open: boolean; invoice: InvoiceRow | null }>({ open: false, invoice: null });
+  const [cnReason, setCnReason] = useState('');
+  const [cnAmount, setCnAmount] = useState(0);
+  const [cnLoading, setCnLoading] = useState(false);
+  const [cnResult, setCnResult] = useState<{ success: boolean; message: string } | null>(null);
   const yardId = session?.activeYardId || 1;
 
   // Invoices
@@ -210,19 +217,20 @@ export default function BillingPage() {
         ))}
       </div>
 
-      <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+      <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1 overflow-x-auto">
         {[
           { id: 'invoices' as const, label: 'ใบแจ้งหนี้', icon: <Receipt size={14} /> },
           { id: 'create' as const, label: 'สร้างบิล', icon: <Plus size={14} /> },
           { id: 'tariffs' as const, label: 'Tariff', icon: <Calculator size={14} /> },
           { id: 'hold' as const, label: 'Hold', icon: <Lock size={14} /> },
+          { id: 'ar_aging' as const, label: 'AR Aging', icon: <Users size={14} /> },
           { id: 'documents' as const, label: 'เอกสาร', icon: <Printer size={14} /> },
           { id: 'export' as const, label: 'ERP', icon: <FileDown size={14} /> },
           { id: 'reports' as const, label: 'รายงาน', icon: <BarChart3 size={14} /> },
           { id: 'demurrage' as const, label: 'Demurrage', icon: <AlertTriangle size={14} /> },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
               activeTab === tab.id ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}>
             {tab.icon} {tab.label}
@@ -285,6 +293,10 @@ export default function BillingPage() {
                         {/* Print: invoice for unpaid, receipt for paid */}
                         <button onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=${inv.status === 'paid' ? 'receipt' : 'invoice'}`, '_blank')}
                           className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-100 flex items-center gap-1"><Printer size={10} /> พิมพ์</button>
+                        {['issued', 'paid'].includes(inv.status) && (
+                          <button onClick={() => { setCnModal({ open: true, invoice: inv }); setCnAmount(inv.grand_total); setCnReason(''); setCnResult(null); }}
+                            className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 text-xs font-medium hover:bg-amber-100 flex items-center gap-1"><ArrowDownToLine size={10} /> ใบลดหนี้</button>
+                        )}
                         {['draft', 'issued'].includes(inv.status) && (
                           <button onClick={() => updateInvoice(inv.invoice_id, 'cancel')} className="px-1 py-1 text-slate-400 hover:text-red-500"><XCircle size={14} /></button>
                         )}
@@ -683,9 +695,98 @@ export default function BillingPage() {
       {/* =================== REPORTS TAB =================== */}
       {activeTab === 'reports' && <BillingReports yardId={yardId} />}
 
+      {/* =================== AR AGING TAB =================== */}
+      {activeTab === 'ar_aging' && <ARAgingTab yardId={yardId} />}
+
       {/* =================== DEMURRAGE TAB =================== */}
       {activeTab === 'demurrage' && (
         <DemurrageTab yardId={yardId} />
+      )}
+
+      {/* =================== CREDIT NOTE MODAL =================== */}
+      {cnModal.open && cnModal.invoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setCnModal({ open: false, invoice: null })}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg mx-4 animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-100 dark:border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600"><ArrowDownToLine size={20} /></div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 dark:text-white">ออกใบลดหนี้ (Credit Note)</h3>
+                  <p className="text-xs text-slate-400">อ้างอิง {cnModal.invoice.invoice_number} — ฿{cnModal.invoice.grand_total.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-slate-500">ลูกค้า</span><span className="font-medium text-slate-800 dark:text-white">{cnModal.invoice.customer_name}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">ประเภท</span><span>{CHARGE_LABELS[cnModal.invoice.charge_type] || cnModal.invoice.charge_type}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">ยอดบิลเดิม</span><span className="font-bold text-blue-600">฿{cnModal.invoice.grand_total.toLocaleString()}</span></div>
+              </div>
+              <div><label className={labelClass}>เหตุผลการลดหนี้ *</label>
+                <input type="text" value={cnReason} onChange={e => setCnReason(e.target.value)} className={inputClass} placeholder="เช่น คิดค่าบริการเกิน, คืนเงินมัดจำ..." />
+              </div>
+              <div><label className={labelClass}>ยอดลดหนี้ (฿) *</label>
+                <input type="number" min={0.01} max={cnModal.invoice.grand_total} step={0.01} value={cnAmount || ''}
+                  onChange={e => setCnAmount(Math.min(parseFloat(e.target.value) || 0, cnModal.invoice!.grand_total))}
+                  className={inputClass} />
+                <div className="flex gap-2 mt-1">
+                  <button onClick={() => setCnAmount(cnModal.invoice!.grand_total)} className="text-[10px] text-blue-500 hover:text-blue-700">เต็มจำนวน</button>
+                  <button onClick={() => setCnAmount(cnModal.invoice!.grand_total / 2)} className="text-[10px] text-blue-500 hover:text-blue-700">50%</button>
+                  <button onClick={() => setCnAmount(cnModal.invoice!.grand_total * 0.25)} className="text-[10px] text-blue-500 hover:text-blue-700">25%</button>
+                </div>
+              </div>
+              {cnAmount > 0 && (
+                <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 space-y-1 text-xs">
+                  <div className="flex justify-between"><span className="text-amber-700">ยอดลดหนี้ (ก่อน VAT)</span><span className="font-semibold">฿{(cnAmount / 1.07).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-amber-700">VAT 7%</span><span className="font-semibold">฿{(cnAmount - cnAmount / 1.07).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between border-t border-amber-200 pt-1"><span className="text-amber-800 font-bold">ยอดลดหนี้สุทธิ</span><span className="text-lg font-bold text-amber-800">-฿{cnAmount.toLocaleString()}</span></div>
+                  {Math.abs(cnAmount - cnModal.invoice.grand_total) < 0.01 && (
+                    <p className="text-[10px] text-rose-500 mt-1">⚠️ ลดเต็มจำนวน — บิลต้นฉบับจะถูกยกเลิกอัตโนมัติ</p>
+                  )}
+                </div>
+              )}
+              {cnResult && (
+                <div className={`p-3 rounded-xl text-sm ${cnResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                  {cnResult.message}
+                </div>
+              )}
+            </div>
+            <div className="p-5 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2">
+              <button onClick={() => setCnModal({ open: false, invoice: null })} className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200">ยกเลิก</button>
+              <button
+                disabled={cnLoading || !cnReason || cnAmount <= 0}
+                onClick={async () => {
+                  setCnLoading(true); setCnResult(null);
+                  try {
+                    const res = await fetch('/api/billing/invoices', {
+                      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        invoice_id: cnModal.invoice!.invoice_id,
+                        action: 'credit_note',
+                        ref_invoice_id: cnModal.invoice!.invoice_id,
+                        reason: cnReason,
+                        credit_amount: cnAmount,
+                        user_id: session?.userId,
+                        yard_id: yardId,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      setCnResult({ success: true, message: `✅ สร้างใบลดหนี้ ${data.cn_number} — ยอด -฿${cnAmount.toLocaleString()} อ้างอิง ${data.ref_invoice}` });
+                      fetchInvoices();
+                    } else {
+                      setCnResult({ success: false, message: `❌ ${data.error}` });
+                    }
+                  } catch { setCnResult({ success: false, message: '❌ เกิดข้อผิดพลาด' }); }
+                  finally { setCnLoading(false); }
+                }}
+                className="px-5 py-2.5 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {cnLoading ? <Loader2 size={14} className="animate-spin" /> : <ArrowDownToLine size={14} />} ออกใบลดหนี้
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -976,6 +1077,145 @@ function BillingReports({ yardId }: { yardId: number }) {
         </>
       )}
 
+    </div>
+  );
+}
+
+/* ===================== AR AGING TAB ===================== */
+interface ARCustomer {
+  customer_id: number;
+  customer_name: string;
+  customer_type: string;
+  current: number;
+  d30: number;
+  d60: number;
+  d90: number;
+  d90plus: number;
+  total: number;
+  invoice_count: number;
+  oldest_days: number;
+}
+
+function ARAgingTab({ yardId }: { yardId: number }) {
+  const [data, setData] = useState<{
+    summary: { current: number; d30: number; d60: number; d90: number; d90plus: number; total: number };
+    customers: ARCustomer[];
+    total_invoices: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/billing/ar-aging?yard_id=${yardId}`)
+      .then(r => r.json())
+      .then(d => { if (!d.error) setData(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [yardId]);
+
+  if (loading) return <div className="p-12 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>;
+  if (!data) return <div className="p-12 text-center text-sm text-slate-400">ไม่มีข้อมูล</div>;
+
+  const s = data.summary;
+  const buckets = [
+    { label: 'Current', sublabel: 'ยังไม่ครบกำหนด', value: s.current, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20', bar: 'bg-emerald-500' },
+    { label: '1-30 วัน', sublabel: 'ค้างชำระ', value: s.d30, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20', bar: 'bg-blue-500' },
+    { label: '31-60 วัน', sublabel: 'ค้างชำระ', value: s.d60, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20', bar: 'bg-amber-500' },
+    { label: '61-90 วัน', sublabel: 'ค้างนาน', value: s.d90, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', bar: 'bg-orange-500' },
+    { label: '90+ วัน', sublabel: 'เสี่ยงสูง', value: s.d90plus, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-900/20', bar: 'bg-rose-500' },
+  ];
+
+  const riskColor = (days: number) => days > 90 ? 'text-rose-600' : days > 60 ? 'text-orange-600' : days > 30 ? 'text-amber-600' : 'text-slate-600';
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+            <Users size={16} /> ยอดค้างชำระ (AR Aging) — {data.total_invoices} รายการ
+          </h3>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-slate-800 dark:text-white">฿{s.total.toLocaleString()}</p>
+            <p className="text-[10px] text-slate-400">ยอดค้างรวม</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {buckets.map((b, i) => (
+            <div key={i} className={`p-3 rounded-xl ${b.bg}`}>
+              <p className={`text-lg font-bold ${b.color}`}>฿{b.value.toLocaleString()}</p>
+              <p className="text-[10px] text-slate-500 font-medium">{b.label}</p>
+              <p className="text-[9px] text-slate-400">{b.sublabel}</p>
+            </div>
+          ))}
+        </div>
+        {/* Horizontal bar */}
+        {s.total > 0 && (
+          <div className="mt-4 flex h-3 rounded-full overflow-hidden">
+            {buckets.map((b, i) => {
+              const pct = (b.value / s.total) * 100;
+              if (pct === 0) return null;
+              return <div key={i} className={`${b.bar} transition-all`} style={{ width: `${pct}%` }} title={`${b.label}: ฿${b.value.toLocaleString()} (${pct.toFixed(1)}%)`} />;
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Customer Breakdown */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-white">แยกตามลูกค้า ({data.customers.length})</h3>
+        </div>
+        {data.customers.length === 0 ? (
+          <div className="p-8 text-center text-sm text-slate-400">ไม่มียอดค้างชำระ 🎉</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-900/30 text-slate-500">
+                <tr>
+                  <th className="text-left px-4 py-2.5">ลูกค้า</th>
+                  <th className="text-right px-3 py-2.5">Current</th>
+                  <th className="text-right px-3 py-2.5">1-30 วัน</th>
+                  <th className="text-right px-3 py-2.5">31-60 วัน</th>
+                  <th className="text-right px-3 py-2.5">61-90 วัน</th>
+                  <th className="text-right px-3 py-2.5">90+ วัน</th>
+                  <th className="text-right px-4 py-2.5">รวม</th>
+                  <th className="text-center px-3 py-2.5">บิล</th>
+                  <th className="text-center px-3 py-2.5">เก่าสุด</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {data.customers.map(c => (
+                  <tr key={c.customer_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-white">{c.customer_name}</td>
+                    <td className="px-3 py-2.5 text-right text-emerald-600">{c.current > 0 ? `฿${c.current.toLocaleString()}` : '-'}</td>
+                    <td className="px-3 py-2.5 text-right text-blue-600">{c.d30 > 0 ? `฿${c.d30.toLocaleString()}` : '-'}</td>
+                    <td className="px-3 py-2.5 text-right text-amber-600">{c.d60 > 0 ? `฿${c.d60.toLocaleString()}` : '-'}</td>
+                    <td className="px-3 py-2.5 text-right text-orange-600">{c.d90 > 0 ? `฿${c.d90.toLocaleString()}` : '-'}</td>
+                    <td className="px-3 py-2.5 text-right text-rose-600 font-semibold">{c.d90plus > 0 ? `฿${c.d90plus.toLocaleString()}` : '-'}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-slate-800 dark:text-white">฿{c.total.toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-center text-slate-500">{c.invoice_count}</td>
+                    <td className={`px-3 py-2.5 text-center font-medium ${riskColor(c.oldest_days)}`}>{c.oldest_days} วัน</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-slate-50 dark:bg-slate-900/30 font-bold text-xs">
+                <tr>
+                  <td className="px-4 py-2.5 text-slate-800 dark:text-white">รวมทั้งหมด</td>
+                  <td className="px-3 py-2.5 text-right text-emerald-600">฿{s.current.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right text-blue-600">฿{s.d30.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right text-amber-600">฿{s.d60.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right text-orange-600">฿{s.d90.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right text-rose-600">฿{s.d90plus.toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-right text-slate-800 dark:text-white">฿{s.total.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-center text-slate-500">{data.total_invoices}</td>
+                  <td className="px-3 py-2.5"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

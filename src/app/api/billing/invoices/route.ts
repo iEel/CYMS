@@ -146,10 +146,83 @@ export async function PUT(request: NextRequest) {
         await db.request().input('id', sql.Int, invoice_id)
           .query("UPDATE Invoices SET status = 'cancelled' WHERE invoice_id = @id");
         break;
-      case 'credit_note':
-        await db.request().input('id', sql.Int, invoice_id)
-          .query("UPDATE Invoices SET status = 'credit_note' WHERE invoice_id = @id");
-        break;
+      case 'credit_note': {
+        // Full credit note workflow: create a new CN invoice referencing the original
+        const { reason, credit_amount, ref_invoice_id } = body;
+        const refId = ref_invoice_id || invoice_id;
+
+        // Fetch original invoice
+        const origInv = await db.request()
+          .input('refId', sql.Int, refId)
+          .query('SELECT * FROM Invoices WHERE invoice_id = @refId');
+        
+        if (!origInv.recordset[0]) {
+          return NextResponse.json({ error: 'ไม่พบใบแจ้งหนี้ต้นฉบับ' }, { status: 404 });
+        }
+
+        const orig = origInv.recordset[0];
+        const creditAmt = credit_amount || orig.grand_total;
+
+        // Validate credit amount
+        if (creditAmt > orig.grand_total) {
+          return NextResponse.json({ error: 'ยอดลดหนี้เกินยอดบิลต้นฉบับ' }, { status: 400 });
+        }
+
+        // Generate CN number
+        const cnCount = await db.request()
+          .input('yardId', sql.Int, orig.yard_id)
+          .query("SELECT COUNT(*) as cnt FROM Invoices WHERE yard_id = @yardId AND invoice_number LIKE 'CN-%'");
+        const cnNumber = `CN-${new Date().getFullYear()}-${String(cnCount.recordset[0].cnt + 1).padStart(6, '0')}`;
+
+        // Calculate proportional VAT
+        const creditBeforeVat = creditAmt / 1.07;
+        const creditVat = creditAmt - creditBeforeVat;
+
+        // Create credit note invoice (negative amounts)
+        const cnResult = await db.request()
+          .input('cnNumber', sql.NVarChar, cnNumber)
+          .input('yardId', sql.Int, orig.yard_id)
+          .input('customerId', sql.Int, orig.customer_id)
+          .input('containerId', sql.Int, orig.container_id || null)
+          .input('chargeType', sql.NVarChar, orig.charge_type)
+          .input('description', sql.NVarChar, `ใบลดหนี้ อ้างอิง ${orig.invoice_number}${reason ? ' — ' + reason : ''}`)
+          .input('quantity', sql.Decimal(10, 2), 1)
+          .input('unitPrice', sql.Decimal(12, 2), -creditBeforeVat)
+          .input('totalAmount', sql.Decimal(12, 2), -creditBeforeVat)
+          .input('vatAmount', sql.Decimal(12, 2), -creditVat)
+          .input('grandTotal', sql.Decimal(12, 2), -creditAmt)
+          .input('notes', sql.NVarChar, `อ้างอิง: ${orig.invoice_number} | เหตุผล: ${reason || '-'}`)
+          .query(`
+            INSERT INTO Invoices (invoice_number, yard_id, customer_id, container_id,
+              charge_type, description, quantity, unit_price, total_amount,
+              vat_amount, grand_total, status, notes)
+            OUTPUT INSERTED.*
+            VALUES (@cnNumber, @yardId, @customerId, @containerId,
+              @chargeType, @description, @quantity, @unitPrice, @totalAmount,
+              @vatAmount, @grandTotal, 'credit_note', @notes)
+          `);
+
+        // If full credit, cancel original invoice
+        if (Math.abs(creditAmt - orig.grand_total) < 0.01) {
+          await db.request()
+            .input('origId', sql.Int, refId)
+            .query("UPDATE Invoices SET status = 'cancelled', notes = ISNULL(notes, '') + ' [ยกเลิกโดยใบลดหนี้ " + cnNumber + "]' WHERE invoice_id = @origId");
+        }
+
+        // Audit log
+        await logAudit({
+          userId: body.user_id, yardId: orig.yard_id,
+          action: 'credit_note_create', entityType: 'invoice', entityId: cnResult.recordset[0].invoice_id,
+          details: { cn_number: cnNumber, ref_invoice: orig.invoice_number, credit_amount: creditAmt, reason }
+        });
+
+        return NextResponse.json({
+          success: true,
+          credit_note: cnResult.recordset[0],
+          cn_number: cnNumber,
+          ref_invoice: orig.invoice_number,
+        });
+      }
       case 'hold':
         // Put billing hold on container — only if still in yard
         const inv2 = await db.request().input('id3', sql.Int, invoice_id)

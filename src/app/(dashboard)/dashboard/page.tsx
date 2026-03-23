@@ -105,24 +105,45 @@ interface DashboardData {
     revenueTrend: Array<{ date: string; revenue: number }>;
     byShippingLine: Array<{ name: string; value: number }>;
     dwellDistribution: Array<{ name: string; value: number; color: string }>;
+    rangeLabel?: string;
   };
 }
+
+type RangeKey = '7d' | '30d' | '90d';
 
 export default function DashboardPage() {
   const { session } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [chartRange, setChartRange] = useState<RangeKey>('7d');
+  const [chartsLoading, setChartsLoading] = useState(false);
 
-  const fetchDashboard = useCallback(async () => {
+  const fetchDashboard = useCallback(async (range?: RangeKey) => {
     try {
       const yardId = session?.activeYardId || 1;
-      const res = await fetch(`/api/dashboard?yard_id=${yardId}`);
+      const r = range || chartRange;
+      const res = await fetch(`/api/dashboard?yard_id=${yardId}&range=${r}`);
       const json = await res.json();
       if (!json.error) setData(json);
     } catch (e) {
       console.error('Dashboard fetch failed:', e);
     } finally {
       setLoading(false);
+    }
+  }, [session?.activeYardId, chartRange]);
+
+  const handleRangeChange = useCallback(async (range: RangeKey) => {
+    setChartRange(range);
+    setChartsLoading(true);
+    try {
+      const yardId = session?.activeYardId || 1;
+      const res = await fetch(`/api/dashboard?yard_id=${yardId}&range=${range}`);
+      const json = await res.json();
+      if (!json.error) setData(json);
+    } catch (e) {
+      console.error('Dashboard fetch failed:', e);
+    } finally {
+      setChartsLoading(false);
     }
   }, [session?.activeYardId]);
 
@@ -271,7 +292,14 @@ export default function DashboardPage() {
           </div>
 
           {/* Charts Section */}
-          {data?.charts && <DashboardCharts charts={data.charts} />}
+          {data?.charts && (
+            <DashboardCharts
+              charts={data.charts}
+              activeRange={chartRange}
+              onRangeChange={handleRangeChange}
+              loading={chartsLoading}
+            />
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Quick Actions */}

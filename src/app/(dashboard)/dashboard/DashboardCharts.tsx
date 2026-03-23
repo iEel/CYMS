@@ -23,7 +23,16 @@ interface ChartsData {
   revenueTrend: Array<{ date: string; revenue: number }>;
   byShippingLine: Array<{ name: string; value: number }>;
   dwellDistribution: Array<{ name: string; value: number; color: string }>;
+  rangeLabel?: string;
 }
+
+type RangeKey = '7d' | '30d' | '90d';
+
+const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
+  { key: '7d', label: '7 วัน' },
+  { key: '30d', label: '30 วัน' },
+  { key: '90d', label: '3 เดือน' },
+];
 
 const PIE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
@@ -43,15 +52,45 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
   );
 };
 
-export default function DashboardCharts({ charts }: { charts: ChartsData }) {
+export default function DashboardCharts({ charts, activeRange, onRangeChange, loading }: {
+  charts: ChartsData;
+  activeRange: RangeKey;
+  onRangeChange: (range: RangeKey) => void;
+  loading?: boolean;
+}) {
   const totalDwell = charts.dwellDistribution.reduce((s, d) => s + d.value, 0);
+  const rangeLabel = charts.rangeLabel || '7 วัน';
 
   return (
+    <div className="space-y-4">
+      {/* Range Toggle */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+          📈 แนวโน้มการทำงาน
+          {loading && <span className="inline-block w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />}
+        </h2>
+        <div className="flex items-center bg-slate-100 dark:bg-slate-700 rounded-lg p-0.5">
+          {RANGE_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => onRangeChange(opt.key)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                activeRange === opt.key
+                  ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Gate Activity — Bar Chart */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
         <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-4">
-          📊 Gate Activity (7 วัน)
+          📊 Gate Activity ({rangeLabel})
         </h3>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={charts.gateActivity} barGap={4}>
@@ -72,7 +111,7 @@ export default function DashboardCharts({ charts }: { charts: ChartsData }) {
       {/* Revenue Trend — Area Chart */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
         <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-4">
-          💰 Revenue Trend (7 วัน)
+          💰 Revenue Trend ({rangeLabel})
         </h3>
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={charts.revenueTrend}>
@@ -146,6 +185,7 @@ export default function DashboardCharts({ charts }: { charts: ChartsData }) {
           })}
         </div>
         <p className="text-xs text-slate-400 mt-3 text-right">รวม {totalDwell} ตู้ในลาน</p>
+      </div>
       </div>
     </div>
   );

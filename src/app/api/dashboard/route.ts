@@ -6,6 +6,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const yardId = parseInt(searchParams.get('yard_id') || '1');
+    const range = searchParams.get('range') || '7d'; // 7d | 30d | 90d
+    const rangeDays = range === '90d' ? 90 : range === '30d' ? 30 : 7;
 
     const db = await getDb();
 
@@ -131,31 +133,33 @@ export async function GET(request: NextRequest) {
         ORDER BY a.created_at DESC
       `);
 
-    // ===== 4. Charts Data =====
+    // ===== 4. Charts Data (range-aware) =====
 
-    // Gate Activity (7 days)
+    // Gate Activity
     const gateActivity = await db.request()
       .input('yardId', sql.Int, yardId)
+      .input('rangeDays', sql.Int, rangeDays - 1)
       .query(`
         SELECT 
           CAST(created_at AS DATE) as date,
           COUNT(CASE WHEN transaction_type = 'gate_in' THEN 1 END) as gate_in,
           COUNT(CASE WHEN transaction_type = 'gate_out' THEN 1 END) as gate_out
         FROM GateTransactions 
-        WHERE yard_id = @yardId AND created_at >= DATEADD(DAY, -6, CAST(GETDATE() AS DATE))
+        WHERE yard_id = @yardId AND created_at >= DATEADD(DAY, -@rangeDays, CAST(GETDATE() AS DATE))
         GROUP BY CAST(created_at AS DATE)
         ORDER BY date
       `);
 
-    // Revenue Trend (7 days)
+    // Revenue Trend
     const revenueTrend = await db.request()
       .input('yardId', sql.Int, yardId)
+      .input('rangeDays', sql.Int, rangeDays - 1)
       .query(`
         SELECT 
           CAST(paid_at AS DATE) as date,
           ISNULL(SUM(grand_total), 0) as revenue
         FROM Invoices 
-        WHERE yard_id = @yardId AND status = 'paid' AND paid_at >= DATEADD(DAY, -6, CAST(GETDATE() AS DATE))
+        WHERE yard_id = @yardId AND status = 'paid' AND paid_at >= DATEADD(DAY, -@rangeDays, CAST(GETDATE() AS DATE))
         GROUP BY CAST(paid_at AS DATE)
         ORDER BY date
       `);
@@ -181,28 +185,74 @@ export async function GET(request: NextRequest) {
         FROM Containers WHERE yard_id = @yardId AND status = 'in_yard' AND gate_in_date IS NOT NULL
       `);
 
-    // Fill 7-day series for gate activity and revenue
-    const days7: string[] = [];
-    for (let i = 6; i >= 0; i--) {
+    // Build date series based on range
+    const dateSeries: string[] = [];
+    for (let i = rangeDays - 1; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
-      days7.push(d.toISOString().slice(0, 10));
+      dateSeries.push(d.toISOString().slice(0, 10));
     }
 
-    const gateChartData = days7.map(date => {
-      const row = gateActivity.recordset.find((r: Record<string, unknown>) => 
-        new Date(r.date as string).toISOString().slice(0, 10) === date
-      );
-      const dayLabel = new Date(date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' });
-      return { date: dayLabel, gate_in: row?.gate_in || 0, gate_out: row?.gate_out || 0 };
-    });
+    // For 30d/90d: aggregate by week to keep charts readable
+    const useWeekly = rangeDays >= 30;
 
-    const revenueChartData = days7.map(date => {
-      const row = revenueTrend.recordset.find((r: Record<string, unknown>) => 
-        new Date(r.date as string).toISOString().slice(0, 10) === date
-      );
-      const dayLabel = new Date(date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' });
-      return { date: dayLabel, revenue: row?.revenue || 0 };
-    });
+    let gateChartData: Array<{ date: string; gate_in: number; gate_out: number }>;
+    let revenueChartData: Array<{ date: string; revenue: number }>;
+
+    if (useWeekly) {
+      // Group dates into weekly buckets
+      const weekSize = rangeDays >= 90 ? 7 : 7; // always 7-day buckets
+      const weekCount = Math.ceil(rangeDays / weekSize);
+      gateChartData = [];
+      revenueChartData = [];
+
+      for (let w = 0; w < weekCount; w++) {
+        const startIdx = w * weekSize;
+        const endIdx = Math.min(startIdx + weekSize, dateSeries.length);
+        const weekDates = dateSeries.slice(startIdx, endIdx);
+        if (weekDates.length === 0) continue;
+
+        let gIn = 0, gOut = 0, rev = 0;
+        weekDates.forEach(date => {
+          const gRow = gateActivity.recordset.find((r: Record<string, unknown>) =>
+            new Date(r.date as string).toISOString().slice(0, 10) === date
+          );
+          if (gRow) { gIn += gRow.gate_in || 0; gOut += gRow.gate_out || 0; }
+
+          const rRow = revenueTrend.recordset.find((r: Record<string, unknown>) =>
+            new Date(r.date as string).toISOString().slice(0, 10) === date
+          );
+          if (rRow) { rev += rRow.revenue || 0; }
+        });
+
+        // Label: "1-7 มี.ค." style
+        const startDate = new Date(weekDates[0]);
+        const endDate = new Date(weekDates[weekDates.length - 1]);
+        const startDay = startDate.getDate();
+        const endDay = endDate.getDate();
+        const monthLabel = endDate.toLocaleDateString('th-TH', { month: 'short' });
+        const weekLabel = startDay === endDay ? `${startDay} ${monthLabel}` : `${startDay}-${endDay} ${monthLabel}`;
+
+        gateChartData.push({ date: weekLabel, gate_in: gIn, gate_out: gOut });
+        revenueChartData.push({ date: weekLabel, revenue: rev });
+      }
+    } else {
+      // Daily view (7d)
+      gateChartData = dateSeries.map(date => {
+        const row = gateActivity.recordset.find((r: Record<string, unknown>) =>
+          new Date(r.date as string).toISOString().slice(0, 10) === date
+        );
+        const dayLabel = new Date(date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' });
+        return { date: dayLabel, gate_in: row?.gate_in || 0, gate_out: row?.gate_out || 0 };
+      });
+
+      revenueChartData = dateSeries.map(date => {
+        const row = revenueTrend.recordset.find((r: Record<string, unknown>) =>
+          new Date(r.date as string).toISOString().slice(0, 10) === date
+        );
+        const dayLabel = new Date(date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' });
+        return { date: dayLabel, revenue: row?.revenue || 0 };
+      });
+    }
 
     const dwell = dwellDist.recordset[0] || {};
     const dwellChartData = [
@@ -211,6 +261,9 @@ export async function GET(request: NextRequest) {
       { name: '15-30 วัน', value: dwell.d30 || 0, color: '#F97316' },
       { name: '>30 วัน', value: dwell.d30plus || 0, color: '#EF4444' },
     ];
+
+    // Range label for frontend
+    const rangeLabel = rangeDays >= 90 ? '3 เดือน' : rangeDays >= 30 ? '30 วัน' : '7 วัน';
 
     // ===== Build Response =====
     const todayTotal = containerCount.recordset[0].total || 0;
@@ -245,6 +298,7 @@ export async function GET(request: NextRequest) {
         revenueTrend: revenueChartData,
         byShippingLine: byShippingLine.recordset,
         dwellDistribution: dwellChartData,
+        rangeLabel,
       },
     });
   } catch (error) {
