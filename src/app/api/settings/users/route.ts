@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import bcrypt from 'bcryptjs';
+import { logAudit } from '@/lib/audit';
 
 // GET — ดึงรายชื่อผู้ใช้ทั้งหมด
 export async function GET() {
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await logAudit({ userId: body.created_by, action: 'user_create', entityType: 'user', entityId: userId, details: { username: body.username, full_name: body.full_name, role_code: body.role_code } });
     return NextResponse.json({ success: true, userId });
   } catch (error: unknown) {
     console.error('❌ POST user error:', error);
@@ -138,6 +140,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    await logAudit({ userId: body.updated_by, action: 'user_update', entityType: 'user', entityId: body.user_id, details: { full_name: body.full_name, role_code: body.role_code, status: body.status } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT user error:', error);

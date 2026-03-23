@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // GET — ดึง zones ตาม yard_id
 export async function GET(request: NextRequest) {
@@ -48,7 +49,9 @@ export async function POST(request: NextRequest) {
         VALUES (@yardId, @zoneName, @zoneType, @maxTier, @maxBay, @maxRow, @maxWeightKg, @sizeRestriction, @hasReeferPlugs)
       `);
 
-    return NextResponse.json({ success: true, data: result.recordset[0] });
+    const created = result.recordset[0];
+    await logAudit({ yardId: body.yard_id, action: 'zone_create', entityType: 'zone', entityId: created.zone_id, details: { zone_name: body.zone_name, zone_type: body.zone_type } });
+    return NextResponse.json({ success: true, data: created });
   } catch (error) {
     console.error('❌ POST zone error:', error);
     return NextResponse.json({ error: 'ไม่สามารถเพิ่มโซนได้' }, { status: 500 });
@@ -80,7 +83,7 @@ export async function PUT(request: NextRequest) {
           is_active = @isActive
         WHERE zone_id = @zoneId
       `);
-
+    await logAudit({ action: 'zone_update', entityType: 'zone', entityId: body.zone_id, details: { zone_name: body.zone_name, zone_type: body.zone_type } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT zone error:', error);
@@ -109,7 +112,7 @@ export async function DELETE(request: NextRequest) {
     await db.request()
       .input('zoneId', sql.Int, parseInt(zoneId))
       .query('DELETE FROM YardZones WHERE zone_id = @zoneId');
-
+    await logAudit({ action: 'zone_delete', entityType: 'zone', entityId: parseInt(zoneId) });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ DELETE zone error:', error);

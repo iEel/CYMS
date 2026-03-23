@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
 
 // Auto-migrate: add branch + shipping_line_code columns if missing
 async function ensureColumns(pool: Awaited<ReturnType<typeof getDb>>) {
@@ -64,7 +65,9 @@ export async function POST(req: NextRequest) {
         OUTPUT INSERTED.*
         VALUES (@customer_name, @customer_type, @tax_id, @address, @contact_name, @contact_phone, @contact_email, @credit_term, @branch_type, @branch_number, @shipping_line_code)
       `);
-    return NextResponse.json({ success: true, data: result.recordset[0] });
+    const created = result.recordset[0];
+    await logAudit({ userId: body.user_id, yardId: body.yard_id, action: 'customer_create', entityType: 'customer', entityId: created.customer_id, details: { customer_name, customer_type } });
+    return NextResponse.json({ success: true, data: created });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -105,6 +108,7 @@ export async function PUT(req: NextRequest) {
             is_active = @is_active, updated_at = GETDATE()
         WHERE customer_id = @customer_id
       `);
+    await logAudit({ userId: body.user_id, yardId: body.yard_id, action: 'customer_update', entityType: 'customer', entityId: customer_id, details: { customer_name } });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -129,6 +133,7 @@ export async function DELETE(req: NextRequest) {
     }
     await pool.request().input('id', customer_id)
       .query('DELETE FROM Customers WHERE customer_id = @id');
+    await logAudit({ action: 'customer_delete', entityType: 'customer', entityId: parseInt(customer_id), details: { customer_id } });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';

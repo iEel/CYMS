@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // GET — ดึง Work Orders
 export async function GET(request: NextRequest) {
@@ -95,7 +96,15 @@ export async function POST(request: NextRequest) {
           CASE WHEN @assignedTo IS NOT NULL THEN 'assigned' ELSE 'pending' END)
       `);
 
-    return NextResponse.json({ success: true, order: result.recordset[0] });
+    // Audit log
+    const created = result.recordset[0];
+    await logAudit({
+      userId: body.user_id, yardId: body.yard_id,
+      action: 'wo_create', entityType: 'work_order', entityId: created.order_id,
+      details: { order_type: body.order_type, container_id: body.container_id, to_zone_id: body.to_zone_id, priority: body.priority, notes: body.notes }
+    });
+
+    return NextResponse.json({ success: true, order: created });
   } catch (error) {
     console.error('❌ POST operations error:', error);
     return NextResponse.json({ error: 'ไม่สามารถสร้างงานได้' }, { status: 500 });
@@ -180,6 +189,14 @@ export async function PUT(request: NextRequest) {
     if (updateQuery) {
       await req.query(updateQuery);
     }
+
+    // Audit log
+    const auditAction = action === 'accept' ? 'wo_accept' : action === 'complete' ? 'wo_complete' : action === 'cancel' ? 'wo_cancel' : `wo_${action}`;
+    await logAudit({
+      userId: body.user_id, yardId: body.yard_id,
+      action: auditAction, entityType: 'work_order', entityId: order_id,
+      details: { action, order_id, ...(body.to_zone_id ? { to_zone_id: body.to_zone_id, to_bay: body.to_bay, to_row: body.to_row, to_tier: body.to_tier } : {}) }
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

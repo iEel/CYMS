@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // Auto-migrate: add branch columns if missing
 async function ensureBranchColumns(db: Awaited<ReturnType<typeof getDb>>) {
@@ -58,7 +59,9 @@ export async function POST(request: NextRequest) {
         VALUES (@yardName, @yardCode, @address, @latitude, @longitude, @geofenceRadius, @branchType, @branchNumber)
       `);
 
-    return NextResponse.json({ success: true, data: result.recordset[0] });
+    const created = result.recordset[0];
+    await logAudit({ action: 'yard_create', entityType: 'yard', entityId: created.yard_id, details: { yard_name: body.yard_name, yard_code: body.yard_code } });
+    return NextResponse.json({ success: true, data: created });
   } catch (error: unknown) {
     console.error('❌ POST yard error:', error);
     const msg = error instanceof Error && error.message.includes('UNIQUE')
@@ -93,6 +96,7 @@ export async function PUT(request: NextRequest) {
         WHERE yard_id = @yardId
       `);
 
+    await logAudit({ yardId: body.yard_id, action: 'yard_update', entityType: 'yard', entityId: body.yard_id, details: { yard_name: body.yard_name, yard_code: body.yard_code } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT yard error:', error);
@@ -127,7 +131,7 @@ export async function DELETE(request: NextRequest) {
     await db.request()
       .input('yardId', sql.Int, parseInt(yardId))
       .query('DELETE FROM Yards WHERE yard_id = @yardId');
-
+    await logAudit({ yardId: parseInt(yardId), action: 'yard_delete', entityType: 'yard', entityId: parseInt(yardId) });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ DELETE yard error:', error);

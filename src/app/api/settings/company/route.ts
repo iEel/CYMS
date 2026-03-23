@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // Auto-migrate: add branch columns if missing
 async function ensureBranchColumns(db: Awaited<ReturnType<typeof getDb>>) {
@@ -86,6 +87,7 @@ export async function POST(request: NextRequest) {
              ISNULL(branch_number, '00000') as branch_number
       FROM CompanyProfile
     `);
+    await logAudit({ action: 'company_update', entityType: 'company', entityId: result.recordset[0]?.company_id, details: { company_name: body.company_name } });
     return NextResponse.json({ success: true, data: result.recordset[0] });
   } catch (error) {
     console.error('❌ POST company error:', error);

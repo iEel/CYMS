@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // Auto-migrate
 async function ensureTable(pool: Awaited<ReturnType<typeof getDb>>) {
@@ -77,7 +78,9 @@ export async function POST(req: NextRequest) {
         VALUES (@prefix_code, @customer_id, @notes)
       `);
 
-    return NextResponse.json({ success: true, data: result.recordset[0] });
+    const created = result.recordset[0];
+    await logAudit({ action: 'prefix_create', entityType: 'prefix_mapping', entityId: created.prefix_id, details: { prefix_code: code, customer_id } });
+    return NextResponse.json({ success: true, data: created });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -97,7 +100,7 @@ export async function DELETE(req: NextRequest) {
     await pool.request()
       .input('id', sql.Int, parseInt(prefixId))
       .query('DELETE FROM PrefixMapping WHERE prefix_id = @id');
-
+    await logAudit({ action: 'prefix_delete', entityType: 'prefix_mapping', entityId: parseInt(prefixId) });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

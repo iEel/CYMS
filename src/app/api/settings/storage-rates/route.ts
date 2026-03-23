@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/settings/storage-rates?yard_id=1
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
         `);
     }
 
+    await logAudit({ yardId: yard_id, action: 'storage_rates_update', entityType: 'storage_rate', details: { yard_id, tier_count: tiers.length } });
     return NextResponse.json({ success: true, message: `บันทึก ${tiers.length} ขั้นอัตราสำเร็จ` });
   } catch (error) {
     console.error('❌ POST storage-rates error:', error);

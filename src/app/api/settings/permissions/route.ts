@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // GET — ดึง Permissions ทั้งหมด + RolePermissions matrix
 export async function GET() {
@@ -63,6 +64,7 @@ export async function PUT(request: NextRequest) {
         .query('DELETE FROM RolePermissions WHERE role_id = @roleId AND permission_id = @permId');
     }
 
+    await logAudit({ action: 'permission_update', entityType: 'permission', details: { role_id, permission_id, granted } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT permission error:', error);

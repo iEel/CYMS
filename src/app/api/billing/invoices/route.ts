@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // GET — ดึง Invoices
 export async function GET(request: NextRequest) {
@@ -102,7 +103,15 @@ export async function POST(request: NextRequest) {
           @vatAmount, @grandTotal, @dueDate, @notes)
       `);
 
-    return NextResponse.json({ success: true, invoice: result.recordset[0], invoice_number: invNumber });
+    // Audit log
+    const inv = result.recordset[0];
+    await logAudit({
+      userId: body.user_id, yardId: body.yard_id,
+      action: 'invoice_create', entityType: 'invoice', entityId: inv.invoice_id,
+      details: { invoice_number: invNumber, customer_id: body.customer_id, charge_type: body.charge_type, grand_total: grandTotal, container_id: body.container_id }
+    });
+
+    return NextResponse.json({ success: true, invoice: inv, invoice_number: invNumber });
   } catch (error) {
     console.error('❌ POST invoice error:', error);
     return NextResponse.json({ error: 'ไม่สามารถสร้างใบแจ้งหนี้ได้' }, { status: 500 });
@@ -159,6 +168,13 @@ export async function PUT(request: NextRequest) {
         }
         break;
     }
+
+    // Audit log
+    await logAudit({
+      userId: body.user_id, yardId: body.yard_id,
+      action: `invoice_${action}`, entityType: 'invoice', entityId: invoice_id,
+      details: { action, invoice_id }
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
