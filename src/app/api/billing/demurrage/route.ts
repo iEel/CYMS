@@ -32,10 +32,8 @@ export async function GET(request: NextRequest) {
                  dr.rate_20, dr.rate_40, dr.rate_45,
                  dr.charge_type as demurrage_type
           FROM Containers c
-          LEFT JOIN DemurrageRates dr ON dr.yard_id = c.yard_id AND dr.is_active = 1 AND dr.charge_type = 'demurrage'
-            AND (dr.customer_id IS NULL OR dr.customer_id IN (
-              SELECT pm2.customer_id FROM PrefixMapping pm2 WHERE pm2.prefix_code = LEFT(c.container_number, 4)
-            ))
+          LEFT JOIN DemurrageRates dr ON dr.yard_id = c.yard_id AND dr.is_active = 1 
+            AND dr.charge_type = 'demurrage' AND dr.customer_id IS NULL
           WHERE c.yard_id = @yardId AND c.status = 'in_yard' AND c.gate_in_date IS NOT NULL
           ORDER BY dwell_days DESC
         `);
