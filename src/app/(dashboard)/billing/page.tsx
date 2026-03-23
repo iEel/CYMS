@@ -256,7 +256,7 @@ export default function BillingPage() {
                           <span>{inv.customer_name || 'ไม่ระบุ'}</span>
                           <span>• {CHARGE_LABELS[inv.charge_type] || inv.charge_type}</span>
                           {inv.container_number && <span>• 🏷️ {inv.container_number}</span>}
-                          <span>• {formatDate(inv.created_at)}</span>
+                          <span>• {formatDateTime(inv.created_at)}</span>
                         </div>
                       </div>
                     </div>
