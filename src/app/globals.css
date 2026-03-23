@@ -267,13 +267,18 @@ input:focus, select:focus, textarea:focus {
   }
 
   /* Remove layout margin/padding from dashboard wrapper */
-  body > * > div[style*="marginLeft"] {
+  body > * > div {
     margin-left: 0 !important;
   }
 
   main {
     padding: 0 !important;
     margin: 0 !important;
+  }
+
+  /* Reset min-height to avoid extra blank space */
+  .min-h-screen {
+    min-height: auto !important;
   }
 
   /* Ensure colors print */
