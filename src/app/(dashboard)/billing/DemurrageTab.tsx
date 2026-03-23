@@ -69,6 +69,10 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const perPage = 25;
+
   const fetchOverview = useCallback(async () => {
     setLoading(true);
     try {
@@ -156,6 +160,12 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
     if (search && !c.container_number.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  // Reset page on filter/search change
+  useEffect(() => { setCurrentPage(1); }, [filter, search]);
+
+  const totalPages = Math.ceil(filteredContainers.length / perPage);
+  const paginated = filteredContainers.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   const RISK_BADGE: Record<string, { bg: string; text: string; label: string }> = {
     exceeded: { bg: 'bg-rose-100 dark:bg-rose-900/20', text: 'text-rose-700', label: '🔴 เกินกำหนด' },
@@ -336,7 +346,7 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
         <div className="text-center py-12 text-slate-400 text-sm">ไม่พบตู้</div>
       ) : (
         <div className="space-y-2">
-          {filteredContainers.map(c => {
+          {paginated.map(c => {
             const badge = RISK_BADGE[c.risk_level] || RISK_BADGE.safe;
             const isCalcOpen = calcId === c.container_id;
             return (
@@ -413,6 +423,43 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+          <span className="text-xs text-slate-400">
+            แสดง {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, filteredContainers.length)} จาก {filteredContainers.length} ตู้
+          </span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1}
+              className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">«</button>
+            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+              className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">‹</button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let page: number;
+              if (totalPages <= 5) {
+                page = i + 1;
+              } else if (currentPage <= 3) {
+                page = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                page = totalPages - 4 + i;
+              } else {
+                page = currentPage - 2 + i;
+              }
+              return (
+                <button key={page} onClick={() => setCurrentPage(page)}
+                  className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                    page === currentPage ? 'bg-blue-500 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}>{page}</button>
+              );
+            })}
+            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+              className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">›</button>
+            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}
+              className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">»</button>
+          </div>
         </div>
       )}
 
