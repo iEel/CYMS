@@ -62,6 +62,13 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
   const [calcResult, setCalcResult] = useState<any>(null);
   const [calcLoading, setCalcLoading] = useState(false);
 
+  // Rate editing
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ free_days: 0, rate_20: 0, rate_40: 0, rate_45: 0, description: '' });
+  const [addForm, setAddForm] = useState({ charge_type: 'demurrage', free_days: 7, rate_20: 0, rate_40: 0, rate_45: 0, description: '' });
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const fetchOverview = useCallback(async () => {
     setLoading(true);
     try {
@@ -94,6 +101,56 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
     finally { setCalcLoading(false); }
   };
 
+  const startEdit = (rate: DemurrageRate) => {
+    setEditingId(rate.demurrage_id);
+    setEditForm({ free_days: rate.free_days, rate_20: rate.rate_20, rate_40: rate.rate_40, rate_45: rate.rate_45, description: rate.description });
+  };
+
+  const saveRate = async () => {
+    if (!editingId) return;
+    setSaving(true);
+    try {
+      await fetch('/api/billing/demurrage', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ demurrage_id: editingId, ...editForm }),
+      });
+      setEditingId(null);
+      fetchRates();
+      fetchOverview();
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
+  };
+
+  const addRate = async () => {
+    setSaving(true);
+    try {
+      await fetch('/api/billing/demurrage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yard_id: yardId, ...addForm }),
+      });
+      setShowAddForm(false);
+      setAddForm({ charge_type: 'demurrage', free_days: 7, rate_20: 0, rate_40: 0, rate_45: 0, description: '' });
+      fetchRates();
+      fetchOverview();
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
+  };
+
+  const deleteRate = async (id: number) => {
+    if (!confirm('ต้องการลบ rate นี้?')) return;
+    try {
+      await fetch('/api/billing/demurrage', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ demurrage_id: id, action: 'delete' }),
+      });
+      fetchRates();
+      fetchOverview();
+    } catch (e) { console.error(e); }
+  };
+
   const filteredContainers = containers.filter(c => {
     if (filter !== 'all' && c.risk_level !== filter) return false;
     if (search && !c.container_number.toLowerCase().includes(search.toLowerCase())) return false;
@@ -107,6 +164,8 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
   };
 
   const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) : '-';
+
+  const inputSm = "h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-right w-20 font-mono";
 
   return (
     <div className="space-y-4">
@@ -150,12 +209,63 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
         </button>
       </div>
 
-      {/* Rates Config */}
+      {/* Rates Config — Editable */}
       {showRates && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-3">⚙️ Demurrage / Detention Rates</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-white">⚙️ Demurrage / Detention Rates</h3>
+            <button onClick={() => setShowAddForm(!showAddForm)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 text-xs font-medium hover:bg-emerald-100">
+              + เพิ่ม Rate
+            </button>
+          </div>
+
+          {/* Add New Rate Form */}
+          {showAddForm && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-200 dark:border-blue-800 space-y-2">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">➕ เพิ่ม Rate ใหม่</p>
+              <div className="grid grid-cols-2 md:grid-cols-7 gap-2 items-end">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">ประเภท</label>
+                  <select value={addForm.charge_type} onChange={e => setAddForm({...addForm, charge_type: e.target.value})}
+                    className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs w-full">
+                    <option value="demurrage">Demurrage</option>
+                    <option value="detention">Detention</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] text-slate-400 block mb-0.5">คำอธิบาย</label>
+                  <input type="text" value={addForm.description} onChange={e => setAddForm({...addForm, description: e.target.value})}
+                    className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs w-full" placeholder="เช่น Demurrage สายเรือ A" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">Free Days</label>
+                  <input type="number" value={addForm.free_days} onChange={e => setAddForm({...addForm, free_days: +e.target.value})} className={inputSm} />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">20&apos; ฿/วัน</label>
+                  <input type="number" value={addForm.rate_20} onChange={e => setAddForm({...addForm, rate_20: +e.target.value})} className={inputSm} />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">40&apos; ฿/วัน</label>
+                  <input type="number" value={addForm.rate_40} onChange={e => setAddForm({...addForm, rate_40: +e.target.value})} className={inputSm} />
+                </div>
+                <div className="flex gap-1">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-slate-400 block mb-0.5">45&apos;</label>
+                    <input type="number" value={addForm.rate_45} onChange={e => setAddForm({...addForm, rate_45: +e.target.value})} className={inputSm} />
+                  </div>
+                  <button onClick={addRate} disabled={saving}
+                    className="self-end h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50">
+                    {saving ? '...' : '✓ บันทึก'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {rates.length === 0 ? (
-            <p className="text-xs text-slate-400">ยังไม่ได้ตั้งค่า — รันคำสั่ง: node scripts/migrate-demurrage.js</p>
+            <p className="text-xs text-slate-400">ยังไม่มี rate — กดปุ่ม &quot;+ เพิ่ม Rate&quot; เพื่อเริ่มต้น</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -168,22 +278,48 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
                     <th className="text-right py-2 px-2">40&apos;</th>
                     <th className="text-right py-2 px-2">45&apos;</th>
                     <th className="text-left py-2 px-2">ลูกค้า</th>
+                    <th className="text-center py-2 px-2">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rates.filter(r => r.is_active).map(rate => (
-                    <tr key={rate.demurrage_id} className="border-b border-slate-100 dark:border-slate-700">
+                    <tr key={rate.demurrage_id} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30">
                       <td className="py-2 px-2">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                           rate.charge_type === 'demurrage' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
                         }`}>{rate.charge_type === 'demurrage' ? 'Demurrage' : 'Detention'}</span>
                       </td>
-                      <td className="py-2 px-2 text-slate-700 dark:text-slate-300">{rate.description}</td>
-                      <td className="py-2 px-2 text-right font-mono">{rate.free_days}</td>
-                      <td className="py-2 px-2 text-right font-mono">฿{rate.rate_20?.toLocaleString()}</td>
-                      <td className="py-2 px-2 text-right font-mono">฿{rate.rate_40?.toLocaleString()}</td>
-                      <td className="py-2 px-2 text-right font-mono">฿{rate.rate_45?.toLocaleString()}</td>
-                      <td className="py-2 px-2 text-slate-400">{rate.customer_name || 'ทุกลูกค้า'}</td>
+                      {editingId === rate.demurrage_id ? (
+                        <>
+                          <td className="py-1 px-1"><input type="text" value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} className="h-7 px-2 rounded border border-blue-300 text-xs w-full bg-white dark:bg-slate-700" /></td>
+                          <td className="py-1 px-1"><input type="number" value={editForm.free_days} onChange={e => setEditForm({...editForm, free_days: +e.target.value})} className="h-7 px-1 rounded border border-blue-300 text-xs w-14 text-right bg-white dark:bg-slate-700 font-mono" /></td>
+                          <td className="py-1 px-1"><input type="number" value={editForm.rate_20} onChange={e => setEditForm({...editForm, rate_20: +e.target.value})} className="h-7 px-1 rounded border border-blue-300 text-xs w-16 text-right bg-white dark:bg-slate-700 font-mono" /></td>
+                          <td className="py-1 px-1"><input type="number" value={editForm.rate_40} onChange={e => setEditForm({...editForm, rate_40: +e.target.value})} className="h-7 px-1 rounded border border-blue-300 text-xs w-16 text-right bg-white dark:bg-slate-700 font-mono" /></td>
+                          <td className="py-1 px-1"><input type="number" value={editForm.rate_45} onChange={e => setEditForm({...editForm, rate_45: +e.target.value})} className="h-7 px-1 rounded border border-blue-300 text-xs w-16 text-right bg-white dark:bg-slate-700 font-mono" /></td>
+                          <td className="py-2 px-2 text-slate-400">{rate.customer_name || 'ทุกลูกค้า'}</td>
+                          <td className="py-1 px-1 text-center">
+                            <div className="flex gap-1 justify-center">
+                              <button onClick={saveRate} disabled={saving} className="px-2 py-1 rounded bg-emerald-600 text-white text-[10px] font-medium hover:bg-emerald-700">{saving ? '...' : '✓'}</button>
+                              <button onClick={() => setEditingId(null)} className="px-2 py-1 rounded bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 text-[10px]">✕</button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-2 px-2 text-slate-700 dark:text-slate-300">{rate.description}</td>
+                          <td className="py-2 px-2 text-right font-mono">{rate.free_days}</td>
+                          <td className="py-2 px-2 text-right font-mono">฿{rate.rate_20?.toLocaleString()}</td>
+                          <td className="py-2 px-2 text-right font-mono">฿{rate.rate_40?.toLocaleString()}</td>
+                          <td className="py-2 px-2 text-right font-mono">฿{rate.rate_45?.toLocaleString()}</td>
+                          <td className="py-2 px-2 text-slate-400">{rate.customer_name || 'ทุกลูกค้า'}</td>
+                          <td className="py-1 px-1 text-center">
+                            <div className="flex gap-1 justify-center">
+                              <button onClick={() => startEdit(rate)} className="px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-[10px] font-medium hover:bg-blue-100">✏️</button>
+                              <button onClick={() => deleteRate(rate.demurrage_id)} className="px-2 py-1 rounded bg-rose-50 dark:bg-rose-900/20 text-rose-600 text-[10px] font-medium hover:bg-rose-100">🗑</button>
+                            </div>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
