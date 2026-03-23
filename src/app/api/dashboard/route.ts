@@ -131,6 +131,87 @@ export async function GET(request: NextRequest) {
         ORDER BY a.created_at DESC
       `);
 
+    // ===== 4. Charts Data =====
+
+    // Gate Activity (7 days)
+    const gateActivity = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .query(`
+        SELECT 
+          CAST(created_at AS DATE) as date,
+          COUNT(CASE WHEN transaction_type = 'gate_in' THEN 1 END) as gate_in,
+          COUNT(CASE WHEN transaction_type = 'gate_out' THEN 1 END) as gate_out
+        FROM GateTransactions 
+        WHERE yard_id = @yardId AND created_at >= DATEADD(DAY, -6, CAST(GETDATE() AS DATE))
+        GROUP BY CAST(created_at AS DATE)
+        ORDER BY date
+      `);
+
+    // Revenue Trend (7 days)
+    const revenueTrend = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .query(`
+        SELECT 
+          CAST(paid_at AS DATE) as date,
+          ISNULL(SUM(grand_total), 0) as revenue
+        FROM Invoices 
+        WHERE yard_id = @yardId AND status = 'paid' AND paid_at >= DATEADD(DAY, -6, CAST(GETDATE() AS DATE))
+        GROUP BY CAST(paid_at AS DATE)
+        ORDER BY date
+      `);
+
+    // Containers by Shipping Line (top 6)
+    const byShippingLine = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .query(`
+        SELECT TOP 6 ISNULL(shipping_line, 'Unknown') as name, COUNT(*) as value
+        FROM Containers WHERE yard_id = @yardId AND status = 'in_yard'
+        GROUP BY shipping_line ORDER BY value DESC
+      `);
+
+    // Dwell Time Distribution
+    const dwellDist = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .query(`
+        SELECT 
+          COUNT(CASE WHEN DATEDIFF(DAY, gate_in_date, GETDATE()) <= 7 THEN 1 END) as d7,
+          COUNT(CASE WHEN DATEDIFF(DAY, gate_in_date, GETDATE()) BETWEEN 8 AND 14 THEN 1 END) as d14,
+          COUNT(CASE WHEN DATEDIFF(DAY, gate_in_date, GETDATE()) BETWEEN 15 AND 30 THEN 1 END) as d30,
+          COUNT(CASE WHEN DATEDIFF(DAY, gate_in_date, GETDATE()) > 30 THEN 1 END) as d30plus
+        FROM Containers WHERE yard_id = @yardId AND status = 'in_yard' AND gate_in_date IS NOT NULL
+      `);
+
+    // Fill 7-day series for gate activity and revenue
+    const days7: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      days7.push(d.toISOString().slice(0, 10));
+    }
+
+    const gateChartData = days7.map(date => {
+      const row = gateActivity.recordset.find((r: Record<string, unknown>) => 
+        new Date(r.date as string).toISOString().slice(0, 10) === date
+      );
+      const dayLabel = new Date(date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' });
+      return { date: dayLabel, gate_in: row?.gate_in || 0, gate_out: row?.gate_out || 0 };
+    });
+
+    const revenueChartData = days7.map(date => {
+      const row = revenueTrend.recordset.find((r: Record<string, unknown>) => 
+        new Date(r.date as string).toISOString().slice(0, 10) === date
+      );
+      const dayLabel = new Date(date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' });
+      return { date: dayLabel, revenue: row?.revenue || 0 };
+    });
+
+    const dwell = dwellDist.recordset[0] || {};
+    const dwellChartData = [
+      { name: '≤7 วัน', value: dwell.d7 || 0, color: '#10B981' },
+      { name: '8-14 วัน', value: dwell.d14 || 0, color: '#F59E0B' },
+      { name: '15-30 วัน', value: dwell.d30 || 0, color: '#F97316' },
+      { name: '>30 วัน', value: dwell.d30plus || 0, color: '#EF4444' },
+    ];
+
     // ===== Build Response =====
     const todayTotal = containerCount.recordset[0].total || 0;
     const yesterdayTotal = yesterdayCount.recordset[0].cnt || 0;
@@ -159,6 +240,12 @@ export async function GET(request: NextRequest) {
       },
       statusSummary: statusSummary.recordset[0],
       activities: activities.recordset,
+      charts: {
+        gateActivity: gateChartData,
+        revenueTrend: revenueChartData,
+        byShippingLine: byShippingLine.recordset,
+        dwellDistribution: dwellChartData,
+      },
     });
   } catch (error) {
     console.error('❌ GET dashboard error:', error);

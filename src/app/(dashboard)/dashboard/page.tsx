@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import {
   Container,
   TrendingUp,
@@ -23,7 +24,10 @@ import {
   Settings,
   User,
   ClipboardList,
+  FileDown,
 } from 'lucide-react';
+
+const DashboardCharts = dynamic(() => import('./DashboardCharts'), { ssr: false });
 
 // Action labels for audit log display
 const actionDisplay: Record<string, { text: (d: Record<string, unknown>) => string; status: string }> = {
@@ -96,6 +100,12 @@ interface DashboardData {
     full_name: string | null;
     username: string | null;
   }>;
+  charts?: {
+    gateActivity: Array<{ date: string; gate_in: number; gate_out: number }>;
+    revenueTrend: Array<{ date: string; revenue: number }>;
+    byShippingLine: Array<{ name: string; value: number }>;
+    dwellDistribution: Array<{ name: string; value: number; color: string }>;
+  };
 }
 
 export default function DashboardPage() {
@@ -203,13 +213,21 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
-          แดชบอร์ด
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          สวัสดีครับ, {session?.fullName} — ภาพรวมการทำงานประจำวัน
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
+            แดชบอร์ด
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+            สวัสดีครับ, {session?.fullName} — ภาพรวมการทำงานประจำวัน
+          </p>
+        </div>
+        <button
+          onClick={() => window.print()}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 transition-colors print:hidden"
+        >
+          <FileDown size={16} /> Export PDF
+        </button>
       </div>
 
       {loading ? (
@@ -248,6 +266,9 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+
+          {/* Charts Section */}
+          {data?.charts && <DashboardCharts charts={data.charts} />}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Quick Actions */}

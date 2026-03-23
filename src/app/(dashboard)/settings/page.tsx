@@ -16,6 +16,7 @@ import {
   Truck,
   Link,
   Shield,
+  Mail,
 } from 'lucide-react';
 import CompanySettings from './CompanySettings';
 import YardsSettings from './YardsSettings';
@@ -29,6 +30,7 @@ import AutoAllocationRules from './AutoAllocationRules';
 import EquipmentRulesConfig from './EquipmentRulesConfig';
 import PrefixMapping from './PrefixMapping';
 import RateLimitSettings from './RateLimitSettings';
+import EmailSettingsTab from './EmailSettings';
 
 const tabs = [
   { id: 'company', label: 'องค์กร', icon: <Building2 size={18} />, color: '#3B82F6' },
@@ -43,6 +45,7 @@ const tabs = [
   { id: 'equipment', label: 'เครื่องจักร', icon: <Truck size={18} />, color: '#F97316' },
   { id: 'prefix', label: 'Prefix', icon: <Link size={18} />, color: '#06B6D4' },
   { id: 'ratelimit', label: 'Rate Limit', icon: <Shield size={18} />, color: '#F59E0B' },
+  { id: 'email', label: 'Email', icon: <Mail size={18} />, color: '#3B82F6' },
 ];
 
 export default function SettingsPage() {
@@ -93,6 +96,7 @@ export default function SettingsPage() {
         {activeTab === 'equipment' && <EquipmentRulesConfig />}
         {activeTab === 'prefix' && <PrefixMapping />}
         {activeTab === 'ratelimit' && <RateLimitSettings />}
+        {activeTab === 'email' && <EmailSettingsTab />}
       </div>
     </div>
   );
