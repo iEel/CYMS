@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import {
   Loader2, Search, FileText, Upload, ShieldCheck, Plus, Ship, Package,
   CheckCircle2, XCircle, Clock, AlertTriangle, RotateCcw, Anchor,
-  FileSpreadsheet, Trash2,
+  FileSpreadsheet, Trash2, Send, FileDown, Filter,
 } from 'lucide-react';
 
 interface BookingRow {
@@ -23,7 +23,7 @@ interface ValidationResult {
 
 export default function EDIPage() {
   const { session } = useAuth();
-  const [activeTab, setActiveTab] = useState<'bookings' | 'import' | 'validate'>('bookings');
+  const [activeTab, setActiveTab] = useState<'bookings' | 'import' | 'validate' | 'codeco'>('bookings');
   const yardId = session?.activeYardId || 1;
 
   // Bookings
@@ -220,6 +220,7 @@ export default function EDIPage() {
           { id: 'bookings' as const, label: 'Bookings', icon: <FileText size={14} /> },
           { id: 'import' as const, label: 'นำเข้าข้อมูล', icon: <Upload size={14} /> },
           { id: 'validate' as const, label: 'ตรวจเลขซีล', icon: <ShieldCheck size={14} /> },
+          { id: 'codeco' as const, label: 'CODECO', icon: <Send size={14} /> },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -481,6 +482,201 @@ export default function EDIPage() {
           )}
         </div>
       )}
+
+      {/* =================== CODECO TAB =================== */}
+      {activeTab === 'codeco' && <CodecoOutbound yardId={yardId} />}
+    </div>
+  );
+}
+
+/* ===================== CODECO OUTBOUND COMPONENT ===================== */
+interface CodecoTx {
+  message_type: string; transaction_type: string; eir_number: string;
+  date: string; container_number: string; size: string; type: string;
+  shipping_line: string; laden_empty: string; seal_number: string;
+  truck_plate: string; driver_name: string; booking_ref: string; yard_code: string;
+}
+
+function CodecoOutbound({ yardId }: { yardId: number }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [dateFrom, setDateFrom] = useState(today);
+  const [dateTo, setDateTo] = useState(today);
+  const [txType, setTxType] = useState('all');
+  const [slFilter, setSlFilter] = useState('');
+  const [shippingLines, setShippingLines] = useState<string[]>([]);
+  const [transactions, setTransactions] = useState<CodecoTx[]>([]);
+  const [summary, setSummary] = useState({ total: 0, gate_in: 0, gate_out: 0 });
+  const [loading, setLoading] = useState(false);
+
+  const buildUrl = useCallback((format = 'json') => {
+    let url = `/api/edi/codeco?yard_id=${yardId}&format=${format}`;
+    if (dateFrom) url += `&date_from=${dateFrom}`;
+    if (dateTo) url += `&date_to=${dateTo}`;
+    if (txType && txType !== 'all') url += `&type=${txType}`;
+    if (slFilter) url += `&shipping_line=${encodeURIComponent(slFilter)}`;
+    return url;
+  }, [yardId, dateFrom, dateTo, txType, slFilter]);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(buildUrl('json'));
+      const data = await res.json();
+      if (!data.error) {
+        setTransactions(data.transactions || []);
+        setSummary(data.summary || { total: 0, gate_in: 0, gate_out: 0 });
+        setShippingLines(data.shipping_lines || []);
+      }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, [buildUrl]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const fmtDate = (d: string) => {
+    if (!d) return '';
+    const dt = new Date(d);
+    return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const inputClass = "h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-700 dark:text-white";
+
+  return (
+    <div className="space-y-4">
+      {/* Header + Filters */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600">
+            <Send size={20} />
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-800 dark:text-white">CODECO — Container Departure/Arrival Message</h3>
+            <p className="text-xs text-slate-400">สร้างข้อมูล EDI ส่งให้สายเรือ — แจ้ง Gate-In / Gate-Out events</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">จากวันที่</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">ถึงวันที่</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">ประเภท</label>
+            <select value={txType} onChange={e => setTxType(e.target.value)} className={inputClass}>
+              <option value="all">ทั้งหมด</option>
+              <option value="gate_in">Gate-In</option>
+              <option value="gate_out">Gate-Out</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">สายเรือ</label>
+            <select value={slFilter} onChange={e => setSlFilter(e.target.value)} className={inputClass}>
+              <option value="">ทั้งหมด</option>
+              {shippingLines.map(sl => <option key={sl} value={sl}>{sl}</option>)}
+            </select>
+          </div>
+          <button onClick={fetchData} className="h-9 px-4 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 flex items-center gap-1">
+            <Filter size={12} /> กรอง
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-center">
+          <p className="text-2xl font-bold text-slate-800 dark:text-white">{summary.total}</p>
+          <p className="text-xs text-slate-400">รายการทั้งหมด</p>
+        </div>
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800 p-4 text-center">
+          <p className="text-2xl font-bold text-emerald-600">{summary.gate_in}</p>
+          <p className="text-xs text-slate-400">Gate-In</p>
+        </div>
+        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 p-4 text-center">
+          <p className="text-2xl font-bold text-amber-600">{summary.gate_out}</p>
+          <p className="text-xs text-slate-400">Gate-Out</p>
+        </div>
+      </div>
+
+      {/* Export Buttons */}
+      <div className="flex gap-2">
+        <button onClick={() => window.open(buildUrl('edifact'), '_blank')}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-all">
+          <Send size={14} /> ส่ง EDIFACT (.edi)
+        </button>
+        <button onClick={() => window.open(buildUrl('csv'), '_blank')}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
+          <FileDown size={14} /> CSV
+        </button>
+        <button onClick={async () => {
+          const res = await fetch(buildUrl('json'));
+          const data = await res.json();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = `CODECO_${new Date().toISOString().split('T')[0]}.json`; a.click();
+        }}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
+          <FileDown size={14} /> JSON
+        </button>
+      </div>
+
+      {/* Transactions Table */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-white flex items-center gap-2">
+            <FileText size={14} /> CODECO Messages ({transactions.length})
+          </h3>
+        </div>
+        {loading ? (
+          <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
+        ) : transactions.length === 0 ? (
+          <div className="p-8 text-center text-sm text-slate-400">ไม่พบรายการ Gate ในช่วงวันที่เลือก</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500">
+                <tr>
+                  <th className="text-center px-3 py-2.5">ประเภท</th>
+                  <th className="text-left px-3 py-2.5">วันที่/เวลา</th>
+                  <th className="text-left px-3 py-2.5">เลขตู้</th>
+                  <th className="text-left px-3 py-2.5">ขนาด</th>
+                  <th className="text-left px-3 py-2.5">สายเรือ</th>
+                  <th className="text-center px-3 py-2.5">สถานะ</th>
+                  <th className="text-left px-3 py-2.5">ซีล</th>
+                  <th className="text-left px-3 py-2.5">ทะเบียนรถ</th>
+                  <th className="text-left px-3 py-2.5">EIR</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {transactions.map((tx, i) => (
+                  <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <td className="px-3 py-2 text-center">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                        tx.transaction_type === 'gate_in' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                      }`}>{tx.transaction_type === 'gate_in' ? 'เข้า' : 'ออก'}</span>
+                    </td>
+                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{fmtDate(tx.date)}</td>
+                    <td className="px-3 py-2 font-mono font-semibold text-slate-800 dark:text-white">{tx.container_number}</td>
+                    <td className="px-3 py-2">{tx.size}'{tx.type}</td>
+                    <td className="px-3 py-2">{tx.shipping_line || '-'}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${tx.laden_empty === 'LADEN' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                        {tx.laden_empty === 'LADEN' ? 'มีสินค้า' : 'เปล่า'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-slate-500">{tx.seal_number || '-'}</td>
+                    <td className="px-3 py-2 text-slate-500">{tx.truck_plate || '-'}</td>
+                    <td className="px-3 py-2 font-mono text-[10px] text-slate-400">{tx.eir_number || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
