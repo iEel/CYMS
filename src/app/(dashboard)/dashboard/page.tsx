@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import Link from 'next/link';
 import {
@@ -15,61 +16,51 @@ import {
   AlertTriangle,
   BarChart3,
   Package,
+  Loader2,
+  DoorOpen,
+  Receipt,
+  Shield,
+  Settings,
+  User,
+  ClipboardList,
 } from 'lucide-react';
 
-// KPI สำหรับ Demo
-const demoKPIs = [
-  {
-    title: 'ตู้คอนเทนเนอร์ทั้งหมด',
-    value: '1,247',
-    change: '+12',
-    changeType: 'up' as const,
-    changeLabel: 'จากเมื่อวาน',
-    icon: <Container size={22} />,
-    color: '#3B82F6',
-    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
-  },
-  {
-    title: 'อัตราลานเต็ม',
-    value: '73%',
-    change: '+2.4%',
-    changeType: 'up' as const,
-    changeLabel: 'จากสัปดาห์ก่อน',
-    icon: <BarChart3 size={22} />,
-    color: '#10B981',
-    bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
-  },
-  {
-    title: 'รอเข้า Gate-In',
-    value: '23',
-    change: '-5',
-    changeType: 'down' as const,
-    changeLabel: 'จากเมื่อวาน',
-    icon: <Truck size={22} />,
-    color: '#F59E0B',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-  },
-  {
-    title: 'รายได้วันนี้',
-    value: '฿ 284,500',
-    change: '+18.2%',
-    changeType: 'up' as const,
-    changeLabel: 'จากเมื่อวาน',
-    icon: <DollarSign size={22} />,
-    color: '#8B5CF6',
-    bgColor: 'bg-violet-50 dark:bg-violet-900/20',
-  },
-];
+// Action labels for audit log display
+const actionDisplay: Record<string, { text: (d: Record<string, unknown>) => string; status: string }> = {
+  gate_in:         { text: (d) => `${d.container_number || 'ตู้'} เข้าลาน (Gate-In)`, status: 'success' },
+  gate_out:        { text: (d) => `${d.container_number || 'ตู้'} ออกจากลาน (Gate-Out)`, status: 'success' },
+  wo_create:       { text: (d) => `สร้างคำสั่งงาน #${d.order_id || ''} ${d.order_type || ''}`, status: 'info' },
+  wo_accept:       { text: (d) => `รับงาน #${d.order_id || ''}`, status: 'success' },
+  wo_complete:     { text: (d) => `ทำงานเสร็จ #${d.order_id || ''}`, status: 'success' },
+  wo_cancel:       { text: (d) => `ยกเลิกงาน #${d.order_id || ''}`, status: 'warning' },
+  invoice_create:  { text: (d) => `สร้างใบแจ้งหนี้ ${d.invoice_number || ''}`, status: 'info' },
+  invoice_pay:     { text: (d) => `ชำระเงินใบแจ้งหนี้ #${d.invoice_id || ''}`, status: 'success' },
+  invoice_cancel:  { text: (d) => `ยกเลิกใบแจ้งหนี้ #${d.invoice_id || ''}`, status: 'danger' },
+  customer_create: { text: (d) => `เพิ่มลูกค้า ${d.customer_name || ''}`, status: 'info' },
+  customer_update: { text: (d) => `แก้ไขลูกค้า ${d.customer_name || ''}`, status: 'info' },
+  user_create:     { text: (d) => `เพิ่มผู้ใช้ ${d.username || ''}`, status: 'info' },
+  user_update:     { text: (d) => `แก้ไขผู้ใช้ ${d.full_name || ''}`, status: 'info' },
+  login:           { text: () => `เข้าสู่ระบบ`, status: 'success' },
+  permission_update: { text: () => `แก้ไขสิทธิ์ผู้ใช้`, status: 'warning' },
+  zone_create:     { text: (d) => `เพิ่มโซน ${d.zone_name || ''}`, status: 'info' },
+  zone_update:     { text: (d) => `แก้ไขโซน ${d.zone_name || ''}`, status: 'info' },
+  company_update:  { text: () => `แก้ไขข้อมูลบริษัท`, status: 'info' },
+  storage_rates_update: { text: () => `แก้ไขอัตราค่าฝาก`, status: 'info' },
+};
 
-// รายการกิจกรรมล่าสุด Demo
-const recentActivities = [
-  { type: 'gate_in', text: 'TCLU1234567 เข้าลานจาก Gate 1', time: '2 นาทีที่แล้ว', status: 'success' },
-  { type: 'gate_out', text: 'MSCU7654321 ออกจากลาน Gate 2', time: '15 นาทีที่แล้ว', status: 'success' },
-  { type: 'alert', text: 'เลขซีล MSCU7654321 ไม่ตรงกับ Manifest', time: '22 นาทีที่แล้ว', status: 'warning' },
-  { type: 'repair', text: 'EOR-2024-0089 อนุมัติแล้วโดยสายเรือ', time: '1 ชั่วโมงที่แล้ว', status: 'success' },
-  { type: 'payment', text: 'รับชำระเงิน ฿45,000 จาก Evergreen Line', time: '2 ชั่วโมงที่แล้ว', status: 'success' },
-  { type: 'alert', text: 'Bay A-12 เกินความสูง Max Tier (5/4)', time: '3 ชั่วโมงที่แล้ว', status: 'danger' },
-];
+const actionIcons: Record<string, React.ReactNode> = {
+  gate_in: <DoorOpen size={14} />,
+  gate_out: <DoorOpen size={14} />,
+  wo_create: <Truck size={14} />,
+  wo_accept: <Truck size={14} />,
+  wo_complete: <CheckCircle size={14} />,
+  wo_cancel: <AlertTriangle size={14} />,
+  invoice_create: <Receipt size={14} />,
+  invoice_pay: <DollarSign size={14} />,
+  invoice_cancel: <Receipt size={14} />,
+  login: <User size={14} />,
+  permission_update: <Shield size={14} />,
+};
 
 // Quick Actions
 const quickActions = [
@@ -79,8 +70,124 @@ const quickActions = [
   { label: 'วางบิล', icon: <DollarSign size={18} />, href: '/billing', color: '#8B5CF6' },
 ];
 
+interface DashboardData {
+  kpi: {
+    containers: { value: number; change: number };
+    occupancy: { value: number; totalSlots: number };
+    gateInToday: { value: number; change: number };
+    revenue: { value: number; change: number };
+    pendingOrders: number;
+  };
+  statusSummary: {
+    available: number;
+    in_yard: number;
+    gated_out_today: number;
+    on_hold: number;
+    reefer: number;
+  };
+  activities: Array<{
+    log_id: number;
+    action: string;
+    entity_type: string;
+    entity_id: number | null;
+    details: string;
+    created_at: string;
+    full_name: string | null;
+    username: string | null;
+  }>;
+}
+
 export default function DashboardPage() {
   const { session } = useAuth();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const yardId = session?.activeYardId || 1;
+      const res = await fetch(`/api/dashboard?yard_id=${yardId}`);
+      const json = await res.json();
+      if (!json.error) setData(json);
+    } catch (e) {
+      console.error('Dashboard fetch failed:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.activeYardId]);
+
+  useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(fetchDashboard, 30000);
+    return () => clearInterval(interval);
+  }, [fetchDashboard]);
+
+  const relativeTime = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'เมื่อสักครู่';
+    if (mins < 60) return `${mins} นาทีที่แล้ว`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} ชั่วโมงที่แล้ว`;
+    const days = Math.floor(hrs / 24);
+    return `${days} วันที่แล้ว`;
+  };
+
+  const kpi = data?.kpi;
+  const summary = data?.statusSummary;
+
+  const kpiCards = kpi ? [
+    {
+      title: 'ตู้ในลาน',
+      value: kpi.containers.value.toLocaleString(),
+      change: `${kpi.containers.change >= 0 ? '+' : ''}${kpi.containers.change}`,
+      changeType: kpi.containers.change >= 0 ? 'up' as const : 'down' as const,
+      changeLabel: 'จากเมื่อวาน',
+      icon: <Container size={22} />,
+      color: '#3B82F6',
+      bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    },
+    {
+      title: 'อัตราลานเต็ม',
+      value: `${kpi.occupancy.value}%`,
+      change: `${kpi.occupancy.totalSlots.toLocaleString()} ช่อง`,
+      changeType: kpi.occupancy.value > 85 ? 'down' as const : 'up' as const,
+      changeLabel: 'ความจุทั้งหมด',
+      icon: <BarChart3 size={22} />,
+      color: '#10B981',
+      bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
+    },
+    {
+      title: 'Gate-In วันนี้',
+      value: kpi.gateInToday.value.toString(),
+      change: `${kpi.gateInToday.change >= 0 ? '+' : ''}${kpi.gateInToday.change}`,
+      changeType: kpi.gateInToday.change >= 0 ? 'up' as const : 'down' as const,
+      changeLabel: 'เทียบเมื่อวาน',
+      icon: <Truck size={22} />,
+      color: '#F59E0B',
+      bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+    },
+    {
+      title: 'รายได้วันนี้',
+      value: `฿ ${kpi.revenue.value.toLocaleString()}`,
+      change: kpi.revenue.change !== 0 ? `${kpi.revenue.change >= 0 ? '+' : ''}${kpi.revenue.change}%` : '-',
+      changeType: kpi.revenue.change >= 0 ? 'up' as const : 'down' as const,
+      changeLabel: 'เทียบเมื่อวาน',
+      icon: <DollarSign size={22} />,
+      color: '#8B5CF6',
+      bgColor: 'bg-violet-50 dark:bg-violet-900/20',
+    },
+  ] : [];
+
+  const statusItems = summary ? [
+    { label: 'พร้อมใช้งาน', count: summary.available, color: '#10B981' },
+    { label: 'อยู่ในลาน', count: summary.in_yard, color: '#3B82F6' },
+    { label: 'งานค้าง', count: kpi?.pendingOrders || 0, color: '#F59E0B' },
+    { label: 'ระงับ (Hold)', count: summary.on_hold, color: '#DC2626' },
+    { label: 'ตู้เย็น (Reefer)', count: summary.reefer, color: '#06B6D4' },
+    { label: 'ออกวันนี้', count: summary.gated_out_today, color: '#64748B' },
+  ] : [];
 
   return (
     <div className="space-y-6">
@@ -94,115 +201,129 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {demoKPIs.map((kpi, i) => (
-          <div
-            key={i}
-            className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700
-              p-5 hover:shadow-md transition-all duration-200 group cursor-default"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className={`w-11 h-11 rounded-xl ${kpi.bgColor} flex items-center justify-center`}
-                style={{ color: kpi.color }}
-              >
-                {kpi.icon}
-              </div>
-              <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg
-                ${kpi.changeType === 'up'
-                  ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400'
-                  : 'text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-400'
-                }
-              `}>
-                {kpi.changeType === 'up' ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                {kpi.change}
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-slate-800 dark:text-white mb-1">{kpi.value}</p>
-            <p className="text-xs text-slate-400">{kpi.title}</p>
-            <p className="text-[10px] text-slate-400 mt-1">{kpi.changeLabel}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Quick Actions */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-          <h2 className="text-base font-semibold text-slate-800 dark:text-white mb-4">คำสั่งด่วน</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {quickActions.map((action, i) => (
-              <Link
+      {loading ? (
+        <div className="flex items-center justify-center p-12">
+          <Loader2 size={32} className="animate-spin text-slate-400" />
+        </div>
+      ) : (
+        <>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {kpiCards.map((kpiItem, i) => (
+              <div
                 key={i}
-                href={action.href}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-100 dark:border-slate-700
-                  hover:border-slate-200 dark:hover:border-slate-600 hover:shadow-sm
-                  transition-all duration-200 group"
+                className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700
+                  p-5 hover:shadow-md transition-all duration-200 group cursor-default"
               >
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white transition-transform duration-200 group-hover:scale-110"
-                  style={{ backgroundColor: action.color }}
-                >
-                  {action.icon}
+                <div className="flex items-start justify-between mb-4">
+                  <div className={`w-11 h-11 rounded-xl ${kpiItem.bgColor} flex items-center justify-center`}
+                    style={{ color: kpiItem.color }}
+                  >
+                    {kpiItem.icon}
+                  </div>
+                  <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg
+                    ${kpiItem.changeType === 'up'
+                      ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400'
+                      : 'text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-400'
+                    }
+                  `}>
+                    {kpiItem.changeType === 'up' ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                    {kpiItem.change}
+                  </div>
                 </div>
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{action.label}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-slate-800 dark:text-white">กิจกรรมล่าสุด</h2>
-            <Link href="/gate" className="text-xs text-[#3B82F6] hover:underline flex items-center gap-1">
-              ดูทั้งหมด <ArrowRight size={12} />
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {recentActivities.map((act, i) => (
-              <div key={i} className="flex items-start gap-3 py-2 border-b border-slate-50 dark:border-slate-700/50 last:border-0">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5
-                  ${act.status === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500' :
-                    act.status === 'warning' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-500' :
-                    'bg-rose-50 dark:bg-rose-900/20 text-rose-500'}
-                `}>
-                  {act.status === 'success' ? <CheckCircle size={14} /> :
-                   act.status === 'warning' ? <AlertTriangle size={14} /> :
-                   <AlertTriangle size={14} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-700 dark:text-slate-300">{act.text}</p>
-                  <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                    <Clock size={10} /> {act.time}
-                  </p>
-                </div>
+                <p className="text-2xl font-bold text-slate-800 dark:text-white mb-1">{kpiItem.value}</p>
+                <p className="text-xs text-slate-400">{kpiItem.title}</p>
+                <p className="text-[10px] text-slate-400 mt-1">{kpiItem.changeLabel}</p>
               </div>
             ))}
           </div>
-        </div>
-      </div>
 
-      {/* Yard Summary */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-        <h2 className="text-base font-semibold text-slate-800 dark:text-white mb-4">สรุปสถานะตู้ในลาน</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {[
-            { label: 'พร้อมใช้งาน', count: 423, color: '#10B981' },
-            { label: 'อยู่ในลาน', count: 687, color: '#3B82F6' },
-            { label: 'กำลังขนส่ง', count: 45, color: '#F59E0B' },
-            { label: 'กำลังซ่อม', count: 32, color: '#EF4444' },
-            { label: 'ระงับ (Hold)', count: 18, color: '#DC2626' },
-            { label: 'ออกจากลาน', count: 42, color: '#64748B' },
-          ].map((item, i) => (
-            <div key={i} className="text-center p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50">
-              <p className="text-2xl font-bold mb-1" style={{ color: item.color }}>
-                {item.count.toLocaleString()}
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{item.label}</p>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Quick Actions */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+              <h2 className="text-base font-semibold text-slate-800 dark:text-white mb-4">คำสั่งด่วน</h2>
+              <div className="grid grid-cols-2 gap-3">
+                {quickActions.map((action, i) => (
+                  <Link
+                    key={i}
+                    href={action.href}
+                    className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-100 dark:border-slate-700
+                      hover:border-slate-200 dark:hover:border-slate-600 hover:shadow-sm
+                      transition-all duration-200 group"
+                  >
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white transition-transform duration-200 group-hover:scale-110"
+                      style={{ backgroundColor: action.color }}
+                    >
+                      {action.icon}
+                    </div>
+                    <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{action.label}</span>
+                  </Link>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
-      </div>
+
+            {/* Recent Activity — from AuditLog */}
+            <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-slate-800 dark:text-white">กิจกรรมล่าสุด</h2>
+                <Link href="/audit-trail" className="text-xs text-[#3B82F6] hover:underline flex items-center gap-1">
+                  ดูทั้งหมด <ArrowRight size={12} />
+                </Link>
+              </div>
+              <div className="space-y-3">
+                {data?.activities && data.activities.length > 0 ? data.activities.map((act) => {
+                  let details: Record<string, unknown> = {};
+                  try { details = JSON.parse(act.details || '{}'); } catch { /* */ }
+                  const display = actionDisplay[act.action] || { text: () => act.action, status: 'info' };
+                  const statusClass = display.status === 'success'
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500'
+                    : display.status === 'warning'
+                    ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-500'
+                    : display.status === 'danger'
+                    ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-500'
+                    : 'bg-blue-50 dark:bg-blue-900/20 text-blue-500';
+                  const icon = actionIcons[act.action] || <ClipboardList size={14} />;
+
+                  return (
+                    <div key={act.log_id} className="flex items-start gap-3 py-2 border-b border-slate-50 dark:border-slate-700/50 last:border-0">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${statusClass}`}>
+                        {icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-700 dark:text-slate-300">
+                          {display.text(details)}
+                          {act.full_name && <span className="text-slate-400 ml-1">— {act.full_name}</span>}
+                        </p>
+                        <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                          <Clock size={10} /> {relativeTime(act.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }) : (
+                  <p className="text-sm text-slate-400 py-4 text-center">ยังไม่มีกิจกรรม</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Container Status Summary */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+            <h2 className="text-base font-semibold text-slate-800 dark:text-white mb-4">สรุปสถานะตู้ในลาน</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {statusItems.map((item, i) => (
+                <div key={i} className="text-center p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50">
+                  <p className="text-2xl font-bold mb-1" style={{ color: item.color }}>
+                    {item.count.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{item.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
