@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       .query(`
         SELECT COUNT(*) as cnt FROM GateTransactions 
         WHERE yard_id = @yardId AND transaction_type = 'gate_in' 
-        AND CAST(transaction_date AS DATE) = CAST(GETDATE() AS DATE)
+        AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE)
       `);
 
     // Gate-In yesterday for comparison
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       .query(`
         SELECT COUNT(*) as cnt FROM GateTransactions 
         WHERE yard_id = @yardId AND transaction_type = 'gate_in' 
-        AND CAST(transaction_date AS DATE) = CAST(DATEADD(DAY, -1, GETDATE()) AS DATE)
+        AND CAST(created_at AS DATE) = CAST(DATEADD(DAY, -1, GETDATE()) AS DATE)
       `);
 
     // Revenue today
