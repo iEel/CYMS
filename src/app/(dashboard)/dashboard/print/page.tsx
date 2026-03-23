@@ -11,6 +11,7 @@ export default function DashboardPrintPage() {
   const [data, setData] = useState<any>(null);
   const [company, setCompany] = useState<{ company_name: string; address: string; phone: string; tax_id: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -18,11 +19,26 @@ export default function DashboardPrintPage() {
         fetch(`/api/dashboard?yard_id=${yardId}`),
         fetch('/api/settings/company'),
       ]);
+      
+      if (!dashRes.ok) {
+        setError(`Dashboard API error: ${dashRes.status} ${dashRes.statusText}`);
+        return;
+      }
+      
       const dashboard = await dashRes.json();
       const comp = await companyRes.json();
-      if (!dashboard.error) setData(dashboard);
+      
+      if (dashboard.error) {
+        setError(`API returned error: ${dashboard.error}`);
+        return;
+      }
+      
+      setData(dashboard);
       if (comp && !comp.error) setCompany(comp);
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error(e); 
+      setError(`Fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
     finally { setLoading(false); }
   }, [yardId]);
 
@@ -37,7 +53,8 @@ export default function DashboardPrintPage() {
   }, [loading, data]);
 
   if (loading) return <div className="flex items-center justify-center min-h-screen text-slate-400">กำลังโหลดข้อมูล...</div>;
-  if (!data?.kpi) return <div className="flex items-center justify-center min-h-screen text-slate-400">ไม่พบข้อมูล</div>;
+  if (error) return <div className="flex items-center justify-center min-h-screen text-red-500 text-sm">{error}</div>;
+  if (!data?.kpi) return <div className="flex items-center justify-center min-h-screen text-slate-400">ไม่พบข้อมูล (kpi is null)</div>;
 
   const kpi = data.kpi;
   const summary = data.statusSummary;
