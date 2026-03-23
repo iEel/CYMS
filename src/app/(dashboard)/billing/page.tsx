@@ -736,7 +736,10 @@ function BillingReports({ yardId }: { yardId: number }) {
           }} className="h-8 px-3 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400">
             วันนี้
           </button>
-          <button onClick={() => window.print()} className="h-8 px-3 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-200 flex items-center gap-1">
+          <button onClick={() => {
+            const dateParam = reportType === 'daily' ? selectedDate : selectedMonth;
+            window.open(`/billing/print/report?type=${reportType}&date=${dateParam}&yard_id=${yardId}`, '_blank');
+          }} className="h-8 px-3 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-200 flex items-center gap-1">
             <Printer size={12} /> พิมพ์
           </button>
         </div>
