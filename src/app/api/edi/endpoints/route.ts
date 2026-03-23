@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // GET — List EDI Endpoints
 export async function GET() {
@@ -40,7 +41,9 @@ export async function POST(request: NextRequest) {
         OUTPUT INSERTED.*
         VALUES (@name, @shipping_line, @type, @host, @port, @username, @password, @remote_path, @format)
       `);
-    return NextResponse.json({ success: true, endpoint: result.recordset[0] });
+    const ep = result.recordset[0];
+    await logAudit({ action: 'create', entityType: 'edi_endpoint', entityId: ep.endpoint_id, details: { name: body.name, host: body.host } });
+    return NextResponse.json({ success: true, endpoint: ep });
   } catch (error) {
     console.error('❌ POST EDI endpoint error:', error);
     return NextResponse.json({ error: 'ไม่สามารถสร้าง Endpoint ได้' }, { status: 500 });
@@ -72,6 +75,7 @@ export async function PUT(request: NextRequest) {
           updated_at = GETDATE()
         WHERE endpoint_id = @id
       `);
+    await logAudit({ action: 'update', entityType: 'edi_endpoint', entityId: body.endpoint_id, details: { name: body.name, host: body.host } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT EDI endpoint error:', error);
@@ -89,6 +93,7 @@ export async function DELETE(request: NextRequest) {
       .query('DELETE FROM EDISendLog WHERE endpoint_id = @id');
     await db.request().input('id2', sql.Int, id)
       .query('DELETE FROM EDIEndpoints WHERE endpoint_id = @id2');
+    await logAudit({ action: 'delete', entityType: 'edi_endpoint', entityId: id, details: {} });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ DELETE EDI endpoint error:', error);

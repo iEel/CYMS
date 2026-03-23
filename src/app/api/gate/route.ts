@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { z } from 'zod';
+
+const gateBodySchema = z.object({
+  transaction_type: z.enum(['gate_in', 'gate_out']),
+  container_number: z.string().min(4).max(15).optional(),
+  size: z.enum(['20', '40', '45']).optional(),
+  type: z.string().max(20).optional(),
+  shipping_line: z.string().max(50).optional(),
+  is_laden: z.boolean().optional(),
+  yard_id: z.coerce.number().int().positive(),
+  zone_id: z.coerce.number().int().positive().optional().nullable(),
+  bay: z.coerce.number().int().min(0).optional().nullable(),
+  row: z.coerce.number().int().min(0).optional().nullable(),
+  tier: z.coerce.number().int().min(0).optional().nullable(),
+  driver_name: z.string().max(100).optional(),
+  driver_license: z.string().max(50).optional(),
+  truck_plate: z.string().max(20).optional(),
+  seal_number: z.string().max(50).optional(),
+  booking_ref: z.string().max(50).optional(),
+  notes: z.string().max(500).optional(),
+  damage_report: z.any().optional(),
+  container_id: z.number().int().positive().optional(),
+  user_id: z.number().int().positive().optional(),
+}).passthrough();
 
 // GET — ดึง gate transactions
 export async function GET(request: NextRequest) {
@@ -147,15 +171,21 @@ async function autoAllocate(db: any, yardId: number, size: string, containerType
 // POST — บันทึก Gate-In หรือ Gate-Out
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const rawBody = await request.json();
+    const parsed = gateBodySchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const errors = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`);
+      return NextResponse.json({ error: 'ข้อมูลไม่ถูกต้อง', details: errors }, { status: 400 });
+    }
+    const body = parsed.data;
     const {
-      transaction_type, // 'gate_in' | 'gate_out'
+      transaction_type,
       container_number, size, type: containerType, shipping_line, is_laden,
       yard_id, zone_id, bay, row, tier,
       driver_name, driver_license, truck_plate, seal_number, booking_ref, notes,
       damage_report,
-      container_id, // for gate_out (existing container)
-      user_id, // processed_by user
+      container_id,
+      user_id,
     } = body;
 
     const db = await getDb();

@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { createToken } from '@/lib/auth';
+import { rateLimitLogin, getClientIP } from '@/lib/rateLimit';
 import bcrypt from 'bcryptjs';
 import sql from 'mssql';
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit check
+    const ip = getClientIP(request);
+    const rl = await rateLimitLogin(ip);
+    if (!rl.success) {
+      return NextResponse.json(
+        { error: `ล็อกอินผิดเกินกำหนด กรุณารอ ${Math.ceil(rl.retryAfterMs / 60000)} นาที` },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
+
     const { username, password } = await request.json();
 
     if (!username || !password) {

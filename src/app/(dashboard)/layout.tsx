@@ -6,6 +6,35 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import Sidebar from '@/components/layout/Sidebar';
 import Topbar from '@/components/layout/Topbar';
 
+// Global fetch interceptor — auto-attach JWT to API calls
+if (typeof window !== 'undefined') {
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+    if (url.startsWith('/api/') && !url.includes('/api/auth/login')) {
+      const headers = new Headers(init?.headers);
+      if (!headers.has('Authorization')) {
+        try {
+          const s = localStorage.getItem('cyms_session');
+          if (s) {
+            const session = JSON.parse(s);
+            if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
+          }
+        } catch { /* */ }
+      }
+      const response = await originalFetch(input, { ...init, headers });
+      // Auto-logout on 401
+      if (response.status === 401 && !window.location.pathname.includes('/login')) {
+        localStorage.removeItem('cyms_session');
+        window.location.href = '/login';
+      }
+      return response;
+    }
+    return originalFetch(input, init);
+  };
+}
+
 export default function DashboardLayout({
   children,
 }: {
