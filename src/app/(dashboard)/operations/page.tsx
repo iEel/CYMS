@@ -7,6 +7,9 @@ import {
   XCircle, Clock, AlertTriangle, Plus, Layers, Shuffle, ChevronDown,
   ArrowDown, ArrowUp, ArrowUpFromLine, ArrowDownToLine, MapPin, User, ListOrdered, RotateCcw,
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+const ContainerTimeline = dynamic(() => import('@/components/containers/ContainerTimeline'), { ssr: false });
 
 interface WorkOrderRow {
   order_id: number;
@@ -66,6 +69,7 @@ export default function OperationsPage() {
   const [orders, setOrders] = useState<WorkOrderRow[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
+  const [timelineCN, setTimelineCN] = useState<string | null>(null);
 
   // Create Work Order
   const [containers, setContainers] = useState<ContainerOption[]>([]);
@@ -342,6 +346,8 @@ export default function OperationsPage() {
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-base md:text-sm text-slate-800 dark:text-white">{order.container_number}</span>
+                          <button onClick={() => setTimelineCN(order.container_number)} title="Timeline"
+                            className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center hover:bg-indigo-200 text-[10px]">⏱</button>
                           <span className="text-xs text-slate-400">{order.size}&apos;{order.type}</span>
                           {order.notes?.includes('Gate-Out') ? (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">📤 ส่งออก</span>
@@ -802,6 +808,9 @@ export default function OperationsPage() {
           )}
         </div>
       )}
+
+      {/* Container Timeline Modal */}
+      {timelineCN && <ContainerTimeline containerNumber={timelineCN} onClose={() => setTimelineCN(null)} />}
     </div>
   );
 }

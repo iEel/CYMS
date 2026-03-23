@@ -9,6 +9,7 @@ import {
   AlertTriangle, Lock, Unlock, Ban, ArrowDownToLine,
   Printer, FileDown, Zap, FileSpreadsheet, BarChart3, ChevronLeft, ChevronRight, Users,
 } from 'lucide-react';
+import DemurrageTab from './DemurrageTab';
 
 interface TariffRow {
   tariff_id: number; charge_type: string; description: string; rate: number;
@@ -37,7 +38,7 @@ const UNIT_LABELS: Record<string, string> = {
 
 export default function BillingPage() {
   const { session } = useAuth();
-  const [activeTab, setActiveTab] = useState<'invoices' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage'>('invoices');
   const yardId = session?.activeYardId || 1;
 
   // Invoices
@@ -211,6 +212,7 @@ export default function BillingPage() {
           { id: 'documents' as const, label: 'เอกสาร', icon: <Printer size={14} /> },
           { id: 'export' as const, label: 'ERP', icon: <FileDown size={14} /> },
           { id: 'reports' as const, label: 'รายงาน', icon: <BarChart3 size={14} /> },
+          { id: 'demurrage' as const, label: 'Demurrage', icon: <AlertTriangle size={14} /> },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition-all ${
@@ -939,6 +941,11 @@ function BillingReports({ yardId }: { yardId: number }) {
             </div>
           </div>
         </>
+      )}
+
+      {/* =================== DEMURRAGE TAB =================== */}
+      {activeTab === 'demurrage' && (
+        <DemurrageTab yardId={yardId} />
       )}
     </div>
   );

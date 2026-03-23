@@ -15,6 +15,9 @@ import PhotoCapture from '@/components/gate/PhotoCapture';
 import SignaturePad from '@/components/gate/SignaturePad';
 import ContainerInspection from '@/components/gate/ContainerInspection';
 import EIRDocument from '@/components/gate/EIRDocument';
+import dynamic from 'next/dynamic';
+
+const ContainerTimeline = dynamic(() => import('@/components/containers/ContainerTimeline'), { ssr: false });
 
 interface Transaction {
   transaction_id: number;
@@ -189,6 +192,7 @@ export default function GatePage() {
   const [eirData, setEirData] = useState<Record<string, string | number | boolean | null> | null>(null);
 
   const yardId = session?.activeYardId || 1;
+  const [timelineId, setTimelineId] = useState<number | null>(null);
 
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -1779,6 +1783,9 @@ export default function GatePage() {
           </div>
         </div>
       )}
+
+      {/* Container Timeline Modal */}
+      {timelineId && <ContainerTimeline containerId={timelineId} onClose={() => setTimelineId(null)} />}
     </div>
   );
 }
