@@ -9,9 +9,11 @@ import YardAudit from '@/components/yard/YardAudit';
 import ContainerCardPWA from '@/components/yard/ContainerCardPWA';
 import BayCrossSection from '@/components/yard/BayCrossSection';
 import ContainerDetailModal from '@/components/yard/ContainerDetailModal';
+
+const ContainerTimeline = dynamic(() => import('@/components/containers/ContainerTimeline'), { ssr: false });
 import {
   MapPin, Search, Filter, ChevronDown, Cuboid, ClipboardCheck, SearchIcon,
-  Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star,
+  Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star, Clock,
 } from 'lucide-react';
 
 const YardViewer3D = dynamic(() => import('@/components/yard/YardViewer3D'), {
@@ -92,6 +94,7 @@ export default function YardPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'search' | 'allocate' | 'audit'>('overview');
   const [highlightNumber, setHighlightNumber] = useState<string>('');
   const [detailContainerId, setDetailContainerId] = useState<number | null>(null);
+  const [timelineId, setTimelineId] = useState<number | null>(null);
 
   // Allocate state
   const [allocForm, setAllocForm] = useState({ size: '20', type: 'GP', shipping_line: '', container_number: '' });
@@ -431,15 +434,21 @@ export default function YardPage() {
                           ) : '—'}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          {c.gate_in_date ? (() => {
-                            const days = Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000);
-                            const color = days <= 7
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                              : days <= 14
-                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-                            return <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${color}`}>{days} วัน</span>;
-                          })() : '—'}
+                          <div className="flex items-center justify-center gap-1">
+                            {c.gate_in_date ? (() => {
+                              const days = Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000);
+                              const color = days <= 7
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                : days <= 14
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                              return <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${color}`}>{days} วัน</span>;
+                            })() : '—'}
+                            <button onClick={(e) => { e.stopPropagation(); setTimelineId(c.container_id); }}
+                              className="p-1 rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 hover:bg-indigo-100 transition-colors" title="Timeline">
+                              <Clock size={12} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -727,6 +736,9 @@ export default function YardPage() {
           onRefresh={fetchData}
         />
       )}
+
+      {/* Container Timeline Modal */}
+      {timelineId && <ContainerTimeline containerId={timelineId} onClose={() => setTimelineId(null)} />}
     </div>
   );
 }
