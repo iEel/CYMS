@@ -223,7 +223,10 @@ export default function DashboardPage() {
           </p>
         </div>
         <button
-          onClick={() => window.print()}
+          onClick={() => {
+            const yardId = session?.activeYardId || 1;
+            window.open(`/dashboard/print?yard_id=${yardId}`, '_blank');
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 transition-colors print:hidden"
         >
           <FileDown size={16} /> Export PDF
