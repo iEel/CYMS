@@ -507,6 +507,8 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
   const [transactions, setTransactions] = useState<CodecoTx[]>([]);
   const [summary, setSummary] = useState({ total: 0, gate_in: 0, gate_out: 0 });
   const [loading, setLoading] = useState(false);
+  const [codecoPage, setCodecoPage] = useState(1);
+  const codecoPerPage = 25;
 
   // SFTP Endpoints
   interface Endpoint { endpoint_id: number; name: string; host: string; shipping_line: string; type: string; format: string; is_active: boolean; last_sent_at: string; last_status: string; }
@@ -581,6 +583,10 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
   };
 
   const inputClass = "h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-700 dark:text-white";
+
+  // CODECO pagination
+  const codecoTotalPages = Math.ceil(transactions.length / codecoPerPage);
+  const codecoPaginated = transactions.slice((codecoPage - 1) * codecoPerPage, codecoPage * codecoPerPage);
 
   return (
     <div className="space-y-4">
@@ -723,7 +729,7 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                {transactions.map((tx, i) => (
+                {codecoPaginated.map((tx, i) => (
                   <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                     <td className="px-3 py-2 text-center">
                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
@@ -746,6 +752,27 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* CODECO Pagination */}
+        {!loading && codecoTotalPages > 1 && (
+          <div className="p-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+            <span className="text-xs text-slate-400">แสดง {(codecoPage - 1) * codecoPerPage + 1}–{Math.min(codecoPage * codecoPerPage, transactions.length)} จาก {transactions.length} รายการ</span>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setCodecoPage(1)} disabled={codecoPage === 1} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">«</button>
+              <button onClick={() => setCodecoPage(p => Math.max(1, p - 1))} disabled={codecoPage === 1} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">‹</button>
+              {Array.from({ length: Math.min(5, codecoTotalPages) }, (_, i) => {
+                let page: number;
+                if (codecoTotalPages <= 5) page = i + 1;
+                else if (codecoPage <= 3) page = i + 1;
+                else if (codecoPage >= codecoTotalPages - 2) page = codecoTotalPages - 4 + i;
+                else page = codecoPage - 2 + i;
+                return <button key={page} onClick={() => setCodecoPage(page)} className={`w-8 h-8 rounded-lg text-xs font-medium ${page === codecoPage ? 'bg-blue-500 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>{page}</button>;
+              })}
+              <button onClick={() => setCodecoPage(p => Math.min(codecoTotalPages, p + 1))} disabled={codecoPage === codecoTotalPages} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">›</button>
+              <button onClick={() => setCodecoPage(codecoTotalPages)} disabled={codecoPage === codecoTotalPages} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">»</button>
+            </div>
           </div>
         )}
       </div>

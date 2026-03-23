@@ -51,6 +51,8 @@ interface ContainerResult {
 export default function GatePage() {
   const { session } = useAuth();
   const [activeTab, setActiveTab] = useState<'gate_in' | 'gate_out' | 'history' | 'transfer'>('gate_in');
+  const [histPage, setHistPage] = useState(1);
+  const histPerPage = 25;
 
   // Gate-In form
   const [gateInForm, setGateInForm] = useState({
@@ -594,6 +596,10 @@ export default function GatePage() {
 
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
+
+  // History pagination
+  const histTotalPages = Math.ceil(transactions.length / histPerPage);
+  const histPaginated = transactions.slice((histPage - 1) * histPerPage, histPage * histPerPage);
 
   return (
     <div className="space-y-4">
@@ -1611,6 +1617,7 @@ export default function GatePage() {
             </div>
           </div>
 
+
           {historyLoading ? (
             <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
           ) : transactions.length === 0 ? (
@@ -1631,7 +1638,7 @@ export default function GatePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {transactions.map(tx => (
+                  {histPaginated.map(tx => (
                     <tr key={tx.transaction_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                       <td className="px-4 py-3 text-slate-500 text-xs">
                         {new Date(tx.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short' })}{' '}
@@ -1662,6 +1669,27 @@ export default function GatePage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {!historyLoading && histTotalPages > 1 && (
+            <div className="p-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+              <span className="text-xs text-slate-400">แสดง {(histPage - 1) * histPerPage + 1}–{Math.min(histPage * histPerPage, transactions.length)} จาก {transactions.length}</span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setHistPage(1)} disabled={histPage === 1} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">«</button>
+                <button onClick={() => setHistPage(p => Math.max(1, p - 1))} disabled={histPage === 1} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">‹</button>
+                {Array.from({ length: Math.min(5, histTotalPages) }, (_, i) => {
+                  let page: number;
+                  if (histTotalPages <= 5) page = i + 1;
+                  else if (histPage <= 3) page = i + 1;
+                  else if (histPage >= histTotalPages - 2) page = histTotalPages - 4 + i;
+                  else page = histPage - 2 + i;
+                  return <button key={page} onClick={() => setHistPage(page)} className={`w-8 h-8 rounded-lg text-xs font-medium ${page === histPage ? 'bg-blue-500 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>{page}</button>;
+                })}
+                <button onClick={() => setHistPage(p => Math.min(histTotalPages, p + 1))} disabled={histPage === histTotalPages} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">›</button>
+                <button onClick={() => setHistPage(histTotalPages)} disabled={histPage === histTotalPages} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">»</button>
+              </div>
             </div>
           )}
         </div>

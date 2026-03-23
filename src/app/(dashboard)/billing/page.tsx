@@ -46,6 +46,8 @@ export default function BillingPage() {
   const [stats, setStats] = useState<Stats>({ total_outstanding: 0, total_paid: 0, total_overdue: 0, pending_count: 0 });
   const [invLoading, setInvLoading] = useState(false);
   const [invFilter, setInvFilter] = useState('');
+  const [invPage, setInvPage] = useState(1);
+  const invPerPage = 25;
 
   // Tariffs
   const [tariffs, setTariffs] = useState<TariffRow[]>([]);
@@ -180,6 +182,11 @@ export default function BillingPage() {
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
 
+  // Invoice pagination
+  const invFiltered = invoices;
+  const invTotalPages = Math.ceil(invFiltered.length / invPerPage);
+  const invPaginated = invFiltered.slice((invPage - 1) * invPerPage, invPage * invPerPage);
+
   return (
     <div className="space-y-4">
       <div>
@@ -244,7 +251,7 @@ export default function BillingPage() {
             <div className="p-8 text-center text-sm text-slate-400">ยังไม่มีใบแจ้งหนี้ — กดแท็บ &quot;สร้างบิล&quot; เพื่อเริ่ม</div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-700">
-              {invoices.map(inv => (
+              {invPaginated.map(inv => (
                 <div key={inv.invoice_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -286,6 +293,27 @@ export default function BillingPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Invoice Pagination */}
+          {!invLoading && invTotalPages > 1 && (
+            <div className="p-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+              <span className="text-xs text-slate-400">แสดง {(invPage - 1) * invPerPage + 1}–{Math.min(invPage * invPerPage, invFiltered.length)} จาก {invFiltered.length} รายการ</span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setInvPage(1)} disabled={invPage === 1} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">«</button>
+                <button onClick={() => setInvPage(p => Math.max(1, p - 1))} disabled={invPage === 1} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">‹</button>
+                {Array.from({ length: Math.min(5, invTotalPages) }, (_, i) => {
+                  let page: number;
+                  if (invTotalPages <= 5) page = i + 1;
+                  else if (invPage <= 3) page = i + 1;
+                  else if (invPage >= invTotalPages - 2) page = invTotalPages - 4 + i;
+                  else page = invPage - 2 + i;
+                  return <button key={page} onClick={() => setInvPage(page)} className={`w-8 h-8 rounded-lg text-xs font-medium ${page === invPage ? 'bg-blue-500 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>{page}</button>;
+                })}
+                <button onClick={() => setInvPage(p => Math.min(invTotalPages, p + 1))} disabled={invPage === invTotalPages} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">›</button>
+                <button onClick={() => setInvPage(invTotalPages)} disabled={invPage === invTotalPages} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">»</button>
+              </div>
             </div>
           )}
         </div>
