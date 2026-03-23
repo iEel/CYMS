@@ -41,9 +41,19 @@ export default function ReportPrintPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      // Get auth token
+      const authHeaders: HeadersInit = {};
+      try {
+        const s = localStorage.getItem('cyms_session');
+        if (s) {
+          const session = JSON.parse(s);
+          if (session?.token) authHeaders['Authorization'] = `Bearer ${session.token}`;
+        }
+      } catch { /* */ }
+
       const [reportRes, companyRes] = await Promise.all([
-        fetch(`/api/billing/reports?yard_id=${yardId}&type=${type}&date=${date}`),
-        fetch('/api/settings/company'),
+        fetch(`/api/billing/reports?yard_id=${yardId}&type=${type}&date=${date}`, { headers: authHeaders }),
+        fetch('/api/settings/company', { headers: authHeaders }),
       ]);
       const report = await reportRes.json();
       const comp = await companyRes.json();

@@ -70,8 +70,18 @@ export default function PrintInvoicePage() {
     if (!invoiceId) return;
     const load = async () => {
       try {
+        // Get auth token from localStorage
+        const authHeaders: HeadersInit = {};
+        try {
+          const s = localStorage.getItem('cyms_session');
+          if (s) {
+            const session = JSON.parse(s);
+            if (session?.token) authHeaders['Authorization'] = `Bearer ${session.token}`;
+          }
+        } catch { /* */ }
+
         // Fetch invoice detail
-        const invRes = await fetch(`/api/billing/invoices?invoice_id=${invoiceId}`);
+        const invRes = await fetch(`/api/billing/invoices?invoice_id=${invoiceId}`, { headers: authHeaders });
         const invData = await invRes.json();
         const inv = invData.invoices?.[0];
         if (inv) {
@@ -94,7 +104,7 @@ export default function PrintInvoicePage() {
             try {
               const gcRes = await fetch('/api/billing/gate-check', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
                 body: JSON.stringify({ yard_id: inv.yard_id, container_id: inv.container_id }),
               });
               const gcData = await gcRes.json();
@@ -112,7 +122,7 @@ export default function PrintInvoicePage() {
         }
 
         // Fetch company profile
-        const compRes = await fetch('/api/settings/company');
+        const compRes = await fetch('/api/settings/company', { headers: authHeaders });
         const compData = await compRes.json();
         if (compData && compData.company_name) setCompany(compData);
       } catch (err) { console.error(err); }
