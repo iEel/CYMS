@@ -68,6 +68,7 @@ export default function DashboardPrintPage() {
           @page { size: A4; margin: 15mm; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
+          .print-section { break-inside: avoid; page-break-inside: avoid; }
         }
       `}</style>
 
@@ -86,7 +87,7 @@ export default function DashboardPrintPage() {
       </div>
 
       {/* KPI Summary */}
-      <div className="grid grid-cols-5 gap-3 mb-5">
+      <div className="print-section grid grid-cols-5 gap-3 mb-5">
         {[
           { label: 'ตู้ในลาน', value: kpi.containers.value, change: kpi.containers.change, color: '#2563EB' },
           { label: 'อัตราลานเต็ม', value: `${kpi.occupancy.value}%`, change: null, color: '#059669' },
@@ -110,7 +111,7 @@ export default function DashboardPrintPage() {
 
       {/* Container Status Summary */}
       {summary && (
-        <div className="border border-slate-200 rounded-lg p-3 mb-5">
+        <div className="print-section border border-slate-200 rounded-lg p-3 mb-5">
           <h3 className="font-bold text-xs mb-2">สรุปสถานะตู้</h3>
           <div className="grid grid-cols-6 gap-2 text-center text-[10px]">
             {[
@@ -132,7 +133,7 @@ export default function DashboardPrintPage() {
 
       {/* Gate Activity (7 days) */}
       {charts?.gateActivity && (
-        <div className="border border-slate-200 rounded-lg p-3 mb-5">
+        <div className="print-section border border-slate-200 rounded-lg p-3 mb-5">
           <h3 className="font-bold text-xs mb-2">Gate Activity (7 วัน)</h3>
           <table className="w-full text-[10px] border border-slate-200">
             <thead>
@@ -157,7 +158,7 @@ export default function DashboardPrintPage() {
 
       {/* Revenue Trend (7 days) */}
       {charts?.revenueTrend && (
-        <div className="border border-slate-200 rounded-lg p-3 mb-5">
+        <div className="print-section border border-slate-200 rounded-lg p-3 mb-5">
           <h3 className="font-bold text-xs mb-2">Revenue Trend (7 วัน)</h3>
           <table className="w-full text-[10px] border border-slate-200">
             <thead>
@@ -179,7 +180,7 @@ export default function DashboardPrintPage() {
       )}
 
       {/* Dwell Distribution + Shipping Line — side by side */}
-      <div className="grid grid-cols-2 gap-4 mb-5">
+      <div className="print-section grid grid-cols-2 gap-4 mb-5">
         {charts?.dwellDistribution && (
           <div className="border border-slate-200 rounded-lg p-3">
             <h3 className="font-bold text-xs mb-2">Dwell Time Distribution</h3>
