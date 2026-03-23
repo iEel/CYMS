@@ -654,6 +654,11 @@ export default function BillingPage() {
 
       {/* =================== REPORTS TAB =================== */}
       {activeTab === 'reports' && <BillingReports yardId={yardId} />}
+
+      {/* =================== DEMURRAGE TAB =================== */}
+      {activeTab === 'demurrage' && (
+        <DemurrageTab yardId={yardId} />
+      )}
     </div>
   );
 }
@@ -943,10 +948,6 @@ function BillingReports({ yardId }: { yardId: number }) {
         </>
       )}
 
-      {/* =================== DEMURRAGE TAB =================== */}
-      {activeTab === 'demurrage' && (
-        <DemurrageTab yardId={yardId} />
-      )}
     </div>
   );
 }
