@@ -25,7 +25,8 @@ const MODULE_LABELS: Record<string, { label: string; color: string }> = {
   mnr:        { label: 'ซ่อมบำรุง M&R',    color: 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' },
   billing:    { label: 'บัญชี & การเงิน',   color: 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
   customers:  { label: 'จัดการลูกค้า',      color: 'bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
-  settings:   { label: 'ตั้งค่าระบบ',       color: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
+  settings:    { label: 'ตั้งค่าระบบ',       color: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
+  audit_trail: { label: 'ประวัติการใช้งาน',  color: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
 };
 
 const ACTION_LABELS: Record<string, string> = {

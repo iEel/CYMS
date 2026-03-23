@@ -71,6 +71,9 @@ const PERMISSIONS = [
   { module: 'customers', action: 'read', description: 'ดูข้อมูลลูกค้า' },
   { module: 'customers', action: 'update', description: 'แก้ไขข้อมูลลูกค้า' },
   { module: 'customers', action: 'delete', description: 'ลบข้อมูลลูกค้า' },
+
+  // Audit Trail
+  { module: 'audit_trail', action: 'read', description: 'ดูประวัติการใช้งาน (Audit Trail)' },
 ];
 
 // สิทธิ์เริ่มต้นตาม Role
