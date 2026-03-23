@@ -17,7 +17,7 @@ interface TariffRow {
 
 interface InvoiceRow {
   invoice_id: number; invoice_number: string; customer_name: string;
-  container_number: string; charge_type: string; description: string;
+  container_number: string; container_status: string; charge_type: string; description: string;
   quantity: number; unit_price: number; total_amount: number;
   vat_amount: number; grand_total: number; status: string;
   due_date: string; paid_at: string; created_at: string;
@@ -106,10 +106,12 @@ export default function BillingPage() {
   }, [activeTab, fetchInvoices, fetchTariffs, customers.length]);
 
   const updateInvoice = async (id: number, action: string) => {
-    await fetch('/api/billing/invoices', {
+    const res = await fetch('/api/billing/invoices', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ invoice_id: id, action }),
     });
+    const data = await res.json();
+    if (data.error) { alert(data.error); }
     fetchInvoices();
   };
 
@@ -479,10 +481,10 @@ export default function BillingPage() {
           {invLoading ? (
             <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-700">
-              {invoices.filter(i => ['issued', 'overdue'].includes(i.status)).length === 0 ? (
-                <div className="p-8 text-center text-sm text-slate-400">ไม่มีบิลค้างชำระ</div>
-              ) : invoices.filter(i => ['issued', 'overdue'].includes(i.status)).map(inv => (
+         <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {invoices.filter(i => ['issued', 'overdue'].includes(i.status) && i.container_status !== 'gated_out').length === 0 ? (
+                <div className="p-8 text-center text-sm text-slate-400">ไม่มีบิลค้างชำระ (เฉพาะตู้ในลาน)</div>
+              ) : invoices.filter(i => ['issued', 'overdue'].includes(i.status) && i.container_status !== 'gated_out').map(inv => (
                 <div key={inv.invoice_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -491,6 +493,7 @@ export default function BillingPage() {
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">{inv.invoice_number}</span>
                           {inv.container_number && <span className="text-xs text-slate-400">🏷️ {inv.container_number}</span>}
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-50 text-emerald-600">ในลาน</span>
                         </div>
                         <div className="text-xs text-slate-400 mt-0.5">{inv.customer_name} • ฿{inv.grand_total.toLocaleString()}</div>
                       </div>

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
              c.address as customer_address,
              ISNULL(c.branch_type, 'head_office') as customer_branch_type,
              ISNULL(c.branch_number, '00000') as customer_branch_number,
-             ct.container_number,
+             ct.container_number, ct.status as container_status,
              y.yard_name, y.yard_code,
              ISNULL(y.branch_type, 'head_office') as yard_branch_type,
              ISNULL(y.branch_number, '00000') as yard_branch_number
@@ -151,12 +151,15 @@ export async function PUT(request: NextRequest) {
           .query("UPDATE Invoices SET status = 'credit_note' WHERE invoice_id = @id");
         break;
       case 'hold':
-        // Put billing hold on container
+        // Put billing hold on container — only if still in yard
         const inv2 = await db.request().input('id3', sql.Int, invoice_id)
-          .query('SELECT container_id FROM Invoices WHERE invoice_id = @id3');
+          .query('SELECT i.container_id, ct.status as container_status FROM Invoices i LEFT JOIN Containers ct ON i.container_id = ct.container_id WHERE i.invoice_id = @id3');
         if (inv2.recordset[0]?.container_id) {
+          if (inv2.recordset[0].container_status === 'gated_out') {
+            return NextResponse.json({ success: false, error: 'ตู้นี้ออกจากลานไปแล้ว ไม่สามารถ Hold ได้' });
+          }
           await db.request().input('cid2', sql.Int, inv2.recordset[0].container_id)
-            .query("UPDATE Containers SET hold_status = 'billing_hold', updated_at = GETDATE() WHERE container_id = @cid2");
+            .query("UPDATE Containers SET hold_status = 'billing_hold', updated_at = GETDATE() WHERE container_id = @cid2 AND status = 'in_yard'");
         }
         break;
       case 'release':
