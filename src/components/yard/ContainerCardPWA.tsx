@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import {
   Search, MapPin, Package, Ship, ArrowUpFromLine, ClipboardCheck,
-  ArrowRightLeft, Eye, Phone, Loader2, Filter, ChevronDown, Box,
+  ArrowRightLeft, Eye, Phone, Loader2, Filter, ChevronDown, Box, Clock,
 } from 'lucide-react';
 
 interface ContainerCard {
@@ -144,6 +144,11 @@ export default function ContainerCardPWA({ yardId, containers }: Props) {
                   }`}>
                     {c.is_laden ? 'LADEN' : 'EMPTY'}
                   </span>
+                  {c.gate_in_date && (() => {
+                    const days = Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000);
+                    const color = days <= 7 ? 'text-emerald-700 bg-emerald-100' : days <= 14 ? 'text-amber-700 bg-amber-100' : 'text-red-700 bg-red-100';
+                    return <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${color}`}><Clock size={10} />{days} วัน</span>;
+                  })()}
                 </div>
               </div>
 

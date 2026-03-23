@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Search, MapPin, Package, Ship, Sparkles, ExternalLink, Calendar, Truck, User, Image as ImageIcon } from 'lucide-react';
+import { Search, MapPin, Package, Ship, Sparkles, ExternalLink, Calendar, Truck, User, Image as ImageIcon, Clock } from 'lucide-react';
 
 interface SearchResult {
   container_id: number;
@@ -175,14 +175,21 @@ export default function ContainerSearch({ yardId, onLocate }: Props) {
                     <MapPin size={10} className="inline mr-1" />
                     Zone {c.zone_name} • B{c.bay}-R{c.row}-T{c.tier}
                   </p>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => { e.stopPropagation(); handleSelect(c); }}
-                    className="mt-1 text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5 ml-auto cursor-pointer"
-                  >
-                    <Sparkles size={10} /> ค้นหาตำแหน่ง 3D
-                  </span>
+                  <div className="flex items-center gap-1.5 justify-end mt-1">
+                    {c.gate_in_date && (() => {
+                      const days = Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000);
+                      const color = days <= 7 ? 'text-emerald-600 bg-emerald-50' : days <= 14 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
+                      return <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${color}`}><Clock size={8} className="inline mr-0.5" />{days} วัน</span>;
+                    })()}
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); handleSelect(c); }}
+                      className="text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Sparkles size={10} /> 3D
+                    </span>
+                  </div>
                 </div>
               </div>
             </button>

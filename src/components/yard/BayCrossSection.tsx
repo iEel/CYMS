@@ -357,6 +357,16 @@ export default function BayCrossSection({ yardId, onSelectContainer }: Props) {
                     Zone {hoveredContainer.zone_name} • B{hoveredContainer.bay}-R{hoveredContainer.row}-T{hoveredContainer.tier}
                   </span>
                 </div>
+                {hoveredContainer.gate_in_date && (() => {
+                  const days = Math.floor((Date.now() - new Date(hoveredContainer.gate_in_date).getTime()) / 86400000);
+                  const color = days <= 7 ? 'text-emerald-400' : days <= 14 ? 'text-amber-400' : 'text-red-400';
+                  return (
+                    <div className="col-span-2">
+                      <span className="text-slate-400">อยู่ในลาน:</span>{' '}
+                      <span className={`font-bold ${color}`}>{days} วัน</span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
