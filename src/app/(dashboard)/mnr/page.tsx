@@ -7,6 +7,7 @@ import {
   XCircle, Clock, AlertTriangle, RotateCcw, Send, ThumbsUp, Play,
   DollarSign, Ban, BookOpen, Camera, ImageIcon, Save,
 } from 'lucide-react';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface EORRow {
   eor_id: number; eor_number: string; container_number: string;
@@ -60,6 +61,7 @@ export default function MnRPage() {
   });
   const [cedexSaving, setCedexSaving] = useState(false);
   const [laborRate, setLaborRate] = useState(350);
+  const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   // Load labor rate from company settings
   useEffect(() => {
@@ -156,11 +158,17 @@ export default function MnRPage() {
   };
 
   const handleDeleteCedex = async (id: number) => {
-    if (!confirm('ยืนยันลบรหัส CEDEX นี้?')) return;
-    try {
-      await fetch(`/api/mnr/cedex?id=${id}`, { method: 'DELETE' });
-      fetchCedexCodes();
-    } catch (err) { console.error(err); }
+    setConfirmDlg({
+      open: true,
+      message: 'ยืนยันลบรหัส CEDEX นี้?',
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        try {
+          await fetch(`/api/mnr/cedex?id=${id}`, { method: 'DELETE' });
+          fetchCedexCodes();
+        } catch (err) { console.error(err); }
+      },
+    });
   };
 
   const startEditCedex = (c: CedexCode) => {
@@ -199,6 +207,7 @@ export default function MnRPage() {
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
 
   return (
+    <>
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">ซ่อมบำรุง M&R</h1>
@@ -533,5 +542,8 @@ export default function MnRPage() {
         </div>
       )}
     </div>
+
+    <ConfirmDialog open={confirmDlg.open} title="ยืนยันการลบ" message={confirmDlg.message} confirmLabel="ลบ" onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
+    </>
   );
 }

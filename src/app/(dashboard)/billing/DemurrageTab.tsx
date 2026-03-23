@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, AlertTriangle, Clock, Search, Calculator, ChevronDown, ChevronUp } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 const ContainerTimeline = dynamic(() => import('@/components/containers/ContainerTimeline'), { ssr: false });
 
@@ -68,6 +69,9 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
   const [addForm, setAddForm] = useState({ charge_type: 'demurrage', free_days: 7, rate_20: 0, rate_40: 0, rate_45: 0, description: '' });
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Confirm dialog
+  const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -143,16 +147,22 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
   };
 
   const deleteRate = async (id: number) => {
-    if (!confirm('ต้องการลบ rate นี้?')) return;
-    try {
-      await fetch('/api/billing/demurrage', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ demurrage_id: id, action: 'delete' }),
-      });
-      fetchRates();
-      fetchOverview();
-    } catch (e) { console.error(e); }
+    setConfirmDlg({
+      open: true,
+      message: 'ต้องการลบ rate นี้?',
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        try {
+          await fetch('/api/billing/demurrage', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ demurrage_id: id, action: 'delete' }),
+          });
+          fetchRates();
+          fetchOverview();
+        } catch (e) { console.error(e); }
+      },
+    });
   };
 
   const filteredContainers = containers.filter(c => {
@@ -465,6 +475,16 @@ export default function DemurrageTab({ yardId }: DemurrageTabProps) {
 
       {/* Timeline Modal */}
       {timelineId && <ContainerTimeline containerId={timelineId} onClose={() => setTimelineId(null)} />}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmDlg.open}
+        title="ยืนยันการลบ"
+        message={confirmDlg.message}
+        confirmLabel="ลบ"
+        onConfirm={confirmDlg.action}
+        onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }

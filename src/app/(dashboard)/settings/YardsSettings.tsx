@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { MapPin, Plus, Pencil, Layers, ChevronDown, ChevronUp, Save, Loader2, X, Trash2 } from 'lucide-react';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface Yard {
   yard_id: number;
@@ -58,6 +59,7 @@ export default function YardsSettings() {
   const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
   const [editZoneForm, setEditZoneForm] = useState({ zone_name: '', zone_type: 'dry', max_tier: 5, max_bay: 20, max_row: 10, size_restriction: 'any', has_reefer_plugs: false });
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchYards = useCallback(async () => {
     try {
@@ -141,14 +143,20 @@ export default function YardsSettings() {
 
   // Delete Yard
   const handleDeleteYard = async (yardId: number) => {
-    if (!confirm('ต้องการลบลานนี้? (zone ทั้งหมดจะถูกลบด้วย)')) return;
-    setDeleteError(null);
-    try {
-      const res = await fetch(`/api/settings/yards?yard_id=${yardId}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json.success) { fetchYards(); }
-      else { setDeleteError(json.error); }
-    } catch (err) { console.error(err); }
+    setConfirmDlg({
+      open: true,
+      message: 'ต้องการลบลานนี้? (zone ทั้งหมดจะถูกลบด้วย)',
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        setDeleteError(null);
+        try {
+          const res = await fetch(`/api/settings/yards?yard_id=${yardId}`, { method: 'DELETE' });
+          const json = await res.json();
+          if (json.success) { fetchYards(); }
+          else { setDeleteError(json.error); }
+        } catch (err) { console.error(err); }
+      },
+    });
   };
 
   // Edit Zone
@@ -168,14 +176,20 @@ export default function YardsSettings() {
 
   // Delete Zone
   const handleDeleteZone = async (zoneId: number, yardId: number) => {
-    if (!confirm('ต้องการลบโซนนี้?')) return;
-    setDeleteError(null);
-    try {
-      const res = await fetch(`/api/settings/zones?zone_id=${zoneId}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json.success) { fetchZones(yardId); fetchYards(); }
-      else { setDeleteError(json.error); }
-    } catch (err) { console.error(err); }
+    setConfirmDlg({
+      open: true,
+      message: 'ต้องการลบโซนนี้?',
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        setDeleteError(null);
+        try {
+          const res = await fetch(`/api/settings/zones?zone_id=${zoneId}`, { method: 'DELETE' });
+          const json = await res.json();
+          if (json.success) { fetchZones(yardId); fetchYards(); }
+          else { setDeleteError(json.error); }
+        } catch (err) { console.error(err); }
+      },
+    });
   };
 
   if (loading) {
@@ -189,6 +203,7 @@ export default function YardsSettings() {
   }
 
   return (
+    <>
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -436,5 +451,8 @@ export default function YardsSettings() {
         </div>
       )}
     </div>
+
+    <ConfirmDialog open={confirmDlg.open} title="ยืนยันการลบ" message={confirmDlg.message} confirmLabel="ลบ" onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
+    </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Shield, Loader2, Save, CheckCircle2, RefreshCw, Trash2 } from 'lucide-react';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface RateLimitConfig {
   enabled: boolean;
@@ -28,6 +29,7 @@ export default function RateLimitSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchData = useCallback(async () => {
     try {
@@ -55,9 +57,15 @@ export default function RateLimitSettings() {
   };
 
   const handleClear = async () => {
-    if (!confirm('ล้างข้อมูล Rate Limit ทั้งหมด? (ปลดบล็อก IP ทั้งหมด)')) return;
-    await fetch('/api/settings/rate-limit', { method: 'DELETE' });
-    fetchData();
+    setConfirmDlg({
+      open: true,
+      message: 'ล้างข้อมูล Rate Limit ทั้งหมด? (ปลดบล็อก IP ทั้งหมด)',
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        await fetch('/api/settings/rate-limit', { method: 'DELETE' });
+        fetchData();
+      },
+    });
   };
 
   const inputClass = "h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 w-24 text-center";
@@ -66,6 +74,7 @@ export default function RateLimitSettings() {
   if (loading) return <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-slate-400" size={24} /></div>;
 
   return (
+    <>
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
       {/* Header */}
       <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
@@ -200,5 +209,8 @@ export default function RateLimitSettings() {
         )}
       </div>
     </div>
+
+    <ConfirmDialog open={confirmDlg.open} title="ยืนยันการล้าง" message={confirmDlg.message} confirmLabel="ล้างข้อมูล" variant="warning" onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
+    </>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Trash2, Search, Loader2, Link, X, AlertTriangle,
 } from 'lucide-react';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface PrefixMap {
   prefix_id: number;
@@ -29,6 +30,7 @@ export default function PrefixMapping() {
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ prefix_code: '', customer_id: '', notes: '' });
+  const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchData = useCallback(async () => {
     try {
@@ -75,12 +77,18 @@ export default function PrefixMapping() {
   };
 
   const handleDelete = async (id: number, code: string) => {
-    if (!confirm(`ลบ prefix ${code}?`)) return;
-    try {
-      const res = await fetch(`/api/settings/prefix-mapping?prefix_id=${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) fetchData();
-    } catch (err) { console.error(err); }
+    setConfirmDlg({
+      open: true,
+      message: `ลบ prefix ${code}?`,
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        try {
+          const res = await fetch(`/api/settings/prefix-mapping?prefix_id=${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) fetchData();
+        } catch (err) { console.error(err); }
+      },
+    });
   };
 
   const filtered = mappings.filter(m =>
@@ -112,6 +120,7 @@ export default function PrefixMapping() {
   }
 
   return (
+    <>
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
@@ -221,5 +230,8 @@ export default function PrefixMapping() {
         )}
       </div>
     </div>
+
+    <ConfirmDialog open={confirmDlg.open} title="ยืนยันการลบ" message={confirmDlg.message} confirmLabel="ลบ" onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
+    </>
   );
 }

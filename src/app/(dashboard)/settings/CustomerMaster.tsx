@@ -5,6 +5,7 @@ import {
   Plus, Trash2, Save, Users, Pencil, X, CheckCircle2, Loader2,
   Building, Truck, Ship, Search,
 } from 'lucide-react';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface Customer {
   customer_id: number;
@@ -43,6 +44,7 @@ export default function CustomerMaster() {
   const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState('');
   const [saved, setSaved] = useState(false);
+  const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchData = useCallback(async () => {
     try {
@@ -98,13 +100,19 @@ export default function CustomerMaster() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('ยืนยันลบลูกค้านี้?')) return;
-    try {
-      const res = await fetch(`/api/settings/customers?customer_id=${id}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json.success) fetchData();
-      else alert(json.error || 'Error');
-    } catch (err) { console.error(err); }
+    setConfirmDlg({
+      open: true,
+      message: 'ยืนยันลบลูกค้านี้?',
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        try {
+          const res = await fetch(`/api/settings/customers?customer_id=${id}`, { method: 'DELETE' });
+          const json = await res.json();
+          if (json.success) fetchData();
+          else alert(json.error || 'Error');
+        } catch (err) { console.error(err); }
+      },
+    });
   };
 
   const startEdit = (c: Customer) => {
@@ -137,6 +145,7 @@ export default function CustomerMaster() {
   }
 
   return (
+    <>
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
@@ -340,5 +349,8 @@ export default function CustomerMaster() {
         )}
       </div>
     </div>
+
+    <ConfirmDialog open={confirmDlg.open} title="ยืนยันการลบ" message={confirmDlg.message} confirmLabel="ลบ" onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
+    </>
   );
 }

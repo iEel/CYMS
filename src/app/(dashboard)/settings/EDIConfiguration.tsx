@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Trash2, Save, Globe, CheckCircle2, Shield, Server, Loader2,
 } from 'lucide-react';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface EDIEndpoint {
   endpoint_id: number;
@@ -26,6 +27,7 @@ export default function EDIConfiguration() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchEndpoints = useCallback(async () => {
     setLoading(true);
@@ -53,9 +55,15 @@ export default function EDIConfiguration() {
   };
 
   const removeEndpoint = async (id: number) => {
-    if (!confirm('ลบ Endpoint นี้?')) return;
-    await fetch(`/api/edi/endpoints?endpoint_id=${id}`, { method: 'DELETE' });
-    setEndpoints(endpoints.filter(e => e.endpoint_id !== id));
+    setConfirmDlg({
+      open: true,
+      message: 'ลบ Endpoint นี้?',
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        await fetch(`/api/edi/endpoints?endpoint_id=${id}`, { method: 'DELETE' });
+        setEndpoints(endpoints.filter(e => e.endpoint_id !== id));
+      },
+    });
   };
 
   const update = (id: number, field: string, value: string | number | boolean) => {
@@ -87,6 +95,7 @@ export default function EDIConfiguration() {
   };
 
   return (
+    <>
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
       <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -160,5 +169,8 @@ export default function EDIConfiguration() {
         </button>
       </div>
     </div>
+
+    <ConfirmDialog open={confirmDlg.open} title="ยืนยันการลบ" message={confirmDlg.message} confirmLabel="ลบ" onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
+    </>
   );
 }
