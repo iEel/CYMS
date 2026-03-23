@@ -16,11 +16,11 @@ export async function GET(req: NextRequest) {
       SELECT i.invoice_id, i.invoice_number, i.charge_type, i.description,
              i.quantity, i.unit_price, i.total_amount, i.vat_amount, i.grand_total,
              i.status, i.paid_at, i.created_at, i.due_date,
-             c.customer_name, c.tax_id,
+             c.customer_name, c.tax_id, c.credit_term, c.address, c.branch_type, c.branch_number,
              ct.container_number
-      FROM invoices i
-      LEFT JOIN customers c ON i.customer_id = c.customer_id
-      LEFT JOIN containers ct ON i.container_id = ct.container_id
+      FROM Invoices i
+      LEFT JOIN Customers c ON i.customer_id = c.customer_id
+      LEFT JOIN Containers ct ON i.container_id = ct.container_id
       WHERE i.yard_id = @yard_id
     `;
 
@@ -59,8 +59,12 @@ export async function GET(req: NextRequest) {
       entry_type: inv.status === 'credit_note' ? 'credit' : 'debit',
       invoice_number: inv.invoice_number,
       date: fmtDate(inv.paid_at || inv.created_at),
+      due_date: fmtDate(inv.due_date),
       customer_name: inv.customer_name,
       tax_id: inv.tax_id || '',
+      branch: inv.branch_type === 'head_office' ? 'สำนักงานใหญ่' : inv.branch_number ? `สาขา ${inv.branch_number}` : '',
+      credit_term: inv.credit_term ? `${inv.credit_term} วัน` : '',
+      address: inv.address || '',
       container_number: inv.container_number || '',
       charge_type: inv.charge_type,
       description: inv.description,
@@ -73,9 +77,9 @@ export async function GET(req: NextRequest) {
     }));
 
     if (format === 'csv') {
-      const headers = 'entry_type,invoice_number,date,customer_name,tax_id,container_number,charge_type,description,quantity,unit_price,amount_before_vat,vat_amount,grand_total,status';
+      const headers = 'entry_type,invoice_number,date,due_date,customer_name,tax_id,branch,credit_term,address,container_number,charge_type,description,quantity,unit_price,amount_before_vat,vat_amount,grand_total,status';
       const rows = entries.map((e: Record<string, unknown>) =>
-        `${e.entry_type},${e.invoice_number},${e.date},${String(e.customer_name || '').replace(/,/g, ' ')},${e.tax_id},${e.container_number},${e.charge_type},"${e.description}",${e.quantity},${e.unit_price},${e.amount_before_vat},${e.vat_amount},${e.grand_total},${e.status}`
+        `${e.entry_type},${e.invoice_number},${e.date},${e.due_date},${String(e.customer_name || '').replace(/,/g, ' ')},${e.tax_id},${String(e.branch || '').replace(/,/g, ' ')},${e.credit_term},"${String(e.address || '').replace(/"/g, '""')}",${e.container_number},${e.charge_type},"${e.description}",${e.quantity},${e.unit_price},${e.amount_before_vat},${e.vat_amount},${e.grand_total},${e.status}`
       );
       const csv = [headers, ...rows].join('\n');
       return new NextResponse(csv, {
