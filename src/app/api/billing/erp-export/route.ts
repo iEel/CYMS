@@ -44,10 +44,21 @@ export async function GET(req: NextRequest) {
     const invoices = result.recordset;
 
     // Transform to accounting entries
+    const fmtDate = (d: unknown) => {
+      if (!d) return '';
+      const dt = new Date(d as string);
+      const dd = String(dt.getDate()).padStart(2, '0');
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const yy = dt.getFullYear();
+      const hh = String(dt.getHours()).padStart(2, '0');
+      const mi = String(dt.getMinutes()).padStart(2, '0');
+      return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+    };
+
     const entries = invoices.map((inv: Record<string, unknown>) => ({
       entry_type: inv.status === 'credit_note' ? 'credit' : 'debit',
       invoice_number: inv.invoice_number,
-      date: inv.paid_at || inv.created_at,
+      date: fmtDate(inv.paid_at || inv.created_at),
       customer_name: inv.customer_name,
       tax_id: inv.tax_id || '',
       container_number: inv.container_number || '',
