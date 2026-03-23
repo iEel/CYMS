@@ -79,6 +79,8 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
 
   const content = (
     <div id="eir-overlay" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm overflow-y-auto p-4">
+      {/* Override @page to A5 landscape for EIR printing */}
+      <style>{`@media print { @page { size: A5 landscape; margin: 3mm; } }`}</style>
       {/* Print & Close Controls — hidden on print */}
       <div className="max-w-[1100px] mx-auto mb-3 flex items-center justify-between no-print">
         <div className="flex items-center gap-3">

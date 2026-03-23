@@ -252,6 +252,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 @media print {
+  /* === Default: Dashboard / Report A4 print === */
   @page {
     size: A4;
     margin: 10mm;
@@ -275,7 +276,28 @@ input:focus, select:focus, textarea:focus {
     margin: 0 !important;
   }
 
-  /* For EIR overlay printing */
+  /* Ensure colors print */
+  * {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  /* White background for print */
+  body, html {
+    background: white !important;
+  }
+
+  /* Remove shadows in print */
+  .rounded-xl, .rounded-lg {
+    box-shadow: none !important;
+  }
+
+  /* === EIR Overlay Mode: A5 Landscape === */
+  /* When #eir-overlay is present, hide everything else */
+  body:has(#eir-overlay) > *:not(#eir-overlay) {
+    display: none !important;
+  }
+
   #eir-overlay {
     position: static !important;
     background: white !important;
@@ -295,20 +317,9 @@ input:focus, select:focus, textarea:focus {
     border: none !important;
   }
 
-  /* Ensure colors print */
-  * {
-    print-color-adjust: exact !important;
-    -webkit-print-color-adjust: exact !important;
-  }
-
-  /* White background for print */
-  body, html {
-    background: white !important;
-  }
-
-  /* Remove shadows and borders in print */
-  .rounded-xl, .rounded-lg {
-    box-shadow: none !important;
+  /* Hide damage section from EIR */
+  #eir-damage-section {
+    display: none !important;
   }
 }
 
