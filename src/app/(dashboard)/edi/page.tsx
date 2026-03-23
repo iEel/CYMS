@@ -508,6 +508,13 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
   const [summary, setSummary] = useState({ total: 0, gate_in: 0, gate_out: 0 });
   const [loading, setLoading] = useState(false);
 
+  // SFTP Endpoints
+  interface Endpoint { endpoint_id: number; name: string; host: string; shipping_line: string; type: string; format: string; is_active: boolean; last_sent_at: string; last_status: string; }
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
+  const [selectedEp, setSelectedEp] = useState<number>(0);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
+
   const buildUrl = useCallback((format = 'json') => {
     let url = `/api/edi/codeco?yard_id=${yardId}&format=${format}`;
     if (dateFrom) url += `&date_from=${dateFrom}`;
@@ -531,7 +538,41 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
     finally { setLoading(false); }
   }, [buildUrl]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const fetchEndpoints = useCallback(async () => {
+    try {
+      const res = await fetch('/api/edi/endpoints');
+      const data = await res.json();
+      const active = (data.endpoints || []).filter((e: Endpoint) => e.is_active);
+      setEndpoints(active);
+      if (active.length > 0 && !selectedEp) setSelectedEp(active[0].endpoint_id);
+    } catch { /* */ }
+  }, [selectedEp]);
+
+  useEffect(() => { fetchData(); fetchEndpoints(); }, [fetchData, fetchEndpoints]);
+
+  const handleSftpSend = async () => {
+    if (!selectedEp || summary.total === 0) return;
+    setSending(true); setSendResult(null);
+    try {
+      const res = await fetch('/api/edi/codeco/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint_id: selectedEp, yard_id: yardId,
+          date_from: dateFrom, date_to: dateTo,
+          type: txType !== 'all' ? txType : undefined,
+          shipping_line: slFilter || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSendResult({ success: true, message: data.message });
+        fetchEndpoints(); // refresh last_sent
+      } else {
+        setSendResult({ success: false, message: data.error || 'เกิดข้อผิดพลาด' });
+      }
+    } catch { setSendResult({ success: false, message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ' }); }
+    finally { setSending(false); }
+  };
 
   const fmtDate = (d: string) => {
     if (!d) return '';
@@ -601,11 +642,42 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
         </div>
       </div>
 
-      {/* Export Buttons */}
+      {/* SFTP Send + Export */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-white mb-3 flex items-center gap-2"><Send size={14} /> ส่ง CODECO ผ่าน SFTP</h4>
+        {endpoints.length === 0 ? (
+          <p className="text-xs text-slate-400">ยังไม่มี SFTP Endpoint — ไปตั้งค่าที่ <b>ตั้งค่า → EDI Configuration</b></p>
+        ) : (
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-[10px] font-semibold text-slate-400 uppercase mb-1 block">เลือก Endpoint</label>
+              <select value={selectedEp} onChange={e => setSelectedEp(parseInt(e.target.value))} className={inputClass + ' w-full'}>
+                {endpoints.map(ep => (
+                  <option key={ep.endpoint_id} value={ep.endpoint_id}>
+                    {ep.name} ({ep.host}) {ep.shipping_line ? `— ${ep.shipping_line}` : ''} [{ep.format}]
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button onClick={handleSftpSend} disabled={sending || summary.total === 0}
+              className="h-9 px-5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 transition-all">
+              {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              {sending ? 'กำลังส่ง...' : `ส่ง ${summary.total} รายการ`}
+            </button>
+          </div>
+        )}
+        {sendResult && (
+          <div className={`mt-3 p-3 rounded-xl text-sm ${sendResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+            {sendResult.message}
+          </div>
+        )}
+      </div>
+
+      {/* Download Buttons */}
       <div className="flex gap-2">
         <button onClick={() => window.open(buildUrl('edifact'), '_blank')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-all">
-          <Send size={14} /> ส่ง EDIFACT (.edi)
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
+          <FileDown size={14} /> EDIFACT (.edi)
         </button>
         <button onClick={() => window.open(buildUrl('csv'), '_blank')}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
