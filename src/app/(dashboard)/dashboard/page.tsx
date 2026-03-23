@@ -75,6 +75,7 @@ interface DashboardData {
     containers: { value: number; change: number };
     occupancy: { value: number; totalSlots: number };
     gateInToday: { value: number; change: number };
+    gateOutToday: { value: number; change: number };
     revenue: { value: number; change: number };
     pendingOrders: number;
   };
@@ -169,6 +170,16 @@ export default function DashboardPage() {
       bgColor: 'bg-amber-50 dark:bg-amber-900/20',
     },
     {
+      title: 'Gate-Out วันนี้',
+      value: kpi.gateOutToday.value.toString(),
+      change: `${kpi.gateOutToday.change >= 0 ? '+' : ''}${kpi.gateOutToday.change}`,
+      changeType: kpi.gateOutToday.change >= 0 ? 'up' as const : 'down' as const,
+      changeLabel: 'เทียบเมื่อวาน',
+      icon: <DoorOpen size={22} />,
+      color: '#EF4444',
+      bgColor: 'bg-red-50 dark:bg-red-900/20',
+    },
+    {
       title: 'รายได้วันนี้',
       value: `฿ ${kpi.revenue.value.toLocaleString()}`,
       change: kpi.revenue.change !== 0 ? `${kpi.revenue.change >= 0 ? '+' : ''}${kpi.revenue.change}%` : '-',
@@ -208,7 +219,7 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {kpiCards.map((kpiItem, i) => (
               <div
                 key={i}

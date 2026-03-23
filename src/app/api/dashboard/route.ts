@@ -61,6 +61,24 @@ export async function GET(request: NextRequest) {
         AND CAST(created_at AS DATE) = CAST(DATEADD(DAY, -1, GETDATE()) AS DATE)
       `);
 
+    // Gate-Out today count
+    const gateOutToday = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .query(`
+        SELECT COUNT(*) as cnt FROM GateTransactions 
+        WHERE yard_id = @yardId AND transaction_type = 'gate_out' 
+        AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE)
+      `);
+
+    // Gate-Out yesterday for comparison
+    const gateOutYesterday = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .query(`
+        SELECT COUNT(*) as cnt FROM GateTransactions 
+        WHERE yard_id = @yardId AND transaction_type = 'gate_out' 
+        AND CAST(created_at AS DATE) = CAST(DATEADD(DAY, -1, GETDATE()) AS DATE)
+      `);
+
     // Revenue today
     const revenueToday = await db.request()
       .input('yardId', sql.Int, yardId)
@@ -126,11 +144,16 @@ export async function GET(request: NextRequest) {
     const revYesterday = revenueYesterday.recordset[0].total || 0;
     const revChange = revYesterday > 0 ? Math.round(((revToday - revYesterday) / revYesterday) * 100 * 10) / 10 : 0;
 
+    const gateOutTodayCount = gateOutToday.recordset[0].cnt || 0;
+    const gateOutYesterdayCount = gateOutYesterday.recordset[0].cnt || 0;
+    const gateOutDiff = gateOutTodayCount - gateOutYesterdayCount;
+
     return NextResponse.json({
       kpi: {
         containers: { value: inYard, change: containerDiff },
         occupancy: { value: occupancyRate, totalSlots },
         gateInToday: { value: gateInTodayCount, change: gateInDiff },
+        gateOutToday: { value: gateOutTodayCount, change: gateOutDiff },
         revenue: { value: revToday, change: revChange },
         pendingOrders: pendingWO.recordset[0].cnt || 0,
       },
