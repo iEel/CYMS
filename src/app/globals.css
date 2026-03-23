@@ -253,22 +253,29 @@ input:focus, select:focus, textarea:focus {
 
 @media print {
   @page {
-    size: A5 landscape;
-    margin: 3mm;
+    size: A4;
+    margin: 10mm;
   }
 
-  /* Hide everything except EIR overlay (rendered via Portal as direct body child) */
-  body > *:not(#eir-overlay) {
+  /* Hide sidebar, topbar, and non-print elements */
+  aside,
+  header,
+  nav,
+  .no-print {
     display: none !important;
   }
 
-  /* Hide controls and damage report from EIR */
-  .no-print,
-  #eir-damage-section {
-    display: none !important;
+  /* Remove layout margin/padding from dashboard wrapper */
+  body > * > div[style*="marginLeft"] {
+    margin-left: 0 !important;
   }
 
-  /* EIR overlay — static layout, white bg, no scrollbar */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* For EIR overlay printing */
   #eir-overlay {
     position: static !important;
     background: white !important;
@@ -279,7 +286,6 @@ input:focus, select:focus, textarea:focus {
     inset: auto !important;
   }
 
-  /* EIR content — scale to fit A5 */
   #eir-print-area {
     max-width: none !important;
     margin: 0 !important;
@@ -293,6 +299,16 @@ input:focus, select:focus, textarea:focus {
   * {
     print-color-adjust: exact !important;
     -webkit-print-color-adjust: exact !important;
+  }
+
+  /* White background for print */
+  body, html {
+    background: white !important;
+  }
+
+  /* Remove shadows and borders in print */
+  .rounded-xl, .rounded-lg {
+    box-shadow: none !important;
   }
 }
 
