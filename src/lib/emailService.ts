@@ -113,31 +113,54 @@ async function sendViaSMTP(config: EmailConfig['smtp'], options: EmailOptions): 
   });
 }
 
-// ===== Get Config from env + DB =====
-export function getEmailConfig(): EmailConfig {
-  return {
-    enabled: true,
-    provider: process.env.AZURE_CLIENT_ID ? 'azure' : 'smtp',
+// ===== Get Config: secrets from .env, basic settings from DB =====
+let configCache: { config: EmailConfig; expiresAt: number } | null = null;
+
+export async function getEmailConfig(): Promise<EmailConfig> {
+  if (configCache && configCache.expiresAt > Date.now()) {
+    return configCache.config;
+  }
+
+  // Read non-sensitive settings from DB
+  let dbSettings: Record<string, string> = {};
+  try {
+    const { getDb } = await import('@/lib/db');
+    const db = await getDb();
+    const result = await db.request().query(`
+      SELECT setting_key, setting_value FROM SystemSettings 
+      WHERE setting_key LIKE 'email_%'
+    `);
+    for (const row of result.recordset) {
+      dbSettings[row.setting_key] = row.setting_value;
+    }
+  } catch { /* fallback to env only */ }
+
+  const config: EmailConfig = {
+    enabled: dbSettings.email_enabled === 'true',
+    provider: (dbSettings.email_provider as 'azure' | 'smtp') || (process.env.AZURE_CLIENT_ID ? 'azure' : 'smtp'),
     azure: {
-      tenantId: process.env.AZURE_TENANT_ID || '',
-      clientId: process.env.AZURE_CLIENT_ID || '',
-      clientSecret: process.env.AZURE_CLIENT_SECRET || '',
-      mailFrom: process.env.AZURE_MAIL_FROM || '',
+      tenantId: dbSettings.email_azure_tenant_id || process.env.AZURE_TENANT_ID || '',
+      clientId: dbSettings.email_azure_client_id || process.env.AZURE_CLIENT_ID || '',
+      clientSecret: process.env.AZURE_CLIENT_SECRET || '',         // .env only
+      mailFrom: dbSettings.email_azure_mail_from || process.env.AZURE_MAIL_FROM || '',
     },
     smtp: {
-      host: process.env.SMTP_HOST || 'smtp.office365.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      user: process.env.SMTP_USER || '',
-      pass: process.env.SMTP_PASS || '',
-      from: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+      host: dbSettings.email_smtp_host || process.env.SMTP_HOST || 'smtp.office365.com',
+      port: parseInt(dbSettings.email_smtp_port || process.env.SMTP_PORT || '587'),
+      user: dbSettings.email_smtp_user || process.env.SMTP_USER || '',
+      pass: process.env.SMTP_PASS || '',                           // .env only
+      from: dbSettings.email_smtp_from || process.env.SMTP_FROM || '',
     },
   };
+
+  configCache = { config, expiresAt: Date.now() + 30000 };
+  return config;
 }
 
 // ===== Main Send Function =====
 export async function sendEmail(options: EmailOptions): Promise<{ success: boolean; provider: string; error?: string }> {
   try {
-    const config = getEmailConfig();
+    const config = await getEmailConfig();
     if (!config.enabled) {
       return { success: false, provider: 'none', error: 'Email disabled' };
     }

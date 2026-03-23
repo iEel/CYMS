@@ -3,38 +3,29 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Mail, Cloud, Server, Send, CheckCircle, XCircle, Loader2,
-  Bell, Shield, Eye, EyeOff, ToggleLeft, ToggleRight,
+  Bell, Shield, ToggleLeft, ToggleRight, Info,
 } from 'lucide-react';
 
 interface EmailSettings {
   enabled: boolean;
   provider: 'azure' | 'smtp';
-  azure: {
-    tenantId: string;
-    clientId: string;
-    clientSecret: string;
-    mailFrom: string;
-  };
-  smtp: {
-    host: string;
-    port: number;
-    user: string;
-    pass: string;
-    from: string;
-  };
+  azure: { tenantId: string; clientId: string; mailFrom: string };
+  smtp: { host: string; port: number; user: string; from: string };
   notifyGate: boolean;
   notifyPayment: boolean;
   notifyTo: string;
+  envStatus: { azureConfigured: boolean; smtpConfigured: boolean };
 }
 
 const DEFAULT: EmailSettings = {
   enabled: false,
   provider: 'azure',
-  azure: { tenantId: '', clientId: '', clientSecret: '', mailFrom: '' },
-  smtp: { host: 'smtp.office365.com', port: 587, user: '', pass: '', from: '' },
+  azure: { tenantId: '', clientId: '', mailFrom: '' },
+  smtp: { host: 'smtp.office365.com', port: 587, user: '', from: '' },
   notifyGate: false,
   notifyPayment: false,
   notifyTo: '',
+  envStatus: { azureConfigured: false, smtpConfigured: false },
 };
 
 export default function EmailSettings() {
@@ -44,15 +35,11 @@ export default function EmailSettings() {
   const [testing, setTesting] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
   const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch('/api/settings/email');
-      if (res.ok) {
-        const data = await res.json();
-        setSettings(data);
-      }
+      if (res.ok) setSettings(await res.json());
     } catch { /* */ }
     finally { setLoading(false); }
   }, []);
@@ -82,8 +69,7 @@ export default function EmailSettings() {
 
   const handleTestEmail = async () => {
     if (!testEmail) return;
-    setTesting(true);
-    setTestResult(null);
+    setTesting(true); setTestResult(null);
     try {
       const res = await fetch('/api/settings/email', {
         method: 'POST',
@@ -91,25 +77,19 @@ export default function EmailSettings() {
         body: JSON.stringify({ to: testEmail }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setTestResult({ success: true, message: `ส่งสำเร็จ via ${data.provider}` });
-      } else {
-        setTestResult({ success: false, message: data.error || 'ส่งไม่สำเร็จ' });
-      }
-    } catch {
-      setTestResult({ success: false, message: 'เกิดข้อผิดพลาด' });
-    }
+      setTestResult(res.ok
+        ? { success: true, message: `ส่งสำเร็จ via ${data.provider}` }
+        : { success: false, message: data.error || 'ส่งไม่สำเร็จ' });
+    } catch { setTestResult({ success: false, message: 'เกิดข้อผิดพลาด' }); }
     setTesting(false);
   };
 
-  const toggleShow = (key: string) => setShowSecrets(p => ({ ...p, [key]: !p[key] }));
-
-  if (loading) {
-    return <div className="flex items-center justify-center p-12"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
-  }
+  if (loading) return <div className="flex items-center justify-center p-12"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
 
   const inputCls = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelCls = "block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1";
+  const envOk = "text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded";
+  const envMiss = "text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded";
 
   return (
     <div className="space-y-6">
@@ -132,14 +112,26 @@ export default function EmailSettings() {
 
       {settings.enabled && (
         <>
+          {/* .env.local notice */}
+          <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-800 dark:text-amber-300">
+            <Info size={18} className="flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Passwords / Secrets ตั้งค่าที่ไฟล์ .env.local</p>
+              <p className="text-xs mt-1 opacity-80">
+                เพื่อความปลอดภัย กรุณาแก้ไข <code className="bg-amber-100 dark:bg-amber-900/30 px-1 rounded">.env.local</code> โดยตรง:&nbsp;
+                <code>AZURE_CLIENT_SECRET</code>, <code>SMTP_PASS</code>
+              </p>
+            </div>
+          </div>
+
           {/* Provider Selection */}
           <div className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
             <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Email Provider</h3>
             <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: 'azure' as const, icon: <Cloud size={20} />, label: 'Azure AD (Graph API)', desc: 'Microsoft 365 OAuth2' },
-                { key: 'smtp' as const, icon: <Server size={20} />, label: 'SMTP Direct', desc: 'smtp.office365.com' },
-              ].map(p => (
+              {([
+                { key: 'azure' as const, icon: <Cloud size={20} />, label: 'Azure AD (Graph API)', desc: 'Microsoft 365 OAuth2', configured: settings.envStatus.azureConfigured },
+                { key: 'smtp' as const, icon: <Server size={20} />, label: 'SMTP Direct', desc: 'smtp.office365.com', configured: settings.envStatus.smtpConfigured },
+              ]).map(p => (
                 <button key={p.key}
                   onClick={() => setSettings(s => ({ ...s, provider: p.key }))}
                   className={`p-4 rounded-xl border text-left transition-all ${
@@ -150,23 +142,22 @@ export default function EmailSettings() {
                   <div className={`mb-2 ${settings.provider === p.key ? 'text-blue-500' : 'text-slate-400'}`}>{p.icon}</div>
                   <p className="text-sm font-semibold text-slate-800 dark:text-white">{p.label}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{p.desc}</p>
-                  {settings.provider === p.key && p.key === 'azure' && (
-                    <span className="inline-block mt-2 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">PRIMARY</span>
-                  )}
-                  {settings.provider !== p.key && p.key === 'smtp' && (
-                    <span className="inline-block mt-2 text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">FALLBACK</span>
-                  )}
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={p.configured ? envOk : envMiss}>
+                      {p.configured ? '✓ Secret ตั้งค่าแล้ว' : '✗ ยังไม่มี Secret ใน .env'}
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Azure AD Config */}
+          {/* Azure AD Config (non-sensitive fields only) */}
           <div className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2 mb-4">
               <Shield size={16} className="text-blue-500" />
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-white">Azure AD Configuration</h3>
-              {settings.provider === 'azure' && <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded">ACTIVE</span>}
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-white">Azure AD</h3>
+              {settings.provider === 'azure' && <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded">PRIMARY</span>}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -179,33 +170,22 @@ export default function EmailSettings() {
                 <input type="text" className={inputCls} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                   value={settings.azure.clientId} onChange={e => setSettings(s => ({ ...s, azure: { ...s.azure, clientId: e.target.value } }))} />
               </div>
-              <div>
-                <label className={labelCls}>Client Secret</label>
-                <div className="relative">
-                  <input type={showSecrets.azureSecret ? 'text' : 'password'} className={`${inputCls} pr-10`}
-                    placeholder="Azure app secret"
-                    value={settings.azure.clientSecret}
-                    onChange={e => setSettings(s => ({ ...s, azure: { ...s.azure, clientSecret: e.target.value } }))} />
-                  <button onClick={() => toggleShow('azureSecret')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                    {showSecrets.azureSecret ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-              </div>
-              <div>
+              <div className="md:col-span-2">
                 <label className={labelCls}>Mail From (User Principal Name)</label>
                 <input type="email" className={inputCls} placeholder="noreply@company.com"
                   value={settings.azure.mailFrom} onChange={e => setSettings(s => ({ ...s, azure: { ...s.azure, mailFrom: e.target.value } }))} />
               </div>
             </div>
+            <p className="text-xs text-slate-400 mt-3">💡 <code>AZURE_CLIENT_SECRET</code> ตั้งค่าที่ .env.local</p>
           </div>
 
-          {/* SMTP Config */}
+          {/* SMTP Config (non-sensitive fields only) */}
           <div className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2 mb-4">
               <Server size={16} className="text-amber-500" />
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-white">SMTP Configuration</h3>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-white">SMTP</h3>
               <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-2 py-0.5 rounded">
-                {settings.provider === 'smtp' ? 'ACTIVE' : 'FALLBACK'}
+                {settings.provider === 'smtp' ? 'PRIMARY' : 'FALLBACK'}
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -225,22 +205,12 @@ export default function EmailSettings() {
                   value={settings.smtp.user} onChange={e => setSettings(s => ({ ...s, smtp: { ...s.smtp, user: e.target.value } }))} />
               </div>
               <div>
-                <label className={labelCls}>Password</label>
-                <div className="relative">
-                  <input type={showSecrets.smtpPass ? 'text' : 'password'} className={`${inputCls} pr-10`}
-                    value={settings.smtp.pass}
-                    onChange={e => setSettings(s => ({ ...s, smtp: { ...s.smtp, pass: e.target.value } }))} />
-                  <button onClick={() => toggleShow('smtpPass')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                    {showSecrets.smtpPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-              </div>
-              <div className="md:col-span-2">
                 <label className={labelCls}>From Address</label>
                 <input type="email" className={inputCls} placeholder="noreply@company.com"
                   value={settings.smtp.from} onChange={e => setSettings(s => ({ ...s, smtp: { ...s.smtp, from: e.target.value } }))} />
               </div>
             </div>
+            <p className="text-xs text-slate-400 mt-3">💡 <code>SMTP_PASS</code> ตั้งค่าที่ .env.local</p>
           </div>
 
           {/* Notification Triggers */}

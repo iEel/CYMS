@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { sendEmail } from '@/lib/emailService';
 
-// GET — ดึงค่า email settings
+// GET — ดึงค่า email settings (non-sensitive from DB + env status)
 export async function GET() {
   try {
     const db = await getDb();
@@ -12,30 +12,33 @@ export async function GET() {
       WHERE setting_key LIKE 'email_%'
     `);
 
-    const settings: Record<string, string> = {};
+    const s: Record<string, string> = {};
     for (const row of result.recordset) {
-      settings[row.setting_key] = row.setting_value;
+      s[row.setting_key] = row.setting_value;
     }
 
     return NextResponse.json({
-      enabled: settings.email_enabled === 'true',
-      provider: settings.email_provider || 'azure',
+      enabled: s.email_enabled === 'true',
+      provider: s.email_provider || 'azure',
       azure: {
-        tenantId: settings.email_azure_tenant_id || '',
-        clientId: settings.email_azure_client_id || '',
-        clientSecret: settings.email_azure_client_secret ? '••••••••' : '',
-        mailFrom: settings.email_azure_mail_from || '',
+        tenantId: s.email_azure_tenant_id || '',
+        clientId: s.email_azure_client_id || '',
+        mailFrom: s.email_azure_mail_from || '',
       },
       smtp: {
-        host: settings.email_smtp_host || 'smtp.office365.com',
-        port: parseInt(settings.email_smtp_port || '587'),
-        user: settings.email_smtp_user || '',
-        pass: settings.email_smtp_pass ? '••••••••' : '',
-        from: settings.email_smtp_from || '',
+        host: s.email_smtp_host || 'smtp.office365.com',
+        port: parseInt(s.email_smtp_port || '587'),
+        user: s.email_smtp_user || '',
+        from: s.email_smtp_from || '',
       },
-      notifyGate: settings.email_notify_gate === 'true',
-      notifyPayment: settings.email_notify_payment === 'true',
-      notifyTo: settings.email_notify_to || '',
+      notifyGate: s.email_notify_gate === 'true',
+      notifyPayment: s.email_notify_payment === 'true',
+      notifyTo: s.email_notify_to || '',
+      // Show whether .env secrets are configured (without revealing values)
+      envStatus: {
+        azureConfigured: !!process.env.AZURE_CLIENT_SECRET,
+        smtpConfigured: !!process.env.SMTP_PASS,
+      },
     });
   } catch (error) {
     console.error('❌ GET email settings error:', error);
@@ -43,7 +46,7 @@ export async function GET() {
   }
 }
 
-// PUT — อัปเดต email settings
+// PUT — บันทึก non-sensitive settings to DB (secrets stay in .env.local)
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
@@ -57,28 +60,23 @@ export async function PUT(request: NextRequest) {
       email_notify_to: body.notifyTo || '',
     };
 
-    // Azure settings
+    // Azure non-sensitive fields
     if (body.azure) {
-      if (body.azure.tenantId) settingsToSave.email_azure_tenant_id = body.azure.tenantId;
-      if (body.azure.clientId) settingsToSave.email_azure_client_id = body.azure.clientId;
-      if (body.azure.clientSecret && body.azure.clientSecret !== '••••••••') {
-        settingsToSave.email_azure_client_secret = body.azure.clientSecret;
-      }
-      if (body.azure.mailFrom) settingsToSave.email_azure_mail_from = body.azure.mailFrom;
+      if (body.azure.tenantId !== undefined) settingsToSave.email_azure_tenant_id = body.azure.tenantId;
+      if (body.azure.clientId !== undefined) settingsToSave.email_azure_client_id = body.azure.clientId;
+      if (body.azure.mailFrom !== undefined) settingsToSave.email_azure_mail_from = body.azure.mailFrom;
+      // NO client_secret — stays in .env.local
     }
 
-    // SMTP settings
+    // SMTP non-sensitive fields
     if (body.smtp) {
-      if (body.smtp.host) settingsToSave.email_smtp_host = body.smtp.host;
-      if (body.smtp.port) settingsToSave.email_smtp_port = String(body.smtp.port);
-      if (body.smtp.user) settingsToSave.email_smtp_user = body.smtp.user;
-      if (body.smtp.pass && body.smtp.pass !== '••••••••') {
-        settingsToSave.email_smtp_pass = body.smtp.pass;
-      }
-      if (body.smtp.from) settingsToSave.email_smtp_from = body.smtp.from;
+      if (body.smtp.host !== undefined) settingsToSave.email_smtp_host = body.smtp.host;
+      if (body.smtp.port !== undefined) settingsToSave.email_smtp_port = String(body.smtp.port);
+      if (body.smtp.user !== undefined) settingsToSave.email_smtp_user = body.smtp.user;
+      if (body.smtp.from !== undefined) settingsToSave.email_smtp_from = body.smtp.from;
+      // NO password — stays in .env.local
     }
 
-    // Upsert each setting
     for (const [key, value] of Object.entries(settingsToSave)) {
       await db.request()
         .input('key', sql.NVarChar, key)
