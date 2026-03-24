@@ -6,23 +6,35 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// ─── Thai Font (THSarabunNew) Base64 ───
-// We'll load the font lazily to avoid bundling issues
-let thaiFont: string | null = null;
+// ─── Thai Font ───
+// Track the font name that was successfully loaded
+let activeFontName = 'helvetica';
+let fontLoaded = false;
 
-async function loadThaiFont(): Promise<string> {
-  if (thaiFont) return thaiFont;
+async function tryLoadThaiFont(doc: jsPDF) {
+  if (fontLoaded) {
+    if (activeFontName !== 'helvetica') {
+      try { doc.setFont(activeFontName); } catch { /* fallback */ }
+    }
+    return;
+  }
+  fontLoaded = true; // only attempt once
   try {
     const res = await fetch('/fonts/THSarabunNew.ttf');
+    if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
     const buf = await res.arrayBuffer();
+    if (buf.byteLength < 1000) throw new Error('Font file too small, likely invalid');
     const bytes = new Uint8Array(buf);
     let binary = '';
     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    thaiFont = btoa(binary);
-    return thaiFont;
-  } catch {
-    console.warn('⚠️ Thai font not found, falling back to Helvetica');
-    return '';
+    const b64 = btoa(binary);
+    doc.addFileToVFS('THSarabunNew.ttf', b64);
+    doc.addFont('THSarabunNew.ttf', 'THSarabunNew', 'normal');
+    doc.setFont('THSarabunNew');
+    activeFontName = 'THSarabunNew';
+  } catch (err) {
+    console.warn('⚠️ Thai font load failed, using helvetica:', err);
+    activeFontName = 'helvetica';
   }
 }
 
@@ -30,14 +42,7 @@ function setupDoc(orientation: 'portrait' | 'landscape' = 'portrait'): jsPDF {
   return new jsPDF({ orientation, unit: 'mm', format: 'a4' });
 }
 
-async function addThaiFont(doc: jsPDF) {
-  const fontData = await loadThaiFont();
-  if (fontData) {
-    doc.addFileToVFS('THSarabunNew.ttf', fontData);
-    doc.addFont('THSarabunNew.ttf', 'THSarabunNew', 'normal');
-    doc.setFont('THSarabunNew');
-  }
-}
+function getFontName() { return activeFontName; }
 
 function formatCurrency(n: number): string {
   return `${n?.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -85,7 +90,7 @@ export async function generateBillingReportPDF(
   companyName?: string,
 ) {
   const doc = setupDoc();
-  await addThaiFont(doc);
+  await tryLoadThaiFont(doc);
   const pageWidth = doc.internal.pageSize.getWidth();
   let y = 15;
 
@@ -110,7 +115,6 @@ export async function generateBillingReportPDF(
   // ─── Summary KPIs ───
   const s = data.summary;
   doc.setFontSize(11);
-  doc.setFont('THSarabunNew', 'normal');
 
   const kpiData = [
     ['ยอดเรียกเก็บ', `฿${formatCurrency(s.total_billed)}`],
@@ -124,7 +128,7 @@ export async function generateBillingReportPDF(
     head: [['รายการ', 'ยอด']],
     body: kpiData,
     theme: 'grid',
-    styles: { font: 'THSarabunNew', fontSize: 11, cellPadding: 3 },
+    styles: { font: getFontName(), fontSize: 11, cellPadding: 3 },
     headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
     columnStyles: { 1: { halign: 'right' } },
     margin: { left: 14, right: 14 },
@@ -147,7 +151,7 @@ export async function generateBillingReportPDF(
         ['Gate-Out (ปล่อยออก)', `${data.gateActivity.gate_out} ตู้`],
       ],
       theme: 'striped',
-      styles: { font: 'THSarabunNew', fontSize: 10, cellPadding: 2.5 },
+      styles: { font: getFontName(), fontSize: 10, cellPadding: 2.5 },
       headStyles: { fillColor: [16, 185, 129] },
       columnStyles: { 1: { halign: 'right' } },
       margin: { left: 14, right: 14 },
@@ -171,7 +175,7 @@ export async function generateBillingReportPDF(
         formatCurrency(ct.total),
       ]),
       theme: 'striped',
-      styles: { font: 'THSarabunNew', fontSize: 10, cellPadding: 2.5 },
+      styles: { font: getFontName(), fontSize: 10, cellPadding: 2.5 },
       headStyles: { fillColor: [59, 130, 246] },
       columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' } },
       margin: { left: 14, right: 14 },
@@ -197,7 +201,7 @@ export async function generateBillingReportPDF(
         formatCurrency(c.total),
       ]),
       theme: 'striped',
-      styles: { font: 'THSarabunNew', fontSize: 10, cellPadding: 2.5 },
+      styles: { font: getFontName(), fontSize: 10, cellPadding: 2.5 },
       headStyles: { fillColor: [245, 158, 11] },
       columnStyles: { 0: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'right' } },
       margin: { left: 14, right: 14 },
@@ -225,7 +229,7 @@ export async function generateBillingReportPDF(
         STATUS_LABELS[inv.status] || inv.status,
       ]),
       theme: 'striped',
-      styles: { font: 'THSarabunNew', fontSize: 9, cellPadding: 2 },
+      styles: { font: getFontName(), fontSize: 9, cellPadding: 2 },
       headStyles: { fillColor: [30, 41, 59] },
       columnStyles: { 0: { cellWidth: 30 }, 4: { halign: 'right' }, 5: { halign: 'center' } },
       margin: { left: 14, right: 14 },
@@ -251,7 +255,7 @@ export async function generateBillingReportPDF(
         formatCurrency(d.collected),
       ]),
       theme: 'striped',
-      styles: { font: 'THSarabunNew', fontSize: 9, cellPadding: 2 },
+      styles: { font: getFontName(), fontSize: 9, cellPadding: 2 },
       headStyles: { fillColor: [59, 130, 246] },
       columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
       margin: { left: 14, right: 14 },
@@ -298,7 +302,7 @@ export async function generateInvoicePDF(
   isReceipt?: boolean,
 ) {
   const doc = setupDoc();
-  await addThaiFont(doc);
+  await tryLoadThaiFont(doc);
   const pw = doc.internal.pageSize.getWidth();
   let y = 15;
 
@@ -369,7 +373,7 @@ export async function generateInvoicePDF(
       ['', '', '', 'ยอดสุทธิ', `฿${formatCurrency(inv.grand_total)}`],
     ],
     theme: 'grid',
-    styles: { font: 'THSarabunNew', fontSize: 10, cellPadding: 3 },
+    styles: { font: getFontName(), fontSize: 10, cellPadding: 3 },
     headStyles: { fillColor: [30, 41, 59], textColor: 255 },
     footStyles: { fillColor: [248, 250, 252], textColor: [30, 41, 59], fontStyle: 'bold' },
     columnStyles: { 0: { halign: 'center', cellWidth: 12 }, 2: { halign: 'center' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
@@ -430,7 +434,7 @@ export async function generateGateHistoryPDF(
   yardName?: string,
 ) {
   const doc = setupDoc('landscape');
-  await addThaiFont(doc);
+  await tryLoadThaiFont(doc);
   const pw = doc.internal.pageSize.getWidth();
   let y = 15;
 
@@ -461,7 +465,7 @@ export async function generateGateHistoryPDF(
       new Date(t.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }),
     ]),
     theme: 'striped',
-    styles: { font: 'THSarabunNew', fontSize: 9, cellPadding: 2 },
+    styles: { font: getFontName(), fontSize: 9, cellPadding: 2 },
     headStyles: { fillColor: [30, 41, 59], textColor: 255 },
     columnStyles: { 0: { halign: 'center', cellWidth: 10 }, 2: { halign: 'center' } },
     margin: { left: 10, right: 10 },
