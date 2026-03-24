@@ -6,43 +6,16 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// ─── Thai Font ───
-// Track the font name that was successfully loaded
-let activeFontName = 'helvetica';
-let fontLoaded = false;
-
-async function tryLoadThaiFont(doc: jsPDF) {
-  if (fontLoaded) {
-    if (activeFontName !== 'helvetica') {
-      try { doc.setFont(activeFontName); } catch { /* fallback */ }
-    }
-    return;
-  }
-  fontLoaded = true; // only attempt once
-  try {
-    const res = await fetch('/fonts/THSarabunNew.ttf');
-    if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength < 1000) throw new Error('Font file too small, likely invalid');
-    const bytes = new Uint8Array(buf);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    const b64 = btoa(binary);
-    doc.addFileToVFS('THSarabunNew.ttf', b64);
-    doc.addFont('THSarabunNew.ttf', 'THSarabunNew', 'normal');
-    doc.setFont('THSarabunNew');
-    activeFontName = 'THSarabunNew';
-  } catch (err) {
-    console.warn('⚠️ Thai font load failed, using helvetica:', err);
-    activeFontName = 'helvetica';
-  }
-}
+// ─── Font Config ───
+// Use helvetica (jsPDF built-in) — safe cross-platform
+// Thai characters in doc.text() will render as-is in PDF viewers that support Unicode
+const PDF_FONT = 'helvetica';
 
 function setupDoc(orientation: 'portrait' | 'landscape' = 'portrait'): jsPDF {
   return new jsPDF({ orientation, unit: 'mm', format: 'a4' });
 }
 
-function getFontName() { return activeFontName; }
+function getFontName() { return PDF_FONT; }
 
 function formatCurrency(n: number): string {
   return `${n?.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -90,7 +63,7 @@ export async function generateBillingReportPDF(
   companyName?: string,
 ) {
   const doc = setupDoc();
-  await tryLoadThaiFont(doc);
+  
   const pageWidth = doc.internal.pageSize.getWidth();
   let y = 15;
 
@@ -302,7 +275,7 @@ export async function generateInvoicePDF(
   isReceipt?: boolean,
 ) {
   const doc = setupDoc();
-  await tryLoadThaiFont(doc);
+  
   const pw = doc.internal.pageSize.getWidth();
   let y = 15;
 
@@ -434,7 +407,7 @@ export async function generateGateHistoryPDF(
   yardName?: string,
 ) {
   const doc = setupDoc('landscape');
-  await tryLoadThaiFont(doc);
+  
   const pw = doc.internal.pageSize.getWidth();
   let y = 15;
 
