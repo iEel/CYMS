@@ -106,7 +106,7 @@ export async function generateBillingReportPDF(
     body: kpiData,
     theme: 'grid',
     styles: { font: getFontName(), fontSize: 11, cellPadding: 3 },
-    headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+    headStyles: { fillColor: [30, 41, 59], textColor: 255 },
     columnStyles: { 1: { halign: 'right' } },
     margin: { left: 14, right: 14 },
   });
@@ -352,7 +352,7 @@ export async function generateInvoicePDF(
     theme: 'grid',
     styles: { font: getFontName(), fontSize: 10, cellPadding: 3 },
     headStyles: { fillColor: [30, 41, 59], textColor: 255 },
-    footStyles: { fillColor: [248, 250, 252], textColor: [30, 41, 59], fontStyle: 'bold' },
+    footStyles: { fillColor: [248, 250, 252], textColor: [30, 41, 59] },
     columnStyles: { 0: { halign: 'center', cellWidth: 12 }, 2: { halign: 'center' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
     margin: { left: 14, right: 14 },
   });
