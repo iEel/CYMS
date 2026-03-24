@@ -45,6 +45,26 @@ async function executeEdiSend(ep: ScheduledEndpoint): Promise<void> {
       .input('epId', sql.Int, ep.endpoint_id)
       .query('UPDATE EDIEndpoints SET schedule_last_run = GETDATE() WHERE endpoint_id = @epId');
 
+    // Audit trail for auto-schedule send
+    const { logAudit } = await import('@/lib/audit');
+    await logAudit({
+      userId: null,
+      yardId: ep.schedule_yard_id || 1,
+      action: data.success ? 'edi_auto_send_success' : 'edi_auto_send_failed',
+      entityType: 'edi_endpoint',
+      entityId: ep.endpoint_id,
+      details: {
+        source: 'auto-schedule',
+        endpoint_name: ep.name,
+        delivery_type: ep.type,
+        shipping_line: ep.shipping_line || 'ALL',
+        cron: ep.schedule_cron,
+        record_count: data.record_count || 0,
+        filename: data.filename || null,
+        error: data.error || null,
+      },
+    });
+
     if (data.success) {
       console.log(`  ✅ [EDI Scheduler] ${ep.name}: sent ${data.record_count} records`);
     } else {
@@ -52,6 +72,23 @@ async function executeEdiSend(ep: ScheduledEndpoint): Promise<void> {
     }
   } catch (error) {
     console.error(`  ❌ [EDI Scheduler] ${ep.name} error:`, error);
+
+    // Audit trail for scheduler error
+    try {
+      const { logAudit } = await import('@/lib/audit');
+      await logAudit({
+        userId: null,
+        yardId: ep.schedule_yard_id || 1,
+        action: 'edi_auto_send_error',
+        entityType: 'edi_endpoint',
+        entityId: ep.endpoint_id,
+        details: {
+          source: 'auto-schedule',
+          endpoint_name: ep.name,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    } catch { /* audit shouldn't block */ }
   }
 }
 

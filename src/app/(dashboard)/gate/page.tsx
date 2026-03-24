@@ -25,7 +25,7 @@ interface Transaction {
   size: string;
   type: string;
   shipping_line: string;
-  transaction_type: 'gate_in' | 'gate_out';
+  transaction_type: 'gate_in' | 'gate_out' | 'transfer' | 'transfer_in';
   driver_name: string;
   truck_plate: string;
   eir_number: string;
@@ -101,6 +101,9 @@ export default function GatePage() {
   const [selectedTransfer, setSelectedTransfer] = useState<ContainerResult | null>(null);
   const [transferLoading, setTransferLoading] = useState(false);
   const [transferResult, setTransferResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [allYards, setAllYards] = useState<{ yard_id: number; yard_name: string }[]>([]);
+  const [inTransitContainers, setInTransitContainers] = useState<{ container_id: number; container_number: string; size: string; type: string; shipping_line: string; driver_name: string; truck_plate: string; transfer_number: string; transfer_date: string; from_yard_name: string }[]>([]);
+  const [receiveLoading, setReceiveLoading] = useState<number | null>(null);
   const [gateInLoading, setGateInLoading] = useState(false);
   const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string; assigned_location?: { zone_name: string; bay: number; row: number; tier: number; reason: string } } | null>(null);
 
@@ -209,9 +212,44 @@ export default function GatePage() {
     finally { setHistoryLoading(false); }
   }, [yardId, historyDate, historySearch]);
 
+  // Fetch yards list for transfer dropdown
+  useEffect(() => {
+    fetch('/api/settings/yards').then(r => r.json()).then(d => setAllYards(Array.isArray(d) ? d : d.yards || [])).catch(() => {});
+  }, []);
+
+  // Fetch in-transit containers when transfer tab is active
+  const fetchInTransit = useCallback(async () => {
+    try {
+      const res = await fetch('/api/gate/transfer/receive');
+      const data = await res.json();
+      setInTransitContainers(data.containers || []);
+    } catch { /* */ }
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'history') fetchHistory();
-  }, [activeTab, fetchHistory]);
+    if (activeTab === 'transfer') fetchInTransit();
+  }, [activeTab, fetchHistory, fetchInTransit]);
+
+  // Receive in-transit container
+  const handleReceiveTransfer = async (containerId: number) => {
+    setReceiveLoading(containerId);
+    try {
+      const res = await fetch('/api/gate/transfer/receive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ container_id: containerId, yard_id: yardId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTransferResult({ success: true, message: data.message });
+        fetchInTransit();
+      } else {
+        setTransferResult({ success: false, message: `❌ ${data.error}` });
+      }
+    } catch { setTransferResult({ success: false, message: '❌ เกิดข้อผิดพลาด' }); }
+    finally { setReceiveLoading(null); }
+  };
 
   // === Check Digit Validation + Boxtech Auto-Lookup ===
   useEffect(() => {
@@ -1648,10 +1686,12 @@ export default function GatePage() {
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${
                           tx.transaction_type === 'gate_in'
                             ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            : tx.transaction_type === 'transfer' || tx.transaction_type === 'transfer_in'
+                            ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
                             : 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
                         }`}>
-                          {tx.transaction_type === 'gate_in' ? <ArrowDownToLine size={10} /> : <ArrowUpFromLine size={10} />}
-                          {tx.transaction_type === 'gate_in' ? 'IN' : 'OUT'}
+                          {tx.transaction_type === 'gate_in' ? <ArrowDownToLine size={10} /> : tx.transaction_type === 'transfer' || tx.transaction_type === 'transfer_in' ? <ArrowRightLeft size={10} /> : <ArrowUpFromLine size={10} />}
+                          {tx.transaction_type === 'gate_in' ? 'IN' : tx.transaction_type === 'transfer' ? 'TRF-OUT' : tx.transaction_type === 'transfer_in' ? 'TRF-IN' : 'OUT'}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-slate-800 dark:text-white">{tx.container_number}</td>
@@ -1711,6 +1751,39 @@ export default function GatePage() {
           </div>
 
           <div className="p-5 space-y-4">
+            {/* ===== RECEIVE IN-TRANSIT ===== */}
+            {inTransitContainers.length > 0 && (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-800 overflow-hidden">
+                <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/10 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2">🚛 ตู้ระหว่างขนส่ง ({inTransitContainers.length} ตู้)</h4>
+                  <button onClick={fetchInTransit} className="text-xs text-amber-600 hover:text-amber-800 font-medium">รีเฟรช</button>
+                </div>
+                <div className="divide-y divide-amber-100 dark:divide-amber-900/20">
+                  {inTransitContainers.map(c => (
+                    <div key={c.container_id} className="px-4 py-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 shrink-0">
+                          <Package size={16} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-mono font-semibold text-sm text-slate-800 dark:text-white">{c.container_number}</p>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {c.size}&apos;{c.type} · {c.shipping_line || '-'} · จาก {c.from_yard_name || 'ไม่ทราบ'} · {c.transfer_number}
+                          </p>
+                        </div>
+                      </div>
+                      <button onClick={() => handleReceiveTransfer(c.container_id)} disabled={receiveLoading === c.container_id}
+                        className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5 shrink-0 transition-all">
+                        {receiveLoading === c.container_id ? <Loader2 size={12} className="animate-spin" /> : <ArrowDownToLine size={12} />}
+                        รับเข้าลาน
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ===== SEND TRANSFER ===== */}
             <div>
               <label className={labelClass}>ค้นหาตู้ในลาน</label>
               <div className="flex gap-2">
@@ -1749,9 +1822,9 @@ export default function GatePage() {
                     <label className={labelClass}>ลานปลายทาง *</label>
                     <select value={transferForm.to_yard_id} onChange={e => setTransferForm({ ...transferForm, to_yard_id: e.target.value })} className={inputClass}>
                       <option value="">เลือกลาน...</option>
-                      <option value="1">ลานตู้สาขาหลัก</option>
-                      <option value="2">ลานตู้สาขา 2</option>
-                      <option value="3">ลานตู้สาขา 3</option>
+                      {allYards.filter(y => y.yard_id !== yardId).map(y => (
+                        <option key={y.yard_id} value={y.yard_id}>{y.yard_name}</option>
+                      ))}
                     </select>
                   </div>
                   <div>

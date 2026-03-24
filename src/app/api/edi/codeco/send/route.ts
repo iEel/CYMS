@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import SftpClient from 'ssh2-sftp-client';
+import { logAudit } from '@/lib/audit';
 
 // POST — Send CODECO file via SFTP to a specific endpoint
 export async function POST(request: NextRequest) {
@@ -226,6 +227,26 @@ export async function POST(request: NextRequest) {
       `);
 
     if (sendStatus === 'failed') {
+      // Audit — failed send
+      await logAudit({
+        userId: null,
+        yardId: yard_id || 1,
+        action: 'edi_send_failed',
+        entityType: 'edi_endpoint',
+        entityId: endpoint_id,
+        details: {
+          endpoint_name: ep.name,
+          delivery_type: ep.type,
+          format: ep.format,
+          shipping_line: ep.shipping_line || 'ALL',
+          record_count: transactions.length,
+          filename,
+          date_from: date_from || 'today',
+          date_to: date_to || 'today',
+          error: errorMsg,
+        },
+      });
+
       return NextResponse.json({
         success: false,
         error: `${ep.type === 'email' ? 'Email' : 'SFTP'} failed: ${errorMsg}`,
@@ -233,6 +254,26 @@ export async function POST(request: NextRequest) {
         record_count: transactions.length,
       });
     }
+
+    // Audit — successful send
+    await logAudit({
+      userId: null,
+      yardId: yard_id || 1,
+      action: 'edi_send_success',
+      entityType: 'edi_endpoint',
+      entityId: endpoint_id,
+      details: {
+        endpoint_name: ep.name,
+        delivery_type: ep.type,
+        format: ep.format,
+        shipping_line: ep.shipping_line || 'ALL',
+        record_count: transactions.length,
+        filename,
+        date_from: date_from || 'today',
+        date_to: date_to || 'today',
+        recipients: ep.type === 'email' ? ep.host : `${ep.host}:${ep.remote_path}`,
+      },
+    });
 
     return NextResponse.json({
       success: true,

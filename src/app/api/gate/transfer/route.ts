@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       .input('driverName', sql.NVarChar, driver_name || '')
       .input('truckPlate', sql.NVarChar, truck_plate || '')
       .input('eirNumber', sql.NVarChar, transferNum)
-      .input('notes', sql.NVarChar, notes || `Transfer to yard ${to_yard_id}`)
+      .input('notes', sql.NVarChar, notes || JSON.stringify({ transfer_to_yard: to_yard_id }))
       .query(`
         INSERT INTO GateTransactions (container_id, yard_id, transaction_type, driver_name, truck_plate, eir_number, notes)
         VALUES (@containerId, @fromYard, @transType, @driverName, @truckPlate, @eirNumber, @notes)
