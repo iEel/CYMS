@@ -63,6 +63,11 @@ export default function MnRPage() {
   const [laborRate, setLaborRate] = useState(350);
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
+  // Complete modal (actual_cost prompt)
+  const [completeModal, setCompleteModal] = useState<{ open: boolean; eorId: number; estimatedCost: number } | null>(null);
+  const [actualCostInput, setActualCostInput] = useState('');
+  const [eorNotes, setEorNotes] = useState('');
+
   // Load labor rate from company settings
   useEffect(() => {
     fetch('/api/settings/company').then(r => r.json()).then(d => {
@@ -119,12 +124,14 @@ export default function MnRPage() {
         body: JSON.stringify({
           container_id: selectedContainer.container_id, yard_id: yardId,
           damage_details: damages, estimated_cost: estimatedCost,
+          notes: eorNotes || null,
+          user_id: session?.userId || null,
         }),
       });
       const data = await res.json();
       if (data.success) {
         setCreateResult({ success: true, message: `✅ สร้าง EOR ${data.eor_number} สำเร็จ — ราคาประเมิน ฿${estimatedCost.toLocaleString()} (พร้อมรูปถ่าย ${repairPhotos.length} รูป)` });
-        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]);
+        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]); setEorNotes('');
       } else {
         setCreateResult({ success: false, message: `❌ ${data.error}` });
       }
@@ -186,12 +193,25 @@ export default function MnRPage() {
     setShowCedexForm(true);
   };
 
-  const updateOrder = async (eorId: number, action: string) => {
+  const updateOrder = async (eorId: number, action: string, actualCost?: number) => {
     await fetch('/api/mnr', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eor_id: eorId, action }),
+      body: JSON.stringify({ eor_id: eorId, action, actual_cost: actualCost, user_id: session?.userId || null }),
     });
     fetchOrders();
+  };
+
+  const handleComplete = (eorId: number, estimatedCost: number) => {
+    setCompleteModal({ open: true, eorId, estimatedCost });
+    setActualCostInput(String(estimatedCost || 0));
+  };
+
+  const confirmComplete = async () => {
+    if (!completeModal) return;
+    const cost = parseFloat(actualCostInput) || 0;
+    await updateOrder(completeModal.eorId, 'complete', cost);
+    setCompleteModal(null);
+    setActualCostInput('');
   };
 
   const statusLabels: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -291,7 +311,7 @@ export default function MnRPage() {
                           className="px-2 py-1 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium hover:bg-violet-100 flex items-center gap-1"><Play size={10} /> เริ่มซ่อม</button>
                       )}
                       {o.status === 'in_repair' && (
-                        <button onClick={() => updateOrder(o.eor_id, 'complete')}
+                        <button onClick={() => handleComplete(o.eor_id, o.estimated_cost)}
                           className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 flex items-center gap-1"><CheckCircle2 size={10} /> เสร็จ</button>
                       )}
                     </div>
@@ -399,6 +419,13 @@ export default function MnRPage() {
               {repairPhotos.length > 0 && (
                 <p className="text-[10px] text-slate-400 flex items-center gap-1"><ImageIcon size={10} /> {repairPhotos.length} รูปแนบ</p>
               )}
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className={labelClass}>หมายเหตุ (ถ้ามี)</label>
+              <input type="text" value={eorNotes} onChange={e => setEorNotes(e.target.value)}
+                className={inputClass} placeholder="เช่น ผู้ใช้แจ้ง, ตรวจพบตอน Gate-In" />
             </div>
 
             <button onClick={handleCreate} disabled={createLoading || !selectedContainer || selectedCodes.length === 0}
@@ -544,6 +571,38 @@ export default function MnRPage() {
     </div>
 
     <ConfirmDialog open={confirmDlg.open} title="ยืนยันการลบ" message={confirmDlg.message} confirmLabel="ลบ" onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
+
+    {/* Complete Modal — ถามค่าซ่อมจริง */}
+    {completeModal?.open && (
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+          <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+            <CheckCircle2 size={18} className="text-emerald-500" /> ยืนยันซ่อมเสร็จ
+          </h3>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">ราคาประเมิน</label>
+            <p className="text-sm text-slate-400">฿{(completeModal.estimatedCost || 0).toLocaleString()}</p>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">ค่าซ่อมจริง (฿) *</label>
+            <input type="number" value={actualCostInput}
+              onChange={e => setActualCostInput(e.target.value)}
+              className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-lg font-mono text-slate-800 dark:text-white outline-none focus:border-emerald-500"
+              autoFocus />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button onClick={confirmComplete}
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 flex items-center justify-center gap-2">
+              <CheckCircle2 size={14} /> ยืนยัน
+            </button>
+            <button onClick={() => setCompleteModal(null)}
+              className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500 text-sm hover:bg-slate-200">
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }

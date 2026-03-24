@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
+import { z } from 'zod';
+
+// === Zod Schemas ===
+const createEORSchema = z.object({
+  container_id: z.number().int().positive(),
+  yard_id: z.number().int().positive(),
+  customer_id: z.number().int().positive().optional().nullable(),
+  damage_details: z.any().optional(),
+  estimated_cost: z.number().min(0).optional().default(0),
+  notes: z.string().max(1000).optional().nullable(),
+  user_id: z.number().int().positive().optional().nullable(),
+});
+
+const updateEORSchema = z.object({
+  eor_id: z.number().int().positive(),
+  action: z.enum(['submit', 'approve', 'start_repair', 'complete', 'reject']),
+  actual_cost: z.number().min(0).optional(),
+  user_id: z.number().int().positive().optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+});
 
 // GET — ดึง Repair Orders
 export async function GET(request: NextRequest) {
@@ -39,7 +60,12 @@ export async function GET(request: NextRequest) {
 // POST — สร้าง EOR
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const rawBody = await request.json();
+    const parsed = createEORSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'ข้อมูลไม่ถูกต้อง', details: parsed.error.issues }, { status: 400 });
+    }
+    const body = parsed.data;
     const db = await getDb();
 
     // Generate EOR number
@@ -56,18 +82,29 @@ export async function POST(request: NextRequest) {
       .input('damageDetails', sql.NVarChar, body.damage_details ? JSON.stringify(body.damage_details) : null)
       .input('estimatedCost', sql.Decimal(12, 2), body.estimated_cost || 0)
       .input('notes', sql.NVarChar, body.notes || null)
+      .input('createdBy', sql.Int, body.user_id || null)
       .query(`
         INSERT INTO RepairOrders (eor_number, container_id, yard_id, customer_id,
-          damage_details, estimated_cost)
+          damage_details, estimated_cost, notes, created_by)
         OUTPUT INSERTED.*
         VALUES (@eorNumber, @containerId, @yardId, @customerId,
-          @damageDetails, @estimatedCost)
+          @damageDetails, @estimatedCost, @notes, @createdBy)
       `);
 
     // Update container status
     await db.request()
       .input('cid', sql.Int, body.container_id)
       .query("UPDATE Containers SET status = 'under_repair', updated_at = GETDATE() WHERE container_id = @cid");
+
+    // Audit trail
+    await logAudit({
+      yardId: body.yard_id,
+      userId: body.user_id || undefined,
+      action: 'eor_create',
+      entityType: 'repair_order',
+      entityId: result.recordset[0].eor_id,
+      details: { eor_number: eorNumber, container_id: body.container_id, estimated_cost: body.estimated_cost },
+    });
 
     return NextResponse.json({ success: true, order: result.recordset[0], eor_number: eorNumber });
   } catch (error) {
@@ -79,10 +116,24 @@ export async function POST(request: NextRequest) {
 // PUT — อัปเดตสถานะ EOR
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { eor_id, action, actual_cost } = body;
+    const rawBody = await request.json();
+    const parsed = updateEORSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'ข้อมูลไม่ถูกต้อง', details: parsed.error.issues }, { status: 400 });
+    }
+    const { eor_id, action, actual_cost, user_id } = parsed.data;
 
     const db = await getDb();
+
+    // Get order info for audit + container status
+    const orderInfo = await db.request()
+      .input('eid', sql.Int, eor_id)
+      .query('SELECT eor_number, container_id, yard_id FROM RepairOrders WHERE eor_id = @eid');
+    const order = orderInfo.recordset[0];
+    if (!order) {
+      return NextResponse.json({ error: 'ไม่พบ EOR' }, { status: 404 });
+    }
+
     const req = db.request().input('eorId', sql.Int, eor_id);
 
     switch (action) {
@@ -98,18 +149,31 @@ export async function PUT(request: NextRequest) {
       case 'complete':
         req.input('actualCost', sql.Decimal(12, 2), actual_cost || 0);
         await req.query("UPDATE RepairOrders SET status = 'completed', actual_cost = @actualCost WHERE eor_id = @eorId");
-
-        // Get container and update status back
-        const orderResult = await db.request().input('eid', sql.Int, eor_id).query('SELECT container_id FROM RepairOrders WHERE eor_id = @eid');
-        if (orderResult.recordset[0]) {
-          await db.request().input('cid2', sql.Int, orderResult.recordset[0].container_id)
-            .query("UPDATE Containers SET status = 'in_yard', updated_at = GETDATE() WHERE container_id = @cid2");
-        }
+        // Revert container status back to in_yard
+        await db.request().input('cid', sql.Int, order.container_id)
+          .query("UPDATE Containers SET status = 'in_yard', updated_at = GETDATE() WHERE container_id = @cid");
         break;
       case 'reject':
         await req.query("UPDATE RepairOrders SET status = 'rejected' WHERE eor_id = @eorId");
+        // Revert container status back to in_yard (fix #3)
+        await db.request().input('cid', sql.Int, order.container_id)
+          .query("UPDATE Containers SET status = 'in_yard', updated_at = GETDATE() WHERE container_id = @cid");
         break;
     }
+
+    // Audit trail for every action
+    await logAudit({
+      yardId: order.yard_id,
+      userId: user_id || undefined,
+      action: `eor_${action}`,
+      entityType: 'repair_order',
+      entityId: eor_id,
+      details: {
+        eor_number: order.eor_number,
+        container_id: order.container_id,
+        ...(action === 'complete' ? { actual_cost } : {}),
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
