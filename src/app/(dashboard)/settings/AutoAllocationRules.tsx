@@ -15,7 +15,7 @@ interface AllocationRule {
 const DEFAULT_RULES: AllocationRule[] = [
   { id: 'segregate_line', label: 'แยกตามสายเรือ', description: 'จัดกลุ่มตู้ของแต่ละสายเรือไว้โซนเดียวกัน', enabled: true, priority: 1, value: 'strict' },
   { id: 'segregate_size', label: 'แยกตามขนาดตู้', description: '20\' และ 40\' ไม่ stack ร่วมกัน', enabled: true, priority: 2, value: 'strict' },
-  { id: 'segregate_type', label: 'แยกตามประเภทตู้', description: 'GP/RF/OT/FR แยกโซน', enabled: true, priority: 3, value: 'preferred' },
+  { id: 'segregate_type', label: 'แยกตามประเภทตู้', description: 'GP/HC/RF/OT/FR/TK/DG แยกโซน', enabled: true, priority: 3, value: 'preferred' },
   { id: 'reefer_zone', label: 'ตู้เย็นในโซนปลั๊ก', description: 'RF ต้องอยู่ในโซนที่มี power plug', enabled: true, priority: 4, value: 'strict' },
   { id: 'dg_zone', label: 'ตู้อันตรายในโซน DG', description: 'Dangerous Goods ต้องอยู่โซน DG เท่านั้น', enabled: true, priority: 5, value: 'strict' },
   { id: 'fifo_lifo', label: 'ลำดับการจัดเรียง', description: 'LIFO = เอาตู้ล่าสุดออกก่อน / FIFO = เอาตู้เก่าออกก่อน', enabled: true, priority: 6, value: 'LIFO' },

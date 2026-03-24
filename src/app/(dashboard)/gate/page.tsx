@@ -749,6 +749,7 @@ export default function GatePage() {
                     <option value="OT">OT (Open Top)</option>
                     <option value="FR">FR (Flat Rack)</option>
                     <option value="TK">TK (Tank)</option>
+                    <option value="DG">DG (สารอันตราย)</option>
                   </select>
                 </div>
                 <div>
