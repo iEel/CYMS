@@ -399,6 +399,60 @@ export default function YardsSettings() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                       {zones[yard.yard_id].map(zone => (
+                        editingZoneId === zone.zone_id ? (
+                          <tr key={zone.zone_id} className="bg-blue-50/50 dark:bg-blue-900/10">
+                            <td className="py-2.5 pr-2">
+                              <input type="text" value={editZoneForm.zone_name} onChange={e => setEditZoneForm({...editZoneForm, zone_name: e.target.value})}
+                                className="h-8 w-full px-2 rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500" />
+                            </td>
+                            <td className="py-2.5 pr-2">
+                              <select value={editZoneForm.zone_type} onChange={e => setEditZoneForm({...editZoneForm, zone_type: e.target.value})}
+                                className="h-8 px-2 rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-xs text-slate-800 dark:text-white outline-none">
+                                {ZONE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                              </select>
+                            </td>
+                            <td className="py-2.5 pr-2">
+                              <div className="flex items-center gap-1">
+                                <input type="number" value={editZoneForm.max_bay} onChange={e => setEditZoneForm({...editZoneForm, max_bay: parseInt(e.target.value) || 1})}
+                                  className="h-8 w-12 px-1 text-center rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-xs font-mono text-slate-800 dark:text-white outline-none" title="Bay" />
+                                <span className="text-slate-400 text-xs">×</span>
+                                <input type="number" value={editZoneForm.max_row} onChange={e => setEditZoneForm({...editZoneForm, max_row: parseInt(e.target.value) || 1})}
+                                  className="h-8 w-12 px-1 text-center rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-xs font-mono text-slate-800 dark:text-white outline-none" title="Row" />
+                                <span className="text-slate-400 text-xs">×</span>
+                                <input type="number" value={editZoneForm.max_tier} onChange={e => setEditZoneForm({...editZoneForm, max_tier: parseInt(e.target.value) || 1})}
+                                  className="h-8 w-12 px-1 text-center rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-xs font-mono text-slate-800 dark:text-white outline-none" title="Tier" />
+                              </div>
+                            </td>
+                            <td className="py-2.5 pr-2">
+                              <select value={editZoneForm.size_restriction} onChange={e => setEditZoneForm({...editZoneForm, size_restriction: e.target.value})}
+                                className="h-8 px-2 rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-xs text-slate-800 dark:text-white outline-none">
+                                <option value="any">ทุกขนาด</option>
+                                <option value="20">20 ฟุต</option>
+                                <option value="40">40 ฟุต</option>
+                                <option value="45">45 ฟุต</option>
+                              </select>
+                            </td>
+                            <td className="py-2.5 pr-2">
+                              <input type="checkbox" checked={editZoneForm.has_reefer_plugs} onChange={e => setEditZoneForm({...editZoneForm, has_reefer_plugs: e.target.checked})}
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                            </td>
+                            <td className="py-2.5 pr-2">
+                              <span className={`w-2 h-2 rounded-full inline-block ${zone.is_active ? 'bg-[#10B981]' : 'bg-slate-300'}`} />
+                            </td>
+                            <td className="py-2.5">
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => handleEditZone(zone.zone_id)} disabled={saving}
+                                  className="w-6 h-6 rounded bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 disabled:opacity-50 transition-colors" title="บันทึก">
+                                  {saving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
+                                </button>
+                                <button onClick={() => setEditingZoneId(null)}
+                                  className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-600 text-slate-400 flex items-center justify-center hover:bg-slate-300 transition-colors" title="ยกเลิก">
+                                  <X size={10} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
                         <tr key={zone.zone_id} className="hover:bg-white dark:hover:bg-slate-800 transition-colors">
                           <td className="py-2.5 pr-4 font-semibold text-slate-800 dark:text-white">{zone.zone_name}</td>
                           <td className="py-2.5 pr-4">
@@ -433,6 +487,7 @@ export default function YardsSettings() {
                             </div>
                           </td>
                         </tr>
+                        )
                       ))}
                     </tbody>
                   </table>
