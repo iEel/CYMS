@@ -8,7 +8,7 @@ import {
   DoorOpen, LogOut, History, Loader2, Search, CheckCircle2, Truck,
   FileText, Plus, ArrowDownToLine, ArrowUpFromLine, Package, User,
   CreditCard, Hash, ClipboardCheck, Printer, X, ChevronDown,
-  ScanLine, ArrowRightLeft, AlertTriangle, Ship,
+  ScanLine, ArrowRightLeft, AlertTriangle, Ship, FileDown,
 } from 'lucide-react';
 import CameraOCR from '@/components/gate/CameraOCR';
 import PhotoCapture from '@/components/gate/PhotoCapture';
@@ -1652,6 +1652,19 @@ export default function GatePage() {
                 onClick={() => setHistoryDate(new Date().toISOString().slice(0, 10))}
                 className="h-10 px-4 rounded-lg bg-slate-100 dark:bg-slate-600 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-500 font-medium transition-all"
               >วันนี้</button>
+              <button
+                disabled={transactions.length === 0}
+                onClick={async () => {
+                  try {
+                    const { generateGateHistoryPDF } = await import('@/lib/pdfExport');
+                    const dateLabel = new Date(historyDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+                    await generateGateHistoryPDF(transactions, historyDate, `ลาน ${yardId}`);
+                  } catch (err) { console.error('PDF error:', err); }
+                }}
+                className="h-10 px-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 text-sm font-medium hover:bg-red-100 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <FileDown size={14} /> PDF
+              </button>
               <span className="text-xs text-slate-400">{transactions.length} รายการ</span>
             </div>
           </div>

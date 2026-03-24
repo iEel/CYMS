@@ -798,6 +798,9 @@ const CHARGE_LABELS_RPT: Record<string, string> = {
   washing: '🫧 ค่าล้างตู้', pti: '🔌 ค่า PTI', reefer: '❄️ ค่าปลั๊กเย็น', other: '📋 อื่นๆ',
 };
 
+// Lazy import for PDF (avoid SSR bundling issues)
+const loadPdfExport = () => import('@/lib/pdfExport');
+
 function BillingReports({ yardId }: { yardId: number }) {
   const [reportType, setReportType] = useState<'daily' | 'monthly'>('daily');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
@@ -805,6 +808,7 @@ function BillingReports({ yardId }: { yardId: number }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -880,6 +884,28 @@ function BillingReports({ yardId }: { yardId: number }) {
             window.open(`/billing/print/report?type=${reportType}&date=${dateParam}&yard_id=${yardId}`, '_blank');
           }} className="h-8 px-3 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-200 flex items-center gap-1">
             <Printer size={12} /> พิมพ์
+          </button>
+          <button
+            disabled={pdfLoading || !data}
+            onClick={async () => {
+              if (!data) return;
+              setPdfLoading(true);
+              try {
+                const { generateBillingReportPDF } = await loadPdfExport();
+                const dateLabel = reportType === 'daily' ? thaiDate(selectedDate) : thaiMonth(selectedMonth);
+                let companyName = 'CYMS';
+                try {
+                  const cr = await fetch('/api/settings/company');
+                  const cd = await cr.json();
+                  if (cd?.company_name) companyName = cd.company_name;
+                } catch { /* ignore */ }
+                await generateBillingReportPDF(data, reportType, dateLabel, companyName);
+              } catch (err) { console.error('PDF error:', err); }
+              finally { setPdfLoading(false); }
+            }}
+            className="h-8 px-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 text-xs font-medium hover:bg-red-100 flex items-center gap-1 disabled:opacity-50"
+          >
+            {pdfLoading ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} PDF
           </button>
         </div>
       </div>
