@@ -238,7 +238,7 @@ export default function MnRPage() {
         {[
           { id: 'list' as const, label: 'รายการ EOR', icon: <FileCheck2 size={14} /> },
           { id: 'create' as const, label: 'สร้าง EOR', icon: <Plus size={14} /> },
-          { id: 'cedex' as const, label: 'CEDEX Codes', icon: <BookOpen size={14} /> },
+          { id: 'cedex' as const, label: 'รหัสความเสียหาย', icon: <BookOpen size={14} /> },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -446,7 +446,7 @@ export default function MnRPage() {
       {activeTab === 'cedex' && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><BookOpen size={16} /> CEDEX Damage Codes</h3>
+            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><BookOpen size={16} /> รหัสความเสียหาย (CEDEX)</h3>
             <button onClick={startCreateCedex}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs rounded-lg hover:bg-violet-700 transition-colors">
               <Plus size={14} /> เพิ่มรหัส
