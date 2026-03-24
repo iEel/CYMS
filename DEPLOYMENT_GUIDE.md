@@ -155,6 +155,18 @@ npm install
 
 > ⏱ ใช้เวลาประมาณ 2-5 นาที ขึ้นอยู่กับความเร็ว internet
 
+**Dependencies สำคัญที่ติดตั้ง:**
+
+| Package | หน้าที่ |
+|---------|--------|
+| `mssql` | MS SQL Server driver |
+| `jsonwebtoken` + `bcryptjs` | JWT + password hashing |
+| `zod` | Input validation |
+| `ssh2-sftp-client` | SFTP file transfer |
+| `jspdf` + `jspdf-autotable` | PDF report export |
+| `tesseract.js` | OCR scanning |
+| `xlsx` | Excel/CSV import/export |
+
 ---
 
 ## 6. ตั้งค่า Environment Variables
@@ -230,6 +242,7 @@ node scripts/migrate-edi-mnr.js
 node scripts/migrate-demurrage.js
 node scripts/migrate-storage-tiers.js
 node scripts/migrate-cedex.js
+node scripts/update-cedex-thai.js
 ```
 
 > ✅ ดูผลลัพธ์ — ทุก script ควรแสดงข้อความ `✅ ... สำเร็จ`
@@ -818,6 +831,8 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 | Deploy ใหม่ | `cd /var/www/container-yard-system && ./deploy.sh` |
 | Backup DB | `sudo /var/backups/cyms/backup.sh` |
 | รัน Tests | `cd /var/www/container-yard-system && npm test` |
+| อัปเดต CEDEX ภาษาไทย | `node scripts/update-cedex-thai.js` |
+| Export PDF รายงาน | บัญชี → รายงาน → ปุ่ม PDF (client-side, ไม่ต้องตั้งค่าเพิ่ม) |
 
 ---
 
