@@ -22,7 +22,8 @@
 12. [Firewall + Security](#12-firewall--security)
 13. [Backup Strategy](#13-backup-strategy)
 14. [อัปเดตระบบ](#14-อัปเดตระบบ)
-15. [Troubleshooting](#15-troubleshooting)
+15. [เคลียข้อมูลทดสอบ (ก่อนขึ้น Production)](#15-เคลียข้อมูลทดสอบ-ก่อนขึ้น-production)
+16. [Troubleshooting](#16-troubleshooting)
 
 ---
 
@@ -683,7 +684,78 @@ chmod +x /var/www/container-yard-system/deploy.sh
 
 ---
 
-## 15. Troubleshooting
+## 15. เคลียข้อมูลทดสอบ (ก่อนขึ้น Production)
+
+> ⚠️ **รันคำสั่งเหล่านี้ก่อนขึ้น Production** เพื่อลบข้อมูลตัวอย่างที่ใช้ทดสอบออกไป
+
+### วิธีที่ 1: 🔥 ลบ DB ทั้งหมด + สร้างใหม่ (สะอาดที่สุด — แนะนำสำหรับครั้งแรก)
+
+```sql
+-- รันบน DB Server (ผ่าน SSMS)
+DROP DATABASE CYMS_DB;
+GO
+CREATE DATABASE CYMS_DB;
+GO
+```
+
+แล้วรัน setup scripts ใหม่ทั้งหมด (ดูขั้นตอนที่ 7):
+
+```bash
+cd /var/www/container-yard-system
+node scripts/setup-db.js
+node scripts/seed-users.js
+node scripts/seed-permissions.js
+# รัน migration scripts ทั้งหมด (step 7)
+# ❌ ไม่ต้องรัน seed-containers.js (ข้อมูลตัวอย่าง)
+```
+
+### วิธีที่ 2: 🧹 ลบเฉพาะข้อมูลทดสอบ (เก็บตั้งค่าไว้)
+
+ใช้ script สำเร็จรูป — ลบข้อมูลธุรกรรม แต่เก็บการตั้งค่าไว้:
+
+```bash
+cd /var/www/container-yard-system
+node scripts/clear-test-data.js --confirm
+```
+
+| ลบ | เก็บ |
+|-----|------|
+| ตู้คอนเทนเนอร์, บิล, Gate, Work Orders | Users, Yards, Zones |
+| M&R, Audit Logs, Holds | Customers, Tariff |
+| EDI Logs, Bookings | CEDEX Codes, Company Profile |
+
+หลังรันเสร็จ ลบไฟล์รูปที่ทดสอบด้วย:
+
+```bash
+rm -rf public/uploads/gate-photos/*
+rm -rf public/uploads/exit-photos/*
+rm -rf public/uploads/repair-photos/*
+pm2 restart cyms
+```
+
+### วิธีที่ 3: 🗂️ แยก Database ใหม่ (ทดสอบ vs Production)
+
+สร้าง database ใหม่บน DB Server แล้วเปลี่ยนค่าใน `.env.local`:
+
+```sql
+-- สร้าง DB ใหม่บน DB Server
+CREATE DATABASE CYMS_PROD;
+GO
+```
+
+```bash
+# แก้ .env.local
+DB_NAME=CYMS_PROD
+
+# รัน setup scripts ทั้งหมด (เหมือนขั้นตอนที่ 7)
+npm run build && pm2 restart cyms
+```
+
+> 💡 วิธีนี้ดีถ้าต้องการเก็บ DB ทดสอบไว้ด้วย เพื่อกลับมาใช้ทีหลัง
+
+---
+
+## 16. Troubleshooting
 
 ### CYMS ไม่ทำงาน
 
