@@ -648,11 +648,11 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
         </div>
       </div>
 
-      {/* SFTP Send + Export */}
+      {/* Send CODECO */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-        <h4 className="text-sm font-semibold text-slate-700 dark:text-white mb-3 flex items-center gap-2"><Send size={14} /> ส่ง CODECO ผ่าน SFTP</h4>
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-white mb-3 flex items-center gap-2"><Send size={14} /> ส่ง CODECO</h4>
         {endpoints.length === 0 ? (
-          <p className="text-xs text-slate-400">ยังไม่มี SFTP Endpoint — ไปตั้งค่าที่ <b>ตั้งค่า → EDI Configuration</b></p>
+          <p className="text-xs text-slate-400">ยังไม่มี Endpoint — ไปตั้งค่าที่ <b>ตั้งค่า → EDI Configuration</b></p>
         ) : (
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[200px]">
@@ -660,11 +660,21 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
               <select value={selectedEp} onChange={e => setSelectedEp(parseInt(e.target.value))} className={inputClass + ' w-full'}>
                 {endpoints.map(ep => (
                   <option key={ep.endpoint_id} value={ep.endpoint_id}>
-                    {ep.name} ({ep.host}) {ep.shipping_line ? `— ${ep.shipping_line}` : ''} [{ep.format}]
+                    {ep.type === 'email' ? '📧' : '📁'} {ep.name} ({ep.type === 'email' ? ep.host : `${ep.host}:${ep.format}`}) {ep.shipping_line ? `— ${ep.shipping_line}` : ''}
                   </option>
                 ))}
               </select>
             </div>
+            {(() => {
+              const sel = endpoints.find(e => e.endpoint_id === selectedEp);
+              return sel ? (
+                <span className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${
+                  sel.type === 'email' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20' : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20'
+                }`}>
+                  {sel.type === 'email' ? '📧 Email' : '📁 SFTP'} • {sel.format}
+                </span>
+              ) : null;
+            })()}
             <button onClick={handleSftpSend} disabled={sending || summary.total === 0}
               className="h-9 px-5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 transition-all">
               {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -681,24 +691,34 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
 
       {/* Download Buttons */}
       <div className="flex gap-2">
-        <button onClick={() => window.open(buildUrl('edifact'), '_blank')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
-          <FileDown size={14} /> EDIFACT (.edi)
-        </button>
-        <button onClick={() => window.open(buildUrl('csv'), '_blank')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
-          <FileDown size={14} /> CSV
-        </button>
-        <button onClick={async () => {
-          const res = await fetch(buildUrl('json'));
-          const data = await res.json();
-          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href = url; a.download = `CODECO_${new Date().toISOString().split('T')[0]}.json`; a.click();
-        }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
-          <FileDown size={14} /> JSON
-        </button>
+        {([
+          { format: 'edifact', label: 'EDIFACT (.edi)', ext: 'edi', mime: 'text/plain' },
+          { format: 'csv', label: 'CSV', ext: 'csv', mime: 'text/csv' },
+          { format: 'json', label: 'JSON', ext: 'json', mime: 'application/json' },
+        ] as const).map(dl => (
+          <button key={dl.format} onClick={async () => {
+            try {
+              const res = await fetch(buildUrl(dl.format));
+              if (!res.ok) { const err = await res.json(); alert(err.error || 'Error'); return; }
+              let blob: Blob;
+              if (dl.format === 'json') {
+                const data = await res.json();
+                blob = new Blob([JSON.stringify(data, null, 2)], { type: dl.mime });
+              } else {
+                blob = await res.blob();
+              }
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `CODECO_${slFilter || 'ALL'}_${new Date().toISOString().split('T')[0]}.${dl.ext}`;
+              a.click();
+              URL.revokeObjectURL(url);
+            } catch { alert('ไม่สามารถดาวน์โหลดได้'); }
+          }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
+            <FileDown size={14} /> {dl.label}
+          </button>
+        ))}
       </div>
 
       {/* Transactions Table */}

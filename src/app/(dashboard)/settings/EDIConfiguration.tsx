@@ -28,6 +28,8 @@ interface EDIEndpoint {
 
 export default function EDIConfiguration() {
   const [endpoints, setEndpoints] = useState<EDIEndpoint[]>([]);
+  const [yards, setYards] = useState<{ yard_id: number; yard_name: string }[]>([]);
+  const [shippingLines, setShippingLines] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -43,7 +45,14 @@ export default function EDIConfiguration() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchEndpoints(); }, [fetchEndpoints]);
+  useEffect(() => {
+    fetchEndpoints();
+    fetch('/api/settings/yards').then(r => r.json()).then(d => setYards(Array.isArray(d) ? d : d.yards || [])).catch(() => {});
+    // Fetch shipping lines for autocomplete
+    fetch('/api/edi/codeco?yard_id=1&format=json').then(r => r.json()).then(d => {
+      if (d.shipping_lines) setShippingLines(d.shipping_lines);
+    }).catch(() => {});
+  }, [fetchEndpoints]);
 
   const addEndpoint = async () => {
     try {
@@ -156,7 +165,13 @@ export default function EDIConfiguration() {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               <div><label className={labelClass}>ชื่อ Endpoint</label><input value={ep.name} onChange={e => update(ep.endpoint_id, 'name', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>สายเรือ</label><input value={ep.shipping_line || ''} onChange={e => update(ep.endpoint_id, 'shipping_line', e.target.value)} className={inputClass} placeholder="MSC, Evergreen..." /></div>
+              <div>
+                <label className={labelClass}>สายเรือ</label>
+                <input list="sl-list" value={ep.shipping_line || ''} onChange={e => update(ep.endpoint_id, 'shipping_line', e.target.value)} className={inputClass} placeholder="พิมพ์เพื่อค้นหา..." />
+                <datalist id="sl-list">
+                  {shippingLines.map(sl => <option key={sl} value={sl} />)}
+                </datalist>
+              </div>
               <div><label className={labelClass}>ประเภท</label>
                 <select value={ep.type} onChange={e => { update(ep.endpoint_id, 'type', e.target.value); if (e.target.value === 'email') { update(ep.endpoint_id, 'port', 0); } }} className={inputClass}>
                   <option value="sftp">SFTP</option><option value="ftp">FTP</option><option value="api">REST API</option><option value="email">Email</option>
@@ -201,38 +216,108 @@ export default function EDIConfiguration() {
                   <span className={`text-xs font-medium ${ep.schedule_enabled ? 'text-amber-600' : 'text-slate-400'}`}>{ep.schedule_enabled ? 'เปิด' : 'ปิด'}</span>
                 </label>
               </div>
-              {ep.schedule_enabled && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>ความถี่</label>
-                    <div className="flex gap-1 flex-wrap">
-                      {[
-                        { label: 'ทุกชั่วโมง', cron: '0 * * * *' },
-                        { label: 'วันละ 2 ครั้ง', cron: '0 8,18 * * *' },
-                        { label: 'ทุกวัน 18:00', cron: '0 18 * * *' },
-                        { label: 'ทุกสัปดาห์', cron: '0 9 * * 1' },
-                      ].map(p => (
-                        <button key={p.cron} type="button" onClick={() => update(ep.endpoint_id, 'schedule_cron', p.cron)}
-                          className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                            ep.schedule_cron === p.cron
-                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                              : 'bg-slate-100 text-slate-500 dark:bg-slate-600 dark:text-slate-400 hover:bg-slate-200'
-                          }`}>
-                          {p.label}
-                        </button>
-                      ))}
+              {ep.schedule_enabled && (() => {
+                // Parse cron to friendly values
+                const cronStr = ep.schedule_cron || '0 18 * * *';
+                const parts = cronStr.split(' ');
+                const minute = parts[0] || '0';
+                const hour = parts[1] || '18';
+                const dayOfWeek = parts[4] || '*';
+
+                let freq = 'daily';
+                if (hour === '*') freq = 'hourly';
+                else if (hour.includes(',')) freq = 'twice';
+                else if (dayOfWeek !== '*') freq = 'weekly';
+
+                const setCron = (f: string, h?: string, m?: string, dow?: string) => {
+                  const mm = m ?? minute;
+                  const hh = h ?? (hour.includes(',') ? '8' : hour === '*' ? '0' : hour);
+                  const dd = dow ?? dayOfWeek;
+                  let cron = '';
+                  if (f === 'hourly') cron = `${mm} * * * *`;
+                  else if (f === 'twice') cron = `${mm} 8,18 * * *`;
+                  else if (f === 'weekly') cron = `${mm} ${hh} * * ${dd === '*' ? '1' : dd}`;
+                  else cron = `${mm} ${hh} * * *`;
+                  update(ep.endpoint_id, 'schedule_cron', cron);
+                };
+
+                const primaryHour = hour.includes(',') ? hour.split(',')[0] : hour === '*' ? '0' : hour;
+
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className={labelClass}>ความถี่</label>
+                      <select value={freq} onChange={e => setCron(e.target.value)} className={inputClass}>
+                        <option value="hourly">⏱ ทุกชั่วโมง</option>
+                        <option value="twice">🔄 วันละ 2 ครั้ง (08:00, 18:00)</option>
+                        <option value="daily">📅 ทุกวัน</option>
+                        <option value="weekly">📆 ทุกสัปดาห์</option>
+                      </select>
+                    </div>
+
+                    {freq !== 'hourly' && freq !== 'twice' && (
+                      <div>
+                        <label className={labelClass}>เวลา</label>
+                        <input type="time"
+                          value={`${String(primaryHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`}
+                          onChange={e => {
+                            const [hh, mm] = e.target.value.split(':');
+                            setCron(freq, hh, mm);
+                          }}
+                          className={inputClass} />
+                      </div>
+                    )}
+
+                    {freq === 'hourly' && (
+                      <div>
+                        <label className={labelClass}>นาทีที่</label>
+                        <select value={minute} onChange={e => setCron('hourly', undefined, e.target.value)} className={inputClass}>
+                          <option value="0">:00 (ตรง)</option>
+                          <option value="15">:15</option>
+                          <option value="30">:30</option>
+                          <option value="45">:45</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {freq === 'weekly' && (
+                      <div>
+                        <label className={labelClass}>วัน</label>
+                        <select value={dayOfWeek === '*' ? '1' : dayOfWeek} onChange={e => setCron('weekly', undefined, undefined, e.target.value)} className={inputClass}>
+                          <option value="1">จันทร์</option>
+                          <option value="2">อังคาร</option>
+                          <option value="3">พุธ</option>
+                          <option value="4">พฤหัสบดี</option>
+                          <option value="5">ศุกร์</option>
+                          <option value="6">เสาร์</option>
+                          <option value="0">อาทิตย์</option>
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className={labelClass}>ลาน</label>
+                      <select value={ep.schedule_yard_id || 1} onChange={e => update(ep.endpoint_id, 'schedule_yard_id', parseInt(e.target.value))} className={inputClass}>
+                        {yards.map(y => <option key={y.yard_id} value={y.yard_id}>{y.yard_name}</option>)}
+                        {yards.length === 0 && <option value={1}>Yard 1</option>}
+                      </select>
+                    </div>
+
+                    {/* Summary */}
+                    <div className="col-span-2 md:col-span-4">
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
+                        <Clock size={12} className="text-amber-500 shrink-0" />
+                        <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                          {freq === 'hourly' && `ส่งทุกชั่วโมง ที่นาที :${String(minute).padStart(2, '0')}`}
+                          {freq === 'twice' && `ส่งวันละ 2 ครั้ง เวลา 08:00 และ 18:00`}
+                          {freq === 'daily' && `ส่งทุกวัน เวลา ${String(primaryHour).padStart(2, '0')}:${String(minute).padStart(2, '0')} น.`}
+                          {freq === 'weekly' && `ส่งทุกวัน${['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'][parseInt(dayOfWeek === '*' ? '1' : dayOfWeek)] || ''} เวลา ${String(primaryHour).padStart(2, '0')}:${String(minute).padStart(2, '0')} น.`}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label className={labelClass}>Cron Expression</label>
-                    <input value={ep.schedule_cron || '0 18 * * *'} onChange={e => update(ep.endpoint_id, 'schedule_cron', e.target.value)} className={inputClass} placeholder="0 18 * * *" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Yard ID</label>
-                    <input type="number" value={ep.schedule_yard_id || 1} onChange={e => update(ep.endpoint_id, 'schedule_yard_id', parseInt(e.target.value) || 1)} className={inputClass} />
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         ))}
