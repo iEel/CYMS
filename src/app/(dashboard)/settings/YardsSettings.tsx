@@ -343,33 +343,54 @@ export default function YardsSettings() {
               {/* Add Zone Form */}
               {showAddZone === yard.yard_id && (
                 <div className="mb-4 p-4 bg-white dark:bg-slate-800 rounded-xl border border-blue-200 dark:border-blue-800">
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">เพิ่มโซนใหม่</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                    <input type="text" placeholder="ชื่อโซน (เช่น A, B, R1) *" value={zoneForm.zone_name} onChange={e => setZoneForm({...zoneForm, zone_name: e.target.value})}
-                      className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white" />
-                    <select value={zoneForm.zone_type} onChange={e => setZoneForm({...zoneForm, zone_type: e.target.value})}
-                      className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white">
-                      {ZONE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
-                    <input type="number" placeholder="Max Tier" value={zoneForm.max_tier} onChange={e => setZoneForm({...zoneForm, max_tier: parseInt(e.target.value) || 5})}
-                      className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white" />
-                    <input type="number" placeholder="Max Bay" value={zoneForm.max_bay} onChange={e => setZoneForm({...zoneForm, max_bay: parseInt(e.target.value) || 20})}
-                      className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white" />
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">ชื่อโซน *</label>
+                      <input type="text" placeholder="เช่น A, B, R1" value={zoneForm.zone_name} onChange={e => setZoneForm({...zoneForm, zone_name: e.target.value})}
+                        className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white focus:border-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">ประเภทโซน</label>
+                      <select value={zoneForm.zone_type} onChange={e => setZoneForm({...zoneForm, zone_type: e.target.value})}
+                        className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white">
+                        {ZONE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">จำนวน Bay (แถวยาว)</label>
+                      <input type="number" min={1} max={100} value={zoneForm.max_bay} onChange={e => setZoneForm({...zoneForm, max_bay: e.target.value === '' ? 0 : parseInt(e.target.value)})}
+                        className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white font-mono focus:border-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">จำนวน Row (แถวสั้น)</label>
+                      <input type="number" min={1} max={50} value={zoneForm.max_row} onChange={e => setZoneForm({...zoneForm, max_row: e.target.value === '' ? 0 : parseInt(e.target.value)})}
+                        className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white font-mono focus:border-blue-500" />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                    <input type="number" placeholder="Max Row" value={zoneForm.max_row} onChange={e => setZoneForm({...zoneForm, max_row: parseInt(e.target.value) || 10})}
-                      className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white" />
-                    <select value={zoneForm.size_restriction} onChange={e => setZoneForm({...zoneForm, size_restriction: e.target.value})}
-                      className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white">
-                      <option value="any">ทุกขนาด</option>
-                      <option value="20">20 ฟุต เท่านั้น</option>
-                      <option value="40">40 ฟุต เท่านั้น</option>
-                      <option value="45">45 ฟุต เท่านั้น</option>
-                    </select>
-                    <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 col-span-2">
-                      <input type="checkbox" checked={zoneForm.has_reefer_plugs} onChange={e => setZoneForm({...zoneForm, has_reefer_plugs: e.target.checked})}
-                        className="w-4 h-4 rounded border-slate-300 text-[#3B82F6] focus:ring-blue-500" />
-                      มีปลั๊กตู้เย็น (Reefer Plugs)
-                    </label>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">จำนวนชั้นซ้อน (Tier)</label>
+                      <input type="number" min={1} max={10} value={zoneForm.max_tier} onChange={e => setZoneForm({...zoneForm, max_tier: e.target.value === '' ? 0 : parseInt(e.target.value)})}
+                        className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white font-mono focus:border-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">ขนาดตู้ที่รับ</label>
+                      <select value={zoneForm.size_restriction} onChange={e => setZoneForm({...zoneForm, size_restriction: e.target.value})}
+                        className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white">
+                        <option value="any">ทุกขนาด</option>
+                        <option value="20">20 ฟุต เท่านั้น</option>
+                        <option value="40">40 ฟุต เท่านั้น</option>
+                        <option value="45">45 ฟุต เท่านั้น</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2 flex items-end pb-1.5">
+                      <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 cursor-pointer">
+                        <input type="checkbox" checked={zoneForm.has_reefer_plugs} onChange={e => setZoneForm({...zoneForm, has_reefer_plugs: e.target.checked})}
+                          className="w-4 h-4 rounded border-slate-300 text-[#3B82F6] focus:ring-blue-500" />
+                        มีปลั๊กตู้เย็น (Reefer Plugs)
+                      </label>
+                    </div>
                   </div>
                   <div className="flex justify-end gap-2">
                     <button onClick={() => setShowAddZone(null)}
