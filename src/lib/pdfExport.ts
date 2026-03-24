@@ -106,7 +106,7 @@ export async function generateBillingReportPDF(
     body: kpiData,
     theme: 'grid',
     styles: { font: getFontName(), fontSize: 11, cellPadding: 3 },
-    headStyles: { fillColor: [30, 41, 59], textColor: 255 },
+    headStyles: { fontStyle: 'normal', fillColor: [30, 41, 59], textColor: 255 },
     columnStyles: { 1: { halign: 'right' } },
     margin: { left: 14, right: 14 },
   });
@@ -129,7 +129,7 @@ export async function generateBillingReportPDF(
       ],
       theme: 'striped',
       styles: { font: getFontName(), fontSize: 10, cellPadding: 2.5 },
-      headStyles: { fillColor: [16, 185, 129] },
+      headStyles: { fontStyle: 'normal', fillColor: [16, 185, 129] },
       columnStyles: { 1: { halign: 'right' } },
       margin: { left: 14, right: 14 },
     });
@@ -153,7 +153,7 @@ export async function generateBillingReportPDF(
       ]),
       theme: 'striped',
       styles: { font: getFontName(), fontSize: 10, cellPadding: 2.5 },
-      headStyles: { fillColor: [59, 130, 246] },
+      headStyles: { fontStyle: 'normal', fillColor: [59, 130, 246] },
       columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' } },
       margin: { left: 14, right: 14 },
     });
@@ -179,7 +179,7 @@ export async function generateBillingReportPDF(
       ]),
       theme: 'striped',
       styles: { font: getFontName(), fontSize: 10, cellPadding: 2.5 },
-      headStyles: { fillColor: [245, 158, 11] },
+      headStyles: { fontStyle: 'normal', fillColor: [245, 158, 11] },
       columnStyles: { 0: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'right' } },
       margin: { left: 14, right: 14 },
     });
@@ -207,7 +207,7 @@ export async function generateBillingReportPDF(
       ]),
       theme: 'striped',
       styles: { font: getFontName(), fontSize: 9, cellPadding: 2 },
-      headStyles: { fillColor: [30, 41, 59] },
+      headStyles: { fontStyle: 'normal', fillColor: [30, 41, 59] },
       columnStyles: { 0: { cellWidth: 30 }, 4: { halign: 'right' }, 5: { halign: 'center' } },
       margin: { left: 14, right: 14 },
     });
@@ -233,7 +233,7 @@ export async function generateBillingReportPDF(
       ]),
       theme: 'striped',
       styles: { font: getFontName(), fontSize: 9, cellPadding: 2 },
-      headStyles: { fillColor: [59, 130, 246] },
+      headStyles: { fontStyle: 'normal', fillColor: [59, 130, 246] },
       columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
       margin: { left: 14, right: 14 },
     });
@@ -351,8 +351,8 @@ export async function generateInvoicePDF(
     ],
     theme: 'grid',
     styles: { font: getFontName(), fontSize: 10, cellPadding: 3 },
-    headStyles: { fillColor: [30, 41, 59], textColor: 255 },
-    footStyles: { fillColor: [248, 250, 252], textColor: [30, 41, 59] },
+    headStyles: { fontStyle: 'normal', fillColor: [30, 41, 59], textColor: 255 },
+    footStyles: { fontStyle: 'normal', fillColor: [248, 250, 252], textColor: [30, 41, 59] },
     columnStyles: { 0: { halign: 'center', cellWidth: 12 }, 2: { halign: 'center' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
     margin: { left: 14, right: 14 },
   });
@@ -443,7 +443,7 @@ export async function generateGateHistoryPDF(
     ]),
     theme: 'striped',
     styles: { font: getFontName(), fontSize: 9, cellPadding: 2 },
-    headStyles: { fillColor: [30, 41, 59], textColor: 255 },
+    headStyles: { fontStyle: 'normal', fillColor: [30, 41, 59], textColor: 255 },
     columnStyles: { 0: { halign: 'center', cellWidth: 10 }, 2: { halign: 'center' } },
     margin: { left: 10, right: 10 },
   });
