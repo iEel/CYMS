@@ -11,7 +11,7 @@
 1. [ข้อกำหนดเบื้องต้น](#1-ข้อกำหนดเบื้องต้น)
 2. [เตรียม Ubuntu Server](#2-เตรียม-ubuntu-server)
 3. [ติดตั้ง Node.js](#3-ติดตั้ง-nodejs)
-4. [ติดตั้ง MS SQL Server](#4-ติดตั้ง-ms-sql-server)
+4. [เชื่อมต่อ MS SQL Server (เครื่อง DB แยก)](#4-เชื่อมต่อ-ms-sql-server-เครื่อง-db-แยก)
 5. [Deploy โปรเจค CYMS](#5-deploy-โปรเจค-cyms)
 6. [ตั้งค่า Environment Variables](#6-ตั้งค่า-environment-variables)
 7. [สร้าง Database + Seed ข้อมูล](#7-สร้าง-database--seed-ข้อมูล)
@@ -80,60 +80,46 @@ sudo npm install -g pm2
 
 ---
 
-## 4. ติดตั้ง MS SQL Server
+## 4. เชื่อมต่อ MS SQL Server (เครื่อง DB แยก)
 
-### 4.1 ติดตั้ง SQL Server 2022 (Express — ฟรี)
+> ⚠️ **CYMS ใช้ MS SQL Server ที่ติดตั้งบน Server แยกต่างหาก** ไม่ได้ติดตั้งบนเครื่องเดียวกับ App Server
+> ตัวอย่างเช่น: App Server = `192.168.110.100`, DB Server = `192.168.110.106`
+
+### 4.1 ข้อกำหนด DB Server
+
+- MS SQL Server 2019+ ติดตั้งและทำงานอยู่แล้วบนเครื่องแยก
+- เปิด TCP/IP port 1433 ให้ App Server เชื่อมต่อได้
+- มี Login สำหรับ CYMS (sa หรือ user แยก)
+
+### 4.2 ตรวจสอบการเชื่อมต่อจาก App Server
 
 ```bash
-# เพิ่ม Microsoft GPG key + repository
-curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+# ทดสอบ ping DB Server
+ping 192.168.110.106
 
-# สำหรับ Ubuntu 22.04
-sudo curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/mssql-server-2022.list | sudo tee /etc/apt/sources.list.d/mssql-server-2022.list
+# ทดสอบ port 1433 (ถ้ามี sqlcmd)
+sqlcmd -S 192.168.110.106 -U sa -P 'YOUR_SA_PASSWORD' -C -Q "SELECT @@VERSION"
 
-# ติดตั้ง
-sudo apt update
-sudo apt install -y mssql-server
-
-# ตั้งค่า SA password + edition (เลือก Express = ฟรี)
-sudo /opt/mssql/bin/mssql-conf setup
-# → เลือก: 3) Express (free)
-# → ตั้ง SA password (จำไว้ ใช้ใน .env)
-# → ยอมรับ License
-
-# ตรวจสอบสถานะ
-systemctl status mssql-server
-# → Active: active (running)
+# หรือใช้ telnet/nc เช็ค port
+nc -zv 192.168.110.106 1433
 ```
 
-### 4.2 ติดตั้ง SQL Server Command Line Tools
+### 4.3 สร้าง Database + User สำหรับ CYMS (รันบน DB Server)
 
-```bash
-# เพิ่ม repository สำหรับ tools
-curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
-sudo apt update
-sudo ACCEPT_EULA=Y apt install -y mssql-tools18 unixodbc-dev
-
-# เพิ่ม PATH
-echo 'export PATH="$PATH:/opt/mssql-tools18/bin"' >> ~/.bashrc
-source ~/.bashrc
-
-# ทดสอบเชื่อมต่อ
-sqlcmd -S localhost -U sa -P 'YOUR_SA_PASSWORD' -C -Q "SELECT @@VERSION"
-```
-
-### 4.3 สร้าง Database User สำหรับ CYMS (แนะนำ)
-
-```bash
-sqlcmd -S localhost -U sa -P 'YOUR_SA_PASSWORD' -C -Q "
-CREATE LOGIN cyms_user WITH PASSWORD = 'CymsStr0ng!Pass';
+```sql
+-- รันบน DB Server (ผ่าน SSMS หรือ sqlcmd)
 CREATE DATABASE CYMS_DB;
+GO
+
+-- (แนะนำ) สร้าง user แยกสำหรับ CYMS
+CREATE LOGIN cyms_user WITH PASSWORD = 'CymsStr0ng!Pass';
 USE CYMS_DB;
 CREATE USER cyms_user FOR LOGIN cyms_user;
 ALTER ROLE db_owner ADD MEMBER cyms_user;
 GO
-"
 ```
+
+> 💡 **ถ้าใช้ Named Instance** (เช่น `ALPHA`) — ให้ระบุ `DB_INSTANCE=alpha` ใน `.env.local` ด้วย
 
 ---
 
@@ -155,17 +141,20 @@ npm install
 
 > ⏱ ใช้เวลาประมาณ 2-5 นาที ขึ้นอยู่กับความเร็ว internet
 
-**Dependencies สำคัญที่ติดตั้ง:**
+### 5.3 Dependencies สำคัญ
 
 | Package | หน้าที่ |
 |---------|--------|
+| `next` + `react` | Web framework (App Router) |
 | `mssql` | MS SQL Server driver |
-| `jsonwebtoken` + `bcryptjs` | JWT + password hashing |
-| `zod` | Input validation |
-| `ssh2-sftp-client` | SFTP file transfer |
-| `jspdf` + `jspdf-autotable` | PDF report export |
-| `tesseract.js` | OCR scanning |
+| `jsonwebtoken` + `bcryptjs` | JWT authentication + password hashing |
+| `zod` | Runtime input validation |
+| `ssh2-sftp-client` | SFTP file transfer (ส่ง EDI) |
+| `jspdf` + `jspdf-autotable` | 📄 PDF report export (รองรับภาษาไทย) |
+| `tesseract.js` | OCR สแกนเลขตู้ |
 | `xlsx` | Excel/CSV import/export |
+| `three` | 3D Yard Viewer |
+| `qrcode.react` | QR Code สำหรับ EIR |
 
 ---
 
@@ -180,12 +169,12 @@ nano /var/www/container-yard-system/.env.local
 
 ```env
 # ===== Database =====
-DB_SERVER=localhost
+DB_SERVER=192.168.110.106
 DB_PORT=1433
 DB_NAME=CYMS_DB
-DB_USER=cyms_user
-DB_PASSWORD=CymsStr0ng!Pass
-# DB_INSTANCE=        # ถ้าใช้ named instance ให้ระบุ
+DB_USER=sa
+DB_PASSWORD=<รหัสผ่าน>
+DB_INSTANCE=alpha              # ถ้าใช้ named instance (เช่น ALPHA)
 
 # ===== JWT =====
 JWT_SECRET=ใส่-random-string-ยาวๆ-อย่างน้อย-32-ตัว
