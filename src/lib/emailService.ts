@@ -7,6 +7,7 @@ interface EmailOptions {
   html: string;
   cc?: string[];
   bcc?: string[];
+  attachments?: Array<{ filename: string; content: Buffer | string; contentType?: string }>;
 }
 
 interface EmailConfig {
@@ -73,6 +74,12 @@ async function sendViaAzure(config: EmailConfig['azure'], options: EmailOptions)
     subject: options.subject,
     body: { contentType: 'HTML', content: options.html },
     toRecipients,
+    attachments: options.attachments?.map(a => ({
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: a.filename,
+      contentType: a.contentType || 'application/octet-stream',
+      contentBytes: typeof a.content === 'string' ? Buffer.from(a.content).toString('base64') : a.content.toString('base64'),
+    })),
   };
 
   if (options.cc?.length) {
@@ -110,6 +117,11 @@ async function sendViaSMTP(config: EmailConfig['smtp'], options: EmailOptions): 
     bcc: options.bcc?.join(', '),
     subject: options.subject,
     html: options.html,
+    attachments: options.attachments?.map(a => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType,
+    })),
   });
 }
 

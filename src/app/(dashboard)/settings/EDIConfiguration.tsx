@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Trash2, Save, Globe, CheckCircle2, Shield, Server, Loader2,
+  Plus, Trash2, Save, Globe, CheckCircle2, Shield, Server, Loader2, Mail,
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -10,7 +10,7 @@ interface EDIEndpoint {
   endpoint_id: number;
   name: string;
   shipping_line: string;
-  type: 'api' | 'ftp' | 'sftp';
+  type: 'api' | 'ftp' | 'sftp' | 'email';
   host: string;
   port: number;
   username: string;
@@ -102,7 +102,7 @@ export default function EDIConfiguration() {
           <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600"><Globe size={20} /></div>
           <div>
             <h3 className="font-semibold text-slate-800 dark:text-white">EDI Configuration</h3>
-            <p className="text-xs text-slate-400">ตั้งค่า SFTP / FTP / API endpoints สำหรับส่งข้อมูลให้สายเรือ</p>
+            <p className="text-xs text-slate-400">ตั้งค่า SFTP / FTP / API / Email endpoints สำหรับส่งข้อมูลให้สายเรือ</p>
           </div>
         </div>
         <button onClick={handleSave} disabled={saving}
@@ -121,7 +121,7 @@ export default function EDIConfiguration() {
           <div key={ep.endpoint_id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-100 dark:border-slate-600 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Server size={14} className={ep.is_active ? 'text-emerald-500' : 'text-slate-400'} />
+                {ep.type === 'email' ? <Mail size={14} className={ep.is_active ? 'text-blue-500' : 'text-slate-400'} /> : <Server size={14} className={ep.is_active ? 'text-emerald-500' : 'text-slate-400'} />}
                 <span className="font-semibold text-sm text-slate-800 dark:text-white">{ep.name || 'Endpoint ใหม่'}</span>
                 <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${ep.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                   {ep.is_active ? 'ACTIVE' : 'INACTIVE'}
@@ -144,17 +144,29 @@ export default function EDIConfiguration() {
               <div><label className={labelClass}>ชื่อ Endpoint</label><input value={ep.name} onChange={e => update(ep.endpoint_id, 'name', e.target.value)} className={inputClass} /></div>
               <div><label className={labelClass}>สายเรือ</label><input value={ep.shipping_line || ''} onChange={e => update(ep.endpoint_id, 'shipping_line', e.target.value)} className={inputClass} placeholder="MSC, Evergreen..." /></div>
               <div><label className={labelClass}>ประเภท</label>
-                <select value={ep.type} onChange={e => update(ep.endpoint_id, 'type', e.target.value)} className={inputClass}>
-                  <option value="sftp">SFTP</option><option value="ftp">FTP</option><option value="api">REST API</option>
+                <select value={ep.type} onChange={e => { update(ep.endpoint_id, 'type', e.target.value); if (e.target.value === 'email') { update(ep.endpoint_id, 'port', 0); } }} className={inputClass}>
+                  <option value="sftp">SFTP</option><option value="ftp">FTP</option><option value="api">REST API</option><option value="email">📧 Email</option>
                 </select>
               </div>
-              <div><label className={labelClass}>Host</label><input value={ep.host} onChange={e => update(ep.endpoint_id, 'host', e.target.value)} className={inputClass} placeholder="sftp.example.com" /></div>
-              <div><label className={labelClass}>Port</label><input type="number" value={ep.port} onChange={e => update(ep.endpoint_id, 'port', parseInt(e.target.value) || 0)} className={inputClass} /></div>
+              {ep.type === 'email' ? (
+                <>
+                  <div className="md:col-span-2"><label className={labelClass}>อีเมลผู้รับ (คั่นด้วย , หากหลายคน)</label><input value={ep.host} onChange={e => update(ep.endpoint_id, 'host', e.target.value)} className={inputClass} placeholder="edi@shipping.com, ops@shipping.com" /></div>
+                </>
+              ) : (
+                <>
+                  <div><label className={labelClass}>Host</label><input value={ep.host} onChange={e => update(ep.endpoint_id, 'host', e.target.value)} className={inputClass} placeholder="sftp.example.com" /></div>
+                  <div><label className={labelClass}>Port</label><input type="number" value={ep.port} onChange={e => update(ep.endpoint_id, 'port', parseInt(e.target.value) || 0)} className={inputClass} /></div>
+                </>
+              )}
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              <div><label className={labelClass}>Username</label><input value={ep.username || ''} onChange={e => update(ep.endpoint_id, 'username', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Password</label><input type="password" value={ep.password || ''} onChange={e => update(ep.endpoint_id, 'password', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Remote Path</label><input value={ep.remote_path || '/'} onChange={e => update(ep.endpoint_id, 'remote_path', e.target.value)} className={inputClass} placeholder="/inbound/codeco" /></div>
+            <div className={`grid gap-2 ${ep.type === 'email' ? 'grid-cols-2 md:grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
+              {ep.type !== 'email' && (
+                <>
+                  <div><label className={labelClass}>Username</label><input value={ep.username || ''} onChange={e => update(ep.endpoint_id, 'username', e.target.value)} className={inputClass} /></div>
+                  <div><label className={labelClass}>Password</label><input type="password" value={ep.password || ''} onChange={e => update(ep.endpoint_id, 'password', e.target.value)} className={inputClass} /></div>
+                  <div><label className={labelClass}>Remote Path</label><input value={ep.remote_path || '/'} onChange={e => update(ep.endpoint_id, 'remote_path', e.target.value)} className={inputClass} placeholder="/inbound/codeco" /></div>
+                </>
+              )}
               <div><label className={labelClass}>ฟอร์แมต</label>
                 <select value={ep.format} onChange={e => update(ep.endpoint_id, 'format', e.target.value as EDIEndpoint['format'])} className={inputClass}>
                   <option value="EDIFACT">EDIFACT</option><option value="CSV">CSV</option><option value="JSON">JSON</option>

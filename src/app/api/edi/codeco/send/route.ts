@@ -133,26 +133,75 @@ export async function POST(request: NextRequest) {
       }, null, 2);
     }
 
-    // 5. Send via SFTP
-    const sftp = new SftpClient();
+    // 5. Send based on endpoint type
     let sendStatus = 'sent';
     let errorMsg = '';
+    let deliveryInfo = '';
 
-    try {
-      await sftp.connect({
-        host: ep.host,
-        port: ep.port || 22,
-        username: ep.username,
-        password: ep.password,
-      });
+    if (ep.type === 'email') {
+      // ===== EMAIL DELIVERY =====
+      try {
+        const { sendEmail } = await import('@/lib/emailService');
+        const recipients = (ep.host || '').split(',').map((e: string) => e.trim()).filter(Boolean);
+        if (recipients.length === 0) {
+          return NextResponse.json({ error: 'ไม่ได้ระบุอีเมลผู้รับ (ตั้งค่าใน Host field)' }, { status: 400 });
+        }
 
-      const remotePath = `${ep.remote_path.replace(/\/$/, '')}/${filename}`;
-      await sftp.put(Buffer.from(fileContent, 'utf-8'), remotePath);
-      await sftp.end();
-    } catch (sftpError: unknown) {
-      sendStatus = 'failed';
-      errorMsg = sftpError instanceof Error ? sftpError.message : String(sftpError);
-      try { await sftp.end(); } catch { /* */ }
+        const contentType = ep.format === 'CSV' ? 'text/csv' : ep.format === 'EDIFACT' ? 'text/plain' : 'application/json';
+        const result = await sendEmail({
+          to: recipients,
+          subject: `[CYMS EDI] CODECO — ${ep.shipping_line || 'ALL'} — ${transactions.length} records — ${new Date().toLocaleDateString('th-TH')}`,
+          html: `
+            <div style="font-family:sans-serif;padding:20px">
+              <h2 style="color:#1E40AF">📦 CODECO EDI Message</h2>
+              <table style="border-collapse:collapse;font-size:14px;margin:16px 0">
+                <tr><td style="padding:6px 12px;color:#64748B">Sender</td><td style="padding:6px 12px;font-weight:bold">${companyName}</td></tr>
+                <tr><td style="padding:6px 12px;color:#64748B">Shipping Line</td><td style="padding:6px 12px">${ep.shipping_line || 'ALL'}</td></tr>
+                <tr><td style="padding:6px 12px;color:#64748B">Records</td><td style="padding:6px 12px;font-weight:bold">${transactions.length}</td></tr>
+                <tr><td style="padding:6px 12px;color:#64748B">Format</td><td style="padding:6px 12px">${ep.format}</td></tr>
+                <tr><td style="padding:6px 12px;color:#64748B">Generated</td><td style="padding:6px 12px">${new Date().toLocaleString('th-TH')}</td></tr>
+              </table>
+              <p style="color:#64748B;font-size:12px">ไฟล์ CODECO แนบมาพร้อมอีเมลนี้ — กรุณาตรวจสอบ</p>
+            </div>
+          `,
+          attachments: [{
+            filename,
+            content: Buffer.from(fileContent, 'utf-8'),
+            contentType,
+          }],
+        });
+
+        if (!result.success) {
+          sendStatus = 'failed';
+          errorMsg = result.error || 'Email send failed';
+        } else {
+          deliveryInfo = `📧 ส่งอีเมลไปที่ ${recipients.join(', ')}`;
+        }
+      } catch (emailError: unknown) {
+        sendStatus = 'failed';
+        errorMsg = emailError instanceof Error ? emailError.message : String(emailError);
+      }
+
+    } else {
+      // ===== SFTP DELIVERY (default) =====
+      const sftp = new SftpClient();
+      try {
+        await sftp.connect({
+          host: ep.host,
+          port: ep.port || 22,
+          username: ep.username,
+          password: ep.password,
+        });
+
+        const remotePath = `${ep.remote_path.replace(/\/$/, '')}/${filename}`;
+        await sftp.put(Buffer.from(fileContent, 'utf-8'), remotePath);
+        await sftp.end();
+        deliveryInfo = `📁 ส่งไฟล์ไปที่ ${ep.host}:${ep.remote_path}/${filename}`;
+      } catch (sftpError: unknown) {
+        sendStatus = 'failed';
+        errorMsg = sftpError instanceof Error ? sftpError.message : String(sftpError);
+        try { await sftp.end(); } catch { /* */ }
+      }
     }
 
     // 6. Log the send
@@ -179,7 +228,7 @@ export async function POST(request: NextRequest) {
     if (sendStatus === 'failed') {
       return NextResponse.json({
         success: false,
-        error: `SFTP failed: ${errorMsg}`,
+        error: `${ep.type === 'email' ? 'Email' : 'SFTP'} failed: ${errorMsg}`,
         filename,
         record_count: transactions.length,
       });
@@ -190,10 +239,11 @@ export async function POST(request: NextRequest) {
       filename,
       record_count: transactions.length,
       endpoint: ep.name,
-      message: `✅ ส่ง ${transactions.length} รายการไปที่ ${ep.host}:${ep.remote_path}/${filename}`,
+      delivery_type: ep.type,
+      message: `✅ ส่ง ${transactions.length} รายการ — ${deliveryInfo}`,
     });
   } catch (error) {
-    console.error('❌ SFTP send error:', error);
+    console.error('❌ EDI send error:', error);
     return NextResponse.json({ error: 'ไม่สามารถส่ง CODECO ได้' }, { status: 500 });
   }
 }
