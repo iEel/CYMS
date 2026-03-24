@@ -1,21 +1,25 @@
 /**
  * PDF Report Generator — CYMS
  * ใช้ jspdf + jspdf-autotable สำหรับสร้าง PDF รายงาน
- * รองรับภาษาไทยผ่าน THSarabunNew font (embedded)
+ * รองรับภาษาไทยผ่าน Google Sarabun font (embedded base64)
  */
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { sarabunBase64 } from './sarabunFont';
 
-// ─── Font Config ───
-// Use helvetica (jsPDF built-in) — safe cross-platform
-// Thai characters in doc.text() will render as-is in PDF viewers that support Unicode
-const PDF_FONT = 'helvetica';
+// ─── Thai Font (Sarabun — Google Fonts, embedded base64) ───
+const FONT_NAME = 'Sarabun';
 
 function setupDoc(orientation: 'portrait' | 'landscape' = 'portrait'): jsPDF {
-  return new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+  // Register Sarabun Thai font
+  doc.addFileToVFS('Sarabun-Regular.ttf', sarabunBase64);
+  doc.addFont('Sarabun-Regular.ttf', FONT_NAME, 'normal');
+  doc.setFont(FONT_NAME);
+  return doc;
 }
 
-function getFontName() { return PDF_FONT; }
+function getFontName() { return FONT_NAME; }
 
 function formatCurrency(n: number): string {
   return `${n?.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
