@@ -1,0 +1,15 @@
+// Instrumentation — runs once on server startup (Next.js 14+)
+export async function register() {
+  // Only run on server side
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // Wait a bit for DB to be ready before initializing scheduler
+    setTimeout(async () => {
+      try {
+        const { initScheduler } = await import('@/lib/ediScheduler');
+        await initScheduler();
+      } catch (error) {
+        console.error('❌ [Instrumentation] EDI Scheduler init failed:', error);
+      }
+    }, 5000); // 5 second delay to ensure DB is connected
+  }
+}

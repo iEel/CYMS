@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Trash2, Save, Globe, CheckCircle2, Shield, Server, Loader2, Mail,
+  Plus, Trash2, Save, Globe, CheckCircle2, Shield, Server, Loader2, Mail, Clock,
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -20,6 +20,10 @@ interface EDIEndpoint {
   is_active: boolean;
   last_sent_at: string;
   last_status: string;
+  schedule_enabled: boolean;
+  schedule_cron: string;
+  schedule_yard_id: number;
+  schedule_last_run: string;
 }
 
 export default function EDIConfiguration() {
@@ -67,7 +71,7 @@ export default function EDIConfiguration() {
   };
 
   const update = (id: number, field: string, value: string | number | boolean) => {
-    setEndpoints(endpoints.map(e => e.endpoint_id === id ? { ...e, [field]: value } : e));
+    setEndpoints(prev => prev.map(e => e.endpoint_id === id ? { ...e, [field]: value } : e));
   };
 
   const handleSave = async () => {
@@ -77,6 +81,16 @@ export default function EDIConfiguration() {
         await fetch('/api/edi/endpoints', {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(ep),
+        });
+        // Sync schedule
+        await fetch('/api/edi/schedule', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            endpoint_id: ep.endpoint_id,
+            schedule_enabled: ep.schedule_enabled,
+            schedule_cron: ep.schedule_cron,
+            schedule_yard_id: ep.schedule_yard_id,
+          }),
         });
       }
       setSaved(true);
@@ -145,7 +159,7 @@ export default function EDIConfiguration() {
               <div><label className={labelClass}>สายเรือ</label><input value={ep.shipping_line || ''} onChange={e => update(ep.endpoint_id, 'shipping_line', e.target.value)} className={inputClass} placeholder="MSC, Evergreen..." /></div>
               <div><label className={labelClass}>ประเภท</label>
                 <select value={ep.type} onChange={e => { update(ep.endpoint_id, 'type', e.target.value); if (e.target.value === 'email') { update(ep.endpoint_id, 'port', 0); } }} className={inputClass}>
-                  <option value="sftp">SFTP</option><option value="ftp">FTP</option><option value="api">REST API</option><option value="email">📧 Email</option>
+                  <option value="sftp">SFTP</option><option value="ftp">FTP</option><option value="api">REST API</option><option value="email">Email</option>
                 </select>
               </div>
               {ep.type === 'email' ? (
@@ -172,6 +186,53 @@ export default function EDIConfiguration() {
                   <option value="EDIFACT">EDIFACT</option><option value="CSV">CSV</option><option value="JSON">JSON</option>
                 </select>
               </div>
+            </div>
+
+            {/* Schedule Section */}
+            <div className="mt-2 p-3 rounded-lg bg-white/60 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-600">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Clock size={13} className={ep.schedule_enabled ? 'text-amber-500' : 'text-slate-400'} />
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">ส่งอัตโนมัติ</span>
+                  {ep.schedule_last_run && <span className="text-[10px] text-slate-400">ส่งล่าสุด: {fmtDate(ep.schedule_last_run)}</span>}
+                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={ep.schedule_enabled || false} onChange={e => update(ep.endpoint_id, 'schedule_enabled', e.target.checked)} className="w-3.5 h-3.5 rounded" />
+                  <span className={`text-xs font-medium ${ep.schedule_enabled ? 'text-amber-600' : 'text-slate-400'}`}>{ep.schedule_enabled ? 'เปิด' : 'ปิด'}</span>
+                </label>
+              </div>
+              {ep.schedule_enabled && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="md:col-span-2">
+                    <label className={labelClass}>ความถี่</label>
+                    <div className="flex gap-1 flex-wrap">
+                      {[
+                        { label: 'ทุกชั่วโมง', cron: '0 * * * *' },
+                        { label: 'วันละ 2 ครั้ง', cron: '0 8,18 * * *' },
+                        { label: 'ทุกวัน 18:00', cron: '0 18 * * *' },
+                        { label: 'ทุกสัปดาห์', cron: '0 9 * * 1' },
+                      ].map(p => (
+                        <button key={p.cron} type="button" onClick={() => update(ep.endpoint_id, 'schedule_cron', p.cron)}
+                          className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                            ep.schedule_cron === p.cron
+                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                              : 'bg-slate-100 text-slate-500 dark:bg-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                          }`}>
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Cron Expression</label>
+                    <input value={ep.schedule_cron || '0 18 * * *'} onChange={e => update(ep.endpoint_id, 'schedule_cron', e.target.value)} className={inputClass} placeholder="0 18 * * *" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Yard ID</label>
+                    <input type="number" value={ep.schedule_yard_id || 1} onChange={e => update(ep.endpoint_id, 'schedule_yard_id', parseInt(e.target.value) || 1)} className={inputClass} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ))}
