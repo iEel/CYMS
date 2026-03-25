@@ -2,33 +2,62 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 
-// GET — ดึง Bookings
+// GET — ดึง Bookings (with progress counts)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const yardId = searchParams.get('yard_id');
     const status = searchParams.get('status');
     const search = searchParams.get('search');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')));
+    const offset = (page - 1) * limit;
 
     const db = await getDb();
-    const req = db.request();
     const conditions: string[] = [];
 
-    if (yardId) { conditions.push('b.yard_id = @yardId'); req.input('yardId', sql.Int, parseInt(yardId)); }
-    if (status) { conditions.push('b.status = @status'); req.input('status', sql.NVarChar, status); }
-    if (search) { conditions.push('(b.booking_number LIKE @search OR b.vessel_name LIKE @search)'); req.input('search', sql.NVarChar, `%${search}%`); }
+    // Build conditions (shared between count + data queries)
+    const reqCount = db.request();
+    const reqData = db.request();
+
+    if (yardId) {
+      conditions.push('b.yard_id = @yardId');
+      reqCount.input('yardId', sql.Int, parseInt(yardId));
+      reqData.input('yardId', sql.Int, parseInt(yardId));
+    }
+    if (status) {
+      conditions.push('b.status = @status');
+      reqCount.input('status', sql.NVarChar, status);
+      reqData.input('status', sql.NVarChar, status);
+    }
+    if (search) {
+      conditions.push('(b.booking_number LIKE @search OR b.vessel_name LIKE @search)');
+      reqCount.input('search', sql.NVarChar, `%${search}%`);
+      reqData.input('search', sql.NVarChar, `%${search}%`);
+    }
 
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
 
-    const result = await req.query(`
-      SELECT b.*, c.customer_name
+    // Count total
+    const countResult = await reqCount.query(`SELECT COUNT(*) AS total FROM Bookings b ${where}`);
+    const total = countResult.recordset[0].total;
+    const totalPages = Math.ceil(total / limit);
+
+    // Fetch page
+    reqData.input('offset', sql.Int, offset);
+    reqData.input('limit', sql.Int, limit);
+
+    const result = await reqData.query(`
+      SELECT b.*, c.customer_name,
+        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id) AS linked_containers
       FROM Bookings b
       LEFT JOIN Customers c ON b.customer_id = c.customer_id
       ${where}
       ORDER BY b.created_at DESC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
-    return NextResponse.json({ bookings: result.recordset });
+    return NextResponse.json({ bookings: result.recordset, total, totalPages, page, limit });
   } catch (error) {
     console.error('❌ GET bookings error:', error);
     return NextResponse.json({ error: 'ไม่สามารถดึงข้อมูล booking ได้' }, { status: 500 });
@@ -52,19 +81,35 @@ export async function POST(request: NextRequest) {
       .input('containerSize', sql.NVarChar, body.container_size || null)
       .input('containerType', sql.NVarChar, body.container_type || null)
       .input('eta', sql.DateTime2, body.eta || null)
+      .input('validFrom', sql.DateTime2, body.valid_from || null)
+      .input('validTo', sql.DateTime2, body.valid_to || null)
       .input('sealNumber', sql.NVarChar, body.seal_number || null)
       .input('notes', sql.NVarChar, body.notes || null)
       .query(`
         INSERT INTO Bookings (booking_number, yard_id, customer_id, booking_type,
           vessel_name, voyage_number, container_count, container_size, container_type,
-          eta, seal_number, notes)
+          eta, valid_from, valid_to, seal_number, notes)
         OUTPUT INSERTED.*
         VALUES (@bookingNumber, @yardId, @customerId, @bookingType,
           @vesselName, @voyageNumber, @containerCount, @containerSize, @containerType,
-          @eta, @sealNumber, @notes)
+          @eta, @validFrom, @validTo, @sealNumber, @notes)
       `);
 
-    return NextResponse.json({ success: true, booking: result.recordset[0] });
+    const booking = result.recordset[0];
+
+    // Auto-create BookingContainers if container_numbers provided
+    if (body.container_numbers && Array.isArray(body.container_numbers)) {
+      for (const cn of body.container_numbers) {
+        if (cn && cn.trim()) {
+          await db.request()
+            .input('bookingId', sql.Int, booking.booking_id)
+            .input('containerNumber', sql.NVarChar, cn.trim().toUpperCase())
+            .query(`INSERT INTO BookingContainers (booking_id, container_number) VALUES (@bookingId, @containerNumber)`);
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, booking });
   } catch (error: unknown) {
     console.error('❌ POST booking error:', error);
     const msg = error instanceof Error && error.message.includes('UNIQUE')
@@ -73,16 +118,31 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT — อัปเดต Booking
+// PUT — อัปเดต Booking (supports multiple fields)
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
 
-    await db.request()
-      .input('bookingId', sql.Int, body.booking_id)
-      .input('status', sql.NVarChar, body.status)
-      .query('UPDATE Bookings SET status = @status WHERE booking_id = @bookingId');
+    const sets: string[] = [];
+    const req = db.request().input('bookingId', sql.Int, body.booking_id);
+
+    if (body.status !== undefined) { sets.push('status = @status'); req.input('status', sql.NVarChar, body.status); }
+    if (body.vessel_name !== undefined) { sets.push('vessel_name = @vesselName'); req.input('vesselName', sql.NVarChar, body.vessel_name); }
+    if (body.voyage_number !== undefined) { sets.push('voyage_number = @voyageNumber'); req.input('voyageNumber', sql.NVarChar, body.voyage_number); }
+    if (body.container_count !== undefined) { sets.push('container_count = @containerCount'); req.input('containerCount', sql.Int, body.container_count); }
+    if (body.container_size !== undefined) { sets.push('container_size = @containerSize'); req.input('containerSize', sql.NVarChar, body.container_size); }
+    if (body.container_type !== undefined) { sets.push('container_type = @containerType'); req.input('containerType', sql.NVarChar, body.container_type); }
+    if (body.eta !== undefined) { sets.push('eta = @eta'); req.input('eta', sql.DateTime2, body.eta || null); }
+    if (body.valid_from !== undefined) { sets.push('valid_from = @validFrom'); req.input('validFrom', sql.DateTime2, body.valid_from || null); }
+    if (body.valid_to !== undefined) { sets.push('valid_to = @validTo'); req.input('validTo', sql.DateTime2, body.valid_to || null); }
+    if (body.customer_id !== undefined) { sets.push('customer_id = @customerId'); req.input('customerId', sql.Int, body.customer_id || null); }
+    if (body.seal_number !== undefined) { sets.push('seal_number = @sealNumber'); req.input('sealNumber', sql.NVarChar, body.seal_number); }
+    if (body.notes !== undefined) { sets.push('notes = @notes'); req.input('notes', sql.NVarChar, body.notes); }
+
+    if (sets.length === 0) return NextResponse.json({ error: 'ไม่มีข้อมูลที่ต้องอัปเดต' }, { status: 400 });
+
+    await req.query(`UPDATE Bookings SET ${sets.join(', ')} WHERE booking_id = @bookingId`);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -408,6 +408,84 @@ export async function POST(request: NextRequest) {
           @eirNumber, @notes, @damageReport, @processedBy)
       `);
 
+    // === Booking Auto-Link ===
+    if (booking_ref) {
+      try {
+        if (transaction_type === 'gate_in') {
+          // Find matching Booking
+          const bkResult = await db.request()
+            .input('bkRef', sql.NVarChar, booking_ref)
+            .input('bkYardId', sql.Int, yard_id)
+            .query(`SELECT booking_id, status FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId`);
+
+          if (bkResult.recordset.length > 0) {
+            const bk = bkResult.recordset[0];
+            if (bk.status === 'confirmed' || bk.status === 'pending') {
+              // Check if already linked
+              const existLink = await db.request()
+                .input('bkId', sql.Int, bk.booking_id)
+                .input('cNum', sql.NVarChar, container_number)
+                .query(`SELECT id FROM BookingContainers WHERE booking_id = @bkId AND container_number = @cNum`);
+
+              if (existLink.recordset.length > 0) {
+                // Update existing link
+                await db.request()
+                  .input('linkId', sql.Int, existLink.recordset[0].id)
+                  .input('cId', sql.Int, finalContainerId)
+                  .query(`UPDATE BookingContainers SET container_id = @cId, status = 'received', gate_in_at = GETDATE() WHERE id = @linkId`);
+              } else {
+                // Create new link
+                await db.request()
+                  .input('bkId2', sql.Int, bk.booking_id)
+                  .input('cId2', sql.Int, finalContainerId)
+                  .input('cNum2', sql.NVarChar, container_number)
+                  .query(`INSERT INTO BookingContainers (booking_id, container_id, container_number, status, gate_in_at) VALUES (@bkId2, @cId2, @cNum2, 'received', GETDATE())`);
+              }
+
+              // Update received_count
+              await db.request()
+                .input('bkId3', sql.Int, bk.booking_id)
+                .query(`UPDATE Bookings SET received_count = (SELECT COUNT(*) FROM BookingContainers WHERE booking_id = @bkId3 AND status IN ('received', 'released')) WHERE booking_id = @bkId3`);
+            }
+          }
+        } else if (transaction_type === 'gate_out') {
+          // Find Booking by ref and update BookingContainers
+          const bkResult = await db.request()
+            .input('bkRef', sql.NVarChar, booking_ref)
+            .input('bkYardId', sql.Int, yard_id)
+            .query(`SELECT booking_id, container_count FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId`);
+
+          if (bkResult.recordset.length > 0) {
+            const bk = bkResult.recordset[0];
+
+            // Update BookingContainers entry
+            await db.request()
+              .input('bkId', sql.Int, bk.booking_id)
+              .input('cId', sql.Int, finalContainerId)
+              .query(`UPDATE BookingContainers SET status = 'released', gate_out_at = GETDATE() WHERE booking_id = @bkId AND container_id = @cId`);
+
+            // Update released_count
+            await db.request()
+              .input('bkId2', sql.Int, bk.booking_id)
+              .query(`UPDATE Bookings SET released_count = (SELECT COUNT(*) FROM BookingContainers WHERE booking_id = @bkId2 AND status = 'released') WHERE booking_id = @bkId2`);
+
+            // Auto-complete if all containers released
+            const updBk = await db.request()
+              .input('bkId3', sql.Int, bk.booking_id)
+              .query(`SELECT released_count, container_count FROM Bookings WHERE booking_id = @bkId3`);
+            if (updBk.recordset.length > 0 && updBk.recordset[0].released_count >= updBk.recordset[0].container_count) {
+              await db.request()
+                .input('bkId4', sql.Int, bk.booking_id)
+                .query(`UPDATE Bookings SET status = 'completed' WHERE booking_id = @bkId4 AND status != 'completed'`);
+            }
+          }
+        }
+      } catch (bkErr) {
+        console.error('⚠️ Booking auto-link failed:', bkErr);
+        // Don't fail the gate transaction if booking linking fails
+      }
+    }
+
     // Audit log
     await db.request()
       .input('yardId', sql.Int, yard_id)

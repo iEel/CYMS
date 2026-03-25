@@ -255,12 +255,29 @@ export interface Booking {
   container_size?: string;
   container_type?: string;
   eta?: string;
+  valid_from?: string;
+  valid_to?: string;
+  received_count: number;
+  released_count: number;
   status: BookingStatus;
   seal_number?: string;
   notes?: string;
   created_at: string;
   // Joined
   customer_name?: string;
+}
+
+export type BookingContainerStatus = 'pending' | 'received' | 'released';
+
+export interface BookingContainer {
+  id: number;
+  booking_id: number;
+  container_id?: number;
+  container_number: string;
+  status: BookingContainerStatus;
+  gate_in_at?: string;
+  gate_out_at?: string;
+  created_at: string;
 }
 
 // ===================================

@@ -46,6 +46,12 @@ const menuItems: MenuItem[] = [
     roles: ['yard_manager', 'gate_clerk', 'surveyor'],
   },
   {
+    label: 'Booking',
+    href: '/booking',
+    icon: <ClipboardList size={20} />,
+    roles: ['yard_manager', 'gate_clerk'],
+  },
+  {
     label: 'ปฏิบัติการ',
     href: '/operations',
     icon: <Truck size={20} />,

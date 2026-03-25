@@ -48,6 +48,12 @@ const PERMISSIONS = [
   { module: 'edi', action: 'update', description: 'แก้ไขข้อมูล EDI' },
   { module: 'edi', action: 'delete', description: 'ลบข้อมูล EDI' },
 
+  // Bookings
+  { module: 'bookings', action: 'create', description: 'สร้าง Booking' },
+  { module: 'bookings', action: 'read', description: 'ดูรายการ Booking' },
+  { module: 'bookings', action: 'update', description: 'แก้ไข/ยืนยัน Booking' },
+  { module: 'bookings', action: 'delete', description: 'ยกเลิก/ลบ Booking' },
+
   // M&R
   { module: 'mnr', action: 'create', description: 'สร้างใบ EOR' },
   { module: 'mnr', action: 'read', description: 'ดูรายการซ่อม/EOR' },
@@ -84,6 +90,7 @@ const ROLE_PERMISSIONS = {
     'gate:create', 'gate:read', 'gate:update',
     'yard:read',
     'edi:read',
+    'bookings:create', 'bookings:read', 'bookings:update',
     'customers:read',
   ],
   surveyor: [
