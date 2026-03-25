@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Package, Loader2, Search, Filter } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Package, Loader2, Search, Filter, RefreshCw } from 'lucide-react';
 
 interface Container {
   container_id: number; container_number: string; size: string; type: string;
@@ -25,8 +25,9 @@ export default function PortalContainers() {
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const loadData = (p = 1, status = statusFilter) => {
+  const loadData = useCallback((p = 1, status = statusFilter) => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(p), limit: '20' });
     if (status) params.set('status', status);
@@ -36,10 +37,15 @@ export default function PortalContainers() {
       setPage(d.page || 1);
       setTotalPages(d.totalPages || 1);
       setLoading(false);
+      setLastUpdated(new Date());
     }).catch(() => setLoading(false));
-  };
+  }, [statusFilter]);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(() => loadData(), 30000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   const filtered = search
     ? containers.filter(c => c.container_number?.toLowerCase().includes(search.toLowerCase()))
@@ -54,7 +60,13 @@ export default function PortalContainers() {
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">{total} ตู้ทั้งหมด</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <button onClick={() => loadData(page)}
+            className="flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-blue-500 transition-colors"
+            title="รีเฟรช">
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+            {lastUpdated && lastUpdated.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </button>
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
             <input type="text" placeholder="ค้นเลขตู้..." value={search} onChange={e => setSearch(e.target.value)}

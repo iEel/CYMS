@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileText, Loader2, Filter } from 'lucide-react';
+import { FileText, Loader2, Filter, Download } from 'lucide-react';
 
 interface Invoice {
   invoice_id: number; invoice_number: string; charge_type: string;
@@ -112,6 +112,10 @@ export default function PortalInvoices() {
                     {inv.container_number && `ตู้: ${inv.container_number} | `}
                     {new Date(inv.created_at).toLocaleDateString('th-TH')}
                   </p>
+                  <a href={`/api/portal/invoice-pdf?invoice_id=${inv.invoice_id}`} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1 mt-1 text-[10px] text-blue-500 hover:text-blue-700">
+                    <Download size={10} /> ดาวน์โหลด PDF
+                  </a>
                 </div>
               ))}
             </div>
@@ -126,6 +130,7 @@ export default function PortalInvoices() {
                   <th className="p-3 text-right">ยอดรวม</th>
                   <th className="p-3">สถานะ</th>
                   <th className="p-3">วันที่</th>
+                  <th className="p-3 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -141,6 +146,12 @@ export default function PortalInvoices() {
                       </span>
                     </td>
                     <td className="p-3 text-slate-500 text-xs">{new Date(inv.created_at).toLocaleDateString('th-TH')}</td>
+                    <td className="p-3 text-right">
+                      <a href={`/api/portal/invoice-pdf?invoice_id=${inv.invoice_id}`} target="_blank" rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 transition-colors">
+                        <Download size={12} /> PDF
+                      </a>
+                    </td>
                   </tr>
                 ))}
               </tbody>

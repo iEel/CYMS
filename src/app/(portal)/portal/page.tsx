@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Package, FileText, ClipboardList, ArrowUpRight, ArrowDownLeft, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Package, FileText, ClipboardList, ArrowUpRight, ArrowDownLeft, Loader2, RefreshCw, Download } from 'lucide-react';
 
 interface Overview {
   customer: { customer_name: string; contact_email: string; customer_type: string };
@@ -17,11 +17,19 @@ interface Overview {
 export default function PortalOverview() {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const fetchData = useCallback(() => {
+    fetch('/api/portal/overview').then(r => r.json()).then(d => {
+      setData(d); setLoading(false); setLastUpdated(new Date());
+    }).catch(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
-    fetch('/api/portal/overview').then(r => r.json()).then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
+    fetchData();
+    const interval = setInterval(fetchData, 30000); // Auto-refresh every 30s
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -54,11 +62,19 @@ export default function PortalOverview() {
   return (
     <div className="space-y-6">
       {/* Welcome */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
-          สวัสดี, {customer.customer_name}
-        </h1>
-        <p className="text-sm text-slate-400 mt-1">Customer Portal — ดูสถานะตู้ และ Invoice</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
+            สวัสดี, {customer.customer_name}
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">Customer Portal — ดูสถานะตู้ และ Invoice</p>
+        </div>
+        <button onClick={fetchData}
+          className="flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-blue-500 transition-colors mt-2"
+          title="รีเฟรช">
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          {lastUpdated && `${lastUpdated.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
+        </button>
       </div>
 
       {/* KPI Cards */}
@@ -97,13 +113,17 @@ export default function PortalOverview() {
                   <p className="text-sm font-medium text-slate-800 dark:text-white font-mono">{g.container_number}</p>
                   <p className="text-[10px] text-slate-400">{g.size}&apos; {g.type} — {g.eir_number}</p>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex flex-col items-end gap-0.5">
                   <p className={`text-xs font-medium ${g.transaction_type === 'gate_in' ? 'text-blue-600' : 'text-red-500'}`}>
                     {g.transaction_type === 'gate_in' ? 'เข้า' : 'ออก'}
                   </p>
                   <p className="text-[10px] text-slate-400">
                     {new Date(g.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </p>
+                  <a href={`/api/portal/eir-pdf?eir_number=${g.eir_number}`} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-0.5 text-[9px] text-blue-500 hover:text-blue-700">
+                    <Download size={9} /> EIR PDF
+                  </a>
                 </div>
               </div>
             ))}
