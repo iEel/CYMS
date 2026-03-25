@@ -14,6 +14,7 @@ import {
   Link,
   Shield,
   Mail,
+  Image,
 } from 'lucide-react';
 import CompanySettings from './CompanySettings';
 import YardsSettings from './YardsSettings';
@@ -25,6 +26,7 @@ import AutoAllocationRules from './AutoAllocationRules';
 import PrefixMapping from './PrefixMapping';
 import RateLimitSettings from './RateLimitSettings';
 import EmailSettingsTab from './EmailSettings';
+import PhotoRetentionSettings from './PhotoRetentionSettings';
 
 const tabs = [
   { id: 'company', label: 'องค์กร', icon: <Building2 size={18} />, color: '#3B82F6' },
@@ -37,6 +39,7 @@ const tabs = [
   { id: 'prefix', label: 'Prefix', icon: <Link size={18} />, color: '#06B6D4' },
   { id: 'ratelimit', label: 'Rate Limit', icon: <Shield size={18} />, color: '#F59E0B' },
   { id: 'email', label: 'Email', icon: <Mail size={18} />, color: '#3B82F6' },
+  { id: 'photos', label: 'รูปภาพ', icon: <Image size={18} />, color: '#6366F1' },
 ];
 
 export default function SettingsPage() {
@@ -85,6 +88,7 @@ export default function SettingsPage() {
         {activeTab === 'prefix' && <PrefixMapping />}
         {activeTab === 'ratelimit' && <RateLimitSettings />}
         {activeTab === 'email' && <EmailSettingsTab />}
+        {activeTab === 'photos' && <PhotoRetentionSettings />}
       </div>
     </div>
   );
