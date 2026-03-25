@@ -242,14 +242,18 @@ export default function EmailSettings() {
                 onChange={e => setSettings(s => ({ ...s, notifyPayment: e.target.checked }))} />
             </label>
             <label className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 cursor-pointer">
-              <span className="text-sm text-slate-700 dark:text-slate-200">📋 แจ้งเมื่อ Booking เปลี่ยนสถานะ</span>
+              <div>
+                <span className="text-sm text-slate-700 dark:text-slate-200">📋 แจ้งเมื่อ Booking เปลี่ยนสถานะ</span>
+                <p className="text-[10px] text-slate-400 mt-0.5">ส่งไปที่ email ลูกค้าเจ้าของ Booking แต่ละราย (Customers → contact_email) ไม่ใช้ email ปลายทางด้านล่าง</p>
+              </div>
               <input type="checkbox" className="w-4 h-4 accent-blue-500" checked={settings.notifyBooking}
                 onChange={e => setSettings(s => ({ ...s, notifyBooking: e.target.checked }))} />
             </label>
             <div>
-              <label className={labelCls}>Email ปลายทาง (คั่นด้วย ,)</label>
+              <label className={labelCls}>Email ปลายทาง สำหรับผู้ดูแลระบบ (คั่นด้วย ,)</label>
               <input type="text" className={inputCls} placeholder="admin@company.com, manager@company.com"
                 value={settings.notifyTo} onChange={e => setSettings(s => ({ ...s, notifyTo: e.target.value }))} />
+              <p className="text-[10px] text-slate-400 mt-1">ส่งแจ้งเตือนให้ admin/ผู้จัดการ เมื่อมีตู้เข้า-ออกลาน หรือมีการชำระเงิน</p>
             </div>
           </div>
         </div>
