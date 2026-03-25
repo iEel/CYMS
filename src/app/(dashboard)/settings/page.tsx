@@ -8,7 +8,6 @@ import {
   Globe,
   Wrench,
   Receipt,
-  Cog,
   Lock,
   TrendingUp,
   Layers,
@@ -22,7 +21,6 @@ import YardsSettings from './YardsSettings';
 import UsersSettings from './UsersSettings';
 import CustomerMaster from './CustomerMaster';
 import EDIConfiguration from './EDIConfiguration';
-import SealMaster from './SealMaster';
 import TieredStorageRate from './TieredStorageRate';
 import AutoAllocationRules from './AutoAllocationRules';
 import EquipmentRulesConfig from './EquipmentRulesConfig';
@@ -36,7 +34,6 @@ const tabs = [
   { id: 'users', label: 'ผู้ใช้/สิทธิ์', icon: <Users size={18} />, color: '#8B5CF6' },
   { id: 'customers', label: 'ลูกค้า', icon: <Receipt size={18} />, color: '#EC4899' },
   { id: 'edi', label: 'EDI', icon: <Globe size={18} />, color: '#0EA5E9' },
-  { id: 'seal', label: 'ซีล', icon: <Lock size={18} />, color: '#EF4444' },
   { id: 'storage', label: 'ค่าฝาก', icon: <TrendingUp size={18} />, color: '#06B6D4' },
   { id: 'allocation', label: 'จัดตู้', icon: <Layers size={18} />, color: '#10B981' },
   { id: 'equipment', label: 'เครื่องจักร', icon: <Truck size={18} />, color: '#F97316' },
@@ -86,7 +83,6 @@ export default function SettingsPage() {
         {activeTab === 'users' && <UsersSettings />}
         {activeTab === 'customers' && <CustomerMaster />}
         {activeTab === 'edi' && <EDIConfiguration />}
-        {activeTab === 'seal' && <SealMaster />}
         {activeTab === 'storage' && <TieredStorageRate />}
         {activeTab === 'allocation' && <AutoAllocationRules />}
         {activeTab === 'equipment' && <EquipmentRulesConfig />}
