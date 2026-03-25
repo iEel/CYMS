@@ -11,6 +11,7 @@ export async function GET() {
     const result = await db.request().query(`
       SELECT u.user_id, u.username, u.full_name, u.email, u.phone,
              u.status, u.two_fa_enabled, u.bound_device_mac, u.created_at,
+             u.customer_id,
              r.role_code, r.role_name,
              STRING_AGG(CAST(uya.yard_id AS VARCHAR), ',') as yard_ids
       FROM Users u
@@ -18,6 +19,7 @@ export async function GET() {
       LEFT JOIN UserYardAccess uya ON u.user_id = uya.user_id
       GROUP BY u.user_id, u.username, u.full_name, u.email, u.phone,
                u.status, u.two_fa_enabled, u.bound_device_mac, u.created_at,
+               u.customer_id,
                r.role_code, r.role_name
       ORDER BY u.user_id
     `);
@@ -56,10 +58,11 @@ export async function POST(request: NextRequest) {
       .input('roleId', sql.Int, roleId)
       .input('email', sql.NVarChar, body.email || null)
       .input('phone', sql.NVarChar, body.phone || null)
+      .input('customerId', sql.Int, body.role_code === 'customer' && body.customer_id ? body.customer_id : null)
       .query(`
-        INSERT INTO Users (username, password_hash, full_name, role_id, email, phone)
+        INSERT INTO Users (username, password_hash, full_name, role_id, email, phone, customer_id)
         OUTPUT INSERTED.user_id
-        VALUES (@username, @passwordHash, @fullName, @roleId, @email, @phone)
+        VALUES (@username, @passwordHash, @fullName, @roleId, @email, @phone, @customerId)
       `);
 
     const userId = insertResult.recordset[0].user_id;
@@ -104,7 +107,7 @@ export async function PUT(request: NextRequest) {
     let query = `
       UPDATE Users SET
         full_name = @fullName, role_id = @roleId, email = @email,
-        phone = @phone, status = @status, updated_at = GETDATE()
+        phone = @phone, status = @status, customer_id = @customerId, updated_at = GETDATE()
     `;
 
     const req = db.request()
@@ -113,7 +116,8 @@ export async function PUT(request: NextRequest) {
       .input('roleId', sql.Int, roleId)
       .input('email', sql.NVarChar, body.email || null)
       .input('phone', sql.NVarChar, body.phone || null)
-      .input('status', sql.NVarChar, body.status || 'active');
+      .input('status', sql.NVarChar, body.status || 'active')
+      .input('customerId', sql.Int, body.role_code === 'customer' && body.customer_id ? body.customer_id : null);
 
     // อัปเดต password ถ้ามีเปลี่ยน
     if (body.password) {

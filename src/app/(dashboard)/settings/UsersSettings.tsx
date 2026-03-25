@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin } from 'lucide-react';
+import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building } from 'lucide-react';
 import PermissionsMatrix from './PermissionsMatrix';
 
 interface UserData {
@@ -14,6 +14,13 @@ interface UserData {
   role_code: string;
   role_name: string;
   yard_ids: string; // comma separated
+  customer_id?: number;
+}
+
+interface CustomerOption {
+  customer_id: number;
+  customer_name: string;
+  customer_type: string;
 }
 
 const ROLES = [
@@ -42,7 +49,17 @@ export default function UsersSettings() {
   const [form, setForm] = useState({
     username: '', password: '', full_name: '', email: '', phone: '',
     role_code: 'gate_clerk', status: 'active', yard_ids: [1] as number[],
+    customer_id: null as number | null,
   });
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+
+  const fetchCustomers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/customers');
+      const data = await res.json();
+      if (Array.isArray(data)) setCustomers(data);
+    } catch { /* ignore */ }
+  }, []);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -53,11 +70,11 @@ export default function UsersSettings() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => { fetchUsers(); fetchCustomers(); }, [fetchUsers, fetchCustomers]);
 
   const openAdd = () => {
     setEditingUser(null);
-    setForm({ username: '', password: '', full_name: '', email: '', phone: '', role_code: 'gate_clerk', status: 'active', yard_ids: [1] });
+    setForm({ username: '', password: '', full_name: '', email: '', phone: '', role_code: 'gate_clerk', status: 'active', yard_ids: [1], customer_id: null });
     setShowForm(true);
   };
 
@@ -72,6 +89,7 @@ export default function UsersSettings() {
       role_code: user.role_code,
       status: user.status,
       yard_ids: user.yard_ids ? user.yard_ids.split(',').map(Number) : [],
+      customer_id: user.customer_id || null,
     });
     setShowForm(true);
   };
@@ -154,10 +172,20 @@ export default function UsersSettings() {
             <input type="text" placeholder="โทรศัพท์" value={form.phone}
               onChange={e => setForm({...form, phone: e.target.value})}
               className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]" />
-            <select value={form.role_code} onChange={e => setForm({...form, role_code: e.target.value})}
+            <select value={form.role_code} onChange={e => setForm({...form, role_code: e.target.value, customer_id: e.target.value !== 'customer' ? null : form.customer_id})}
               className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]">
               {ROLES.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
             </select>
+            {form.role_code === 'customer' && (
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">🏢 บริษัทลูกค้า *</label>
+                <select value={form.customer_id || ''} onChange={e => setForm({...form, customer_id: e.target.value ? parseInt(e.target.value) : null})}
+                  className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]">
+                  <option value="">-- เลือกบริษัท --</option>
+                  {customers.map(c => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
+                </select>
+              </div>
+            )}
             {editingUser && (
               <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
                 className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]">

@@ -10,7 +10,12 @@ const config = {
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  options: { encrypt: true, trustServerCertificate: true },
+  port: parseInt(process.env.DB_PORT || '1433'),
+  options: {
+    encrypt: true,
+    trustServerCertificate: true,
+    instanceName: process.env.DB_INSTANCE || undefined,
+  },
 };
 
 async function migrate() {
