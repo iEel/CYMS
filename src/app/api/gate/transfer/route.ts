@@ -34,10 +34,11 @@ export async function POST(request: NextRequest) {
 
     const container = containerResult.recordset[0];
 
-    // Generate transfer number
+    // Generate transfer number with random suffix
     const countResult = await db.request()
       .query("SELECT COUNT(*) as cnt FROM GateTransactions WHERE transaction_type = 'transfer'");
-    const transferNum = `TRF-${new Date().getFullYear()}-${String((countResult.recordset[0]?.cnt || 0) + 1).padStart(6, '0')}`;
+    const randomHex = crypto.randomUUID().replace(/-/g, '').slice(0, 6);
+    const transferNum = `TRF-${new Date().getFullYear()}-${String((countResult.recordset[0]?.cnt || 0) + 1).padStart(6, '0')}-${randomHex}`;
 
     // 1. Update container: status → in_transit, clear position
     await db.request()

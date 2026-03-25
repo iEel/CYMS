@@ -271,12 +271,13 @@ export async function POST(request: NextRequest) {
 
     const db = await getDb();
 
-    // Generate EIR number
+    // Generate EIR number with random suffix (prevents URL guessing on public QR pages)
     const eirPrefix = transaction_type === 'gate_in' ? 'EIR-IN' : 'EIR-OUT';
     const countResult = await db.request()
       .input('yardId', sql.Int, yard_id)
       .query(`SELECT COUNT(*) as cnt FROM GateTransactions WHERE yard_id = @yardId`);
-    const eirNumber = `${eirPrefix}-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}`;
+    const randomHex = crypto.randomUUID().replace(/-/g, '').slice(0, 6);
+    const eirNumber = `${eirPrefix}-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}-${randomHex}`;
 
     let finalContainerId = container_id;
     let assignedLocation: { zone_name: string; zone_id: number; bay: number; row: number; tier: number; reason: string } | null = null;
