@@ -182,93 +182,164 @@ export default function UsersSettings() {
 
       {/* Add/Edit User Form */}
       {showForm && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border-2 border-[#8B5CF6]/30 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-800 dark:text-white">
-              {editingUser ? `แก้ไข: ${editingUser.full_name}` : 'เพิ่มผู้ใช้ใหม่'}
-            </h3>
-            <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <input type="text" placeholder="ชื่อผู้ใช้ (Username) *" value={form.username} disabled={!!editingUser}
-              onChange={e => setForm({...form, username: e.target.value})}
-              className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white font-mono outline-none focus:border-[#8B5CF6] disabled:opacity-50" />
-            <input type="password" placeholder={editingUser ? 'รหัสผ่านใหม่ (ไม่เปลี่ยนเว้นว่าง)' : 'รหัสผ่าน *'} value={form.password}
-              onChange={e => setForm({...form, password: e.target.value})}
-              className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]" />
-            <input type="text" placeholder="ชื่อ-นามสกุล *" value={form.full_name}
-              onChange={e => setForm({...form, full_name: e.target.value})}
-              className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]" />
-            <input type="email" placeholder="อีเมล" value={form.email}
-              onChange={e => setForm({...form, email: e.target.value})}
-              className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]" />
-            <input type="text" placeholder="โทรศัพท์" value={form.phone}
-              onChange={e => setForm({...form, phone: e.target.value})}
-              className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]" />
-            <select value={form.role_code} onChange={e => setForm({...form, role_code: e.target.value, customer_id: e.target.value !== 'customer' ? null : form.customer_id})}
-              className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]">
-              {ROLES.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
-            </select>
-            {form.role_code === 'customer' && (
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">🏢 บริษัทลูกค้า *</label>
-                <select value={form.customer_id || ''} onChange={e => setForm({...form, customer_id: e.target.value ? parseInt(e.target.value) : null})}
-                  className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]">
-                  <option value="">-- เลือกบริษัท --</option>
-                  {customers.map(c => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
-                </select>
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden">
+          {/* Form Header */}
+          <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-violet-600 to-purple-600">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                {editingUser ? <Pencil size={16} className="text-white" /> : <Plus size={16} className="text-white" />}
               </div>
-            )}
-            {editingUser && (
-              <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
-                className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-[#8B5CF6]">
-                <option value="active">ใช้งาน</option>
-                <option value="suspend">ระงับ</option>
-                <option value="resign">ลาออก</option>
-              </select>
-            )}
+              <div>
+                <h3 className="font-semibold text-white text-sm">
+                  {editingUser ? `แก้ไขผู้ใช้` : 'เพิ่มผู้ใช้ใหม่'}
+                </h3>
+                {editingUser && <p className="text-violet-200 text-xs">{editingUser.full_name} ({editingUser.username})</p>}
+              </div>
+            </div>
+            <button onClick={() => setShowForm(false)} className="text-white/70 hover:text-white transition-colors"><X size={18} /></button>
           </div>
 
-          {/* Yard Access */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
-                <MapPin size={12} /> สิทธิ์เข้าถึงลาน
-              </label>
-              <button type="button" onClick={() => setForm({...form, yard_ids: yards.map(y => y.yard_id)})}
-                className="text-[10px] text-violet-500 hover:underline">เลือกทั้งหมด</button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {yards.map(y => {
-                const checked = form.yard_ids.includes(y.yard_id);
-                return (
-                  <label key={y.yard_id}
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
-                      checked
-                        ? 'border-violet-400 bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300'
-                        : 'border-slate-200 dark:border-slate-600 text-slate-500 hover:border-slate-300'
-                    }`}>
-                    <input type="checkbox" checked={checked}
-                      onChange={() => {
-                        setForm({...form, yard_ids: checked
-                          ? form.yard_ids.filter(id => id !== y.yard_id)
-                          : [...form.yard_ids, y.yard_id]
-                        });
-                      }}
-                      className="accent-violet-600 w-3.5 h-3.5" />
-                    {y.yard_name}
+          <div className="p-6 space-y-6">
+            {/* Section 1: Account */}
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Shield size={12} className="text-violet-500" /> ข้อมูลบัญชี
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1.5">ชื่อผู้ใช้ (Username) <span className="text-rose-400">*</span></label>
+                  <input type="text" value={form.username} disabled={!!editingUser}
+                    onChange={e => setForm({...form, username: e.target.value})} placeholder="เช่น admin, john.doe"
+                    className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white font-mono outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 disabled:opacity-50 disabled:bg-slate-100 transition-all" />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1.5">
+                    {editingUser ? 'รหัสผ่านใหม่' : <span>รหัสผ่าน <span className="text-rose-400">*</span></span>}
                   </label>
-                );
-              })}
-              {yards.length === 0 && <span className="text-xs text-slate-400">ยังไม่มีลาน</span>}
+                  <input type="password" value={form.password}
+                    onChange={e => setForm({...form, password: e.target.value})} placeholder={editingUser ? 'เว้นว่างถ้าไม่เปลี่ยน' : '••••••••'}
+                    className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Personal */}
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Users size={12} className="text-blue-500" /> ข้อมูลส่วนตัว
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1.5">ชื่อ-นามสกุล <span className="text-rose-400">*</span></label>
+                  <input type="text" value={form.full_name}
+                    onChange={e => setForm({...form, full_name: e.target.value})} placeholder="ระบุชื่อเต็ม"
+                    className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1.5">อีเมล</label>
+                  <input type="email" value={form.email}
+                    onChange={e => setForm({...form, email: e.target.value})} placeholder="email@example.com"
+                    className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1.5">โทรศัพท์</label>
+                  <input type="text" value={form.phone}
+                    onChange={e => setForm({...form, phone: e.target.value})} placeholder="0xx-xxx-xxxx"
+                    className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Role & Permissions */}
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Shield size={12} className="text-emerald-500" /> บทบาทและสิทธิ์
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1.5">บทบาท</label>
+                  <select value={form.role_code} onChange={e => setForm({...form, role_code: e.target.value, customer_id: e.target.value !== 'customer' ? null : form.customer_id})}
+                    className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all">
+                    {ROLES.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
+                  </select>
+                </div>
+                {editingUser && (
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1.5">สถานะ</label>
+                    <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
+                      className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all">
+                      <option value="active">✅ ใช้งาน</option>
+                      <option value="suspend">⚠️ ระงับ</option>
+                      <option value="resign">🚫 ลาออก</option>
+                    </select>
+                  </div>
+                )}
+                {form.role_code === 'customer' && (
+                  <div className={editingUser ? 'md:col-span-2' : ''}>
+                    <label className="block text-xs text-slate-500 mb-1.5">🏢 บริษัทลูกค้า <span className="text-rose-400">*</span></label>
+                    <select value={form.customer_id || ''} onChange={e => setForm({...form, customer_id: e.target.value ? parseInt(e.target.value) : null})}
+                      className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all">
+                      <option value="">-- เลือกบริษัท --</option>
+                      {customers.map(c => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Yard Access */}
+              <div className="mt-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                    <MapPin size={12} className="text-violet-500" /> สิทธิ์เข้าถึงลาน
+                    <span className="text-violet-500 font-bold">({form.yard_ids.length})</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setForm({...form, yard_ids: []})}
+                      className="text-[10px] text-slate-400 hover:text-slate-600 hover:underline">เคลียร์</button>
+                    <span className="text-slate-300">|</span>
+                    <button type="button" onClick={() => setForm({...form, yard_ids: yards.map(y => y.yard_id)})}
+                      className="text-[10px] text-violet-500 hover:underline">เลือกทั้งหมด</button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {yards.map(y => {
+                    const checked = form.yard_ids.includes(y.yard_id);
+                    return (
+                      <label key={y.yard_id}
+                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
+                          checked
+                            ? 'border-violet-400 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 shadow-sm'
+                            : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-500 hover:border-violet-300'
+                        }`}>
+                        <input type="checkbox" checked={checked}
+                          onChange={() => {
+                            setForm({...form, yard_ids: checked
+                              ? form.yard_ids.filter(id => id !== y.yard_id)
+                              : [...form.yard_ids, y.yard_id]
+                            });
+                          }}
+                          className="accent-violet-600 w-3.5 h-3.5" />
+                        {y.yard_name}
+                      </label>
+                    );
+                  })}
+                  {yards.length === 0 && <span className="text-xs text-slate-400">ยังไม่มีลาน — ไปสร้างที่ ตั้งค่าระบบ → ลาน</span>}
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex justify-end mt-4">
+
+          {/* Form Footer */}
+          <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 dark:bg-slate-700/30 border-t border-slate-200 dark:border-slate-700">
+            <button onClick={() => setShowForm(false)}
+              className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all">
+              ยกเลิก
+            </button>
             <button onClick={handleSave}
               disabled={saving || !form.full_name || (!editingUser && (!form.username || !form.password))}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#8B5CF6] text-white text-sm font-medium hover:bg-[#7C3AED] disabled:opacity-50 transition-all">
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 active:scale-[0.98] transition-all shadow-sm shadow-violet-600/25">
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {editingUser ? 'อัปเดต' : 'เพิ่มผู้ใช้'}
+              {editingUser ? 'บันทึกการแก้ไข' : 'เพิ่มผู้ใช้'}
             </button>
           </div>
         </div>
