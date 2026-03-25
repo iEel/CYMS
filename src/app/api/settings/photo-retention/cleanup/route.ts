@@ -13,6 +13,9 @@ const FOLDER_RETENTION: Record<string, string> = {
   'eir': 'eir_pdf_days',
 };
 
+// Folders that should never be cleaned up
+const EXCLUDED_FOLDERS = ['logos'];
+
 // POST — Run cleanup (delete files past retention period)
 export async function POST() {
   try {
@@ -47,6 +50,7 @@ export async function POST() {
     const folders = fs.readdirSync(UPLOAD_DIR, { withFileTypes: true }).filter(d => d.isDirectory());
 
     for (const folder of folders) {
+      if (EXCLUDED_FOLDERS.includes(folder.name)) continue;
       const folderPath = path.join(UPLOAD_DIR, folder.name);
       const retentionKey = FOLDER_RETENTION[folder.name] || 'gate_photos_days';
       const retentionDays = config[retentionKey] || 90;

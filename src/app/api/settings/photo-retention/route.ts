@@ -13,6 +13,9 @@ const FOLDER_RETENTION: Record<string, string> = {
   'eir': 'eir_pdf_days',
 };
 
+// Folders that should never be cleaned up
+const EXCLUDED_FOLDERS = ['logos'];
+
 async function getRetentionConfig() {
   try {
     const db = await getDb();
@@ -68,6 +71,7 @@ function scanUploads(config: Record<string, number | boolean | string | null>) {
     const folders = fs.readdirSync(UPLOAD_DIR, { withFileTypes: true }).filter(d => d.isDirectory());
 
     for (const folder of folders) {
+      if (EXCLUDED_FOLDERS.includes(folder.name)) continue;
       const folderPath = path.join(UPLOAD_DIR, folder.name);
       let folderFiles = 0;
       let folderSize = 0;
