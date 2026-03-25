@@ -24,6 +24,12 @@ interface CustomerOption {
   customer_type: string;
 }
 
+interface YardOption {
+  yard_id: number;
+  yard_name: string;
+  yard_code: string;
+}
+
 const ROLES = [
   { code: 'yard_manager', label: 'ผู้จัดการลาน / Admin' },
   { code: 'gate_clerk', label: 'พนักงานหน้าประตู' },
@@ -54,12 +60,21 @@ export default function UsersSettings() {
     customer_id: null as number | null,
   });
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [yards, setYards] = useState<YardOption[]>([]);
 
   const fetchCustomers = useCallback(async () => {
     try {
       const res = await fetch('/api/settings/customers');
       const data = await res.json();
       if (Array.isArray(data)) setCustomers(data);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchYards = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/yards');
+      const data = await res.json();
+      if (Array.isArray(data)) setYards(data);
     } catch { /* ignore */ }
   }, []);
 
@@ -72,7 +87,7 @@ export default function UsersSettings() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchUsers(); fetchCustomers(); }, [fetchUsers, fetchCustomers]);
+  useEffect(() => { fetchUsers(); fetchCustomers(); fetchYards(); }, [fetchUsers, fetchCustomers, fetchYards]);
 
   const openAdd = () => {
     setEditingUser(null);
@@ -212,6 +227,41 @@ export default function UsersSettings() {
                 <option value="resign">ลาออก</option>
               </select>
             )}
+          </div>
+
+          {/* Yard Access */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                <MapPin size={12} /> สิทธิ์เข้าถึงลาน
+              </label>
+              <button type="button" onClick={() => setForm({...form, yard_ids: yards.map(y => y.yard_id)})}
+                className="text-[10px] text-violet-500 hover:underline">เลือกทั้งหมด</button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {yards.map(y => {
+                const checked = form.yard_ids.includes(y.yard_id);
+                return (
+                  <label key={y.yard_id}
+                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
+                      checked
+                        ? 'border-violet-400 bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300'
+                        : 'border-slate-200 dark:border-slate-600 text-slate-500 hover:border-slate-300'
+                    }`}>
+                    <input type="checkbox" checked={checked}
+                      onChange={() => {
+                        setForm({...form, yard_ids: checked
+                          ? form.yard_ids.filter(id => id !== y.yard_id)
+                          : [...form.yard_ids, y.yard_id]
+                        });
+                      }}
+                      className="accent-violet-600 w-3.5 h-3.5" />
+                    {y.yard_name}
+                  </label>
+                );
+              })}
+              {yards.length === 0 && <span className="text-xs text-slate-400">ยังไม่มีลาน</span>}
+            </div>
           </div>
           <div className="flex justify-end mt-4">
             <button onClick={handleSave}
