@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Trash2, Save, Users, Pencil, X, CheckCircle2, Loader2,
-  Building, Truck, Ship, Search,
+  Building, Truck, Ship, Search, KeyRound,
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -44,6 +44,7 @@ export default function CustomerMaster() {
   const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState('');
   const [saved, setSaved] = useState(false);
+  const [portalLoading, setPortalLoading] = useState<number | null>(null);
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchData = useCallback(async () => {
@@ -125,6 +126,23 @@ export default function CustomerMaster() {
       branch_type: c.branch_type || 'head_office', branch_number: c.branch_number || '00000',
       shipping_line_code: c.shipping_line_code || '',
     });
+  };
+
+  const createPortalAccount = async (cid: number) => {
+    setPortalLoading(cid);
+    try {
+      const res = await fetch('/api/settings/customers/portal', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: cid }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert(`✅ สร้างบัญชี Portal สำเร็จ!\n\nUsername: ${json.username}\nPassword: ${json.tempPassword}\n\nกรุณาส่งข้อมูลนี้ให้ลูกค้า`);
+      } else {
+        alert(json.error || 'เกิดข้อผิดพลาด');
+      }
+    } catch { alert('ไม่สามารถสร้างบัญชีได้'); }
+    finally { setPortalLoading(null); }
   };
 
   const filtered = customers.filter(c =>
@@ -334,6 +352,10 @@ export default function CustomerMaster() {
                         <button onClick={() => startEdit(c)}
                           className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-blue-50 hover:text-blue-500 transition-colors" title="แก้ไข">
                           <Pencil size={14} />
+                        </button>
+                        <button onClick={() => createPortalAccount(c.customer_id)} disabled={portalLoading === c.customer_id}
+                          className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-emerald-50 hover:text-emerald-500 transition-colors" title="สร้างบัญชี Portal">
+                          {portalLoading === c.customer_id ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
                         </button>
                         <button onClick={() => handleDelete(c.customer_id)}
                           className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-colors" title="ลบ">

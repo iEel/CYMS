@@ -74,6 +74,15 @@ export async function POST(request: NextRequest) {
 
     const yardIds = yardResult.recordset.map((r: { yard_id: number }) => r.yard_id);
 
+    // ดึง customer_id สำหรับ customer role
+    let customerId: number | undefined;
+    if (user.role_code === 'customer') {
+      const custResult = await db.request()
+        .input('uid', sql.Int, user.user_id)
+        .query(`SELECT customer_id FROM Users WHERE user_id = @uid AND customer_id IS NOT NULL`);
+      customerId = custResult.recordset[0]?.customer_id || undefined;
+    }
+
     // สร้าง JWT token
     const token = await createToken({
       userId: user.user_id,
@@ -82,6 +91,7 @@ export async function POST(request: NextRequest) {
       role: user.role_code,
       yardIds,
       activeYardId: yardIds[0] || 1,
+      customerId,
     });
 
     // บันทึก Audit Log
@@ -106,6 +116,7 @@ export async function POST(request: NextRequest) {
         role: user.role_code,
         yardIds,
         activeYardId: yardIds[0] || 1,
+        customerId,
         token,
       },
     });

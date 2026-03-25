@@ -27,7 +27,9 @@ export default function LoginPage() {
     const result = await login(username, password);
     
     if (result.success) {
-      router.push('/dashboard');
+      // Customer role → Portal, others → Dashboard
+      const session = JSON.parse(localStorage.getItem('cyms_session') || '{}');
+      router.push(session.role === 'customer' ? '/portal' : '/dashboard');
     } else {
       setError(result.error || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
       setIsLoggingIn(false);

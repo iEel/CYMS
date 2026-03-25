@@ -46,11 +46,22 @@ export async function middleware(request: NextRequest) {
     const token = authHeader.slice(7);
     const { payload } = await jwtVerify(token, JWT_SECRET);
 
+    // Portal routes: only customer role allowed
+    if (pathname.startsWith('/api/portal/') && payload.role !== 'customer') {
+      return NextResponse.json(
+        { error: 'เฉพาะลูกค้าเท่านั้นที่เข้าถึง Portal ได้' },
+        { status: 403 }
+      );
+    }
+
     // Attach user info to headers for downstream use
     const response = NextResponse.next();
     response.headers.set('x-user-id', String(payload.userId || ''));
     response.headers.set('x-user-role', String(payload.role || ''));
     response.headers.set('x-user-name', String(payload.username || ''));
+    if (payload.customerId) {
+      response.headers.set('x-customer-id', String(payload.customerId));
+    }
     return response;
   } catch {
     return NextResponse.json(

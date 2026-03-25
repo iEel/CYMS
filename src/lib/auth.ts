@@ -11,6 +11,7 @@ export interface UserPayload {
   role: string;
   yardIds: number[];
   activeYardId: number;
+  customerId?: number;
 }
 
 export async function createToken(payload: UserPayload): Promise<string> {
