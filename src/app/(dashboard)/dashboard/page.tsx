@@ -291,6 +291,21 @@ export default function DashboardPage() {
             ))}
           </div>
 
+          {/* Container Status Summary */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+            <h2 className="text-base font-semibold text-slate-800 dark:text-white mb-4">สรุปสถานะตู้ในลาน</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {statusItems.map((item, i) => (
+                <div key={i} className="text-center p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50">
+                  <p className="text-2xl font-bold mb-1" style={{ color: item.color }}>
+                    {item.count.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{item.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Charts Section */}
           {data?.charts && (
             <DashboardCharts
@@ -368,21 +383,6 @@ export default function DashboardPage() {
                   <p className="text-sm text-slate-400 py-4 text-center">ยังไม่มีกิจกรรม</p>
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Container Status Summary */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-            <h2 className="text-base font-semibold text-slate-800 dark:text-white mb-4">สรุปสถานะตู้ในลาน</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {statusItems.map((item, i) => (
-                <div key={i} className="text-center p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50">
-                  <p className="text-2xl font-bold mb-1" style={{ color: item.color }}>
-                    {item.count.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{item.label}</p>
-                </div>
-              ))}
             </div>
           </div>
         </>
