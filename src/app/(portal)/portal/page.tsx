@@ -30,11 +30,18 @@ export default function PortalOverview() {
   );
   if (!data) return <p className="text-red-500">ไม่สามารถโหลดข้อมูลได้</p>;
 
+  // Safe defaults in case API returns partial data
+  const customer = data.customer || { customer_name: 'ลูกค้า', contact_email: '', customer_type: '' };
+  const containers = data.containers || { total: 0, in_yard: 0, released: 0 };
+  const outstanding = data.outstanding || { count: 0, total: 0 };
+  const activeBookings = data.activeBookings || 0;
+  const recentGate = data.recentGate || [];
+
   const kpis = [
-    { label: 'ตู้ในลาน', value: data.containers.in_yard, icon: <Package size={20} />, color: 'blue', sub: `ทั้งหมด ${data.containers.total} ตู้` },
-    { label: 'ค้างชำระ', value: `฿${data.outstanding.total.toLocaleString()}`, icon: <FileText size={20} />, color: 'amber', sub: `${data.outstanding.count} รายการ` },
-    { label: 'Booking Active', value: data.activeBookings, icon: <ClipboardList size={20} />, color: 'emerald', sub: 'pending + confirmed' },
-    { label: 'ตู้ปล่อยออก', value: data.containers.released, icon: <ArrowUpRight size={20} />, color: 'purple', sub: 'ทั้งหมด' },
+    { label: 'ตู้ในลาน', value: containers.in_yard, icon: <Package size={20} />, color: 'blue', sub: `ทั้งหมด ${containers.total} ตู้` },
+    { label: 'ค้างชำระ', value: `฿${outstanding.total.toLocaleString()}`, icon: <FileText size={20} />, color: 'amber', sub: `${outstanding.count} รายการ` },
+    { label: 'Booking Active', value: activeBookings, icon: <ClipboardList size={20} />, color: 'emerald', sub: 'pending + confirmed' },
+    { label: 'ตู้ปล่อยออก', value: containers.released, icon: <ArrowUpRight size={20} />, color: 'purple', sub: 'ทั้งหมด' },
   ];
 
   const colorMap: Record<string, string> = {
@@ -49,7 +56,7 @@ export default function PortalOverview() {
       {/* Welcome */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
-          สวัสดี, {data.customer.customer_name}
+          สวัสดี, {customer.customer_name}
         </h1>
         <p className="text-sm text-slate-400 mt-1">Customer Portal — ดูสถานะตู้ และ Invoice</p>
       </div>
@@ -73,11 +80,11 @@ export default function PortalOverview() {
         <div className="p-4 border-b border-slate-200 dark:border-slate-700">
           <h2 className="font-semibold text-slate-800 dark:text-white">กิจกรรม Gate ล่าสุด</h2>
         </div>
-        {data.recentGate.length === 0 ? (
+        {recentGate.length === 0 ? (
           <p className="p-6 text-center text-slate-400 text-sm">ยังไม่มีกิจกรรม</p>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-            {data.recentGate.map((g, i) => (
+            {recentGate.map((g, i) => (
               <div key={i} className="flex items-center gap-3 p-3 px-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                   g.transaction_type === 'gate_in'
