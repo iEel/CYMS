@@ -251,6 +251,147 @@ export function paymentConfirmationEmail(data: {
   };
 }
 
+export function bookingStatusEmail(data: {
+  bookingNumber: string;
+  status: string;
+  previousStatus?: string;
+  customerName: string;
+  vesselName?: string;
+  voyageNumber?: string;
+  containerCount: number;
+  receivedCount: number;
+  releasedCount: number;
+  containerNumber?: string;
+  eventType: 'status_change' | 'container_received' | 'container_released' | 'completed';
+}) {
+  const statusLabels: Record<string, { label: string; color: string; emoji: string }> = {
+    pending:   { label: 'รอยืนยัน', color: '#F59E0B', emoji: '⏳' },
+    confirmed: { label: 'ยืนยันแล้ว', color: '#3B82F6', emoji: '✅' },
+    completed: { label: 'เสร็จสมบูรณ์', color: '#10B981', emoji: '🎉' },
+    cancelled: { label: 'ยกเลิก', color: '#EF4444', emoji: '❌' },
+  };
+  const st = statusLabels[data.status] || statusLabels.pending;
+
+  const subjectMap: Record<string, string> = {
+    status_change: `[CYMS] Booking ${data.bookingNumber} — ${st.label}`,
+    container_received: `[CYMS] Booking ${data.bookingNumber} — ตู้ ${data.containerNumber} เข้าลานแล้ว`,
+    container_released: `[CYMS] Booking ${data.bookingNumber} — ตู้ ${data.containerNumber} ออกจากลานแล้ว`,
+    completed: `[CYMS] Booking ${data.bookingNumber} — เสร็จสมบูรณ์ 🎉`,
+  };
+
+  const progress = data.containerCount > 0 ? Math.min(100, Math.round((data.receivedCount / data.containerCount) * 100)) : 0;
+  const progressColor = progress >= 100 ? '#10B981' : '#3B82F6';
+
+  return {
+    subject: subjectMap[data.eventType] || subjectMap.status_change,
+    html: emailWrapper(`
+      <h2 style="color:${st.color};margin:0 0 16px">${st.emoji} Booking ${data.bookingNumber}</h2>
+      <div style="background:${st.color}15;border:1px solid ${st.color}30;border-radius:8px;padding:12px;margin-bottom:16px;text-align:center">
+        <span style="font-size:14px;font-weight:bold;color:${st.color}">${st.label}</span>
+      </div>
+      ${data.containerNumber ? `
+        <div style="background:#F8FAFC;border-radius:8px;padding:12px;margin-bottom:16px">
+          <span style="color:#64748B;font-size:12px">Container</span><br>
+          <span style="font-family:monospace;font-size:18px;font-weight:bold;color:#1E293B">${data.containerNumber}</span>
+          <span style="font-size:12px;color:#64748B;margin-left:8px">${data.eventType === 'container_received' ? '📥 เข้าลาน' : data.eventType === 'container_released' ? '📤 ออกจากลาน' : ''}</span>
+        </div>
+      ` : ''}
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        <tr><td style="padding:8px;color:#64748B;width:120px">ลูกค้า</td><td style="padding:8px">${data.customerName}</td></tr>
+        ${data.vesselName ? `<tr><td style="padding:8px;color:#64748B">เรือ</td><td style="padding:8px">${data.vesselName} ${data.voyageNumber || ''}</td></tr>` : ''}
+        <tr><td style="padding:8px;color:#64748B">ตู้ทั้งหมด</td><td style="padding:8px">${data.containerCount} ตู้</td></tr>
+      </table>
+      <div style="margin:16px 0">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748B;margin-bottom:4px">
+          <span>ความคืบหน้า</span>
+          <span>รับ ${data.receivedCount}/${data.containerCount} • ออก ${data.releasedCount}</span>
+        </div>
+        <div style="background:#E2E8F0;border-radius:4px;height:8px;overflow:hidden">
+          <div style="background:${progressColor};height:100%;width:${progress}%;border-radius:4px"></div>
+        </div>
+      </div>
+    `),
+  };
+}
+
+export function bookingDailySummaryEmail(data: {
+  date: string;
+  yardName: string;
+  stats: {
+    totalActive: number;
+    newToday: number;
+    confirmedToday: number;
+    completedToday: number;
+    containersReceived: number;
+    containersReleased: number;
+  };
+  recentBookings: Array<{
+    booking_number: string;
+    status: string;
+    customer_name: string;
+    container_count: number;
+    received_count: number;
+  }>;
+}) {
+  const { stats } = data;
+
+  const kpiCard = (emoji: string, label: string, value: number, color: string) =>
+    `<td style="padding:8px;text-align:center;background:${color}10;border-radius:8px;border:1px solid ${color}20">
+      <div style="font-size:20px">${emoji}</div>
+      <div style="font-size:24px;font-weight:bold;color:${color}">${value}</div>
+      <div style="font-size:11px;color:#64748B">${label}</div>
+    </td>`;
+
+  const bookingRows = data.recentBookings.slice(0, 10).map(bk => {
+    const pct = bk.container_count > 0 ? Math.min(100, Math.round((bk.received_count / bk.container_count) * 100)) : 0;
+    const stColor = bk.status === 'completed' ? '#10B981' : bk.status === 'confirmed' ? '#3B82F6' : '#F59E0B';
+    return `<tr>
+      <td style="padding:6px 8px;font-family:monospace;font-weight:bold;font-size:13px">${bk.booking_number}</td>
+      <td style="padding:6px 8px;font-size:12px">${bk.customer_name || '—'}</td>
+      <td style="padding:6px 8px;text-align:center">
+        <span style="background:${stColor}15;color:${stColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">${bk.status}</span>
+      </td>
+      <td style="padding:6px 8px;text-align:center;font-size:12px">${bk.received_count}/${bk.container_count} (${pct}%)</td>
+    </tr>`;
+  }).join('');
+
+  return {
+    subject: `[CYMS] Booking สรุปประจำวัน — ${data.date}`,
+    html: emailWrapper(`
+      <h2 style="color:#1E40AF;margin:0 0 4px">📊 รายงานสรุป Booking ประจำวัน</h2>
+      <p style="color:#64748B;margin:0 0 20px;font-size:13px">${data.yardName} • ${data.date}</p>
+
+      <table style="width:100%;border-collapse:separate;border-spacing:6px;margin-bottom:16px">
+        <tr>
+          ${kpiCard('📋', 'Active', stats.totalActive, '#3B82F6')}
+          ${kpiCard('🆕', 'ใหม่วันนี้', stats.newToday, '#8B5CF6')}
+          ${kpiCard('✅', 'ยืนยัน', stats.confirmedToday, '#10B981')}
+        </tr>
+        <tr>
+          ${kpiCard('🎉', 'เสร็จ', stats.completedToday, '#059669')}
+          ${kpiCard('📥', 'รับวันนี้', stats.containersReceived, '#0EA5E9')}
+          ${kpiCard('📤', 'ออกวันนี้', stats.containersReleased, '#F97316')}
+        </tr>
+      </table>
+
+      ${data.recentBookings.length > 0 ? `
+        <h3 style="color:#334155;font-size:14px;margin:20px 0 8px">Bookings ที่มีการเปลี่ยนแปลง</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden">
+          <thead>
+            <tr style="background:#F8FAFC">
+              <th style="padding:8px;text-align:left;font-size:11px;color:#64748B">Booking #</th>
+              <th style="padding:8px;text-align:left;font-size:11px;color:#64748B">ลูกค้า</th>
+              <th style="padding:8px;text-align:center;font-size:11px;color:#64748B">สถานะ</th>
+              <th style="padding:8px;text-align:center;font-size:11px;color:#64748B">รับ/จำนวน</th>
+            </tr>
+          </thead>
+          <tbody>${bookingRows}</tbody>
+        </table>
+      ` : '<p style="color:#94A3B8;text-align:center;padding:16px;font-size:13px">ไม่มีการเปลี่ยนแปลงวันนี้</p>'}
+    `),
+  };
+}
+
 function emailWrapper(content: string): string {
   return `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden">
@@ -265,3 +406,4 @@ function emailWrapper(content: string): string {
     </div>
   `;
 }
+

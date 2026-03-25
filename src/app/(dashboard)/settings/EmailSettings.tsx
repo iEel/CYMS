@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Mail, Cloud, Server, Send, CheckCircle, XCircle, Loader2,
-  Bell, Shield, ToggleLeft, ToggleRight, Info,
+  Bell, Shield, ToggleLeft, ToggleRight, Info, Clock, ClipboardList,
 } from 'lucide-react';
 
 interface EmailSettings {
@@ -13,6 +13,11 @@ interface EmailSettings {
   smtp: { host: string; port: number; user: string; from: string };
   notifyGate: boolean;
   notifyPayment: boolean;
+  notifyBooking: boolean;
+  notifyBookingSummary: boolean;
+  bookingSummaryTime: string;
+  bookingSummaryTo: string;
+  bookingSummaryLastSent: string;
   notifyTo: string;
   envStatus: { azureConfigured: boolean; smtpConfigured: boolean };
 }
@@ -24,6 +29,11 @@ const DEFAULT: EmailSettings = {
   smtp: { host: 'smtp.office365.com', port: 587, user: '', from: '' },
   notifyGate: false,
   notifyPayment: false,
+  notifyBooking: false,
+  notifyBookingSummary: false,
+  bookingSummaryTime: '18:00',
+  bookingSummaryTo: '',
+  bookingSummaryLastSent: '',
   notifyTo: '',
   envStatus: { azureConfigured: false, smtpConfigured: false },
 };
@@ -35,6 +45,7 @@ export default function EmailSettings() {
   const [testing, setTesting] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [sendingSummary, setSendingSummary] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -226,15 +237,116 @@ export default function EmailSettings() {
                   onChange={e => setSettings(s => ({ ...s, notifyGate: e.target.checked }))} />
               </label>
               <label className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 cursor-pointer">
-                <span className="text-sm text-slate-700 dark:text-slate-200">💰 แจ้งเมื่อมีการชำระเงิน</span>
-                <input type="checkbox" className="w-4 h-4 accent-blue-500" checked={settings.notifyPayment}
-                  onChange={e => setSettings(s => ({ ...s, notifyPayment: e.target.checked }))} />
-              </label>
+              <span className="text-sm text-slate-700 dark:text-slate-200">💰 แจ้งเมื่อมีการชำระเงิน</span>
+              <input type="checkbox" className="w-4 h-4 accent-blue-500" checked={settings.notifyPayment}
+                onChange={e => setSettings(s => ({ ...s, notifyPayment: e.target.checked }))} />
+            </label>
+            <label className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 cursor-pointer">
+              <span className="text-sm text-slate-700 dark:text-slate-200">📋 แจ้งเมื่อ Booking เปลี่ยนสถานะ</span>
+              <input type="checkbox" className="w-4 h-4 accent-blue-500" checked={settings.notifyBooking}
+                onChange={e => setSettings(s => ({ ...s, notifyBooking: e.target.checked }))} />
+            </label>
+            <div>
+              <label className={labelCls}>Email ปลายทาง (คั่นด้วย ,)</label>
+              <input type="text" className={inputCls} placeholder="admin@company.com, manager@company.com"
+                value={settings.notifyTo} onChange={e => setSettings(s => ({ ...s, notifyTo: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+
+        {/* ===== Booking Daily Summary ===== */}
+        <div className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2 mb-4">
+            <ClipboardList size={16} className="text-teal-500" />
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-white">สรุป Booking ประจำวัน</h3>
+          </div>
+          <div className="space-y-3">
+            <label className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 cursor-pointer">
               <div>
-                <label className={labelCls}>Email ปลายทาง (คั่นด้วย ,)</label>
-                <input type="text" className={inputCls} placeholder="admin@company.com, manager@company.com"
-                  value={settings.notifyTo} onChange={e => setSettings(s => ({ ...s, notifyTo: e.target.value }))} />
+                <span className="text-sm text-slate-700 dark:text-slate-200">📊 ส่งสรุป Booking ประจำวัน</span>
+                <p className="text-[10px] text-slate-400 mt-0.5">สรุปสถานะ Booking, ตู้เข้า-ออก, KPI ส่งอัตโนมัติตามเวลาที่ตั้ง</p>
               </div>
+              <input type="checkbox" className="w-4 h-4 accent-teal-500" checked={settings.notifyBookingSummary}
+                onChange={e => setSettings(s => ({ ...s, notifyBookingSummary: e.target.checked }))} />
+            </label>
+
+            {settings.notifyBookingSummary && (
+              <div className="p-3 rounded-lg bg-teal-50/50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-800 space-y-3">
+                {/* Time Picker */}
+                <div>
+                  <label className={labelCls}><Clock size={12} className="inline mr-1" />เวลาส่งสรุป (ทุกวัน)</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={settings.bookingSummaryTime.split(':')[0] || '18'}
+                      onChange={e => {
+                        const mm = settings.bookingSummaryTime.split(':')[1] || '00';
+                        setSettings(s => ({ ...s, bookingSummaryTime: `${e.target.value}:${mm}` }));
+                      }}
+                      className={`${inputCls} w-24`}>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')} น.</option>
+                      ))}
+                    </select>
+                    <span className="text-slate-400 font-bold">:</span>
+                    <select
+                      value={settings.bookingSummaryTime.split(':')[1] || '00'}
+                      onChange={e => {
+                        const hh = settings.bookingSummaryTime.split(':')[0] || '18';
+                        setSettings(s => ({ ...s, bookingSummaryTime: `${hh}:${e.target.value}` }));
+                      }}
+                      className={`${inputCls} w-24`}>
+                      {[0, 15, 30, 45].map(m => (
+                        <option key={m} value={String(m).padStart(2, '0')}>{String(m).padStart(2, '0')} นาที</option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-slate-400 ml-1">(Asia/Bangkok)</span>
+                  </div>
+                </div>
+
+                {/* Email Recipients */}
+                <div>
+                  <label className={labelCls}>📧 Email ปลายทาง (สรุปประจำวัน)</label>
+                  <input type="text" className={inputCls} placeholder="ใช้ Email ปลายทางหลัก (ด้านบน) ถ้าไม่ระบุ"
+                    value={settings.bookingSummaryTo}
+                    onChange={e => setSettings(s => ({ ...s, bookingSummaryTo: e.target.value }))} />
+                  <p className="text-[10px] text-slate-400 mt-1">เว้นว่าง = ใช้ Email ปลายทางหลัก</p>
+                </div>
+
+                {/* Last Sent + Manual Trigger */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    {settings.bookingSummaryLastSent ? (
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <CheckCircle size={10} className="text-emerald-500" />
+                        ส่งล่าสุด: {settings.bookingSummaryLastSent}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">ยังไม่เคยส่ง</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setSendingSummary(true); setTestResult(null);
+                      try {
+                        const res = await fetch('/api/cron/booking-summary');
+                        const data = await res.json();
+                        if (data.success) {
+                          setTestResult({ success: true, message: `ส่งสรุปสำเร็จ (${data.recipients} ราย)` });
+                          fetchSettings();
+                        } else {
+                          setTestResult({ success: false, message: data.reason || data.error || 'ส่งไม่สำเร็จ' });
+                        }
+                      } catch { setTestResult({ success: false, message: 'เกิดข้อผิดพลาด' }); }
+                      setSendingSummary(false);
+                    }}
+                    disabled={sendingSummary}
+                    className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 disabled:bg-slate-300 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors">
+                    {sendingSummary ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                    ส่งสรุปตอนนี้
+                  </button>
+                </div>
+              </div>
+            )}
             </div>
           </div>
 

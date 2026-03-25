@@ -446,6 +446,28 @@ export async function POST(request: NextRequest) {
               await db.request()
                 .input('bkId3', sql.Int, bk.booking_id)
                 .query(`UPDATE Bookings SET received_count = (SELECT COUNT(*) FROM BookingContainers WHERE booking_id = @bkId3 AND status IN ('received', 'released')) WHERE booking_id = @bkId3`);
+
+              // Send email: container received
+              try {
+                const { getEmailConfig, sendEmail, bookingStatusEmail } = await import('@/lib/emailService');
+                const emailCfg = await getEmailConfig();
+                if (emailCfg.enabled) {
+                  const nResult = await db.request().query(`SELECT setting_value FROM SystemSettings WHERE setting_key = 'email_notify_booking'`);
+                  if (nResult.recordset[0]?.setting_value === 'true') {
+                    const bkDetail = await db.request().input('bkId5', sql.Int, bk.booking_id).query(`
+                      SELECT b.*, c.customer_name, c.contact_email FROM Bookings b
+                      LEFT JOIN Customers c ON b.customer_id = c.customer_id WHERE b.booking_id = @bkId5`);
+                    const bd = bkDetail.recordset[0];
+                    if (bd?.contact_email) {
+                      const ed = bookingStatusEmail({ bookingNumber: bd.booking_number, status: bd.status,
+                        customerName: bd.customer_name || '', vesselName: bd.vessel_name, voyageNumber: bd.voyage_number,
+                        containerCount: bd.container_count || 0, receivedCount: bd.received_count || 0,
+                        releasedCount: bd.released_count || 0, containerNumber: container_number, eventType: 'container_received' });
+                      await sendEmail({ to: bd.contact_email, ...ed });
+                    }
+                  }
+                }
+              } catch (emailErr) { console.error('⚠️ Gate-In booking email error:', emailErr); }
             }
           }
         } else if (transaction_type === 'gate_out') {
@@ -473,11 +495,35 @@ export async function POST(request: NextRequest) {
             const updBk = await db.request()
               .input('bkId3', sql.Int, bk.booking_id)
               .query(`SELECT released_count, container_count FROM Bookings WHERE booking_id = @bkId3`);
-            if (updBk.recordset.length > 0 && updBk.recordset[0].released_count >= updBk.recordset[0].container_count) {
+            const autoCompleted = updBk.recordset.length > 0 && updBk.recordset[0].released_count >= updBk.recordset[0].container_count;
+            if (autoCompleted) {
               await db.request()
                 .input('bkId4', sql.Int, bk.booking_id)
                 .query(`UPDATE Bookings SET status = 'completed' WHERE booking_id = @bkId4 AND status != 'completed'`);
             }
+
+            // Send email: container released / completed
+            try {
+              const { getEmailConfig, sendEmail, bookingStatusEmail } = await import('@/lib/emailService');
+              const emailCfg = await getEmailConfig();
+              if (emailCfg.enabled) {
+                const nResult = await db.request().query(`SELECT setting_value FROM SystemSettings WHERE setting_key = 'email_notify_booking'`);
+                if (nResult.recordset[0]?.setting_value === 'true') {
+                  const bkDetail = await db.request().input('bkId5', sql.Int, bk.booking_id).query(`
+                    SELECT b.*, c.customer_name, c.contact_email FROM Bookings b
+                    LEFT JOIN Customers c ON b.customer_id = c.customer_id WHERE b.booking_id = @bkId5`);
+                  const bd = bkDetail.recordset[0];
+                  if (bd?.contact_email) {
+                    const ed = bookingStatusEmail({ bookingNumber: bd.booking_number, status: bd.status,
+                      customerName: bd.customer_name || '', vesselName: bd.vessel_name, voyageNumber: bd.voyage_number,
+                      containerCount: bd.container_count || 0, receivedCount: bd.received_count || 0,
+                      releasedCount: bd.released_count || 0, containerNumber: container_number,
+                      eventType: autoCompleted ? 'completed' : 'container_released' });
+                    await sendEmail({ to: bd.contact_email, ...ed });
+                  }
+                }
+              }
+            } catch (emailErr) { console.error('⚠️ Gate-Out booking email error:', emailErr); }
           }
         }
       } catch (bkErr) {

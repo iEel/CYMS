@@ -33,6 +33,11 @@ export async function GET() {
       },
       notifyGate: s.email_notify_gate === 'true',
       notifyPayment: s.email_notify_payment === 'true',
+      notifyBooking: s.email_notify_booking === 'true',
+      notifyBookingSummary: s.email_notify_booking_summary === 'true',
+      bookingSummaryTime: s.email_booking_summary_time || '18:00',
+      bookingSummaryTo: s.email_booking_summary_to || '',
+      bookingSummaryLastSent: s.email_booking_summary_last_sent || '',
       notifyTo: s.email_notify_to || '',
       // Show whether .env secrets are configured (without revealing values)
       envStatus: {
@@ -57,6 +62,10 @@ export async function PUT(request: NextRequest) {
       email_provider: body.provider || 'azure',
       email_notify_gate: String(body.notifyGate ?? false),
       email_notify_payment: String(body.notifyPayment ?? false),
+      email_notify_booking: String(body.notifyBooking ?? false),
+      email_notify_booking_summary: String(body.notifyBookingSummary ?? false),
+      email_booking_summary_time: body.bookingSummaryTime || '18:00',
+      email_booking_summary_to: body.bookingSummaryTo || '',
       email_notify_to: body.notifyTo || '',
     };
 
@@ -88,6 +97,12 @@ export async function PUT(request: NextRequest) {
             INSERT INTO SystemSettings (setting_key, setting_value) VALUES (@key, @value)
         `);
     }
+
+    // Reload booking scheduler if summary settings changed
+    try {
+      const { reloadBookingScheduler } = await import('@/lib/bookingScheduler');
+      await reloadBookingScheduler();
+    } catch { /* scheduler not critical */ }
 
     return NextResponse.json({ success: true });
   } catch (error) {

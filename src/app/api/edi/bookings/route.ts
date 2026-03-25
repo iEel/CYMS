@@ -144,6 +144,50 @@ export async function PUT(request: NextRequest) {
 
     await req.query(`UPDATE Bookings SET ${sets.join(', ')} WHERE booking_id = @bookingId`);
 
+    // Send email notification if status changed
+    if (body.status && ['confirmed', 'completed', 'cancelled'].includes(body.status)) {
+      try {
+        const { getEmailConfig, sendEmail, bookingStatusEmail } = await import('@/lib/emailService');
+        const emailConfig = await getEmailConfig();
+        if (emailConfig.enabled) {
+          // Check if booking notifications are enabled
+          const settingsRes = await db.request().query(`
+            SELECT setting_value FROM SystemSettings WHERE setting_key = 'email_notify_booking'
+          `);
+          const notifyBooking = settingsRes.recordset[0]?.setting_value === 'true';
+
+          if (notifyBooking) {
+            // Fetch booking + customer details
+            const bkRes = await db.request()
+              .input('bkId', sql.Int, body.booking_id)
+              .query(`
+                SELECT b.*, c.customer_name, c.contact_email
+                FROM Bookings b
+                LEFT JOIN Customers c ON b.customer_id = c.customer_id
+                WHERE b.booking_id = @bkId
+              `);
+            const bk = bkRes.recordset[0];
+            if (bk?.contact_email) {
+              const emailData = bookingStatusEmail({
+                bookingNumber: bk.booking_number,
+                status: body.status,
+                customerName: bk.customer_name || '',
+                vesselName: bk.vessel_name,
+                voyageNumber: bk.voyage_number,
+                containerCount: bk.container_count || 0,
+                receivedCount: bk.received_count || 0,
+                releasedCount: bk.released_count || 0,
+                eventType: 'status_change',
+              });
+              await sendEmail({ to: bk.contact_email, ...emailData });
+            }
+          }
+        }
+      } catch (emailErr) {
+        console.error('⚠️ Booking status email error (non-blocking):', emailErr);
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT booking error:', error);
