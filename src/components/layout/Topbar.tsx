@@ -37,7 +37,13 @@ export default function Topbar() {
   interface NotifItem { id: string; source: string; type: string; title: string; detail: string; time: string; }
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
-  const [lastReadTime, setLastReadTime] = useState<string>('');
+  const notifStorageKey = session?.userId ? `cyms_notif_last_read_${session.userId}` : '';
+  const [lastReadTime, setLastReadTime] = useState<string>(() => {
+    if (typeof window !== 'undefined' && session?.userId) {
+      return localStorage.getItem(`cyms_notif_last_read_${session.userId}`) || '';
+    }
+    return '';
+  });
 
   const getRelativeTime = (iso: string) => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -63,10 +69,17 @@ export default function Topbar() {
     }
     // NFR1 — Initialize offline sync
     initOfflineSync();
-    // Load last read time
-    const savedRead = localStorage.getItem('cyms_notif_last_read');
-    if (savedRead) setLastReadTime(savedRead);
   }, []);
+
+  // Reload lastReadTime when user changes (login/switch)
+  useEffect(() => {
+    if (notifStorageKey) {
+      const savedRead = localStorage.getItem(notifStorageKey);
+      setLastReadTime(savedRead || '');
+    } else {
+      setLastReadTime('');
+    }
+  }, [notifStorageKey]);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -296,7 +309,7 @@ export default function Topbar() {
                 <button onClick={() => {
                   const now = new Date().toISOString();
                   setLastReadTime(now);
-                  localStorage.setItem('cyms_notif_last_read', now);
+                  if (notifStorageKey) localStorage.setItem(notifStorageKey, now);
                 }} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">
                   อ่านทั้งหมดแล้ว
                 </button>

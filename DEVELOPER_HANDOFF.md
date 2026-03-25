@@ -648,7 +648,9 @@ container-yard-system/
 - กดกระดิ้ง → เปิด dropdown รายการแจ้งเตือน
 - ไอคอนสีตามประเภท: 📥 Gate-In, 📤 Gate-Out, ✅ เสร็จ, 🆕 งานใหม่
 - เวลาสัมพัทธ์ (3 min, 2 hr, 1 d) + จุดสีน้ำเงิน unread
-- ปุ่ม "อ่านทั้งหมดแล้ว" → จำใน localStorage
+- ปุ่ม "อ่านทั้งหมดแล้ว" → จำใน localStorage **ผูก userId** (`cyms_notif_last_read_${userId}`)
+- **Per-user read state**: แต่ละ user มี read timestamp แยกกัน — ไม่ข้ามไปใช้ของ user อื่น
+- **Lazy initializer**: อ่านค่าจาก localStorage ก่อน render แรก — ไม่ flash badge ตอน re-login
 - รีเฟรชอัตโนมัติทุก 30 วินาที
 
 ### 7.8 ปฏิบัติการ (Operations)
