@@ -37,7 +37,12 @@ export default function PortalInvoices() {
     if (status) params.set('status', status);
     fetch(`/api/portal/invoices?${params}`).then(r => r.json()).then(d => {
       setInvoices(d.invoices || []);
-      setSummary(d.summary || {});
+      setSummary({
+        outstanding: d.summary?.outstanding || 0,
+        paid_total: d.summary?.paid_total || 0,
+        issued_count: d.summary?.issued_count || 0,
+        paid_count: d.summary?.paid_count || 0,
+      });
       setTotal(d.total || 0);
       setPage(d.page || 1);
       setTotalPages(d.totalPages || 1);
