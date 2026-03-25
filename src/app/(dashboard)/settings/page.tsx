@@ -11,7 +11,6 @@ import {
   Lock,
   TrendingUp,
   Layers,
-  Truck,
   Link,
   Shield,
   Mail,
@@ -23,7 +22,6 @@ import CustomerMaster from './CustomerMaster';
 import EDIConfiguration from './EDIConfiguration';
 import TieredStorageRate from './TieredStorageRate';
 import AutoAllocationRules from './AutoAllocationRules';
-import EquipmentRulesConfig from './EquipmentRulesConfig';
 import PrefixMapping from './PrefixMapping';
 import RateLimitSettings from './RateLimitSettings';
 import EmailSettingsTab from './EmailSettings';
@@ -36,7 +34,6 @@ const tabs = [
   { id: 'edi', label: 'EDI', icon: <Globe size={18} />, color: '#0EA5E9' },
   { id: 'storage', label: 'ค่าฝาก', icon: <TrendingUp size={18} />, color: '#06B6D4' },
   { id: 'allocation', label: 'จัดตู้', icon: <Layers size={18} />, color: '#10B981' },
-  { id: 'equipment', label: 'เครื่องจักร', icon: <Truck size={18} />, color: '#F97316' },
   { id: 'prefix', label: 'Prefix', icon: <Link size={18} />, color: '#06B6D4' },
   { id: 'ratelimit', label: 'Rate Limit', icon: <Shield size={18} />, color: '#F59E0B' },
   { id: 'email', label: 'Email', icon: <Mail size={18} />, color: '#3B82F6' },
@@ -85,7 +82,6 @@ export default function SettingsPage() {
         {activeTab === 'edi' && <EDIConfiguration />}
         {activeTab === 'storage' && <TieredStorageRate />}
         {activeTab === 'allocation' && <AutoAllocationRules />}
-        {activeTab === 'equipment' && <EquipmentRulesConfig />}
         {activeTab === 'prefix' && <PrefixMapping />}
         {activeTab === 'ratelimit' && <RateLimitSettings />}
         {activeTab === 'email' && <EmailSettingsTab />}
