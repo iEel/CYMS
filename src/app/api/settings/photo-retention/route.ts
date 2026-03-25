@@ -25,6 +25,7 @@ async function getRetentionConfig() {
       seal_photos_days: 180,
       eir_pdf_days: 730,
       auto_cleanup_enabled: false,
+      auto_cleanup_time: '03:00',
       last_cleanup_at: null,
       last_cleanup_deleted: 0,
     };
@@ -32,7 +33,7 @@ async function getRetentionConfig() {
       const key = row.setting_key.replace('photo_retention_', '');
       if (key === 'auto_cleanup_enabled') {
         config[key] = row.setting_value === 'true';
-      } else if (key === 'last_cleanup_at') {
+      } else if (key === 'last_cleanup_at' || key === 'auto_cleanup_time') {
         config[key] = row.setting_value;
       } else {
         config[key] = parseInt(row.setting_value) || config[key];
@@ -151,7 +152,7 @@ export async function PUT(request: Request) {
       )
     `);
 
-    const keys = ['gate_photos_days', 'damage_photos_days', 'seal_photos_days', 'eir_pdf_days', 'auto_cleanup_enabled'];
+    const keys = ['gate_photos_days', 'damage_photos_days', 'seal_photos_days', 'eir_pdf_days', 'auto_cleanup_enabled', 'auto_cleanup_time'];
     for (const key of keys) {
       if (body[key] !== undefined) {
         const value = String(body[key]);

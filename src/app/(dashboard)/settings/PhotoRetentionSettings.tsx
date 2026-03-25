@@ -12,6 +12,7 @@ interface RetentionConfig {
   seal_photos_days: number;
   eir_pdf_days: number;
   auto_cleanup_enabled: boolean;
+  auto_cleanup_time: string;
   last_cleanup_at: string | null;
   last_cleanup_deleted: number;
 }
@@ -30,6 +31,7 @@ const DEFAULT_CONFIG: RetentionConfig = {
   seal_photos_days: 180,
   eir_pdf_days: 730, // 2 years
   auto_cleanup_enabled: false,
+  auto_cleanup_time: '03:00',
   last_cleanup_at: null,
   last_cleanup_deleted: 0,
 };
@@ -96,7 +98,7 @@ export default function PhotoRetentionSettings() {
     });
   };
 
-  const update = (field: keyof RetentionConfig, value: number | boolean) => {
+  const update = (field: keyof RetentionConfig, value: number | boolean | string) => {
     setConfig(prev => ({ ...prev, [field]: value }));
   };
 
@@ -164,7 +166,7 @@ export default function PhotoRetentionSettings() {
           <label className="flex items-center justify-between cursor-pointer">
             <div>
               <p className="text-sm font-semibold text-slate-800 dark:text-white">🤖 Cleanup อัตโนมัติ</p>
-              <p className="text-xs text-slate-400 mt-0.5">ลบรูปที่เกินกำหนดอัตโนมัติทุกวันเวลา 03:00</p>
+              <p className="text-xs text-slate-400 mt-0.5">ลบรูปที่เกินกำหนดอัตโนมัติทุกวัน</p>
             </div>
             <div className="relative">
               <input type="checkbox" checked={config.auto_cleanup_enabled}
@@ -174,6 +176,15 @@ export default function PhotoRetentionSettings() {
               <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5"></div>
             </div>
           </label>
+          {config.auto_cleanup_enabled && (
+            <div className="mt-3 flex items-center gap-3 pl-1">
+              <span className="text-xs text-slate-500">⏰ เวลาทำ Cleanup:</span>
+              <input type="time" value={config.auto_cleanup_time}
+                onChange={e => update('auto_cleanup_time', e.target.value)}
+                className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm font-mono text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors" />
+              <span className="text-[10px] text-slate-400">ทุกวัน</span>
+            </div>
+          )}
           {config.last_cleanup_at && (
             <p className="text-[10px] text-slate-400 mt-2">
               Cleanup ล่าสุด: {new Date(config.last_cleanup_at).toLocaleString('th-TH')} — ลบ {config.last_cleanup_deleted} ไฟล์
