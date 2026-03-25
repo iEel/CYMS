@@ -167,6 +167,12 @@ export async function PUT(request: Request) {
       }
     }
 
+    // Reload scheduler with new settings
+    try {
+      const { reloadPhotoCleanupScheduler } = await import('@/lib/photoCleanupScheduler');
+      await reloadPhotoCleanupScheduler();
+    } catch { /* scheduler reload is optional */ }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ Photo retention PUT error:', error);

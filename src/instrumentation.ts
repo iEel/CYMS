@@ -16,6 +16,12 @@ export async function register() {
       } catch (error) {
         console.error('❌ [Instrumentation] Booking Scheduler init failed:', error);
       }
+      try {
+        const { initPhotoCleanupScheduler } = await import('@/lib/photoCleanupScheduler');
+        await initPhotoCleanupScheduler();
+      } catch (error) {
+        console.error('❌ [Instrumentation] Photo Cleanup Scheduler init failed:', error);
+      }
     }, 5000); // 5 second delay to ensure DB is connected
   }
 }
