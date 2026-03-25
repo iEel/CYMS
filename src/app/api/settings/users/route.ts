@@ -151,3 +151,37 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'ไม่สามารถแก้ไขผู้ใช้ได้' }, { status: 500 });
   }
 }
+
+// DELETE — ลบผู้ใช้
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('user_id');
+    if (!userId) {
+      return NextResponse.json({ error: 'กรุณาระบุ user_id' }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const uid = parseInt(userId);
+
+    // ห้ามลบตัวเอง
+    const reqUserId = request.headers.get('x-user-id');
+    if (reqUserId && parseInt(reqUserId) === uid) {
+      return NextResponse.json({ error: 'ไม่สามารถลบบัญชีของตัวเองได้' }, { status: 400 });
+    }
+
+    // ลบ UserYardAccess ก่อน (FK)
+    await db.request().input('uid', sql.Int, uid)
+      .query('DELETE FROM UserYardAccess WHERE user_id = @uid');
+
+    // ลบ user
+    await db.request().input('uid', sql.Int, uid)
+      .query('DELETE FROM Users WHERE user_id = @uid');
+
+    await logAudit({ action: 'user_delete', entityType: 'user', entityId: uid, details: { user_id: uid } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('❌ DELETE user error:', error);
+    return NextResponse.json({ error: 'ไม่สามารถลบผู้ใช้ได้' }, { status: 500 });
+  }
+}

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building } from 'lucide-react';
+import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building, Trash2 } from 'lucide-react';
 import PermissionsMatrix from './PermissionsMatrix';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface UserData {
   user_id: number;
@@ -44,6 +45,7 @@ export default function UsersSettings() {
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   // Form
   const [form, setForm] = useState({
@@ -117,6 +119,22 @@ export default function UsersSettings() {
       }
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
+  };
+
+  const handleDelete = (user: UserData) => {
+    setConfirmDlg({
+      open: true,
+      message: `ยืนยันลบผู้ใช้ "${user.full_name}" (@${user.username})?`,
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        try {
+          const res = await fetch(`/api/settings/users?user_id=${user.user_id}`, { method: 'DELETE' });
+          const json = await res.json();
+          if (json.success) fetchUsers();
+          else alert(json.error || 'เกิดข้อผิดพลาด');
+        } catch { alert('ไม่สามารถลบผู้ใช้ได้'); }
+      },
+    });
   };
 
   if (loading) {
@@ -257,11 +275,18 @@ export default function UsersSettings() {
                       </span>
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      <button onClick={() => openEdit(user)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                          text-slate-500 hover:text-[#8B5CF6] hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all">
-                        <Pencil size={13} /> แก้ไข
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openEdit(user)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                            text-slate-500 hover:text-[#8B5CF6] hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all">
+                          <Pencil size={13} /> แก้ไข
+                        </button>
+                        <button onClick={() => handleDelete(user)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                            text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all">
+                          <Trash2 size={13} /> ลบ
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -272,6 +297,9 @@ export default function UsersSettings() {
       </div>
       {/* Granular RBAC — Permission Matrix */}
       <PermissionsMatrix />
+
+      <ConfirmDialog open={confirmDlg.open} title="ยืนยันการลบ" message={confirmDlg.message} confirmLabel="ลบ"
+        onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
     </div>
   );
 }
