@@ -548,6 +548,87 @@ export async function POST(request: NextRequest) {
         VALUES (@yardId, @action, @entityType, @entityId, @details, GETDATE())
       `);
 
+    // === Gate Email Notification with EIR PDF ===
+    try {
+      const { getEmailConfig, sendEmail, gateNotificationEmail } = await import('@/lib/emailService');
+      const emailCfg = await getEmailConfig();
+      if (emailCfg.enabled) {
+        const nResult = await db.request().query(`
+          SELECT setting_key, setting_value FROM SystemSettings
+          WHERE setting_key IN ('email_notify_gate', 'email_notify_to')
+        `);
+        const ns: Record<string, string> = {};
+        for (const nr of nResult.recordset) ns[nr.setting_key] = nr.setting_value;
+
+        if (ns.email_notify_gate === 'true' && ns.email_notify_to) {
+          // Get yard name
+          const yardResult = await db.request()
+            .input('yId', sql.Int, yard_id)
+            .query(`SELECT yard_name, yard_code FROM Yards WHERE yard_id = @yId`);
+          const yard = yardResult.recordset[0];
+
+          // Get company info
+          let company = null;
+          try {
+            const compResult = await db.request().query('SELECT TOP 1 company_name, address, phone, tax_id FROM CompanyProfile');
+            company = compResult.recordset[0] || null;
+          } catch { /* ignore */ }
+
+          const now = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+
+          // Generate EIR PDF
+          const { generateEIRPDF } = await import('@/lib/eirPdfGenerator');
+          const pdfBuffer = generateEIRPDF({
+            eir_number: eirNumber,
+            transaction_type,
+            container_number: container_number || '',
+            size,
+            type: containerType,
+            shipping_line,
+            is_laden,
+            seal_number,
+            driver_name,
+            driver_license,
+            truck_plate,
+            booking_ref,
+            yard_name: yard?.yard_name,
+            yard_code: yard?.yard_code,
+            zone_name: assignedLocation?.zone_name,
+            bay: assignedLocation?.bay,
+            row: assignedLocation?.row,
+            tier: assignedLocation?.tier,
+            processed_by: undefined,
+            notes,
+            date: now,
+            company,
+          });
+
+          const emailData = gateNotificationEmail({
+            type: transaction_type as 'gate_in' | 'gate_out',
+            containerNumber: container_number || '',
+            customerName: shipping_line || '-',
+            yardName: yard?.yard_name || 'CYMS',
+            dateTime: now,
+            driverName: driver_name,
+            truckPlate: truck_plate,
+          });
+
+          const toList = ns.email_notify_to.split(',').map(e => e.trim()).filter(Boolean);
+          await sendEmail({
+            to: toList,
+            ...emailData,
+            attachments: [{
+              filename: `EIR_${eirNumber}.pdf`,
+              content: pdfBuffer,
+              contentType: 'application/pdf',
+            }],
+          });
+        }
+      }
+    } catch (emailErr) {
+      console.error('⚠️ Gate email notification error (non-blocking):', emailErr);
+    }
+
     // === Auto-create Work Order for forklift driver ===
     if (transaction_type === 'gate_in' && assignedLocation) {
       try {
