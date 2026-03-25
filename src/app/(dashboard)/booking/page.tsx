@@ -7,7 +7,7 @@ import {
   Loader2, Search, FileText, Upload, Plus, Ship, Package,
   CheckCircle2, XCircle, Clock, AlertTriangle, RotateCcw, Anchor,
   FileSpreadsheet, Trash2, Filter, ClipboardCheck, BarChart3,
-  ChevronDown, Calendar, Eye, Link2, ChevronLeft, ChevronRight,
+  ChevronDown, Calendar, Eye, Link2, ChevronLeft, ChevronRight, Download,
 } from 'lucide-react';
 
 interface BookingRow {
@@ -224,7 +224,25 @@ export default function BookingPage() {
       eta: get('eta', 'arrival'),
       seal_number: get('seal_number', 'seal', 'seal_no'),
       notes: get('notes', 'remark', 'remarks'),
+      container_numbers: get('container_numbers', 'containers', 'container_no'),
+      valid_from: get('valid_from', 'from', 'start_date'),
+      valid_to: get('valid_to', 'to', 'end_date', 'expiry'),
     };
+  };
+
+  // Download Excel template
+  const downloadTemplate = () => {
+    const headers = ['booking_number', 'booking_type', 'vessel_name', 'voyage_number', 'container_count', 'container_size', 'container_type', 'eta', 'seal_number', 'container_numbers', 'valid_from', 'valid_to', 'notes'];
+    const data = [
+      headers,
+      ['BK-2025-0001', 'import', 'EVER GIVEN', 'V.001N', 5, '40', 'GP', '2025-04-01', 'SL12345', 'MSCU1234567, MSCU2345678', '2025-04-01', '2025-04-30', 'ตัวอย่าง'],
+      ['BK-2025-0002', 'export', 'MSC ANNA', 'V.120E', 3, '20', 'HC', '2025-04-05', '', 'TEMU9876543', '2025-04-05', '2025-05-05', ''],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 16) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Booking Template');
+    XLSX.writeFile(wb, 'booking_template.xlsx');
   };
 
   const handleBatchImport = async () => {
@@ -234,9 +252,14 @@ export default function BookingPage() {
       const mapped = mapRow(row);
       if (!mapped.booking_number) { failed++; continue; }
       try {
+        // Split container_numbers string into array
+        const payload: Record<string, unknown> = { yard_id: yardId, ...mapped };
+        if (mapped.container_numbers) {
+          payload.container_numbers = String(mapped.container_numbers).split(/[,;\ ]+/).map((s: string) => s.trim()).filter(Boolean);
+        }
         const res = await fetch('/api/edi/bookings', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ yard_id: yardId, ...mapped }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (data.success) success++; else failed++;
@@ -521,6 +544,12 @@ export default function BookingPage() {
                 <FileSpreadsheet size={32} className="mx-auto text-slate-400 mb-2" />
                 <p className="text-sm font-medium text-slate-600 dark:text-slate-300">ลากไฟล์มาวางที่นี่ หรือ คลิกเพื่อเลือกไฟล์</p>
                 <p className="text-[10px] text-slate-400 mt-1">รองรับ .csv, .xlsx, .xls — คอลัมน์: booking_number, vessel_name, voyage_number, container_count, container_size, container_type, seal_number</p>
+              </div>
+              <div className="flex items-center justify-center gap-3 mt-2">
+                <button onClick={downloadTemplate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 rounded-lg transition-colors">
+                  <Download size={12} /> ดาวน์โหลด Template (.xlsx)
+                </button>
               </div>
 
               {fileRows.length > 0 && (
