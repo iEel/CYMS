@@ -222,12 +222,21 @@ export default function UsersSettings() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {users.map((user) => {
                 const st = STATUS_MAP[user.status] || STATUS_MAP.active;
+                const isCustomer = user.role_code === 'customer';
+                const linkedCompany = isCustomer ? customers.find(c => c.customer_id === user.customer_id) : null;
                 return (
                   <tr key={user.user_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                     <td className="px-5 py-3.5">
                       <div>
                         <p className="font-semibold text-slate-800 dark:text-white">{user.full_name}</p>
-                        <p className="text-xs text-slate-400 font-mono">@{user.username}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-slate-400">{user.username}</span>
+                          {linkedCompany && (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400">
+                              🏢 {linkedCompany.customer_name}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
