@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building, Trash2 } from 'lucide-react';
+import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building, Trash2, Search } from 'lucide-react';
 import PermissionsMatrix from './PermissionsMatrix';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -52,6 +52,8 @@ export default function UsersSettings() {
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
+  const [tab, setTab] = useState<'all' | 'staff' | 'customer'>('all');
+  const [search, setSearch] = useState('');
 
   // Form
   const [form, setForm] = useState({
@@ -345,8 +347,37 @@ export default function UsersSettings() {
         </div>
       )}
 
-      {/* Users Table */}
+      {/* Tabs + Search */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-100 dark:border-slate-700">
+          <div className="flex items-center gap-1">
+            {[
+              { key: 'all' as const, label: 'ทั้งหมด', count: users.length },
+              { key: 'staff' as const, label: 'พนักงาน', count: users.filter(u => u.role_code !== 'customer').length, icon: '👤' },
+              { key: 'customer' as const, label: 'ลูกค้า', count: users.filter(u => u.role_code === 'customer').length, icon: '🏢' },
+            ].map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  tab === t.key
+                    ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}>
+                {t.icon && <span className="mr-1">{t.icon}</span>}
+                {t.label}
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] ${
+                  tab === t.key ? 'bg-violet-200 dark:bg-violet-800 text-violet-700 dark:text-violet-300' : 'bg-slate-100 dark:bg-slate-700'
+                }`}>{t.count}</span>
+              </button>
+            ))}
+          </div>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="ค้นหาชื่อ, username..." className="h-9 pl-9 pr-3 w-48 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-800 dark:text-white outline-none focus:border-violet-500 transition-all" />
+          </div>
+        </div>
+
+      {/* Users Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -359,7 +390,10 @@ export default function UsersSettings() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {users.map((user) => {
+              {users
+                .filter(u => tab === 'all' ? true : tab === 'customer' ? u.role_code === 'customer' : u.role_code !== 'customer')
+                .filter(u => !search || u.full_name.toLowerCase().includes(search.toLowerCase()) || u.username.toLowerCase().includes(search.toLowerCase()))
+                .map((user) => {
                 const st = STATUS_MAP[user.status] || STATUS_MAP.active;
                 const isCustomer = user.role_code === 'customer';
                 const linkedCompany = isCustomer ? customers.find(c => c.customer_id === user.customer_id) : null;
