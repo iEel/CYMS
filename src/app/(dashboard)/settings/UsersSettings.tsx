@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building, Trash2, Search } from 'lucide-react';
+import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building, Trash2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import PermissionsMatrix from './PermissionsMatrix';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -54,6 +54,8 @@ export default function UsersSettings() {
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
   const [tab, setTab] = useState<'all' | 'staff' | 'customer'>('all');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const perPage = 10;
 
   // Form
   const [form, setForm] = useState({
@@ -356,7 +358,7 @@ export default function UsersSettings() {
               { key: 'staff' as const, label: 'พนักงาน', count: users.filter(u => u.role_code !== 'customer').length, icon: '👤' },
               { key: 'customer' as const, label: 'ลูกค้า', count: users.filter(u => u.role_code === 'customer').length, icon: '🏢' },
             ].map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)}
+              <button key={t.key} onClick={() => { setTab(t.key); setPage(1); }}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   tab === t.key
                     ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
@@ -372,7 +374,7 @@ export default function UsersSettings() {
           </div>
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
               placeholder="ค้นหาชื่อ, username..." className="h-9 pl-9 pr-3 w-48 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-800 dark:text-white outline-none focus:border-violet-500 transition-all" />
           </div>
         </div>
@@ -390,10 +392,14 @@ export default function UsersSettings() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {users
-                .filter(u => tab === 'all' ? true : tab === 'customer' ? u.role_code === 'customer' : u.role_code !== 'customer')
-                .filter(u => !search || u.full_name.toLowerCase().includes(search.toLowerCase()) || u.username.toLowerCase().includes(search.toLowerCase()))
-                .map((user) => {
+              {(() => {
+                const filtered = users
+                  .filter(u => tab === 'all' ? true : tab === 'customer' ? u.role_code === 'customer' : u.role_code !== 'customer')
+                  .filter(u => !search || u.full_name.toLowerCase().includes(search.toLowerCase()) || u.username.toLowerCase().includes(search.toLowerCase()));
+                const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+                const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+                return (<>
+                  {paginated.map((user) => {
                 const st = STATUS_MAP[user.status] || STATUS_MAP.active;
                 const isCustomer = user.role_code === 'customer';
                 const linkedCompany = isCustomer ? customers.find(c => c.customer_id === user.customer_id) : null;
@@ -446,6 +452,38 @@ export default function UsersSettings() {
                   </tr>
                 );
               })}
+                  {paginated.length === 0 && (
+                    <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-400 text-sm">ไม่พบผู้ใช้</td></tr>
+                  )}
+                  {/* Pagination inside tbody context for totalPages access */}
+                  <tr><td colSpan={5}>
+                    <div className="flex items-center justify-between px-5 py-3">
+                      <span className="text-xs text-slate-400">แสดง {((page-1)*perPage)+1}-{Math.min(page*perPage, filtered.length)} จาก {filtered.length} รายการ</span>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-all">
+                          <ChevronLeft size={14} />
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                          .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                          .map((p, idx, arr) => (
+                            <span key={p}>
+                              {idx > 0 && arr[idx - 1] !== p - 1 && <span className="text-slate-300 text-xs px-1">…</span>}
+                              <button onClick={() => setPage(p)}
+                                className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                                  p === page ? 'bg-violet-600 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                }`}>{p}</button>
+                            </span>
+                          ))}
+                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-all">
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </td></tr>
+                </>);
+              })()}
             </tbody>
           </table>
         </div>
