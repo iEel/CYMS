@@ -221,10 +221,12 @@ export default function YardPage() {
           ? (inYardCtrs.reduce((s, c) => s + Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000), 0) / inYardCtrs.length).toFixed(1)
           : '0';
         return (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {[
+              { label: 'ตู้ทั้งหมด', value: summary.total || 0, color: 'text-slate-800 dark:text-white' },
               { label: 'ในลาน', value: summary.in_yard || 0, color: 'text-emerald-600' },
               { label: 'ค้างจ่าย', value: summary.on_hold || 0, color: 'text-amber-600' },
+              { label: 'ซ่อม', value: summary.in_repair || 0, color: 'text-rose-600' },
               { label: 'Overdue (>30วัน)', value: overdueCount, color: overdueCount > 0 ? 'text-rose-600' : 'text-emerald-600' },
               { label: 'Avg Dwell', value: `${avgDwell} วัน`, color: 'text-blue-600' },
               { label: 'อัตราเต็ม', value: `${overallPct.toFixed(1)}%`, color: overallPct > 80 ? 'text-rose-600' : 'text-blue-600' },
