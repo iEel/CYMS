@@ -303,6 +303,18 @@ export default function GatePage() {
         if (err.name !== 'AbortError') console.error('Boxtech lookup error:', err);
       })
       .finally(() => setBoxtechLoading(false));
+
+    // Auto-lookup Booking Ref
+    fetch(`/api/edi/bookings?lookup=1&container_number=${num}&yard_id=${yardId}`, { signal: controller.signal })
+      .then(res => res.json())
+      .then(data => {
+        if (data.booking) {
+          setGateInForm(prev => ({ ...prev, booking_ref: prev.booking_ref || data.booking.booking_number }));
+        }
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') console.error('Booking lookup error:', err);
+      });
     
     return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -493,6 +505,15 @@ export default function GatePage() {
         } catch { /* ignore */ }
       }
     } catch (err) { console.error(err); }
+
+    // Auto-fill Booking Ref from BookingContainers
+    try {
+      const bkRes = await fetch(`/api/edi/bookings?lookup=1&container_id=${c.container_id}&yard_id=${yardId}`);
+      const bkData = await bkRes.json();
+      if (bkData.booking) {
+        setGateOutForm(prev => ({ ...prev, booking_ref: prev.booking_ref || bkData.booking.booking_number }));
+      }
+    } catch (err) { console.error('Booking lookup error:', err); }
   };
 
   // Phase 1: Request release (create Work Order for forklift)

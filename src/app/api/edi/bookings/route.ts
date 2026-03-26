@@ -7,6 +7,49 @@ import { logAudit } from '@/lib/audit';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const lookup = searchParams.get('lookup');
+
+    // === Lookup mode: find booking by container_number or container_id ===
+    if (lookup === '1') {
+      const db = await getDb();
+      const containerNumber = searchParams.get('container_number');
+      const containerId = searchParams.get('container_id');
+      const yardId = searchParams.get('yard_id');
+
+      if (containerNumber) {
+        // Gate-In: find pending/confirmed booking that expects this container
+        const req = db.request().input('cNum', sql.NVarChar, containerNumber.toUpperCase());
+        if (yardId) req.input('yardId', sql.Int, parseInt(yardId));
+        const result = await req.query(`
+          SELECT TOP 1 b.booking_number, b.booking_id, b.vessel_name, b.booking_type, b.status
+          FROM BookingContainers bc
+          JOIN Bookings b ON bc.booking_id = b.booking_id
+          WHERE bc.container_number = @cNum AND b.status IN ('pending', 'confirmed')
+          ${yardId ? 'AND b.yard_id = @yardId' : ''}
+          ORDER BY b.created_at DESC
+        `);
+        return NextResponse.json({ booking: result.recordset[0] || null });
+      }
+
+      if (containerId) {
+        // Gate-Out: find booking linked to this container (received status)
+        const req = db.request().input('cId', sql.Int, parseInt(containerId));
+        if (yardId) req.input('yardId', sql.Int, parseInt(yardId));
+        const result = await req.query(`
+          SELECT TOP 1 b.booking_number, b.booking_id, b.vessel_name, b.booking_type, b.status
+          FROM BookingContainers bc
+          JOIN Bookings b ON bc.booking_id = b.booking_id
+          WHERE bc.container_id = @cId AND bc.status = 'received'
+          ${yardId ? 'AND b.yard_id = @yardId' : ''}
+          ORDER BY b.created_at DESC
+        `);
+        return NextResponse.json({ booking: result.recordset[0] || null });
+      }
+
+      return NextResponse.json({ booking: null });
+    }
+
+    // === Normal listing mode ===
     const yardId = searchParams.get('yard_id');
     const status = searchParams.get('status');
     const search = searchParams.get('search');
