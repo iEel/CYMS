@@ -86,3 +86,17 @@ export function getStatusLabel(status: string): string {
   };
   return labels[status] || status;
 }
+
+/**
+ * Calculate dwell days using Calendar Days method.
+ * วันเข้า = Day 1 (นับวันเข้าเป็นวันแรก)
+ * ตัดเวลาออก ใช้เฉพาะวันที่ เทียบกัน
+ * เช่น เข้า 1 มี.ค. → วันนี้ 1 มี.ค. = 1 วัน
+ */
+export function calcDwellDays(gateInDate: string | Date): number {
+  const start = new Date(gateInDate);
+  start.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(1, Math.floor((today.getTime() - start.getTime()) / 86400000) + 1);
+}

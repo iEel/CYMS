@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { calcDwellDays } from '@/lib/utils';
 
 // GET — ดึงรายละเอียดตู้ + Gate Transactions + damage_report
 export async function GET(request: NextRequest) {
@@ -64,9 +65,7 @@ export async function GET(request: NextRequest) {
 
     // Calculate dwell days — use gate_in_date from container, or gate transaction date, or created_at
     const dwellStart = container.gate_in_date || gateIn?.created_at || container.created_at;
-    const dwellDays = dwellStart
-      ? Math.floor((Date.now() - new Date(dwellStart).getTime()) / 86400000)
-      : 0;
+    const dwellDays = dwellStart ? calcDwellDays(dwellStart) : 0;
 
     return NextResponse.json({
       container: {

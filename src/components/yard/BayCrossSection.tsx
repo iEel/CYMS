@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Layers, ChevronDown, Box, Snowflake, AlertTriangle, Wrench, Trash2 } from 'lucide-react';
+import { calcDwellDays } from '@/lib/utils';
 
 interface ContainerData {
   container_id: number;
@@ -358,7 +359,7 @@ export default function BayCrossSection({ yardId, onSelectContainer }: Props) {
                   </span>
                 </div>
                 {hoveredContainer.gate_in_date && (() => {
-                  const days = Math.floor((Date.now() - new Date(hoveredContainer.gate_in_date).getTime()) / 86400000);
+                  const days = calcDwellDays(hoveredContainer.gate_in_date);
                   const color = days <= 7 ? 'text-emerald-400' : days <= 14 ? 'text-amber-400' : 'text-red-400';
                   return (
                     <div className="col-span-2">

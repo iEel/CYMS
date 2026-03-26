@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Search, MapPin, Package, Ship, Sparkles, ExternalLink, Calendar, Truck, User, Image as ImageIcon, Clock } from 'lucide-react';
+import { calcDwellDays } from '@/lib/utils';
 
 interface SearchResult {
   container_id: number;
@@ -177,7 +178,7 @@ export default function ContainerSearch({ yardId, onLocate }: Props) {
                   </p>
                   <div className="flex items-center gap-1.5 justify-end mt-1">
                     {c.gate_in_date && (() => {
-                      const days = Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000);
+                      const days = calcDwellDays(c.gate_in_date);
                       const color = days <= 7 ? 'text-emerald-600 bg-emerald-50' : days <= 14 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
                       return <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${color}`}><Clock size={8} className="inline mr-0.5" />{days} วัน</span>;
                     })()}

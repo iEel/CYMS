@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { formatShortDate } from '@/lib/utils';
+import { formatShortDate, calcDwellDays } from '@/lib/utils';
 import ContainerSearch from '@/components/yard/ContainerSearch';
 import YardAudit from '@/components/yard/YardAudit';
 import ContainerCardPWA from '@/components/yard/ContainerCardPWA';
@@ -216,9 +216,9 @@ export default function YardPage() {
       {/* Summary Stats */}
       {(() => {
         const inYardCtrs = containers.filter(c => c.status !== 'gated_out' && c.gate_in_date);
-        const overdueCount = inYardCtrs.filter(c => Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000) > 30).length;
+        const overdueCount = inYardCtrs.filter(c => calcDwellDays(c.gate_in_date) > 30).length;
         const avgDwell = inYardCtrs.length > 0
-          ? (inYardCtrs.reduce((s, c) => s + Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000), 0) / inYardCtrs.length).toFixed(1)
+          ? (inYardCtrs.reduce((s, c) => s + calcDwellDays(c.gate_in_date), 0) / inYardCtrs.length).toFixed(1)
           : '0';
         return (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
@@ -447,7 +447,7 @@ export default function YardPage() {
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-1">
                             {c.gate_in_date ? (() => {
-                              const days = Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000);
+                              const days = calcDwellDays(c.gate_in_date);
                               const color = days <= 7
                                 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
                                 : days <= 14
