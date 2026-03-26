@@ -106,6 +106,8 @@ export default function EDIConfiguration() {
   const [tplEdifactVer, setTplEdifactVer] = useState('D:95B:UN');
   const [tplEdifactSender, setTplEdifactSender] = useState('');
   const [tplSaving, setTplSaving] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const fetchEndpoints = useCallback(async () => {
     setLoading(true);
@@ -283,6 +285,30 @@ export default function EDIConfiguration() {
       [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
       return arr;
     });
+  };
+
+  // Drag-and-drop handlers
+  const handleDragStart = (idx: number) => {
+    setDragIdx(idx);
+  };
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    setDragOverIdx(idx);
+  };
+  const handleDrop = (idx: number) => {
+    if (dragIdx === null || dragIdx === idx) { setDragIdx(null); setDragOverIdx(null); return; }
+    setTplFields(prev => {
+      const arr = [...prev];
+      const [moved] = arr.splice(dragIdx, 1);
+      arr.splice(idx, 0, moved);
+      return arr;
+    });
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+  const handleDragEnd = () => {
+    setDragIdx(null);
+    setDragOverIdx(null);
   };
 
   // Generate preview
@@ -652,12 +678,18 @@ UNZ+1+CODECO...'`;
                     <h5 className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-3">📋 Field Mapping — เลือก/เรียงลำดับ/เปลี่ยนชื่อ header</h5>
                     <div className="space-y-1.5">
                       {tplFields.map((f, idx) => (
-                        <div key={f.source} className={`flex items-center gap-2 p-2 rounded-lg transition-all ${f.enabled ? 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600' : 'bg-slate-100/50 dark:bg-slate-800/30 border border-transparent opacity-60'}`}>
-                          <GripVertical size={14} className="text-slate-300 cursor-move shrink-0" />
+                        <div key={f.source}
+                          draggable
+                          onDragStart={() => handleDragStart(idx)}
+                          onDragOver={(e) => handleDragOver(e, idx)}
+                          onDrop={() => handleDrop(idx)}
+                          onDragEnd={handleDragEnd}
+                          className={`flex items-center gap-2 p-2 rounded-lg transition-all ${dragOverIdx === idx && dragIdx !== idx ? 'ring-2 ring-blue-400 ring-offset-1' : ''} ${dragIdx === idx ? 'opacity-40' : ''} ${f.enabled ? 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600' : 'bg-slate-100/50 dark:bg-slate-800/30 border border-transparent opacity-60'}`}>
+                          <GripVertical size={14} className="text-slate-300 cursor-grab active:cursor-grabbing shrink-0" />
                           <button onClick={() => toggleField(idx)} className="shrink-0">
                             {f.enabled ? <Eye size={14} className="text-emerald-500" /> : <EyeOff size={14} className="text-slate-400" />}
                           </button>
-                          <span className="text-[11px] text-slate-400 w-32 shrink-0 font-mono">{f.source}</span>
+                          <span className="text-[11px] text-slate-400 w-32 shrink-0 font-mono cursor-grab active:cursor-grabbing">{f.source}</span>
                           <span className="text-slate-400 text-[10px]">→</span>
                           <input value={f.header} onChange={e => updateFieldHeader(idx, e.target.value)}
                             className="flex-1 h-7 px-2 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-400"
