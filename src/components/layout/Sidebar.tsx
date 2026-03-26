@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  BarChart3,
 } from 'lucide-react';
 import type { UserRole } from '@/types';
 
@@ -74,6 +75,12 @@ const menuItems: MenuItem[] = [
     href: '/billing',
     icon: <Receipt size={20} />,
     roles: ['yard_manager', 'billing_officer'],
+  },
+  {
+    label: 'รายงาน',
+    href: '/reports',
+    icon: <BarChart3 size={20} />,
+    roles: ['yard_manager', 'billing_officer', 'surveyor'],
   },
   {
     label: 'ตั้งค่าระบบ',

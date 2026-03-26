@@ -811,6 +811,7 @@ function BillingReports({ yardId }: { yardId: number }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [excelLoading, setExcelLoading] = useState(false);
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -908,6 +909,22 @@ function BillingReports({ yardId }: { yardId: number }) {
             className="h-8 px-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 text-xs font-medium hover:bg-red-100 flex items-center gap-1 disabled:opacity-50"
           >
             {pdfLoading ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} PDF
+          </button>
+          <button
+            disabled={excelLoading || !data}
+            onClick={async () => {
+              if (!data) return;
+              setExcelLoading(true);
+              try {
+                const { exportBillingReportExcel } = await import('@/lib/excelExport');
+                const dateLabel = reportType === 'daily' ? selectedDate : selectedMonth;
+                await exportBillingReportExcel(data, reportType, dateLabel);
+              } catch (err) { console.error('Excel error:', err); }
+              finally { setExcelLoading(false); }
+            }}
+            className="h-8 px-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 text-xs font-medium hover:bg-emerald-100 flex items-center gap-1 disabled:opacity-50"
+          >
+            {excelLoading ? <Loader2 size={12} className="animate-spin" /> : <FileSpreadsheet size={12} />} Excel
           </button>
         </div>
       </div>
