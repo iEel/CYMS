@@ -530,44 +530,84 @@ export default function YardPage() {
 
         return (
           <div className="space-y-4">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-rose-50 dark:bg-rose-900/20 rounded-xl border border-rose-200/50 dark:border-rose-800/30 p-4 text-center">
-                <p className="text-[10px] font-semibold uppercase text-rose-500 mb-1">🔴 Overdue (&gt;30 วัน)</p>
-                <p className="text-3xl font-bold text-rose-600">{overdue}</p>
-                <p className="text-[10px] text-rose-400 mt-1">ตู้</p>
+            {/* Summary Cards — improved */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Overdue */}
+              <div className="relative bg-white dark:bg-slate-800 rounded-2xl border-2 border-rose-200 dark:border-rose-800/50 p-4 overflow-hidden">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-rose-500/10 dark:bg-rose-500/5 rounded-bl-full" />
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center text-rose-600 text-base">🚨</div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-rose-500">Overdue</p>
+                    <p className="text-[9px] text-rose-400">&gt;30 วัน</p>
+                  </div>
+                </div>
+                <p className="text-4xl font-black text-rose-600">{overdue}</p>
+                <p className="text-[10px] text-rose-400 mt-1">{dwellContainers.length > 0 ? ((overdue / dwellContainers.length) * 100).toFixed(0) : 0}% ของทั้งหมด</p>
               </div>
-              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200/50 dark:border-amber-800/30 p-4 text-center">
-                <p className="text-[10px] font-semibold uppercase text-amber-500 mb-1">🟡 Chargeable</p>
-                <p className="text-3xl font-bold text-amber-600">{chargeable}</p>
-                <p className="text-[10px] text-amber-400 mt-1">&gt;{dwellThreshold} วัน</p>
+              {/* Chargeable */}
+              <div className="relative bg-white dark:bg-slate-800 rounded-2xl border-2 border-amber-200 dark:border-amber-800/50 p-4 overflow-hidden">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 dark:bg-amber-500/5 rounded-bl-full" />
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-base">💰</div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Chargeable</p>
+                    <p className="text-[9px] text-amber-400">&gt;{dwellThreshold} วัน</p>
+                  </div>
+                </div>
+                <p className="text-4xl font-black text-amber-600">{chargeable}</p>
+                <p className="text-[10px] text-amber-400 mt-1">คิดค่าฝากแล้ว</p>
               </div>
-              <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200/50 dark:border-emerald-800/30 p-4 text-center">
-                <p className="text-[10px] font-semibold uppercase text-emerald-500 mb-1">🟢 Free Days</p>
-                <p className="text-3xl font-bold text-emerald-600">{inFree}</p>
-                <p className="text-[10px] text-emerald-400 mt-1">≤{dwellThreshold} วัน</p>
+              {/* Free */}
+              <div className="relative bg-white dark:bg-slate-800 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800/50 p-4 overflow-hidden">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-bl-full" />
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-base">✅</div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500">Free Period</p>
+                    <p className="text-[9px] text-emerald-400">≤{dwellThreshold} วัน</p>
+                  </div>
+                </div>
+                <p className="text-4xl font-black text-emerald-600">{inFree}</p>
+                <p className="text-[10px] text-emerald-400 mt-1">ยังไม่คิดค่าฝาก</p>
               </div>
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200/50 dark:border-blue-800/30 p-4 text-center">
-                <p className="text-[10px] font-semibold uppercase text-blue-500 mb-1">⏱ Avg Dwell</p>
-                <p className="text-3xl font-bold text-blue-600">{avgDays}</p>
-                <p className="text-[10px] text-blue-400 mt-1">วัน/ตู้</p>
+              {/* Avg */}
+              <div className="relative bg-white dark:bg-slate-800 rounded-2xl border-2 border-blue-200 dark:border-blue-800/50 p-4 overflow-hidden">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 dark:bg-blue-500/5 rounded-bl-full" />
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-base">⏱️</div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500">Avg Dwell</p>
+                    <p className="text-[9px] text-blue-400">ค่าเฉลี่ย</p>
+                  </div>
+                </div>
+                <p className="text-4xl font-black text-blue-600">{avgDays}</p>
+                <p className="text-[10px] text-blue-400 mt-1">วัน / ตู้</p>
               </div>
             </div>
 
-            {/* Filter Bar */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex items-center gap-4">
-              <span className="text-sm text-slate-500">แสดงตู้ที่อยู่ในลานเกิน:</span>
-              <div className="flex gap-2">
-                {[3, 7, 14, 30].map(d => (
+            {/* Filter Bar — improved */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3 flex flex-wrap items-center gap-3">
+              <span className="text-xs font-medium text-slate-500">📋 แสดงตู้ที่อยู่เกิน:</span>
+              <div className="flex gap-1.5">
+                {[{ d: 3, label: '3 วัน' }, { d: 7, label: '7 วัน' }, { d: 14, label: '14 วัน' }, { d: 30, label: '30 วัน' }].map(({ d, label }) => (
                   <button key={d} onClick={() => { setDwellThreshold(d); setDwellPage(1); }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      dwellThreshold === d ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-slate-700'
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                      dwellThreshold === d
+                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-200'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-600'
                     }`}>
-                    {d} วัน
+                    {label}
                   </button>
                 ))}
               </div>
-              <span className="text-xs text-slate-400 ml-auto">แสดง {filtered30.length} รายการ</span>
+              <div className="ml-auto flex items-center gap-2 text-xs text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> Overdue
+                <span className="w-2 h-2 rounded-full bg-amber-400 inline-block ml-2"></span> Chargeable
+                <span className="w-2 h-2 rounded-full bg-blue-400 inline-block ml-2"></span> &lt;{dwellThreshold} วัน
+                <span className="text-slate-300 mx-1">|</span>
+                <span className="font-medium text-slate-500">{filtered30.length} รายการ</span>
+              </div>
             </div>
 
             {/* Table */}
@@ -575,46 +615,76 @@ export default function YardPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-700/50 text-left text-xs text-slate-500 uppercase">
-                      <th className="px-4 py-3">เลขตู้</th>
-                      <th className="px-4 py-3">สายเรือ</th>
-                      <th className="px-4 py-3">ขนาด/ประเภท</th>
-                      <th className="px-4 py-3">โซน</th>
-                      <th className="px-4 py-3">ตู้เข้าลานเมื่อ</th>
-                      <th className="px-4 py-3 text-center">วันในลาน</th>
-                      <th className="px-4 py-3 text-center">สถานะ</th>
+                    <tr className="bg-slate-50 dark:bg-slate-700/50 text-left text-[10px] text-slate-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 font-semibold">เลขตู้</th>
+                      <th className="px-4 py-3 font-semibold">สายเรือ</th>
+                      <th className="px-4 py-3 font-semibold">ขนาด/ประเภท</th>
+                      <th className="px-4 py-3 font-semibold">โซน/พิกัด</th>
+                      <th className="px-4 py-3 font-semibold">เข้าลานเมื่อ</th>
+                      <th className="px-4 py-3 font-semibold text-center">วันในลาน</th>
+                      <th className="px-4 py-3 font-semibold text-center">สถานะ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                     {filtered30.length === 0 ? (
-                      <tr><td colSpan={7} className="p-8 text-center text-slate-400 text-sm">ไม่มีตู้ที่อยู่นานเกิน {dwellThreshold} วัน</td></tr>
+                      <tr><td colSpan={7} className="p-12 text-center">
+                        <div className="text-3xl mb-2">🎉</div>
+                        <p className="text-slate-500 font-medium">ไม่มีตู้ที่อยู่นานเกิน {dwellThreshold} วัน</p>
+                        <p className="text-slate-400 text-xs mt-1">ทุกตู้อยู่ในช่วง Free Period</p>
+                      </td></tr>
                     ) : dwellPaginated.map(c => {
-                      const badge = c.days > 30
-                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
-                        : c.days > 14
-                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                      const isOverdue = c.days > 30;
+                      const isWarn = c.days > 14 && !isOverdue;
+                      const barPct = Math.min(100, (c.days / 45) * 100);
+                      const barColor = isOverdue ? 'bg-rose-500' : isWarn ? 'bg-amber-400' : 'bg-blue-400';
+                      const badgeCls = isOverdue
+                        ? 'bg-rose-600 text-white'
+                        : isWarn
+                        ? 'bg-amber-500 text-white'
                         : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
                       return (
                         <tr key={c.container_id}
-                          className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer ${
-                            c.days > 30 ? 'border-l-2 border-rose-400' : ''
+                          className={`cursor-pointer transition-all group ${
+                            isOverdue
+                              ? 'bg-rose-50/60 dark:bg-rose-900/10 hover:bg-rose-50 dark:hover:bg-rose-900/20'
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
                           }`}
                           onClick={() => setDetailContainerId(c.container_id)}>
                           <td className="px-4 py-3">
-                            <span className="font-mono font-semibold text-slate-800 dark:text-white">{c.container_number}</span>
-                            {c.days > 30 && <span className="ml-2 text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded">OVERDUE</span>}
+                            <div className="flex items-center gap-2">
+                              {isOverdue && <span className="w-1.5 h-8 rounded-full bg-rose-500 shrink-0" />}
+                              <div>
+                                <span className="font-mono font-bold text-slate-800 dark:text-white text-sm">{c.container_number}</span>
+                                {isOverdue && (
+                                  <span className="ml-2 text-[9px] font-bold bg-rose-600 text-white px-1.5 py-0.5 rounded-full tracking-wider">OVERDUE</span>
+                                )}
+                              </div>
+                            </div>
                           </td>
-                          <td className="px-4 py-3 text-xs text-slate-500">{c.shipping_line || '—'}</td>
+                          <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300 font-medium">{c.shipping_line || '—'}</td>
                           <td className="px-4 py-3">
-                            <span className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded font-mono">{c.size}&apos;{c.type}</span>
+                            <span className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg font-mono font-semibold text-slate-700 dark:text-slate-200">{c.size}&apos;{c.type}</span>
                           </td>
-                          <td className="px-4 py-3 text-xs text-slate-500">{c.zone_name || '—'}</td>
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {c.zone_name ? (
+                              <span className="font-medium text-slate-700 dark:text-slate-300">Zone {c.zone_name}</span>
+                            ) : '—'}
+                            {c.bay && c.row && c.tier && (
+                              <span className="ml-1 text-[10px] text-slate-400 font-mono">B{c.bay}-R{c.row}-T{c.tier}</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-xs text-slate-400">{formatShortDate(c.gate_in_date)}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex px-2.5 py-1 rounded-lg text-sm font-bold ${badge}`}>{c.days}</span>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={`inline-flex items-center justify-center w-12 h-7 rounded-lg text-sm font-black ${badgeCls}`}>{c.days}</span>
+                              {/* Progress bar */}
+                              <div className="w-12 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${barPct}%` }} />
+                              </div>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium ${
+                            <span className={`inline-flex px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
                               STATUS_LABELS[c.status]?.color || ''
                             }`}>{STATUS_LABELS[c.status]?.label || c.status}</span>
                           </td>
@@ -644,7 +714,7 @@ export default function YardPage() {
                       return (
                         <button key={page} onClick={() => setDwellPage(page)}
                           className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
-                            page === dwellPage ? 'bg-blue-500 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            page === dwellPage ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
                           }`}>{page}</button>
                       );
                     })}
