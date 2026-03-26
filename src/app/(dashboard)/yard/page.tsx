@@ -13,7 +13,7 @@ import ContainerDetailModal from '@/components/yard/ContainerDetailModal';
 const ContainerTimeline = dynamic(() => import('@/components/containers/ContainerTimeline'), { ssr: false });
 import {
   MapPin, Search, Filter, ChevronDown, Cuboid, ClipboardCheck, SearchIcon,
-  Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star, Clock, TrendingUp,
+  Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star, Clock,
 } from 'lucide-react';
 
 const YardViewer3D = dynamic(() => import('@/components/yard/YardViewer3D'), {
@@ -91,10 +91,7 @@ export default function YardPage() {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [viewMode, setViewMode] = useState<'2d' | '3d' | 'bay'>('2d');
   const [selectedContainer, setSelectedContainer] = useState<ContainerData | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'dwell' | 'search' | 'allocate' | 'audit'>('overview');
-  const [dwellThreshold, setDwellThreshold] = useState(7);
-  const [dwellPage, setDwellPage] = useState(1);
-  const dwellPerPage = 20;
+  const [activeTab, setActiveTab] = useState<'overview' | 'search' | 'allocate' | 'audit'>('overview');
   const [highlightNumber, setHighlightNumber] = useState<string>('');
   const [detailContainerId, setDetailContainerId] = useState<number | null>(null);
   const [timelineId, setTimelineId] = useState<number | null>(null);
@@ -203,7 +200,6 @@ export default function YardPage() {
       <div className="flex items-center gap-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-1">
         {[
           { id: 'overview' as const, label: 'ภาพรวม', icon: <LayoutGrid size={14} /> },
-          { id: 'dwell' as const, label: 'Dwell Time', icon: <TrendingUp size={14} /> },
           { id: 'search' as const, label: 'ค้นหาตู้', icon: <Search size={14} /> },
           { id: 'allocate' as const, label: 'จัดวางตู้', icon: <Wand2 size={14} /> },
           { id: 'audit' as const, label: 'ตรวจนับ', icon: <ClipboardCheck size={14} /> },
@@ -218,20 +214,29 @@ export default function YardPage() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {[
-          { label: 'ตู้ทั้งหมด', value: summary.total || 0, color: 'text-slate-800 dark:text-white' },
-          { label: 'ในลาน', value: summary.in_yard || 0, color: 'text-emerald-600' },
-          { label: 'ค้างจ่าย', value: summary.on_hold || 0, color: 'text-amber-600' },
-          { label: 'ซ่อม', value: summary.in_repair || 0, color: 'text-rose-600' },
-          { label: 'อัตราเต็ม', value: `${overallPct.toFixed(1)}%`, color: overallPct > 80 ? 'text-rose-600' : 'text-blue-600' },
-        ].map((stat, i) => (
-          <div key={i} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-            <p className="text-xs text-slate-400 mb-1">{stat.label}</p>
-            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+      {(() => {
+        const inYardCtrs = containers.filter(c => c.status !== 'gated_out' && c.gate_in_date);
+        const overdueCount = inYardCtrs.filter(c => Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000) > 30).length;
+        const avgDwell = inYardCtrs.length > 0
+          ? (inYardCtrs.reduce((s, c) => s + Math.floor((Date.now() - new Date(c.gate_in_date).getTime()) / 86400000), 0) / inYardCtrs.length).toFixed(1)
+          : '0';
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {[
+              { label: 'ในลาน', value: summary.in_yard || 0, color: 'text-emerald-600' },
+              { label: 'ค้างจ่าย', value: summary.on_hold || 0, color: 'text-amber-600' },
+              { label: 'Overdue (>30วัน)', value: overdueCount, color: overdueCount > 0 ? 'text-rose-600' : 'text-emerald-600' },
+              { label: 'Avg Dwell', value: `${avgDwell} วัน`, color: 'text-blue-600' },
+              { label: 'อัตราเต็ม', value: `${overallPct.toFixed(1)}%`, color: overallPct > 80 ? 'text-rose-600' : 'text-blue-600' },
+            ].map((stat, i) => (
+              <div key={i} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                <p className="text-xs text-slate-400 mb-1">{stat.label}</p>
+                <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        );
+      })()}
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
@@ -506,176 +511,6 @@ export default function YardPage() {
           </div>
         </>
       )}
-
-      {activeTab === 'dwell' && (() => {
-        // Compute dwell days for all in-yard containers
-        const now = Date.now();
-        const dwellContainers = containers
-          .filter(c => c.status !== 'gated_out' && c.gate_in_date)
-          .map(c => ({
-            ...c,
-            days: Math.floor((now - new Date(c.gate_in_date).getTime()) / 86400000),
-          }))
-          .sort((a, b) => b.days - a.days);
-
-        const overdue = dwellContainers.filter(c => c.days > 30).length;
-        const chargeable = dwellContainers.filter(c => c.days > dwellThreshold && c.days <= 30).length;
-        const inFree = dwellContainers.filter(c => c.days <= dwellThreshold).length;
-        const avgDays = dwellContainers.length > 0
-          ? (dwellContainers.reduce((s, c) => s + c.days, 0) / dwellContainers.length).toFixed(1)
-          : '0';
-        const filtered30 = dwellContainers.filter(c => c.days >= dwellThreshold);
-        const dwellTotalPages = Math.max(1, Math.ceil(filtered30.length / dwellPerPage));
-        const dwellPaginated = filtered30.slice((dwellPage - 1) * dwellPerPage, dwellPage * dwellPerPage);
-
-        return (
-          <div className="space-y-4">
-            {/* Summary Cards — matching overview style */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {[
-                { label: 'Overdue (>30 วัน)', value: overdue, color: 'text-rose-600' },
-                { label: 'Chargeable', value: chargeable, color: 'text-amber-600' },
-                { label: 'Free Period', value: inFree, color: 'text-emerald-600' },
-                { label: 'Avg Dwell', value: `${avgDays} วัน`, color: 'text-blue-600' },
-                { label: 'ทั้งหมดในลาน', value: dwellContainers.length, color: 'text-slate-800 dark:text-white' },
-              ].map((stat, i) => (
-                <div key={i} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-                  <p className="text-xs text-slate-400 mb-1">{stat.label}</p>
-                  <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Filter + Table combined — matching overview style */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-              {/* Search & Filters */}
-              <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center gap-3">
-                <span className="text-sm text-slate-500">แสดงตู้ที่อยู่ในลานเกิน:</span>
-                <div className="flex gap-1.5">
-                  {[3, 7, 14, 30].map(d => (
-                    <button key={d} onClick={() => { setDwellThreshold(d); setDwellPage(1); }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        dwellThreshold === d
-                          ? 'bg-[#3B82F6] text-white shadow-sm'
-                          : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-slate-700'
-                      }`}>
-                      {d} วัน
-                    </button>
-                  ))}
-                </div>
-                <span className="text-xs text-slate-400 ml-auto">
-                  แสดง {filtered30.length} / {dwellContainers.length} ตู้
-                </span>
-              </div>
-
-              {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-700/50 text-left text-xs text-slate-500 uppercase">
-                      <th className="px-4 py-3">เลขตู้</th>
-                      <th className="px-4 py-3">สายเรือ</th>
-                      <th className="px-4 py-3">ขนาด/ประเภท</th>
-                      <th className="px-4 py-3">โซน</th>
-                      <th className="px-4 py-3">พิกัด</th>
-                      <th className="px-4 py-3">สินค้า</th>
-                      <th className="px-4 py-3">เข้าลานเมื่อ</th>
-                      <th className="px-4 py-3">อยู่ในลาน</th>
-                      <th className="px-4 py-3">สถานะ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {filtered30.length === 0 ? (
-                      <tr><td colSpan={9} className="p-8 text-center text-slate-400 text-sm">ไม่มีตู้ที่อยู่นานเกิน {dwellThreshold} วัน</td></tr>
-                    ) : dwellPaginated.map(c => {
-                      const days = c.days;
-                      const color = days > 30
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                        : days > 14
-                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
-                      const st = STATUS_LABELS[c.status] || STATUS_LABELS.available;
-                      return (
-                        <tr key={c.container_id}
-                          className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer"
-                          onClick={() => setDetailContainerId(c.container_id)}>
-                          <td className="px-4 py-3">
-                            <span className="font-mono font-semibold text-slate-800 dark:text-white">{c.container_number}</span>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">{c.shipping_line || '—'}</td>
-                          <td className="px-4 py-3">
-                            <span className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded font-mono">{c.size}&apos;{c.type}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-medium ${ZONE_COLORS[c.zone_type]?.text || 'text-slate-500'}`}>{c.zone_name || '—'}</span>
-                          </td>
-                          <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                            {c.bay && c.row && c.tier ? `B${c.bay}-R${c.row}-T${c.tier}` : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {c.is_laden ? (
-                              <span className="inline-flex w-5 h-5 rounded bg-emerald-100 dark:bg-emerald-900/30 items-center justify-center text-emerald-600 text-[10px] font-bold">F</span>
-                            ) : (
-                              <span className="inline-flex w-5 h-5 rounded bg-slate-100 dark:bg-slate-700 items-center justify-center text-slate-400 text-[10px] font-bold">E</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-slate-400">
-                            {c.gate_in_date ? (
-                              <div>
-                                <span>{formatShortDate(c.gate_in_date)}</span>
-                                <span className="ml-1 text-slate-500 dark:text-slate-400">
-                                  {new Date(c.gate_in_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                                </span>
-                              </div>
-                            ) : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${color}`}>{days} วัน</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium ${st.color}`}>{st.label}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {/* Pagination */}
-              {dwellTotalPages > 1 && (
-                <div className="p-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                  <span className="text-xs text-slate-400">
-                    แสดง {(dwellPage - 1) * dwellPerPage + 1}–{Math.min(dwellPage * dwellPerPage, filtered30.length)} จาก {filtered30.length} รายการ
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => setDwellPage(1)} disabled={dwellPage === 1}
-                      className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">«</button>
-                    <button onClick={() => setDwellPage(p => Math.max(1, p - 1))} disabled={dwellPage === 1}
-                      className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">‹</button>
-                    {Array.from({ length: Math.min(5, dwellTotalPages) }, (_, i) => {
-                      let page: number;
-                      if (dwellTotalPages <= 5) page = i + 1;
-                      else if (dwellPage <= 3) page = i + 1;
-                      else if (dwellPage >= dwellTotalPages - 2) page = dwellTotalPages - 4 + i;
-                      else page = dwellPage - 2 + i;
-                      return (
-                        <button key={page} onClick={() => setDwellPage(page)}
-                          className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
-                            page === dwellPage ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
-                          }`}>{page}</button>
-                      );
-                    })}
-                    <button onClick={() => setDwellPage(p => Math.min(dwellTotalPages, p + 1))} disabled={dwellPage === dwellTotalPages}
-                      className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">›</button>
-                    <button onClick={() => setDwellPage(dwellTotalPages)} disabled={dwellPage === dwellTotalPages}
-                      className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">»</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
 
       {activeTab === 'search' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
