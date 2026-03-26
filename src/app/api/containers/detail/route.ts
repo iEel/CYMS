@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     // Calculate dwell days — use gate_in_date from container, or gate transaction date, or created_at
     const dwellStart = container.gate_in_date || gateIn?.created_at || container.created_at;
     const dwellDays = dwellStart
-      ? Math.max(1, Math.ceil((Date.now() - new Date(dwellStart).getTime()) / (1000 * 60 * 60 * 24)))
+      ? Math.floor((Date.now() - new Date(dwellStart).getTime()) / 86400000)
       : 0;
 
     return NextResponse.json({
