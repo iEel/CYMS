@@ -28,6 +28,7 @@ const MODULE_LABELS: Record<string, { label: string; color: string }> = {
   customers:  { label: 'จัดการลูกค้า',      color: 'bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
   settings:    { label: 'ตั้งค่าระบบ',       color: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
   audit_trail: { label: 'ประวัติการใช้งาน',  color: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
+  reports:     { label: 'รายงาน',             color: 'bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
 };
 
 const ACTION_LABELS: Record<string, string> = {

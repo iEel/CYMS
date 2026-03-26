@@ -80,6 +80,10 @@ const PERMISSIONS = [
 
   // Audit Trail
   { module: 'audit_trail', action: 'read', description: 'ดูประวัติการใช้งาน (Audit Trail)' },
+
+  // Reports
+  { module: 'reports', action: 'read',   description: 'ดูรายงาน Container Dwell / M&R' },
+  { module: 'reports', action: 'create', description: 'สร้าง / Export รายงาน (Excel/PDF)' },
 ];
 
 // สิทธิ์เริ่มต้นตาม Role
@@ -99,6 +103,7 @@ const ROLE_PERMISSIONS = {
     'gate:read',
     'operations:read', 'operations:update',
     'mnr:create', 'mnr:read',
+    'reports:read',
   ],
   rs_driver: [
     'dashboard:read',
@@ -111,6 +116,7 @@ const ROLE_PERMISSIONS = {
     'mnr:create', 'mnr:read', 'mnr:update',
     'yard:read',
     'customers:create', 'customers:read', 'customers:update', 'customers:delete',
+    'reports:read', 'reports:create',
   ],
   customer: [
     'dashboard:read',
