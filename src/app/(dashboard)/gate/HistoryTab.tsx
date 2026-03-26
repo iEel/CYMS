@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { formatTime } from '@/lib/utils';
 import {
   Loader2, Search, History,
@@ -21,6 +21,7 @@ export default function HistoryTab({ yardId, onViewEIR }: HistoryTabProps) {
   const [historySearch, setHistorySearch] = useState<string>('');
   const [histPage, setHistPage] = useState(1);
   const histPerPage = 25;
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -37,6 +38,14 @@ export default function HistoryTab({ yardId, onViewEIR }: HistoryTabProps) {
   }, [yardId, historyDate, historySearch]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  // Auto-search with 400ms debounce on search text change
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => { fetchHistory(); }, 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historySearch]);
 
   const histTotalPages = Math.ceil(transactions.length / histPerPage);
   const histPaginated = transactions.slice((histPage - 1) * histPerPage, histPage * histPerPage);
@@ -58,7 +67,6 @@ export default function HistoryTab({ yardId, onViewEIR }: HistoryTabProps) {
               placeholder="ค้นหาเลขตู้, คนขับ, ทะเบียน, EIR..."
               value={historySearch}
               onChange={(e) => setHistorySearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && fetchHistory()}
               className="w-full h-10 pl-9 pr-4 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
                 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500"
             />
