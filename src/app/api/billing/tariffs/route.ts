@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // GET — ดึง Tariffs
 export async function GET(request: NextRequest) {
@@ -47,7 +48,11 @@ export async function POST(request: NextRequest) {
         VALUES (@yardId, @chargeType, @description, @rate, @unit, @freeDays, @customerId)
       `);
 
-    return NextResponse.json({ success: true, tariff: result.recordset[0] });
+    const tariff = result.recordset[0];
+
+    await logAudit({ yardId: body.yard_id, action: 'tariff_create', entityType: 'tariff', entityId: tariff.tariff_id, details: { charge_type: body.charge_type, rate: body.rate, description: body.description } });
+
+    return NextResponse.json({ success: true, tariff });
   } catch (error) {
     console.error('❌ POST tariff error:', error);
     return NextResponse.json({ error: 'ไม่สามารถสร้าง Tariff ได้' }, { status: 500 });
@@ -72,6 +77,8 @@ export async function PUT(request: NextRequest) {
         .input('description', sql.NVarChar, body.description)
         .query('UPDATE Tariffs SET rate = @rate, free_days = @freeDays, description = @description WHERE tariff_id = @tariffId');
     }
+
+    await logAudit({ action: body.action === 'delete' ? 'tariff_delete' : 'tariff_update', entityType: 'tariff', entityId: body.tariff_id, details: { rate: body.rate, free_days: body.free_days, action: body.action } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

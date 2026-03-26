@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // GET — ดึง Bookings (with progress counts)
 export async function GET(request: NextRequest) {
@@ -109,6 +110,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await logAudit({ yardId: body.yard_id, action: 'booking_create', entityType: 'booking', entityId: booking.booking_id, details: { booking_number: body.booking_number, booking_type: body.booking_type, container_count: body.container_count } });
+
     return NextResponse.json({ success: true, booking });
   } catch (error: unknown) {
     console.error('❌ POST booking error:', error);
@@ -143,6 +146,8 @@ export async function PUT(request: NextRequest) {
     if (sets.length === 0) return NextResponse.json({ error: 'ไม่มีข้อมูลที่ต้องอัปเดต' }, { status: 400 });
 
     await req.query(`UPDATE Bookings SET ${sets.join(', ')} WHERE booking_id = @bookingId`);
+
+    await logAudit({ action: 'booking_update', entityType: 'booking', entityId: body.booking_id, details: { status: body.status, vessel_name: body.vessel_name } });
 
     // Send email notification if status changed
     if (body.status && ['confirmed', 'completed', 'cancelled'].includes(body.status)) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { getRateLimitStats, clearRateLimitStores, invalidateRateLimitConfig } from '@/lib/rateLimit';
+import { logAudit } from '@/lib/audit';
 
 // GET — Get rate limit settings + stats
 export async function GET() {
@@ -51,6 +52,8 @@ export async function PUT(request: NextRequest) {
 
     invalidateRateLimitConfig();
 
+    await logAudit({ action: 'rate_limit_update', entityType: 'system_settings', details: { enabled: config.enabled, login_limit: config.login_limit, api_limit: config.api_limit } });
+
     return NextResponse.json({ success: true, config });
   } catch (error) {
     console.error('❌ PUT rate limit settings error:', error);
@@ -62,6 +65,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE() {
   try {
     clearRateLimitStores();
+    await logAudit({ action: 'rate_limit_clear', entityType: 'system_settings', details: { cleared: true } });
     return NextResponse.json({ success: true, message: 'ล้าง Rate Limit ทั้งหมดแล้ว' });
   } catch (error) {
     console.error('❌ DELETE rate limit error:', error);

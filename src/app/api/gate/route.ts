@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { z } from 'zod';
+import { logAudit } from '@/lib/audit';
 
 const gateBodySchema = z.object({
   transaction_type: z.enum(['gate_in', 'gate_out']),
@@ -534,20 +535,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Audit log
-    await db.request()
-      .input('yardId', sql.Int, yard_id)
-      .input('action', sql.NVarChar, transaction_type)
-      .input('entityType', sql.NVarChar, 'container')
-      .input('entityId', sql.Int, finalContainerId)
-      .input('details', sql.NVarChar, JSON.stringify({
+    await logAudit({
+      userId: user_id || null,
+      yardId: yard_id,
+      action: transaction_type,
+      entityType: 'container',
+      entityId: finalContainerId,
+      details: {
         eir_number: eirNumber, container_number, transaction_type,
         driver_name, truck_plate,
         ...(assignedLocation ? { assigned_location: assignedLocation } : {}),
-      }))
-      .query(`
-        INSERT INTO AuditLog (yard_id, action, entity_type, entity_id, details, created_at)
-        VALUES (@yardId, @action, @entityType, @entityId, @details, GETDATE())
-      `);
+      },
+    });
 
     // === Gate Email Notification with EIR PDF ===
     try {

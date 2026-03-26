@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { existsSync } from 'fs';
+import { logAudit } from '@/lib/audit';
 
 // POST — Upload photo (base64 → file)
 export async function POST(request: NextRequest) {
@@ -43,6 +44,8 @@ export async function POST(request: NextRequest) {
 
     // Return public URL path
     const urlPath = `/uploads/${folder}/${yearMonth}/${fileName}`;
+
+    await logAudit({ action: 'file_upload', entityType: 'upload', details: { folder, filename: fileName, size: buffer.length, url: urlPath } });
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/billing/demurrage?yard_id=X
@@ -178,7 +179,11 @@ export async function POST(request: NextRequest) {
         VALUES (@yardId, @customerId, @chargeType, @freeDays, @rate20, @rate40, @rate45, @description)
       `);
 
-    return NextResponse.json({ success: true, rate: result.recordset[0] });
+    const rate = result.recordset[0];
+
+    await logAudit({ yardId: body.yard_id, action: 'demurrage_create', entityType: 'demurrage_rate', entityId: rate.demurrage_id, details: { charge_type: body.charge_type, free_days: body.free_days, rate_20: body.rate_20, rate_40: body.rate_40 } });
+
+    return NextResponse.json({ success: true, rate });
   } catch (error) {
     console.error('❌ POST demurrage error:', error);
     return NextResponse.json({ error: 'ไม่สามารถบันทึกได้' }, { status: 500 });
@@ -208,6 +213,8 @@ export async function PUT(request: NextRequest) {
           WHERE demurrage_id = @id
         `);
     }
+
+    await logAudit({ action: body.action === 'delete' ? 'demurrage_delete' : 'demurrage_update', entityType: 'demurrage_rate', entityId: body.demurrage_id, details: { free_days: body.free_days, rate_20: body.rate_20, action: body.action } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

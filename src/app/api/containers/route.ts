@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { logAudit } from '@/lib/audit';
 
 // GET — ดึง containers ตาม yard_id + filter, หรือ check_position (conflict detection)
 export async function GET(request: NextRequest) {
@@ -104,7 +105,11 @@ export async function POST(request: NextRequest) {
           @bay, @row, @tier, @shippingLine, @isLaden, @sealNumber, @gateInDate)
       `);
 
-    return NextResponse.json({ success: true, data: result.recordset[0] });
+    const created = result.recordset[0];
+
+    await logAudit({ action: 'container_create', entityType: 'container', entityId: created.container_id, details: { container_number: body.container_number, size: body.size, type: body.type, yard_id: body.yard_id } });
+
+    return NextResponse.json({ success: true, data: created });
   } catch (error: unknown) {
     console.error('❌ POST container error:', error);
     const msg = error instanceof Error && error.message.includes('UNIQUE')
@@ -156,6 +161,8 @@ export async function PUT(request: NextRequest) {
     }
 
     await req.query(`UPDATE Containers SET ${setClauses.join(', ')} WHERE container_id = @containerId`);
+
+    await logAudit({ action: 'container_update', entityType: 'container', entityId: body.container_id, details: { status: body.status, zone_id: body.zone_id, bay: body.bay, row: body.row, tier: body.tier } });
 
     return NextResponse.json({ success: true });
   } catch (error) {
