@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useToast } from '@/components/providers/ToastProvider';
 import {
   Plus, Trash2, Save, Globe, CheckCircle2, Shield, Server, Loader2, Mail, Clock,
   FileText, GripVertical, Eye, EyeOff, ChevronDown, ChevronUp, Copy, Pencil,
@@ -84,6 +85,7 @@ const SAMPLE_DATA = {
 };
 
 export default function EDIConfiguration() {
+  const { toast } = useToast();
   const [endpoints, setEndpoints] = useState<EDIEndpoint[]>([]);
   const [templates, setTemplates] = useState<EDITemplate[]>([]);
   const [yards, setYards] = useState<{ yard_id: number; yard_name: string }[]>([]);
@@ -251,7 +253,7 @@ export default function EDIConfiguration() {
         const res = await fetch(`/api/edi/templates?template_id=${id}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.success) fetchTemplates();
-        else alert(data.error);
+        else toast('error', data.error);
       },
     });
   };

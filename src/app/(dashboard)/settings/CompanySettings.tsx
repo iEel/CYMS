@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useToast } from '@/components/providers/ToastProvider';
 import { Building2, Save, Loader2, CheckCircle, Upload, ImageIcon, X } from 'lucide-react';
 
 interface CompanyData {
@@ -21,6 +22,7 @@ const emptyCompany: CompanyData = {
 };
 
 export default function CompanySettings() {
+  const { toast } = useToast();
   const [data, setData] = useState<CompanyData>(emptyCompany);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,7 +95,7 @@ export default function CompanySettings() {
 
   const handleFileSelect = async (file: File) => {
     if (!file.type.startsWith('image/')) return;
-    if (file.size > 5 * 1024 * 1024) { alert('ไฟล์ใหญ่เกิน 5MB'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast('warning', 'ไฟล์ใหญ่เกิน 5MB'); return; }
 
     // Read as base64 first for preview
     const reader = new FileReader();

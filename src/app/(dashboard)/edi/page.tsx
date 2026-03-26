@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useToast } from '@/components/providers/ToastProvider';
 import {
   Loader2, Search, FileText, ShieldCheck,
   CheckCircle2, XCircle, AlertTriangle,
@@ -125,6 +126,7 @@ interface CodecoTx {
 }
 
 function CodecoOutbound({ yardId }: { yardId: number }) {
+  const { toast } = useToast();
   const today = new Date().toISOString().slice(0, 10);
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
@@ -326,7 +328,7 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
           <button key={dl.format} onClick={async () => {
             try {
               const res = await fetch(buildUrl(dl.format));
-              if (!res.ok) { const err = await res.json(); alert(err.error || 'Error'); return; }
+              if (!res.ok) { const err = await res.json(); toast('error', err.error || 'Error'); return; }
               let blob: Blob;
               if (dl.format === 'json') {
                 const data = await res.json();
@@ -340,7 +342,7 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
               a.download = `CODECO_${slFilter || 'ALL'}_${new Date().toISOString().split('T')[0]}.${dl.ext}`;
               a.click();
               URL.revokeObjectURL(url);
-            } catch { alert('ไม่สามารถดาวน์โหลดได้'); }
+            } catch { toast('error', 'ไม่สามารถดาวน์โหลดได้'); }
           }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
             <FileDown size={14} /> {dl.label}

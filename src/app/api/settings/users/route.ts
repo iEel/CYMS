@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
+import { getPasswordPolicy, validatePassword } from '@/lib/passwordPolicy';
 
 // GET — ดึงรายชื่อผู้ใช้ทั้งหมด
 export async function GET() {
@@ -11,7 +12,7 @@ export async function GET() {
     const result = await db.request().query(`
       SELECT u.user_id, u.username, u.full_name, u.email, u.phone,
              u.status, u.two_fa_enabled, u.bound_device_mac, u.created_at,
-             u.customer_id,
+             u.customer_id, u.failed_login_count, u.locked_at, u.password_changed_at,
              r.role_code, r.role_name,
              STRING_AGG(CAST(uya.yard_id AS VARCHAR), ',') as yard_ids
       FROM Users u
@@ -19,7 +20,7 @@ export async function GET() {
       LEFT JOIN UserYardAccess uya ON u.user_id = uya.user_id
       GROUP BY u.user_id, u.username, u.full_name, u.email, u.phone,
                u.status, u.two_fa_enabled, u.bound_device_mac, u.created_at,
-               u.customer_id,
+               u.customer_id, u.failed_login_count, u.locked_at, u.password_changed_at,
                r.role_code, r.role_name
       ORDER BY u.user_id
     `);
@@ -35,6 +36,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+
+    // Password validation
+    const policy = await getPasswordPolicy();
+    const validation = validatePassword(body.password, policy);
+    if (!validation.valid) {
+      return NextResponse.json({ error: 'รหัสผ่านไม่ผ่านเกณฑ์', password_errors: validation.errors }, { status: 400 });
+    }
 
     // Hash password
     const salt = await bcrypt.genSalt(10);
@@ -60,9 +68,9 @@ export async function POST(request: NextRequest) {
       .input('phone', sql.NVarChar, body.phone || null)
       .input('customerId', sql.Int, body.role_code === 'customer' && body.customer_id ? body.customer_id : null)
       .query(`
-        INSERT INTO Users (username, password_hash, full_name, role_id, email, phone, customer_id)
+        INSERT INTO Users (username, password_hash, full_name, role_id, email, phone, customer_id, password_changed_at)
         OUTPUT INSERTED.user_id
-        VALUES (@username, @passwordHash, @fullName, @roleId, @email, @phone, @customerId)
+        VALUES (@username, @passwordHash, @fullName, @roleId, @email, @phone, @customerId, GETDATE())
       `);
 
     const userId = insertResult.recordset[0].user_id;
@@ -93,6 +101,15 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const db = await getDb();
 
+    // Action: unlock user
+    if (body.action === 'unlock' && body.user_id) {
+      await db.request()
+        .input('userId', sql.Int, body.user_id)
+        .query(`UPDATE Users SET failed_login_count = 0, locked_at = NULL, updated_at = GETDATE() WHERE user_id = @userId`);
+      await logAudit({ userId: body.updated_by, action: 'account_unlock', entityType: 'user', entityId: body.user_id, details: { unlocked_user_id: body.user_id } });
+      return NextResponse.json({ success: true, message: 'ปลดล็อคบัญชีเรียบร้อย' });
+    }
+
     // หา role_id
     const roleResult = await db.request()
       .input('roleCode', sql.NVarChar, body.role_code)
@@ -121,9 +138,15 @@ export async function PUT(request: NextRequest) {
 
     // อัปเดต password ถ้ามีเปลี่ยน
     if (body.password) {
+      // Password validation
+      const policy = await getPasswordPolicy();
+      const validation = validatePassword(body.password, policy);
+      if (!validation.valid) {
+        return NextResponse.json({ error: 'รหัสผ่านไม่ผ่านเกณฑ์', password_errors: validation.errors }, { status: 400 });
+      }
       const salt = await bcrypt.genSalt(10);
       const hash = await bcrypt.hash(body.password, salt);
-      query += `, password_hash = @passwordHash`;
+      query += `, password_hash = @passwordHash, password_changed_at = GETDATE()`;
       req.input('passwordHash', sql.NVarChar, hash);
     }
 

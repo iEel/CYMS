@@ -47,27 +47,34 @@ export async function POST(request: NextRequest) {
       .query(`
         UPDATE Containers SET
           status = 'in_transit',
-          zone_id = NULL, bay = NULL, row_pos = NULL, tier = NULL,
+          zone_id = NULL, bay = NULL, [row] = NULL, tier = NULL,
           updated_at = GETDATE()
         WHERE container_id = @containerId
       `);
 
-    // 2. Create gate-out transaction from source yard
+    // 2. Create gate-out transaction from source yard (store to_yard_id in structured notes)
+    const transferMeta = JSON.stringify({
+      transfer_to_yard: to_yard_id,
+      user_notes: notes || '',
+    });
+
     await db.request()
       .input('containerId', sql.Int, container_id)
       .input('fromYard', sql.Int, from_yard_id)
+      .input('toYard', sql.Int, to_yard_id)
       .input('transType', sql.NVarChar, 'transfer')
       .input('driverName', sql.NVarChar, driver_name || '')
       .input('truckPlate', sql.NVarChar, truck_plate || '')
       .input('eirNumber', sql.NVarChar, transferNum)
-      .input('notes', sql.NVarChar, notes || JSON.stringify({ transfer_to_yard: to_yard_id }))
+      .input('notes', sql.NVarChar, transferMeta)
       .query(`
-        INSERT INTO GateTransactions (container_id, yard_id, transaction_type, driver_name, truck_plate, eir_number, notes)
-        VALUES (@containerId, @fromYard, @transType, @driverName, @truckPlate, @eirNumber, @notes)
+        INSERT INTO GateTransactions (container_id, yard_id, transaction_type, driver_name, truck_plate, eir_number, notes, to_yard_id)
+        VALUES (@containerId, @fromYard, @transType, @driverName, @truckPlate, @eirNumber, @notes, @toYard)
       `);
 
-    // 3. Audit log
+    // 3. Audit log (including user_id)
     await db.request()
+      .input('userId', sql.Int, body.user_id || null)
       .input('fromYard', sql.Int, from_yard_id)
       .input('containerId', sql.Int, container_id)
       .input('details', sql.NVarChar, JSON.stringify({
@@ -78,8 +85,8 @@ export async function POST(request: NextRequest) {
         transfer_number: transferNum,
       }))
       .query(`
-        INSERT INTO AuditLog (yard_id, action, entity_type, entity_id, details, created_at)
-        VALUES (@fromYard, 'transfer_out', 'container', @containerId, @details, GETDATE())
+        INSERT INTO AuditLog (user_id, yard_id, action, entity_type, entity_id, details, created_at)
+        VALUES (@userId, @fromYard, 'transfer_out', 'container', @containerId, @details, GETDATE())
       `);
 
     return NextResponse.json({

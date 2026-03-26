@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useToast } from '@/components/providers/ToastProvider';
 import {
   Plus, Trash2, Save, Users, Pencil, X, CheckCircle2, Loader2,
   Building, Truck, Ship, Search,
@@ -36,6 +37,7 @@ const emptyForm = {
 };
 
 export default function CustomerMaster() {
+  const { toast } = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,7 +76,7 @@ export default function CustomerMaster() {
         setForm(emptyForm);
         fetchData();
       } else {
-        alert(json.error || 'Error');
+        toast('error', json.error || 'Error');
       }
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
@@ -109,7 +111,7 @@ export default function CustomerMaster() {
           const res = await fetch(`/api/settings/customers?customer_id=${id}`, { method: 'DELETE' });
           const json = await res.json();
           if (json.success) fetchData();
-          else alert(json.error || 'Error');
+          else toast('error', json.error || 'Error');
         } catch (err) { console.error(err); }
       },
     });

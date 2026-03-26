@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useToast } from '@/components/providers/ToastProvider';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import {
   Loader2, Calculator, Receipt, CreditCard, FileText, Plus, Search,
@@ -38,6 +39,7 @@ const UNIT_LABELS: Record<string, string> = {
 
 export default function BillingPage() {
   const { session } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'invoices' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging'>('invoices');
 
   // Credit Note Modal
@@ -121,7 +123,7 @@ export default function BillingPage() {
       body: JSON.stringify({ invoice_id: id, action }),
     });
     const data = await res.json();
-    if (data.error) { alert(data.error); }
+    if (data.error) { toast('error', data.error); }
     fetchInvoices();
   };
 
@@ -683,7 +685,7 @@ export default function BillingPage() {
                 const res = await fetch(url);
                 const data = await res.json();
                 // Show summary alert
-                alert(`ERP Export สำเร็จ\n\nรายการ: ${data.total_entries}\nDebit: ฿${data.total_debit?.toLocaleString()}\nCredit: ฿${data.total_credit?.toLocaleString()}`);
+                toast('success', 'ERP Export สำเร็จ', `รายการ: ${data.total_entries} | Debit: ฿${data.total_debit?.toLocaleString()} | Credit: ฿${data.total_credit?.toLocaleString()}`);
               }} className="flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
                 <Search size={16} /> ดูตัวอย่าง JSON
               </button>

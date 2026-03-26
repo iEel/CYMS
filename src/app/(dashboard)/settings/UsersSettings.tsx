@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building, Trash2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useToast } from '@/components/providers/ToastProvider';
+import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building, Trash2, Search, ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
+import { getPasswordStrength } from '@/lib/passwordStrength';
 import PermissionsMatrix from './PermissionsMatrix';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -16,6 +18,8 @@ interface UserData {
   role_name: string;
   yard_ids: string; // comma separated
   customer_id?: number;
+  failed_login_count?: number;
+  locked_at?: string;
 }
 
 interface CustomerOption {
@@ -46,6 +50,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 };
 
 export default function UsersSettings() {
+  const { toast } = useToast();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -134,7 +139,7 @@ export default function UsersSettings() {
         setShowForm(false);
         fetchUsers();
       } else {
-        alert(json.error || 'เกิดข้อผิดพลาด');
+        toast('error', json.error || 'เกิดข้อผิดพลาด');
       }
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
@@ -150,8 +155,8 @@ export default function UsersSettings() {
           const res = await fetch(`/api/settings/users?user_id=${user.user_id}`, { method: 'DELETE' });
           const json = await res.json();
           if (json.success) fetchUsers();
-          else alert(json.error || 'เกิดข้อผิดพลาด');
-        } catch { alert('ไม่สามารถลบผู้ใช้ได้'); }
+          else toast('error', json.error || 'เกิดข้อผิดพลาด');
+        } catch { toast('error', 'ไม่สามารถลบผู้ใช้ได้'); }
       },
     });
   };
@@ -223,6 +228,21 @@ export default function UsersSettings() {
                   <input type="password" value={form.password}
                     onChange={e => setForm({...form, password: e.target.value})} placeholder={editingUser ? 'เว้นว่างถ้าไม่เปลี่ยน' : '••••••••'}
                     className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                  {/* Password Strength Meter */}
+                  {form.password && (() => {
+                    const strength = getPasswordStrength(form.password);
+                    return (
+                      <div className="mt-2">
+                        <div className="flex gap-1">
+                          {[0,1,2,3].map(i => (
+                            <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${i < strength.score ? '' : 'bg-slate-200 dark:bg-slate-600'}`}
+                              style={{ backgroundColor: i < strength.score ? strength.color : undefined }} />
+                          ))}
+                        </div>
+                        <p className="text-[10px] mt-0.5 font-medium" style={{ color: strength.color }}>{strength.label}</p>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -431,12 +451,42 @@ export default function UsersSettings() {
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className={`inline-flex px-2.5 py-0.5 rounded-lg text-xs font-medium ${st.color}`}>
-                        {st.label}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-lg text-xs font-medium ${st.color}`}>
+                          {st.label}
+                        </span>
+                        {user.locked_at && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400">
+                            <Lock size={9} /> ถูกล็อค
+                          </span>
+                        )}
+                        {!user.locked_at && (user.failed_login_count || 0) > 0 && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+                            ⚠️ {user.failed_login_count}x
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {user.locked_at && (
+                          <button onClick={async () => {
+                            try {
+                              const res = await fetch('/api/settings/users', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'unlock', user_id: user.user_id }),
+                              });
+                              const json = await res.json();
+                              if (json.success) { toast('success', `ปลดล็อค ${user.username} เรียบร้อย`); fetchUsers(); }
+                              else toast('error', json.error || 'ไม่สามารถปลดล็อคได้');
+                            } catch { toast('error', 'เกิดข้อผิดพลาด'); }
+                          }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                              text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all">
+                            <Unlock size={13} /> ปลดล็อค
+                          </button>
+                        )}
                         <button onClick={() => openEdit(user)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                             text-slate-500 hover:text-[#8B5CF6] hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all">

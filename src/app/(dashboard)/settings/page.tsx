@@ -27,6 +27,7 @@ import PrefixMapping from './PrefixMapping';
 import RateLimitSettings from './RateLimitSettings';
 import EmailSettingsTab from './EmailSettings';
 import PhotoRetentionSettings from './PhotoRetentionSettings';
+import SecuritySettings from './SecuritySettings';
 
 const tabs = [
   { id: 'company', label: 'องค์กร', icon: <Building2 size={18} />, color: '#3B82F6' },
@@ -38,6 +39,7 @@ const tabs = [
   { id: 'allocation', label: 'จัดตู้', icon: <Layers size={18} />, color: '#10B981' },
   { id: 'prefix', label: 'Prefix', icon: <Link size={18} />, color: '#06B6D4' },
   { id: 'ratelimit', label: 'Rate Limit', icon: <Shield size={18} />, color: '#F59E0B' },
+  { id: 'security', label: 'ความปลอดภัย', icon: <Lock size={18} />, color: '#EF4444' },
   { id: 'email', label: 'Email', icon: <Mail size={18} />, color: '#3B82F6' },
   { id: 'photos', label: 'รูปภาพ', icon: <Image size={18} />, color: '#6366F1' },
 ];
@@ -87,6 +89,7 @@ export default function SettingsPage() {
         {activeTab === 'allocation' && <AutoAllocationRules />}
         {activeTab === 'prefix' && <PrefixMapping />}
         {activeTab === 'ratelimit' && <RateLimitSettings />}
+        {activeTab === 'security' && <SecuritySettings />}
         {activeTab === 'email' && <EmailSettingsTab />}
         {activeTab === 'photos' && <PhotoRetentionSettings />}
       </div>

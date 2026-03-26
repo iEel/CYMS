@@ -104,6 +104,9 @@ CREATE TABLE Users (
     status          NVARCHAR(20) DEFAULT 'active',  -- 'active','suspend','resign'
     two_fa_enabled  BIT DEFAULT 0,
     bound_device_mac NVARCHAR(50),     -- Device Binding สำหรับคนขับรถยก
+    failed_login_count INT DEFAULT 0,  -- จำนวน login ผิดติดต่อกัน
+    locked_at       DATETIME2 NULL,    -- เวลาที่ถูกล็อค (NULL = ไม่ถูกล็อค)
+    password_changed_at DATETIME2 NULL,-- เวลาเปลี่ยนรหัสผ่านล่าสุด
     created_at      DATETIME2 DEFAULT GETDATE(),
     updated_at      DATETIME2 DEFAULT GETDATE()
 );
@@ -212,6 +215,7 @@ CREATE TABLE GateTransactions (
     notes           NVARCHAR(500),
     damage_report   NVARCHAR(MAX),              -- JSON damage data
     processed_by    INT REFERENCES Users(user_id),
+    to_yard_id      INT REFERENCES Yards(yard_id),  -- ลานปลายทาง (สำหรับ transfer)
     created_at      DATETIME2 DEFAULT GETDATE()
 );
 

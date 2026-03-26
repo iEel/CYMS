@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useToast } from '@/components/providers/ToastProvider';
 import {
   Plus, Trash2, Search, Loader2, Link, X, AlertTriangle,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ interface Customer {
 }
 
 export default function PrefixMapping() {
+  const { toast } = useToast();
   const [mappings, setMappings] = useState<PrefixMap[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ export default function PrefixMapping() {
         setForm({ prefix_code: '', customer_id: '', notes: '' });
         fetchData();
       } else {
-        alert(data.error || 'Error');
+        toast('error', data.error || 'Error');
       }
     } catch (err) { console.error(err); }
     finally { setSaving(false); }

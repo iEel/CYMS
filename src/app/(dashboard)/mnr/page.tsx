@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useToast } from '@/components/providers/ToastProvider';
 import {
   Loader2, Search, Wrench, FileCheck2, Plus, Package, CheckCircle2,
   XCircle, Clock, AlertTriangle, RotateCcw, Send, ThumbsUp, Play,
@@ -34,6 +35,7 @@ interface CedexCode {
 
 export default function MnRPage() {
   const { session } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'cedex'>('list');
   const yardId = session?.activeYardId || 1;
 
@@ -158,7 +160,7 @@ export default function MnRPage() {
         setCedexForm({ code: '', component: '', damage: '', repair: '', labor_hours: 0, material_cost: 0 });
         fetchCedexCodes();
       } else {
-        alert(data.error || 'เกิดข้อผิดพลาด');
+        toast('error', data.error || 'เกิดข้อผิดพลาด');
       }
     } catch (err) { console.error(err); }
     finally { setCedexSaving(false); }

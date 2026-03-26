@@ -10,6 +10,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [lockoutMinutes, setLockoutMinutes] = useState(0);
+  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
@@ -17,6 +19,8 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLockoutMinutes(0);
+    setRemainingAttempts(null);
     
     if (!username.trim() || !password.trim()) {
       setError('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
@@ -31,6 +35,13 @@ export default function LoginPage() {
       const session = JSON.parse(localStorage.getItem('cyms_session') || '{}');
       router.push(session.role === 'customer' ? '/portal' : '/dashboard');
     } else {
+      // Parse lockout / remaining attempts info from error response
+      if (result.remaining_minutes) {
+        setLockoutMinutes(result.remaining_minutes);
+      }
+      if (typeof result.remaining_attempts === 'number') {
+        setRemainingAttempts(result.remaining_attempts);
+      }
       setError(result.error || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
       setIsLoggingIn(false);
     }
@@ -79,9 +90,25 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Error Message */}
             {error && (
-              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm animate-[fadeIn_0.2s_ease]">
-                <AlertCircle size={16} className="flex-shrink-0" />
-                {error}
+              <div className={`flex items-start gap-2 px-4 py-3 rounded-xl border text-sm animate-[fadeIn_0.2s_ease] ${
+                lockoutMinutes > 0
+                  ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                  : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+              }`}>
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <div>
+                  <p>{error}</p>
+                  {lockoutMinutes > 0 && (
+                    <p className="text-xs mt-1 opacity-80">
+                      🕐 กรุณารอ {lockoutMinutes} นาที หรือติดต่อผู้ดูแลระบบเพื่อปลดล็อค
+                    </p>
+                  )}
+                  {remainingAttempts !== null && remainingAttempts > 0 && remainingAttempts <= 3 && (
+                    <p className="text-xs mt-1 text-amber-400">
+                      ⚠️ เหลือโอกาสอีก {remainingAttempts} ครั้งก่อนบัญชีถูกล็อค
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 

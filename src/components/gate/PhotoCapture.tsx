@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import { useToast } from '@/components/providers/ToastProvider';
 import { Camera, Upload, X, Loader2 } from 'lucide-react';
 
 interface PhotoCaptureProps {
@@ -23,6 +24,7 @@ async function uploadPhoto(dataUrl: string, folder: string): Promise<string> {
 }
 
 export default function PhotoCapture({ label, required, onCapture, value, folder = 'photos' }: PhotoCaptureProps) {
+  const { toast } = useToast();
   const [preview, setPreview] = useState<string>(value || '');
   const [streaming, setStreaming] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -43,7 +45,7 @@ export default function PhotoCapture({ label, required, onCapture, value, folder
         setStreaming(true);
       }
     } catch {
-      alert('ไม่สามารถเปิดกล้องได้');
+      toast('error', 'ไม่สามารถเปิดกล้องได้');
     }
   }, []);
 

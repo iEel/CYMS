@@ -6,7 +6,7 @@ import type { AuthSession } from '@/types';
 interface AuthContextType {
   session: AuthSession | null;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string; locked?: boolean; remaining_minutes?: number; remaining_attempts?: number }>;
   logout: () => void;
   switchYard: (yardId: number) => void;
 }
@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = useCallback(async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = useCallback(async (username: string, password: string): Promise<{ success: boolean; error?: string; locked?: boolean; remaining_minutes?: number; remaining_attempts?: number }> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -46,7 +46,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        return { success: false, error: data.error || 'เกิดข้อผิดพลาด' };
+        return {
+          success: false,
+          error: data.error || 'เกิดข้อผิดพลาด',
+          locked: data.locked,
+          remaining_minutes: data.remaining_minutes,
+          remaining_attempts: data.remaining_attempts,
+        };
       }
 
       setSession(data.session);

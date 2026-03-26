@@ -45,42 +45,50 @@ export async function POST(request: NextRequest) {
     const driverName = transferTx.recordset[0]?.driver_name || '';
     const truckPlate = transferTx.recordset[0]?.truck_plate || '';
 
-    // 3. Auto-allocate position if zone_id not provided
-    let assignedZone = zone_id || null;
-    let assignedBay = null, assignedRow = null, assignedTier = null;
+    // 3. Smart auto-allocate position (same logic as Gate-In)
+    const { autoAllocate } = await import('@/lib/autoAllocate');
+    let assignedZone: number | null = zone_id || null;
+    let assignedBay: number | null = null;
+    let assignedRow: number | null = null;
+    let assignedTier: number | null = null;
     let zoneName = '';
 
     if (!assignedZone) {
-      // Find first available zone in destination yard
-      const zoneResult = await db.request()
-        .input('yardId', sql.Int, yard_id)
-        .query(`
-          SELECT TOP 1 z.zone_id, z.zone_name
-          FROM Zones z
-          WHERE z.yard_id = @yardId
-          ORDER BY z.zone_id
-        `);
-      if (zoneResult.recordset.length > 0) {
-        assignedZone = zoneResult.recordset[0].zone_id;
-        zoneName = zoneResult.recordset[0].zone_name;
+      const allocation = await autoAllocate(
+        db,
+        yard_id,
+        container.size || '20',
+        container.type || 'GP',
+        container.shipping_line || undefined,
+        false // laden status unknown for transfer
+      );
+      if (allocation) {
+        assignedZone = allocation.zone_id;
+        assignedBay = allocation.bay;
+        assignedRow = allocation.row;
+        assignedTier = allocation.tier;
+        zoneName = allocation.zone_name;
       }
-    }
+    } else {
+      // Zone specified — find next slot in that zone
+      const zoneResult = await db.request()
+        .input('zoneId', sql.Int, assignedZone)
+        .query(`SELECT zone_name FROM YardZones WHERE zone_id = @zoneId`);
+      zoneName = zoneResult.recordset[0]?.zone_name || '';
 
-    if (assignedZone) {
-      // Find next available slot
       const slotResult = await db.request()
         .input('zoneId', sql.Int, assignedZone)
         .query(`
-          SELECT TOP 1 bay, row_pos, tier + 1 as next_tier
+          SELECT TOP 1 bay, [row], tier + 1 as next_tier
           FROM Containers
           WHERE zone_id = @zoneId AND status = 'in_yard'
-          GROUP BY bay, row_pos, tier
-          ORDER BY bay, row_pos, tier
+          GROUP BY bay, [row], tier
+          ORDER BY bay, [row], tier
         `);
 
       if (slotResult.recordset.length > 0) {
         assignedBay = slotResult.recordset[0].bay;
-        assignedRow = slotResult.recordset[0].row_pos;
+        assignedRow = slotResult.recordset[0].row;
         assignedTier = slotResult.recordset[0].next_tier;
       } else {
         assignedBay = 1;
@@ -103,7 +111,7 @@ export async function POST(request: NextRequest) {
           yard_id = @yardId,
           zone_id = @zoneId,
           bay = @bay,
-          row_pos = @row,
+          [row] = @row,
           tier = @tier,
           updated_at = GETDATE()
         WHERE container_id = @containerId
@@ -172,30 +180,32 @@ export async function GET(request: NextRequest) {
     const yardId = searchParams.get('yard_id');
 
     const db = await getDb();
+    const req = db.request();
 
-    // Find containers that are in_transit with a transfer transaction pointing to this yard
-    const result = await db.request()
-      .query(`
-        SELECT c.container_id, c.container_number, c.size, c.type, c.shipping_line,
-               g.driver_name, g.truck_plate, g.eir_number as transfer_number,
-               g.created_at as transfer_date, g.notes,
-               g.yard_id as from_yard_id,
-               y.yard_name as from_yard_name
-        FROM Containers c
-        INNER JOIN GateTransactions g ON c.container_id = g.container_id AND g.transaction_type = 'transfer'
-        LEFT JOIN Yards y ON g.yard_id = y.yard_id
-        WHERE c.status = 'in_transit'
-          AND g.transaction_id = (
-            SELECT MAX(g2.transaction_id) FROM GateTransactions g2
-            WHERE g2.container_id = c.container_id AND g2.transaction_type = 'transfer'
-          )
-        ${yardId ? 'AND CHARINDEX(@yardId, g.notes) > 0' : ''}
-        ORDER BY g.created_at DESC
-      `);
-
+    // Filter by destination yard using to_yard_id column
+    let yardFilter = '';
     if (yardId) {
-      // Re-query with yard_id filter in the notes (notes contains "Transfer to yard X")
+      yardFilter = 'AND g.to_yard_id = @toYardId';
+      req.input('toYardId', sql.Int, parseInt(yardId));
     }
+
+    const result = await req.query(`
+      SELECT c.container_id, c.container_number, c.size, c.type, c.shipping_line,
+             g.driver_name, g.truck_plate, g.eir_number as transfer_number,
+             g.created_at as transfer_date, g.notes,
+             g.yard_id as from_yard_id, g.to_yard_id,
+             y.yard_name as from_yard_name
+      FROM Containers c
+      INNER JOIN GateTransactions g ON c.container_id = g.container_id AND g.transaction_type = 'transfer'
+      LEFT JOIN Yards y ON g.yard_id = y.yard_id
+      WHERE c.status = 'in_transit'
+        AND g.transaction_id = (
+          SELECT MAX(g2.transaction_id) FROM GateTransactions g2
+          WHERE g2.container_id = c.container_id AND g2.transaction_type = 'transfer'
+        )
+        ${yardFilter}
+      ORDER BY g.created_at DESC
+    `);
 
     return NextResponse.json({ containers: result.recordset });
   } catch (error) {
