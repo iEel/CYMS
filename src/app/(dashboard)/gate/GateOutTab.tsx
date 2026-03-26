@@ -4,9 +4,10 @@ import { useState } from 'react';
 import {
   Loader2, Search, CheckCircle2, Truck,
   Package, User, FileText, X,
-  ArrowUpFromLine, AlertTriangle,
+  ArrowUpFromLine, AlertTriangle, ScanLine,
 } from 'lucide-react';
 import PhotoCapture from '@/components/gate/PhotoCapture';
+import CameraOCR from '@/components/gate/CameraOCR';
 import { BillingCharge, BillingData, ContainerResult, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 
 interface GateOutTabProps {
@@ -31,6 +32,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [gateOutPhotos, setGateOutPhotos] = useState<string[]>([]);
   const [gateOutPhase, setGateOutPhase] = useState<'search' | 'pending_pickup' | 'confirm_release'>('search');
   const [releaseLoading, setReleaseLoading] = useState(false);
+  const [showOCR, setShowOCR] = useState<'plate' | 'seal' | null>(null);
 
   // Billing
   const [billingData, setBillingData] = useState<BillingData | null>(null);
@@ -564,11 +566,21 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                     </div>
                     <div>
                       <label className={labelClass}>ทะเบียนรถ</label>
-                      <input type="text" value={gateOutForm.truck_plate} onChange={e => setGateOutForm({ ...gateOutForm, truck_plate: e.target.value })} className={inputClass} placeholder="1กก 1234" />
+                      <div className="flex gap-1">
+                        <input type="text" value={gateOutForm.truck_plate} onChange={e => setGateOutForm({ ...gateOutForm, truck_plate: e.target.value })} className={`${inputClass} flex-1`} placeholder="1กก 1234" />
+                        <button onClick={() => setShowOCR('plate')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 border border-blue-200 dark:border-blue-800" title="สแกนทะเบียน">
+                          <ScanLine size={14} />
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className={labelClass}>เลขซีล</label>
-                      <input type="text" value={gateOutForm.seal_number} onChange={e => setGateOutForm({ ...gateOutForm, seal_number: e.target.value })} className={`${inputClass} font-mono`} placeholder="SEAL123456" />
+                      <div className="flex gap-1">
+                        <input type="text" value={gateOutForm.seal_number} onChange={e => setGateOutForm({ ...gateOutForm, seal_number: e.target.value })} className={`${inputClass} font-mono flex-1`} placeholder="SEAL123456" />
+                        <button onClick={() => setShowOCR('seal')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 border border-blue-200 dark:border-blue-800" title="สแกนซีล">
+                          <ScanLine size={14} />
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className={labelClass}>Booking Ref</label>
@@ -676,6 +688,20 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           </div>
         )}
       </div>
+
+      {/* OCR Modal */}
+      {showOCR && (
+        <CameraOCR
+          label={showOCR === 'plate' ? 'สแกนทะเบียนรถ' : 'สแกนเลขซีล'}
+          mode={showOCR === 'plate' ? 'plate' : 'seal'}
+          onResult={(text) => {
+            if (showOCR === 'plate') setGateOutForm(f => ({ ...f, truck_plate: text }));
+            else setGateOutForm(f => ({ ...f, seal_number: text }));
+            setShowOCR(null);
+          }}
+          onClose={() => setShowOCR(null)}
+        />
+      )}
     </div>
   );
 }

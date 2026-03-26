@@ -705,10 +705,10 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         </div>
       </div>
 
-      {/* OCR Modal */}
       {showOCR && (
         <CameraOCR
           label={showOCR === 'container' ? 'สแกนเลขตู้' : showOCR === 'plate' ? 'สแกนทะเบียนรถ' : 'สแกนเลขซีล'}
+          mode={showOCR === 'container' ? 'container' : showOCR === 'plate' ? 'plate' : 'seal'}
           onResult={handleOCRResult}
           onClose={() => setShowOCR(null)}
         />

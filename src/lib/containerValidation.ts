@@ -108,11 +108,95 @@ export function validateContainerNumber(containerNo: string): ValidationResult {
 }
 
 /**
- * Parse ISO size/type code (group_st) to size and type
- * e.g. "22G1" → { size: "20", type: "GP" }
- *      "42G1" → { size: "40", type: "GP" }
- *      "45R1" → { size: "40", type: "RF" }
+ * Extract a container number from raw OCR text.
+ * Handles OCR noise like spaces, hyphens, O/0 confusion, I/1 confusion.
+ * Returns the best candidate or null.
  */
+export function extractContainerNumber(rawText: string): { value: string; confidence: 'high' | 'medium' | 'low' } | null {
+  if (!rawText) return null;
+
+  // Normalize: uppercase, collapse whitespace
+  const text = rawText.toUpperCase().replace(/\s+/g, ' ').trim();
+
+  // Strategy 1: Direct regex match — ISO 6346 pattern
+  // Pattern: 3 letters + U/J/Z + 6 digits + 1 digit
+  const directMatch = text.match(/\b([A-Z]{3}[UJZ])\s*[-]?\s*(\d{6})\s*[-]?\s*(\d)\b/);
+  if (directMatch) {
+    const candidate = `${directMatch[1]}${directMatch[2]}${directMatch[3]}`;
+    if (candidate.length === 11) {
+      const validation = validateContainerNumber(candidate);
+      if (validation.valid) return { value: candidate, confidence: 'high' };
+    }
+  }
+
+  // Strategy 2: OCR noise correction — O↔0, I↔1, S↔5, B↔8, G↔6
+  const corrected = text
+    .replace(/\bO(\d)/g, '0$1') // O before digit → 0
+    .replace(/([A-Z]{4})\s*I(\d)/g, '$1 1$2') // I after 4 letters → 1
+    .replace(/([A-Z]{3}[UJZ]\d{6})S\b/g, '$15') // trailing S → 5
+    .replace(/([A-Z]{3}[UJZ]\d{6})B\b/g, '$18');
+
+  // Look for all 11-char sequences that could be container numbers
+  const candidates: string[] = [];
+  
+  // Remove all non-alphanumeric except spaces
+  const cleaned = corrected.replace(/[^A-Z0-9 ]/g, ' ');
+  
+  // Find any word that looks like a container prefix (4 letters with U/J/Z as 4th)
+  const prefixMatches = cleaned.match(/[A-Z]{3}[UJZ]/g) || [];
+  
+  for (const prefix of prefixMatches) {
+    const prefixIdx = cleaned.indexOf(prefix);
+    const after = cleaned.substring(prefixIdx + 4).replace(/\s/g, '');
+    const digits = after.match(/^\d{7}/);
+    if (digits) {
+      candidates.push(`${prefix}${digits[0]}`);
+    }
+  }
+
+  for (const candidate of candidates) {
+    const validation = validateContainerNumber(candidate);
+    if (validation.valid) return { value: candidate, confidence: 'high' };
+  }
+
+  // Strategy 3: Fuzzy — try check digit correction
+  for (const candidate of candidates) {
+    if (candidate.length === 11) {
+      const first10 = candidate.substring(0, 10);
+      const expectedCheck = calculateCheckDigit(first10);
+      if (expectedCheck >= 0) {
+        const fixed = `${first10}${expectedCheck}`;
+        return { value: fixed, confidence: 'medium' };
+      }
+    }
+  }
+
+  // Strategy 4: Closest 11-char alphanumeric sequence (low confidence)
+  const words = cleaned.split(/\s+/).filter(w => w.length >= 8);
+  for (const word of words) {
+    if (/^[A-Z]{3}[UJZ]\d/.test(word)) {
+      const padded = `${word.substring(0, 10).padEnd(10, '0')}0`;
+      const expectedCheck = calculateCheckDigit(padded.substring(0, 10));
+      if (expectedCheck >= 0) {
+        return { value: `${padded.substring(0, 10)}${expectedCheck}`, confidence: 'low' };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract a Thai license plate from OCR text.
+ * Formats like: 1กก 1234, กข 1234, 1กข-1234
+ */
+export function extractTruckPlate(rawText: string): string {
+  if (!rawText) return '';
+  const text = rawText.trim().replace(/\s+/g, ' ');
+  // Just return cleaned upper-case — plates are hard to regex reliably across regions
+  return text.replace(/[^ก-ฮA-Z0-9\s-]/g, '').trim().substring(0, 20);
+}
+
 export function parseSizeTypeCode(groupSt: string): { size: string; type: string } | null {
   if (!groupSt || groupSt.length < 2) return null;
   
