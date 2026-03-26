@@ -93,6 +93,8 @@ export default function YardPage() {
   const [selectedContainer, setSelectedContainer] = useState<ContainerData | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'dwell' | 'search' | 'allocate' | 'audit'>('overview');
   const [dwellThreshold, setDwellThreshold] = useState(7);
+  const [dwellPage, setDwellPage] = useState(1);
+  const dwellPerPage = 20;
   const [highlightNumber, setHighlightNumber] = useState<string>('');
   const [detailContainerId, setDetailContainerId] = useState<number | null>(null);
   const [timelineId, setTimelineId] = useState<number | null>(null);
@@ -523,6 +525,8 @@ export default function YardPage() {
           ? (dwellContainers.reduce((s, c) => s + c.days, 0) / dwellContainers.length).toFixed(1)
           : '0';
         const filtered30 = dwellContainers.filter(c => c.days >= dwellThreshold);
+        const dwellTotalPages = Math.max(1, Math.ceil(filtered30.length / dwellPerPage));
+        const dwellPaginated = filtered30.slice((dwellPage - 1) * dwellPerPage, dwellPage * dwellPerPage);
 
         return (
           <div className="space-y-4">
@@ -555,7 +559,7 @@ export default function YardPage() {
               <span className="text-sm text-slate-500">แสดงตู้ที่อยู่ในลานเกิน:</span>
               <div className="flex gap-2">
                 {[3, 7, 14, 30].map(d => (
-                  <button key={d} onClick={() => setDwellThreshold(d)}
+                  <button key={d} onClick={() => { setDwellThreshold(d); setDwellPage(1); }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       dwellThreshold === d ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-slate-700'
                     }`}>
@@ -584,7 +588,7 @@ export default function YardPage() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {filtered30.length === 0 ? (
                       <tr><td colSpan={7} className="p-8 text-center text-slate-400 text-sm">ไม่มีตู้ที่อยู่นานเกิน {dwellThreshold} วัน</td></tr>
-                    ) : filtered30.map(c => {
+                    ) : dwellPaginated.map(c => {
                       const badge = c.days > 30
                         ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
                         : c.days > 14
@@ -620,6 +624,37 @@ export default function YardPage() {
                   </tbody>
                 </table>
               </div>
+              {/* Pagination */}
+              {dwellTotalPages > 1 && (
+                <div className="p-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    แสดง {(dwellPage - 1) * dwellPerPage + 1}–{Math.min(dwellPage * dwellPerPage, filtered30.length)} จาก {filtered30.length} รายการ
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setDwellPage(1)} disabled={dwellPage === 1}
+                      className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">«</button>
+                    <button onClick={() => setDwellPage(p => Math.max(1, p - 1))} disabled={dwellPage === 1}
+                      className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">‹</button>
+                    {Array.from({ length: Math.min(5, dwellTotalPages) }, (_, i) => {
+                      let page: number;
+                      if (dwellTotalPages <= 5) page = i + 1;
+                      else if (dwellPage <= 3) page = i + 1;
+                      else if (dwellPage >= dwellTotalPages - 2) page = dwellTotalPages - 4 + i;
+                      else page = dwellPage - 2 + i;
+                      return (
+                        <button key={page} onClick={() => setDwellPage(page)}
+                          className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                            page === dwellPage ? 'bg-blue-500 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                          }`}>{page}</button>
+                      );
+                    })}
+                    <button onClick={() => setDwellPage(p => Math.min(dwellTotalPages, p + 1))} disabled={dwellPage === dwellTotalPages}
+                      className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">›</button>
+                    <button onClick={() => setDwellPage(dwellTotalPages)} disabled={dwellPage === dwellTotalPages}
+                      className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30">»</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );
