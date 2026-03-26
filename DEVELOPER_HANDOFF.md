@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 26 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Gate History Search + Container Detail Modal + Search Detail Panel + Boxtech API + ISO 6346 Check Digit + Prefix Mapping + Gate-In Billing + Gate-Out Billing Fix + SSE Real-Time Operations + Billing Reports + ERP Export Fix + Hold Logic Fix + Dashboard Gate-Out + CODECO Outbound EDI + SFTP Integration + 📧 Email EDI Delivery + ⏰ EDI Auto-Schedule (node-cron) + 🔐 Production Readiness (Auth Middleware + Rate Limiting + Input Validation + Audit Trail) + Dwell Days Display + Demurrage Calculator + Container Tracking Timeline + 📄 Table Pagination + 🎨 Custom ConfirmDialog + 🔒 SQL Injection Audit + 🧪 Automated Testing + 📈 Dashboard Analytics (Range Toggle 7d/30d/3m) + 💳 Credit Note + 📊 AR Aging Report + 🏗️ Auto-Allocation DB Rules + 🔧 M&R Hardening + 🌐 CEDEX Thai + 📄 PDF Export + 📅 Calendar Days Dwell + 📋 EDI Template System + 🧩 Gate Component Decomposition + 🔐 Password Policy & Account Lockout + 🚚 Inter-Yard Transfer Hardening + 📷 PWA Camera OCR (Smart Container Scanner) + 📊 B4 Reports (Dwell + M&R + Excel Export)** (99.8%)
+> ส่งมอบงาน: 26 มีนาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Gate History Search + Container Detail Modal + Search Detail Panel + Boxtech API + ISO 6346 Check Digit + Prefix Mapping + Gate-In Billing + Gate-Out Billing Fix + SSE Real-Time Operations + Billing Reports + ERP Export Fix + Hold Logic Fix + Dashboard Gate-Out + CODECO Outbound EDI + SFTP Integration + 📧 Email EDI Delivery + ⏰ EDI Auto-Schedule (node-cron) + 🔐 Production Readiness (Auth Middleware + Rate Limiting + Input Validation + Audit Trail) + Dwell Days Display + Demurrage Calculator + Container Tracking Timeline + 📄 Table Pagination + 🎨 Custom ConfirmDialog + 🔒 SQL Injection Audit + 🧪 Automated Testing + 📈 Dashboard Analytics (Range Toggle 7d/30d/3m) + 💳 Credit Note + 📊 AR Aging Report + 🏗️ Auto-Allocation DB Rules + 🔧 M&R Hardening + 🌐 CEDEX Thai + 📄 PDF Export + 📅 Calendar Days Dwell + 📋 EDI Template System + 🧩 Gate Component Decomposition + 🔐 Password Policy & Account Lockout + 🚚 Inter-Yard Transfer Hardening + 📷 PWA Camera OCR (Smart Container Scanner) + 📊 B4 Reports (Dwell + M&R + Excel Export) + 🔐 RBAC Reports Module + 🐛 Dashboard Shipping Line Chart Fix + ⚡ Gate History Auto-search Debounce + 🧪 API Integration Tests (194 tests)** (~100%)
 
 ---
 
@@ -97,7 +97,7 @@ node scripts/setup-db.js
 # 2. Seed ข้อมูลผู้ใช้ (5 demo accounts)
 node scripts/seed-users.js
 
-# 3. Seed สิทธิ์ (33 permissions × 6 roles)
+# 3. Seed สิทธิ์ (40 permissions × 6 roles — รวม reports module)
 node scripts/seed-permissions.js
 
 # 4. Seed ข้อมูลตู้ (10 zones + ~925 containers)
@@ -241,6 +241,12 @@ container-yard-system/
 │   │       ├── reports/
 │   │       │   ├── dwell/route.ts           # **📊 GET Container Dwell Report** — by shipping line (avg/max/min dwell) + overdue list (>${overdueDays}d) + distribution buckets (7/14/30d)
 │   │       │   └── mnr/route.ts             # **📊 GET M&R Report** — EOR summary KPIs + by status + 6-month trend + full EOR list with date range filter
+│   │       ├── __tests__/                   # **🧪 API Integration Tests** — 48 tests (containers, mnr, reports/dwell, reports/mnr, gate, billing/invoices)
+│   │       │   ├── containers.test.ts       # GET (list, position check, filters) + POST (create, UNIQUE)
+│   │       │   ├── mnr.test.ts              # GET + POST (create EOR) + PUT (approve/reject/complete/404)
+│   │       │   ├── reports.test.ts          # GET /reports/dwell + GET /reports/mnr — structure + error handling
+│   │       │   ├── gate.test.ts             # GET (list, date/search filter)
+│   │       │   └── billing.test.ts          # GET (list+stats) + POST (VAT calc) + PUT (pay/issue/cancel)
 │   │       ├── settings/
 │   │       │   ├── company/route.ts        # GET/POST company profile (+ branch + logo URL)
 │   │       │   ├── customers/route.ts      # GET/POST/PUT/DELETE customers (+ branch auto-migrate)
@@ -1190,15 +1196,17 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Unit Tests (146 tests)
+# 🧪 รัน Tests ทั้งหมด (194 tests: 146 lib + 48 API integration)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)
 npm run test:watch
 
-# รัน test เฉพาะ module
-npx jest containerValidation
-npx jest validators
+# รัน test เฉพาะ suite
+npx jest containerValidation        # lib unit tests
+npx jest "api/__tests__"             # API integration tests เท่านั้น
+npx jest "api/__tests__/billing"     # เฉพาะ billing
+npx jest "api/__tests__/mnr"         # เฉพาะ M&R
 
 # Migration: Customer Portal
 node scripts/migrate-customer-portal.js
@@ -1213,5 +1221,5 @@ node scripts/migrate-transfer-yard.js
 ---
 
 > **ผู้สร้าง**: AI Assistant (Antigravity)  
-> **วันที่อัพเดทล่าสุด**: 26 มีนาคม 2569  
+> **วันที่อัพเดทล่าสุด**: 27 มีนาคม 2569  
 > **เอกสารเพิ่มเติม**: `src/lib/schema.sql` (SQL schema), `.env.local` (config)
