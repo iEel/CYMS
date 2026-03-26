@@ -13,10 +13,6 @@ const Tooltip = dynamic(() => import('recharts').then(m => m.Tooltip), { ssr: fa
 const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false, loading: () => <div className="w-full h-[200px] flex items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={20} /></div> });
 const AreaChart = dynamic(() => import('recharts').then(m => m.AreaChart), { ssr: false });
 const Area = dynamic(() => import('recharts').then(m => m.Area), { ssr: false });
-const PieChart = dynamic(() => import('recharts').then(m => m.PieChart), { ssr: false });
-const Pie = dynamic(() => import('recharts').then(m => m.Pie), { ssr: false });
-const Cell = dynamic(() => import('recharts').then(m => m.Cell), { ssr: false });
-const Legend = dynamic(() => import('recharts').then(m => m.Legend), { ssr: false });
 
 interface ChartsData {
   gateActivity: Array<{ date: string; gate_in: number; gate_out: number }>;
@@ -130,32 +126,46 @@ export default function DashboardCharts({ charts, activeRange, onRangeChange, lo
         </ResponsiveContainer>
       </div>
 
-      {/* Container by Shipping Line — Pie Chart */}
+      {/* Container by Shipping Line — Horizontal Bar Chart */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
         <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-4">
           🚢 ตู้ตามสายเรือ (Top 6)
         </h3>
-        <div className="flex items-center">
-          <ResponsiveContainer width="50%" height={200}>
-            <PieChart>
-              <Pie data={charts.byShippingLine} cx="50%" cy="50%" outerRadius={80} innerRadius={40} dataKey="value" paddingAngle={2} stroke="none">
-                {charts.byShippingLine.map((_entry, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex-1 space-y-2">
-            {charts.byShippingLine.map((item, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
-                <span className="text-slate-600 dark:text-slate-300 truncate flex-1">{item.name}</span>
-                <span className="font-bold text-slate-800 dark:text-white">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        {charts.byShippingLine.length === 0 ? (
+          <div className="flex items-center justify-center h-[160px] text-slate-400 text-sm">ไม่มีข้อมูล</div>
+        ) : (() => {
+          const maxVal = Math.max(...charts.byShippingLine.map(d => d.value), 1);
+          const total = charts.byShippingLine.reduce((s, d) => s + d.value, 0);
+          return (
+            <div className="space-y-2.5">
+              {charts.byShippingLine.map((item, i) => {
+                const pct = Math.max((item.value / maxVal) * 100, 3);
+                const sharePct = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0';
+                return (
+                  <div key={i}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-slate-600 dark:text-slate-300 font-medium truncate max-w-[140px]">{item.name}</span>
+                      <span className="font-bold text-slate-800 dark:text-white ml-2 shrink-0">
+                        {item.value} <span className="text-slate-400 font-normal">({sharePct}%)</span>
+                      </span>
+                    </div>
+                    <div className="w-full h-5 bg-slate-100 dark:bg-slate-700 rounded-lg overflow-hidden">
+                      <div
+                        className="h-full rounded-lg transition-all duration-700 flex items-center justify-end pr-2"
+                        style={{ width: `${pct}%`, backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                      >
+                        {pct > 20 && (
+                          <span className="text-[10px] font-bold text-white">{item.value}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="text-xs text-slate-400 text-right pt-1">รวม {total} ตู้</p>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Dwell Time Distribution — Horizontal Bars */}
