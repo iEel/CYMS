@@ -1677,14 +1677,31 @@ export default function GatePage() {
                 disabled={transactions.length === 0}
                 onClick={async () => {
                   try {
-                    const { generateGateHistoryPDF } = await import('@/lib/pdfExport');
-                    const dateLabel = new Date(historyDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
-                    await generateGateHistoryPDF(transactions, historyDate, `ลาน ${yardId}`);
-                  } catch (err) { console.error('PDF error:', err); }
+                    const XLSX = await import('xlsx');
+                    const rows = transactions.map(t => ({
+                      'วันที่': new Date(t.created_at).toLocaleDateString('th-TH'),
+                      'เวลา': new Date(t.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+                      'ประเภท': t.transaction_type === 'gate_in' ? 'รับเข้า' : t.transaction_type === 'gate_out' ? 'ปล่อยออก' : t.transaction_type === 'transfer' ? 'ย้ายออก' : 'รับย้าย',
+                      'เลขตู้': t.container_number,
+                      'ขนาด': t.size,
+                      'ประเภทตู้': t.type,
+                      'สายเรือ': t.shipping_line || '',
+                      'EIR': t.eir_number || '',
+                      'คนขับ': t.driver_name || '',
+                      'ทะเบียนรถ': t.truck_plate || '',
+                      'ผู้ดำเนินการ': t.full_name || '',
+                    }));
+                    const ws = XLSX.utils.json_to_sheet(rows);
+                    // Auto column widths
+                    ws['!cols'] = Object.keys(rows[0] || {}).map(key => ({ wch: Math.max(key.length * 2, 12) }));
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Gate History');
+                    XLSX.writeFile(wb, `gate-history-${historyDate}.xlsx`);
+                  } catch (err) { console.error('Excel export error:', err); }
                 }}
-                className="h-10 px-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 text-sm font-medium hover:bg-red-100 flex items-center gap-1.5 disabled:opacity-50"
+                className="h-10 px-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 text-sm font-medium hover:bg-emerald-100 flex items-center gap-1.5 disabled:opacity-50"
               >
-                <FileDown size={14} /> PDF
+                <FileDown size={14} /> Excel
               </button>
               <span className="text-xs text-slate-400">{transactions.length} รายการ</span>
             </div>
