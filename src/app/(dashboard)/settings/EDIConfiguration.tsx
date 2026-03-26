@@ -95,6 +95,7 @@ export default function EDIConfiguration() {
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   // Template editor state
+  const [showEditor, setShowEditor] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<EDITemplate | null>(null);
   const [tplName, setTplName] = useState('');
   const [tplFormat, setTplFormat] = useState<'csv' | 'json' | 'edifact'>('csv');
@@ -209,6 +210,7 @@ export default function EDIConfiguration() {
       setTplEdifactVer('D:95B:UN');
       setTplEdifactSender('');
     }
+    setShowEditor(true);
   };
 
   const saveTemplate = async () => {
@@ -234,6 +236,7 @@ export default function EDIConfiguration() {
       await fetchTemplates();
       setEditingTemplate(null);
       setTplName('');
+      setShowEditor(false);
     } catch { /* */ }
     finally { setTplSaving(false); }
   };
@@ -553,7 +556,7 @@ UNZ+1+CODECO...'`;
         {activeTab === 'templates' && (
           <>
             {/* Template List */}
-            {!tplName && !editingTemplate && (
+            {!showEditor && (
               <div className="space-y-3">
                 {templates.length === 0 ? (
                   <p className="text-sm text-slate-400 text-center py-8">ยังไม่มี Template — กดปุ่มด้านล่างเพื่อสร้าง</p>
@@ -596,13 +599,13 @@ UNZ+1+CODECO...'`;
             )}
 
             {/* Template Editor */}
-            {(tplName || editingTemplate) && (
+            {showEditor && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold text-sm text-slate-800 dark:text-white">
                     {editingTemplate ? `✏️ แก้ไข: ${editingTemplate.template_name}` : '🆕 สร้าง Template ใหม่'}
                   </h4>
-                  <button onClick={() => { setEditingTemplate(null); setTplName(''); }}
+                  <button onClick={() => { setEditingTemplate(null); setTplName(''); setShowEditor(false); }}
                     className="text-xs text-slate-400 hover:text-slate-600">✕ ยกเลิก</button>
                 </div>
 
@@ -679,7 +682,7 @@ UNZ+1+CODECO...'`;
 
                 {/* Save/Cancel */}
                 <div className="flex justify-end gap-2">
-                  <button onClick={() => { setEditingTemplate(null); setTplName(''); }}
+                  <button onClick={() => { setEditingTemplate(null); setTplName(''); setShowEditor(false); }}
                     className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
                     ยกเลิก
                   </button>
