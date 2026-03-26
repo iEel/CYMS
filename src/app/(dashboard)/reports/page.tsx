@@ -44,7 +44,7 @@ interface MnRTrend { month: string; total: number; approved: number; rejected: n
 interface MnREOR {
   eor_number: string; container_number: string; size: string; type: string;
   shipping_line: string; estimated_cost: number; actual_cost: number; status: string;
-  created_at: string; approved_at: string; created_name: string; notes: string;
+  created_at: string; approved_at: string; created_name: string;
 }
 
 // ── Constants ──

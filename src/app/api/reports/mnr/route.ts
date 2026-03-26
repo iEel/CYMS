@@ -75,12 +75,11 @@ export async function GET(request: NextRequest) {
           c.container_number,
           c.size,
           c.type,
-          ISNULL(c.shipping_line, 'ไม่ระบุ') AS shipping_line,
+          ISNULL(c.shipping_line, N'ไม่ระบุ') AS shipping_line,
           r.damage_details,
           r.estimated_cost,
           r.actual_cost,
           r.status,
-          r.notes,
           r.created_at,
           r.approved_at,
           u.full_name AS created_name

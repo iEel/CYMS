@@ -218,7 +218,6 @@ interface MnREOR {
   created_at: string;
   approved_at: string;
   created_name: string;
-  notes: string;
 }
 
 const STATUS_TH: Record<string, string> = {
@@ -283,11 +282,10 @@ export async function exportMnRReportExcel(
   ws1['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
   XLSX.utils.book_append_sheet(wb, ws1, 'สรุป KPIs');
 
-  // ── Sheet 2: EOR List ──
   const eorRows: unknown[][] = [
     [`รายการ EOR — ${yardName} — ${period}`],
     [],
-    ['เลข EOR', 'เลขตู้', 'ขนาด', 'ประเภท', 'สายเรือ', 'สถานะ', 'ราคาประเมิน (฿)', 'ราคาจริง (฿)', 'ผู้สร้าง', 'วันสร้าง', 'วันอนุมัติ', 'หมายเหตุ'],
+    ['เลข EOR', 'เลขตู้', 'ขนาด', 'ประเภท', 'สายเรือ', 'สถานะ', 'ราคาประเมิน (฿)', 'ราคาจริง (฿)', 'ผู้สร้าง', 'วันสร้าง', 'วันอนุมัติ'],
     ...data.eorList.map(r => [
       r.eor_number,
       r.container_number,
@@ -299,16 +297,15 @@ export async function exportMnRReportExcel(
       r.created_name || '-',
       formatDate(r.created_at),
       formatDate(r.approved_at),
-      r.notes || '-',
     ]),
   ];
 
   const ws2 = XLSX.utils.aoa_to_sheet(eorRows);
   ws2['!cols'] = [
     { wch: 20 }, { wch: 18 }, { wch: 7 }, { wch: 7 }, { wch: 16 }, { wch: 14 },
-    { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 24 },
+    { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
   ];
-  ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }];
+  ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 10 } }];
   XLSX.utils.book_append_sheet(wb, ws2, 'รายการ EOR');
 
   XLSX.writeFile(wb, `CYMS_MnR_Report_${now.replace(/\//g, '-')}.xlsx`);
