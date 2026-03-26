@@ -36,10 +36,11 @@ export async function POST(request: NextRequest) {
       .input('password', sql.NVarChar, body.password || null)
       .input('remote_path', sql.NVarChar, body.remote_path || '/')
       .input('format', sql.NVarChar, body.format || 'EDIFACT')
+      .input('template_id', sql.Int, body.template_id || null)
       .query(`
-        INSERT INTO EDIEndpoints (name, shipping_line, type, host, port, username, password, remote_path, format)
+        INSERT INTO EDIEndpoints (name, shipping_line, type, host, port, username, password, remote_path, format, template_id)
         OUTPUT INSERTED.*
-        VALUES (@name, @shipping_line, @type, @host, @port, @username, @password, @remote_path, @format)
+        VALUES (@name, @shipping_line, @type, @host, @port, @username, @password, @remote_path, @format, @template_id)
       `);
     const ep = result.recordset[0];
     await logAudit({ action: 'create', entityType: 'edi_endpoint', entityId: ep.endpoint_id, details: { name: body.name, host: body.host } });
@@ -67,12 +68,13 @@ export async function PUT(request: NextRequest) {
       .input('remote_path', sql.NVarChar, body.remote_path || '/')
       .input('format', sql.NVarChar, body.format || 'EDIFACT')
       .input('is_active', sql.Bit, body.is_active !== false ? 1 : 0)
+      .input('template_id', sql.Int, body.template_id || null)
       .query(`
         UPDATE EDIEndpoints SET
           name = @name, shipping_line = @shipping_line, type = @type,
           host = @host, port = @port, username = @username, password = @password,
           remote_path = @remote_path, format = @format, is_active = @is_active,
-          updated_at = GETDATE()
+          template_id = @template_id, updated_at = GETDATE()
         WHERE endpoint_id = @id
       `);
     await logAudit({ action: 'update', entityType: 'edi_endpoint', entityId: body.endpoint_id, details: { name: body.name, host: body.host } });

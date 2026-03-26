@@ -3,8 +3,9 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import SftpClient from 'ssh2-sftp-client';
 import { logAudit } from '@/lib/audit';
+import { formatCODECO, legacyFormatToTemplate, type CODECOTransaction, type EDITemplate } from '@/lib/ediFormatter';
 
-// POST — Send CODECO file via SFTP to a specific endpoint
+// POST — Send CODECO file via SFTP/Email to a specific endpoint
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
     query += ` ORDER BY g.created_at DESC`;
     const txResult = await req.query(query);
-    const transactions = txResult.recordset;
+    const transactions = txResult.recordset as CODECOTransaction[];
 
     if (transactions.length === 0) {
       return NextResponse.json({ error: 'ไม่มีรายการ Gate ในช่วงที่เลือก' }, { status: 400 });
@@ -68,73 +69,27 @@ export async function POST(request: NextRequest) {
       if (cr.recordset[0]) companyName = cr.recordset[0].company_name;
     } catch { /* */ }
 
-    // 4. Generate file content based on format
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
-    const filename = `CODECO_${ep.shipping_line || 'ALL'}_${dateStr}_${now.getTime().toString().slice(-6)}.${ep.format === 'EDIFACT' ? 'edi' : ep.format === 'CSV' ? 'csv' : 'json'}`;
-    let fileContent: string;
-
-    if (ep.format === 'EDIFACT') {
-      const fmtDT = (d: Date) => {
-        const y = d.getFullYear().toString().slice(-2);
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const hh = String(d.getHours()).padStart(2, '0');
-        const mi = String(d.getMinutes()).padStart(2, '0');
-        return `${y}${m}${dd}:${hh}${mi}`;
-      };
-      const msgRef = `CODECO${now.getTime()}`;
-      const lines: string[] = [];
-      lines.push(`UNB+UNOC:3+${companyName.substring(0, 35)}+${ep.shipping_line || 'SHIPPING'}+${fmtDT(now)}+${msgRef}'`);
-      lines.push(`UNH+1+CODECO:D:95B:UN'`);
-      lines.push(`BGM+36+${msgRef}+9'`);
-
-      transactions.forEach((tx: Record<string, unknown>) => {
-        const txDate = new Date(tx.transaction_date as string);
-        const giFn = (tx.transaction_type as string) === 'gate_in' ? '34' : '36';
-        lines.push(`TDT+${giFn}'`);
-        lines.push(`LOC+89+${tx.yard_code || 'YARD'}:139:6'`);
-        lines.push(`DTM+137:${fmtDT(txDate)}:203'`);
-        const sizeCode = (tx.size as string) === '40' ? '42' : (tx.size as string) === '45' ? '45' : '22';
-        lines.push(`EQD+CN+${tx.container_number}+${sizeCode}G1:102:5'`);
-        if (tx.seal_number) lines.push(`SEL+${tx.seal_number}+CA'`);
-        if (tx.truck_plate) lines.push(`TDT+1++3+++++${tx.truck_plate}'`);
-        if (tx.booking_ref) lines.push(`RFF+BN:${tx.booking_ref}'`);
-        lines.push(`FTX+AAA+++${tx.is_laden ? 'LADEN' : 'EMPTY'}'`);
-      });
-
-      lines.push(`UNT+${lines.length - 1}+1'`);
-      lines.push(`UNZ+1+${msgRef}'`);
-      fileContent = lines.join('\n');
-
-    } else if (ep.format === 'CSV') {
-      const fmtDate = (d: unknown) => {
-        if (!d) return '';
-        const dt = new Date(d as string);
-        return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
-      };
-      const headers = 'message_type,transaction_type,eir_number,date,container_number,size,type,shipping_line,laden_empty,seal_number,truck_plate,driver_name,booking_ref';
-      const rows = transactions.map((tx: Record<string, unknown>) =>
-        `CODECO,${tx.transaction_type},${tx.eir_number || ''},${fmtDate(tx.transaction_date)},${tx.container_number},${tx.size},${tx.container_type},${tx.shipping_line || ''},${tx.is_laden ? 'F' : 'E'},${tx.seal_number || ''},${tx.truck_plate || ''},"${tx.driver_name || ''}",${tx.booking_ref || ''}`
-      );
-      fileContent = [headers, ...rows].join('\n');
-
-    } else {
-      fileContent = JSON.stringify({
-        message_type: 'CODECO',
-        sender: companyName,
-        generated_at: now.toISOString(),
-        record_count: transactions.length,
-        transactions: transactions.map((tx: Record<string, unknown>) => ({
-          type: tx.transaction_type, container: tx.container_number,
-          size: tx.size, shipping_line: tx.shipping_line,
-          laden: tx.is_laden ? 'LADEN' : 'EMPTY', seal: tx.seal_number,
-          truck: tx.truck_plate, date: tx.transaction_date,
-        })),
-      }, null, 2);
+    // 4. Load template (from endpoint config or legacy format)
+    let template: EDITemplate | null = null;
+    if (ep.template_id) {
+      try {
+        const tplResult = await db.request()
+          .input('tplId', sql.Int, ep.template_id)
+          .query('SELECT * FROM EDITemplates WHERE template_id = @tplId');
+        if (tplResult.recordset[0]) {
+          template = tplResult.recordset[0] as EDITemplate;
+        }
+      } catch { /* fallback */ }
+    }
+    if (!template) {
+      template = legacyFormatToTemplate(ep.format || 'CSV');
     }
 
-    // 5. Send based on endpoint type
+    // 5. Generate file content using shared formatter
+    const output = formatCODECO(transactions, template, companyName, ep.shipping_line || shipping_line || undefined);
+    const { content: fileContent, filename } = output;
+
+    // 6. Send based on endpoint type
     let sendStatus = 'sent';
     let errorMsg = '';
     let deliveryInfo = '';
@@ -148,7 +103,6 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'ไม่ได้ระบุอีเมลผู้รับ (ตั้งค่าใน Host field)' }, { status: 400 });
         }
 
-        const contentType = ep.format === 'CSV' ? 'text/csv' : ep.format === 'EDIFACT' ? 'text/plain' : 'application/json';
         const result = await sendEmail({
           to: recipients,
           subject: `[CYMS EDI] CODECO — ${ep.shipping_line || 'ALL'} — ${transactions.length} records — ${new Date().toLocaleDateString('th-TH')}`,
@@ -159,7 +113,7 @@ export async function POST(request: NextRequest) {
                 <tr><td style="padding:6px 12px;color:#64748B">Sender</td><td style="padding:6px 12px;font-weight:bold">${companyName}</td></tr>
                 <tr><td style="padding:6px 12px;color:#64748B">Shipping Line</td><td style="padding:6px 12px">${ep.shipping_line || 'ALL'}</td></tr>
                 <tr><td style="padding:6px 12px;color:#64748B">Records</td><td style="padding:6px 12px;font-weight:bold">${transactions.length}</td></tr>
-                <tr><td style="padding:6px 12px;color:#64748B">Format</td><td style="padding:6px 12px">${ep.format}</td></tr>
+                <tr><td style="padding:6px 12px;color:#64748B">Format</td><td style="padding:6px 12px">${template?.template_name || ep.format}</td></tr>
                 <tr><td style="padding:6px 12px;color:#64748B">Generated</td><td style="padding:6px 12px">${new Date().toLocaleString('th-TH')}</td></tr>
               </table>
               <p style="color:#64748B;font-size:12px">ไฟล์ CODECO แนบมาพร้อมอีเมลนี้ — กรุณาตรวจสอบ</p>
@@ -168,7 +122,7 @@ export async function POST(request: NextRequest) {
           attachments: [{
             filename,
             content: Buffer.from(fileContent, 'utf-8'),
-            contentType,
+            contentType: output.contentType,
           }],
         });
 
@@ -205,7 +159,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 6. Log the send
+    // 7. Log the send
     await db.request()
       .input('epId2', sql.Int, endpoint_id)
       .input('filename', sql.NVarChar, filename)
@@ -227,60 +181,39 @@ export async function POST(request: NextRequest) {
       `);
 
     if (sendStatus === 'failed') {
-      // Audit — failed send
       await logAudit({
-        userId: null,
-        yardId: yard_id || 1,
+        userId: null, yardId: yard_id || 1,
         action: 'edi_send_failed',
-        entityType: 'edi_endpoint',
-        entityId: endpoint_id,
+        entityType: 'edi_endpoint', entityId: endpoint_id,
         details: {
-          endpoint_name: ep.name,
-          delivery_type: ep.type,
-          format: ep.format,
-          shipping_line: ep.shipping_line || 'ALL',
-          record_count: transactions.length,
-          filename,
-          date_from: date_from || 'today',
-          date_to: date_to || 'today',
-          error: errorMsg,
+          endpoint_name: ep.name, delivery_type: ep.type, format: template?.template_name || ep.format,
+          shipping_line: ep.shipping_line || 'ALL', record_count: transactions.length, filename,
+          date_from: date_from || 'today', date_to: date_to || 'today', error: errorMsg,
         },
       });
 
       return NextResponse.json({
         success: false,
         error: `${ep.type === 'email' ? 'Email' : 'SFTP'} failed: ${errorMsg}`,
-        filename,
-        record_count: transactions.length,
+        filename, record_count: transactions.length,
       });
     }
 
-    // Audit — successful send
     await logAudit({
-      userId: null,
-      yardId: yard_id || 1,
+      userId: null, yardId: yard_id || 1,
       action: 'edi_send_success',
-      entityType: 'edi_endpoint',
-      entityId: endpoint_id,
+      entityType: 'edi_endpoint', entityId: endpoint_id,
       details: {
-        endpoint_name: ep.name,
-        delivery_type: ep.type,
-        format: ep.format,
-        shipping_line: ep.shipping_line || 'ALL',
-        record_count: transactions.length,
-        filename,
-        date_from: date_from || 'today',
-        date_to: date_to || 'today',
+        endpoint_name: ep.name, delivery_type: ep.type, format: template?.template_name || ep.format,
+        shipping_line: ep.shipping_line || 'ALL', record_count: transactions.length, filename,
+        date_from: date_from || 'today', date_to: date_to || 'today',
         recipients: ep.type === 'email' ? ep.host : `${ep.host}:${ep.remote_path}`,
       },
     });
 
     return NextResponse.json({
-      success: true,
-      filename,
-      record_count: transactions.length,
-      endpoint: ep.name,
-      delivery_type: ep.type,
+      success: true, filename, record_count: transactions.length,
+      endpoint: ep.name, delivery_type: ep.type,
       message: `✅ ส่ง ${transactions.length} รายการ — ${deliveryInfo}`,
     });
   } catch (error) {

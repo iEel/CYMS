@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { formatCODECO, legacyFormatToTemplate, type CODECOTransaction, type EDITemplate } from '@/lib/ediFormatter';
 
 // CODECO — Container Departure/Arrival Message (Outbound EDI)
 // Generate CODECO messages from gate transactions for shipping lines
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
     const transactionType = searchParams.get('type'); // gate_in | gate_out | all
     const shippingLine = searchParams.get('shipping_line');
     const format = searchParams.get('format') || 'json'; // json | edifact | csv
-    const status = searchParams.get('status'); // sent | pending | all
+    const templateId = searchParams.get('template_id'); // NEW: optional template_id
 
     const db = await getDb();
     const req = db.request().input('yardId', sql.Int, yardId);
@@ -51,13 +52,13 @@ export async function GET(request: NextRequest) {
     query += ` ORDER BY g.created_at DESC`;
 
     const result = await req.query(query);
-    const transactions = result.recordset;
+    const transactions = result.recordset as CODECOTransaction[];
 
     // Get company info for message header
-    let company = { company_name: 'CYMS', address: '' };
+    let companyName = 'CYMS';
     try {
-      const cr = await db.request().query('SELECT TOP 1 company_name, address FROM CompanyProfile');
-      if (cr.recordset[0]) company = cr.recordset[0];
+      const cr = await db.request().query('SELECT TOP 1 company_name FROM CompanyProfile');
+      if (cr.recordset[0]) companyName = cr.recordset[0].company_name;
     } catch { /* ignore */ }
 
     // Get unique shipping lines for filter dropdown
@@ -71,125 +72,64 @@ export async function GET(request: NextRequest) {
         ORDER BY c.shipping_line
       `);
 
-    if (format === 'edifact') {
-      // Generate UN/EDIFACT CODECO format
-      const now = new Date();
-      const fmtDT = (d: Date) => {
-        const y = d.getFullYear().toString().slice(-2);
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const hh = String(d.getHours()).padStart(2, '0');
-        const mi = String(d.getMinutes()).padStart(2, '0');
-        return `${y}${m}${dd}:${hh}${mi}`;
+    // === Format output ===
+    // If format is 'json' without template → return structured JSON with metadata (original behavior)
+    if (format === 'json' && !templateId) {
+      const summary = {
+        total: transactions.length,
+        gate_in: transactions.filter(t => t.transaction_type === 'gate_in').length,
+        gate_out: transactions.filter(t => t.transaction_type === 'gate_out').length,
       };
-      const msgRef = `CODECO${now.getTime()}`;
 
-      const lines: string[] = [];
-      // Interchange header
-      lines.push(`UNB+UNOC:3+${(company.company_name || 'CYMS').substring(0, 35)}+${shippingLine || 'SHIPPING_LINE'}+${fmtDT(now)}+${msgRef}'`);
-      // Message header
-      lines.push(`UNH+1+CODECO:D:95B:UN'`);
-      // Beginning of message
-      lines.push(`BGM+36+${msgRef}+9'`);
-
-      transactions.forEach((tx: Record<string, unknown>, idx: number) => {
-        const txDate = new Date(tx.transaction_date as string);
-        const giFn = (tx.transaction_type as string) === 'gate_in' ? '34' : '36'; // 34=discharge, 36=loading
-        // Transport movement details
-        lines.push(`TDT+${giFn}'`);
-        // Location
-        lines.push(`LOC+89+${tx.yard_code || 'YARD'}:139:6'`);
-        // Date/Time
-        lines.push(`DTM+137:${fmtDT(txDate)}:203'`);
-        // Equipment details
-        const sizeCode = (tx.size as string) === '40' ? '42' : (tx.size as string) === '45' ? '45' : '22';
-        const typeCode = (tx.container_type as string) || 'GP';
-        lines.push(`EQD+CN+${tx.container_number}+${sizeCode}${typeCode === 'GP' ? 'G1' : typeCode === 'HC' ? 'G1' : typeCode === 'RF' ? 'R1' : 'G1'}:102:5'`);
-        // Full/Empty
-        lines.push(`MEA+AAE+VGM+KGM'`);
-        // Seal
-        if (tx.seal_number) {
-          lines.push(`SEL+${tx.seal_number}+CA'`);
-        }
-        // Transport (truck)
-        if (tx.truck_plate) {
-          lines.push(`TDT+1++3+++++${tx.truck_plate}'`);
-        }
-        // Name (driver)
-        if (tx.driver_name) {
-          lines.push(`NAD+CA+${tx.driver_name}'`);
-        }
-        // Reference (booking)
-        if (tx.booking_ref) {
-          lines.push(`RFF+BN:${tx.booking_ref}'`);
-        }
-        // Laden/Empty indicator
-        lines.push(`FTX+AAA+++${tx.is_laden ? 'LADEN' : 'EMPTY'}'`);
-      });
-
-      // Message trailer
-      lines.push(`UNT+${lines.length - 1}+1'`);
-      // Interchange trailer
-      lines.push(`UNZ+1+${msgRef}'`);
-
-      const edifact = lines.join('\n');
-
-      return new NextResponse(edifact, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Content-Disposition': `attachment; filename="CODECO_${shippingLine || 'ALL'}_${now.toISOString().split('T')[0]}.edi"`,
-        },
+      return NextResponse.json({
+        company: companyName,
+        generated_at: new Date().toISOString(),
+        filters: { yard_id: yardId, date_from: dateFrom, date_to: dateTo, transaction_type: transactionType, shipping_line: shippingLine },
+        summary,
+        shipping_lines: slResult.recordset.map((r: Record<string, string>) => r.shipping_line),
+        transactions: transactions.map(tx => ({
+          message_type: 'CODECO',
+          transaction_type: tx.transaction_type,
+          eir_number: tx.eir_number,
+          date: tx.transaction_date,
+          container_number: tx.container_number,
+          size: tx.size,
+          type: tx.container_type,
+          shipping_line: tx.shipping_line,
+          laden_empty: tx.is_laden ? 'LADEN' : 'EMPTY',
+          seal_number: tx.seal_number,
+          truck_plate: tx.truck_plate,
+          driver_name: tx.driver_name,
+          booking_ref: tx.booking_ref,
+          yard_code: tx.yard_code,
+        })),
       });
     }
 
-    if (format === 'csv') {
-      const headers = 'message_type,transaction_type,eir_number,date,container_number,size,type,shipping_line,laden_empty,seal_number,truck_plate,driver_name,booking_ref,yard_code';
-      const fmtDate = (d: unknown) => {
-        if (!d) return '';
-        const dt = new Date(d as string);
-        return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
-      };
-      const rows = transactions.map((tx: Record<string, unknown>) =>
-        `CODECO,${tx.transaction_type},${tx.eir_number || ''},${fmtDate(tx.transaction_date)},${tx.container_number},${tx.size},${tx.container_type},${tx.shipping_line || ''},${tx.is_laden ? 'F' : 'E'},${tx.seal_number || ''},${tx.truck_plate || ''},"${tx.driver_name || ''}",${tx.booking_ref || ''},${tx.yard_code || ''}`
-      );
-      const csv = [headers, ...rows].join('\n');
-      return new NextResponse(csv, {
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="CODECO_${shippingLine || 'ALL'}_${new Date().toISOString().split('T')[0]}.csv"`,
-        },
-      });
+    // Load template (from DB or legacy format)
+    let template: EDITemplate | null = null;
+    if (templateId) {
+      try {
+        const tplResult = await db.request()
+          .input('tplId', sql.Int, parseInt(templateId))
+          .query('SELECT * FROM EDITemplates WHERE template_id = @tplId');
+        if (tplResult.recordset[0]) {
+          template = tplResult.recordset[0] as EDITemplate;
+        }
+      } catch { /* fallback to legacy */ }
+    }
+    if (!template) {
+      template = legacyFormatToTemplate(format);
     }
 
-    // JSON response (default)
-    const summary = {
-      total: transactions.length,
-      gate_in: transactions.filter((t: Record<string, string>) => t.transaction_type === 'gate_in').length,
-      gate_out: transactions.filter((t: Record<string, string>) => t.transaction_type === 'gate_out').length,
-    };
+    // Use shared formatter
+    const output = formatCODECO(transactions, template, companyName, shippingLine || undefined);
 
-    return NextResponse.json({
-      company: company.company_name,
-      generated_at: new Date().toISOString(),
-      filters: { yard_id: yardId, date_from: dateFrom, date_to: dateTo, transaction_type: transactionType, shipping_line: shippingLine },
-      summary,
-      shipping_lines: slResult.recordset.map((r: Record<string, string>) => r.shipping_line),
-      transactions: transactions.map((tx: Record<string, unknown>) => ({
-        message_type: 'CODECO',
-        transaction_type: tx.transaction_type,
-        eir_number: tx.eir_number,
-        date: tx.transaction_date,
-        container_number: tx.container_number,
-        size: tx.size,
-        type: tx.container_type,
-        shipping_line: tx.shipping_line,
-        laden_empty: tx.is_laden ? 'LADEN' : 'EMPTY',
-        seal_number: tx.seal_number,
-        truck_plate: tx.truck_plate,
-        driver_name: tx.driver_name,
-        booking_ref: tx.booking_ref,
-        yard_code: tx.yard_code,
-      })),
+    return new NextResponse(output.content, {
+      headers: {
+        'Content-Type': output.contentType,
+        'Content-Disposition': `attachment; filename="${output.filename}"`,
+      },
     });
   } catch (error) {
     console.error('❌ GET CODECO error:', error);
