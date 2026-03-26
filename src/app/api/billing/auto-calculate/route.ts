@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import getPool from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 // FR6.2 — Auto-Billing Engine: Calculate storage charges from Dwell Time
 export async function POST(req: NextRequest) {
   try {
     const { yard_id, container_id } = await req.json();
-    const pool = await getPool();
+    const pool = await getDb();
 
     // Get container info with gate_in_date
     const cResult = await pool.request()
