@@ -94,8 +94,8 @@ export async function GET(req: NextRequest) {
       export_date: new Date().toISOString(),
       yard_id: parseInt(yardId),
       total_entries: entries.length,
-      total_debit: entries.filter((e: Record<string, string>) => e.entry_type === 'debit').reduce((s: number, e: Record<string, number>) => s + (e.grand_total || 0), 0),
-      total_credit: entries.filter((e: Record<string, string>) => e.entry_type === 'credit').reduce((s: number, e: Record<string, number>) => s + (e.grand_total || 0), 0),
+      total_debit: entries.filter((e: Record<string, unknown>) => e.entry_type === 'debit').reduce((s: number, e: Record<string, unknown>) => s + ((e.grand_total as number) || 0), 0),
+      total_credit: entries.filter((e: Record<string, unknown>) => e.entry_type === 'credit').reduce((s: number, e: Record<string, unknown>) => s + ((e.grand_total as number) || 0), 0),
       entries,
     });
   } catch (err: unknown) {

@@ -5,7 +5,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import {
   Loader2,
   ArrowDownToLine, ArrowUpFromLine,
-  History, ArrowRightLeft,
+  History, ArrowRightLeft, BarChart3,
 } from 'lucide-react';
 import EIRDocument from '@/components/gate/EIRDocument';
 import dynamic from 'next/dynamic';
@@ -15,12 +15,13 @@ import GateInTab from './GateInTab';
 import GateOutTab from './GateOutTab';
 import HistoryTab from './HistoryTab';
 import TransferTab from './TransferTab';
+import GateReportTab from './GateReportTab';
 
 const ContainerTimeline = dynamic(() => import('@/components/containers/ContainerTimeline'), { ssr: false });
 
 export default function GatePage() {
   const { session } = useAuth();
-  const [activeTab, setActiveTab] = useState<'gate_in' | 'gate_out' | 'history' | 'transfer'>('gate_in');
+  const [activeTab, setActiveTab] = useState<'gate_in' | 'gate_out' | 'history' | 'transfer' | 'report'>('gate_in');
 
   // EIR Preview (shared across tabs)
   const [showEIR, setShowEIR] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export default function GatePage() {
           { id: 'gate_out' as const, label: 'Gate-Out (ปล่อยออก)', icon: <ArrowUpFromLine size={14} />, color: 'blue' },
           { id: 'history' as const, label: 'ประวัติ Gate', icon: <History size={14} />, color: 'slate' },
           { id: 'transfer' as const, label: 'ย้ายข้ามลาน', icon: <ArrowRightLeft size={14} />, color: 'purple' },
+          { id: 'report' as const, label: 'รายงาน', icon: <BarChart3 size={14} />, color: 'rose' },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -94,6 +96,13 @@ export default function GatePage() {
         <TransferTab
           yardId={yardId}
           userId={session?.userId}
+        />
+      )}
+
+      {activeTab === 'report' && (
+        <GateReportTab
+          yardId={yardId}
+          onViewEIR={viewEIR}
         />
       )}
 

@@ -459,3 +459,284 @@ export async function generateGateHistoryPDF(
 
   doc.save(`CYMS_Gate_History_${dateLabel}.pdf`);
 }
+
+// ─────────────────── GATE DAILY REPORT PDF ───────────────────
+
+interface GateDailyReportData {
+  type: string;
+  date: string;
+  summary: {
+    total: number;
+    laden: number;
+    empty: number;
+    size_20: number;
+    size_40: number;
+    size_45: number;
+  };
+  transactions: Array<{
+    eir_number?: string;
+    created_at: string;
+    driver_name?: string;
+    truck_plate?: string;
+    container_number?: string;
+    size?: string;
+    container_type?: string;
+    shipping_line?: string;
+    is_laden?: boolean;
+    operator_name?: string;
+  }>;
+  byShippingLine: Array<{ shipping_line: string; count: number }>;
+}
+
+export function generateGateReportPDF(
+  data: GateDailyReportData,
+  type: 'daily_in' | 'daily_out',
+  date: string,
+) {
+  const doc = setupDoc('landscape');
+  const pw = doc.internal.pageSize.getWidth();
+  let y = 15;
+
+  const title = type === 'daily_in' ? 'Daily Gate In Report — รายงานตู้เข้ารายวัน' : 'Daily Gate Out Report — รายงานตู้ออกรายวัน';
+
+  doc.setFontSize(16);
+  doc.text('CYMS — Container Yard Management System', pw / 2, y, { align: 'center' });
+  y += 7;
+  doc.setFontSize(12);
+  doc.text(title, pw / 2, y, { align: 'center' });
+  y += 5;
+  doc.setFontSize(9);
+  doc.setTextColor(128);
+  doc.text(`วันที่: ${new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`, pw / 2, y, { align: 'center' });
+  doc.text(`พิมพ์เมื่อ: ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`, pw - 14, y, { align: 'right' });
+  doc.setTextColor(0);
+  y += 8;
+
+  // ── Summary KPIs ──
+  const s = data.summary;
+  autoTable(doc, {
+    startY: y,
+    head: [['รวมทั้งหมด', 'โหลด', 'เปล่า', '20 ฟุต', '40 ฟุต', '45 ฟุต']],
+    body: [[`${s.total} ตู้`, `${s.laden} ตู้`, `${s.empty} ตู้`, `${s.size_20} ตู้`, `${s.size_40} ตู้`, `${s.size_45} ตู้`]],
+    theme: 'grid',
+    styles: { font: getFontName(), fontSize: 11, cellPadding: 3, halign: 'center' },
+    headStyles: { fontStyle: 'normal', fillColor: type === 'daily_in' ? [5, 150, 105] : [37, 99, 235], textColor: 255 },
+    margin: { left: 14, right: 14 },
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  y = (doc as any).lastAutoTable.finalY + 6;
+
+  // ── Transaction Table ──
+  doc.setFontSize(11);
+  doc.text(`รายการทั้งหมด (${data.transactions.length} รายการ)`, 14, y);
+  y += 4;
+
+  autoTable(doc, {
+    startY: y,
+    head: [['#', 'เวลา', 'เลขตู้', 'ขนาด/ประเภท', 'สายเรือ', 'สภาพ', 'คนขับ', 'ทะเบียน', 'เลข EIR', 'ผู้ดำเนินการ']],
+    body: data.transactions.map((t, i) => [
+      `${i + 1}`,
+      new Date(t.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }),
+      t.container_number || '-',
+      t.size ? `${t.size}'${t.container_type || ''}` : '-',
+      t.shipping_line || '-',
+      t.is_laden ? 'โหลด' : 'เปล่า',
+      t.driver_name || '-',
+      t.truck_plate || '-',
+      t.eir_number || '-',
+      t.operator_name || '-',
+    ]),
+    theme: 'striped',
+    styles: { font: getFontName(), fontSize: 8.5, cellPadding: 2 },
+    headStyles: { fontStyle: 'normal', fillColor: [30, 41, 59], textColor: 255 },
+    columnStyles: { 0: { halign: 'center', cellWidth: 10 }, 5: { halign: 'center' } },
+    margin: { left: 14, right: 14 },
+  });
+
+  // Footer
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(`CYMS Gate Report — หน้า ${i}/${pageCount}`, pw / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
+  }
+
+  doc.save(`CYMS_${type === 'daily_in' ? 'GateIn' : 'GateOut'}_Daily_${date}.pdf`);
+}
+
+// ─────────────────── GATE SUMMARY REPORT PDF ───────────────────
+
+interface GateSummaryReportData {
+  type: string;
+  date_from: string;
+  date_to: string;
+  kpi: {
+    total: number;
+    laden: number;
+    empty: number;
+    avg_per_day: number;
+    peak_count?: number;
+    peak_date?: string;
+  };
+  byShippingLine: Array<{ shipping_line: string; count: number; laden: number; empty: number }>;
+  bySize: Array<{ size: string; count: number }>;
+  byType: Array<{ container_type: string; count: number }>;
+  byOperator: Array<{ operator_name: string; count: number }>;
+  dailyTrend: Array<{ date: string; count: number }>;
+}
+
+export function generateGateSummaryPDF(
+  data: GateSummaryReportData,
+  type: 'summary_in' | 'summary_out',
+  dateFrom: string,
+  dateTo: string,
+) {
+  const doc = setupDoc('landscape');
+  const pw = doc.internal.pageSize.getWidth();
+  let y = 15;
+
+  const title = type === 'summary_in' ? 'Summary Gate In Report — สรุปตู้เข้า' : 'Summary Gate Out Report — สรุปตู้ออก';
+  const dateLabel = `${new Date(dateFrom).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} — ${new Date(dateTo).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+  doc.setFontSize(16);
+  doc.text('CYMS — Container Yard Management System', pw / 2, y, { align: 'center' });
+  y += 7;
+  doc.setFontSize(12);
+  doc.text(title, pw / 2, y, { align: 'center' });
+  y += 5;
+  doc.setFontSize(9);
+  doc.setTextColor(128);
+  doc.text(`ช่วงเวลา: ${dateLabel}`, pw / 2, y, { align: 'center' });
+  doc.text(`พิมพ์เมื่อ: ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`, pw - 14, y, { align: 'right' });
+  doc.setTextColor(0);
+  y += 8;
+
+  // ── KPI Summary ──
+  const k = data.kpi;
+  autoTable(doc, {
+    startY: y,
+    head: [['ตู้ทั้งหมด', 'โหลด', 'เปล่า', 'เฉลี่ยต่อวัน', 'วัน Peak']],
+    body: [[
+      `${k.total.toLocaleString()} ตู้`,
+      `${k.laden} ตู้ (${k.total > 0 ? Math.round(k.laden / k.total * 100) : 0}%)`,
+      `${k.empty} ตู้ (${k.total > 0 ? Math.round(k.empty / k.total * 100) : 0}%)`,
+      `${k.avg_per_day} ตู้/วัน`,
+      `${k.peak_count || 0} ตู้ (${k.peak_date ? new Date(k.peak_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) : '-'})`,
+    ]],
+    theme: 'grid',
+    styles: { font: getFontName(), fontSize: 10, cellPadding: 3, halign: 'center' },
+    headStyles: { fontStyle: 'normal', fillColor: type === 'summary_in' ? [5, 150, 105] : [124, 58, 237], textColor: 255 },
+    margin: { left: 14, right: 14 },
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  y = (doc as any).lastAutoTable.finalY + 6;
+
+  // ── By Shipping Line ──
+  doc.setFontSize(11);
+  doc.text('Top 10 สายเรือ', 14, y);
+  y += 4;
+  autoTable(doc, {
+    startY: y,
+    head: [['อันดับ', 'สายเรือ', 'จำนวน (ตู้)', 'โหลด', 'เปล่า', '% ของทั้งหมด']],
+    body: data.byShippingLine.map((r, i) => [
+      `${i + 1}`,
+      r.shipping_line,
+      `${r.count}`,
+      `${r.laden}`,
+      `${r.empty}`,
+      `${k.total > 0 ? Math.round(r.count / k.total * 100) : 0}%`,
+    ]),
+    theme: 'striped',
+    styles: { font: getFontName(), fontSize: 9.5, cellPadding: 2.5 },
+    headStyles: { fontStyle: 'normal', fillColor: [30, 41, 59], textColor: 255 },
+    columnStyles: { 0: { halign: 'center', cellWidth: 16 }, 2: { halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'center' }, 5: { halign: 'center' } },
+    margin: { left: 14, right: 14 },
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  y = (doc as any).lastAutoTable.finalY + 6;
+
+  if (y > 150) { doc.addPage(); y = 15; }
+
+  // ── By Size & By Type (side by side) ──
+  const sizeBody = data.bySize.map(r => [`${r.size ? r.size + ' ฟุต' : 'ไม่ระบุ'}`, `${r.count}`, `${k.total > 0 ? Math.round(r.count / k.total * 100) : 0}%`]);
+  const typeBody = data.byType.map(r => [r.container_type, `${r.count}`, `${k.total > 0 ? Math.round(r.count / k.total * 100) : 0}%`]);
+
+  doc.setFontSize(11);
+  doc.text('แยกตามขนาด', 14, y);
+  doc.text('แยกตามประเภท', pw / 2 + 5, y);
+  y += 4;
+
+  autoTable(doc, {
+    startY: y,
+    head: [['ขนาด', 'จำนวน', '%']],
+    body: sizeBody,
+    theme: 'striped',
+    styles: { font: getFontName(), fontSize: 9.5, cellPadding: 2.5 },
+    headStyles: { fontStyle: 'normal', fillColor: [59, 130, 246], textColor: 255 },
+    columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' } },
+    margin: { left: 14, right: pw / 2 + 2 },
+  });
+
+  const sizeEndY = (doc as any).lastAutoTable.finalY; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  autoTable(doc, {
+    startY: y,
+    head: [['ประเภท', 'จำนวน', '%']],
+    body: typeBody,
+    theme: 'striped',
+    styles: { font: getFontName(), fontSize: 9.5, cellPadding: 2.5 },
+    headStyles: { fontStyle: 'normal', fillColor: [16, 185, 129], textColor: 255 },
+    columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' } },
+    margin: { left: pw / 2 + 5, right: 14 },
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  y = Math.max(sizeEndY, (doc as any).lastAutoTable.finalY) + 6;
+
+  if (y > 150) { doc.addPage(); y = 15; }
+
+  // ── Daily Trend ──
+  doc.setFontSize(11);
+  doc.text('แนวโน้มรายวัน', 14, y);
+  y += 4;
+  autoTable(doc, {
+    startY: y,
+    head: [['วันที่', 'จำนวน (ตู้)']],
+    body: data.dailyTrend.map(d => [
+      new Date(d.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }),
+      `${d.count}`,
+    ]),
+    theme: 'striped',
+    styles: { font: getFontName(), fontSize: 9.5, cellPadding: 2.5 },
+    headStyles: { fontStyle: 'normal', fillColor: [139, 92, 246], textColor: 255 },
+    columnStyles: { 1: { halign: 'center' } },
+    margin: { left: 14, right: pw / 2 + 2 },
+  });
+
+  // ── By Operator (same page, right side) ──
+  doc.setFontSize(11);
+  doc.text('ผู้ดำเนินการ', pw / 2 + 5, y - 4);
+  autoTable(doc, {
+    startY: y,
+    head: [['ผู้ดำเนินการ', 'จำนวน']],
+    body: data.byOperator.map(r => [r.operator_name, `${r.count}`]),
+    theme: 'striped',
+    styles: { font: getFontName(), fontSize: 9.5, cellPadding: 2.5 },
+    headStyles: { fontStyle: 'normal', fillColor: [100, 116, 139], textColor: 255 },
+    columnStyles: { 1: { halign: 'center' } },
+    margin: { left: pw / 2 + 5, right: 14 },
+  });
+
+  // Footer
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(`CYMS Gate Summary Report — หน้า ${i}/${pageCount}`, pw / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
+  }
+
+  doc.save(`CYMS_${type === 'summary_in' ? 'GateIn' : 'GateOut'}_Summary_${dateFrom}_${dateTo}.pdf`);
+}
+
