@@ -37,13 +37,7 @@ export default function Topbar() {
   interface NotifItem { id: string; source: string; type: string; title: string; detail: string; time: string; }
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
-  const notifStorageKey = session?.userId ? `cyms_notif_last_read_${session.userId}` : '';
-  const [lastReadTime, setLastReadTime] = useState<string>(() => {
-    if (typeof window !== 'undefined' && session?.userId) {
-      return localStorage.getItem(`cyms_notif_last_read_${session.userId}`) || '';
-    }
-    return '';
-  });
+  const [lastReadTime, setLastReadTime] = useState<string>('');
 
   const getRelativeTime = (iso: string) => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -71,25 +65,20 @@ export default function Topbar() {
     initOfflineSync();
   }, []);
 
-  // Reload lastReadTime when user changes (login/switch)
-  useEffect(() => {
-    if (notifStorageKey) {
-      const savedRead = localStorage.getItem(notifStorageKey);
-      setLastReadTime(savedRead || '');
-    } else {
-      setLastReadTime('');
-    }
-  }, [notifStorageKey]);
-
-  // Fetch notifications
+  // Fetch notifications (รวม last_read_at จาก DB ด้วย)
   const fetchNotifications = useCallback(async () => {
     try {
       const yid = session?.activeYardId || 1;
-      const res = await fetch(`/api/notifications?yard_id=${yid}&limit=20`);
+      const uid = session?.userId;
+      const res = await fetch(`/api/notifications?yard_id=${yid}&limit=20${uid ? `&user_id=${uid}` : ''}`);
       const data = await res.json();
       setNotifications(data.notifications || []);
+      // อัปเดต lastReadTime จาก DB (ซิงค์ข้าม browser ได้)
+      if (data.last_read_at !== undefined) {
+        setLastReadTime(data.last_read_at || '');
+      }
     } catch (err) { console.error(err); }
-  }, [session?.activeYardId]);
+  }, [session?.activeYardId, session?.userId]);
 
   useEffect(() => {
     fetchNotifications();
@@ -306,10 +295,18 @@ export default function Topbar() {
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-white flex items-center gap-2">
                   <Bell size={14} /> การแจ้งเตือน
                 </h3>
-                <button onClick={() => {
-                  const now = new Date().toISOString();
-                  setLastReadTime(now);
-                  if (notifStorageKey) localStorage.setItem(notifStorageKey, now);
+                <button onClick={async () => {
+                  const uid = session?.userId;
+                  if (!uid) return;
+                  try {
+                    const res = await fetch('/api/notifications', {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ user_id: uid }),
+                    });
+                    const data = await res.json();
+                    if (data.last_read_at) setLastReadTime(data.last_read_at);
+                  } catch (err) { console.error(err); }
                 }} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">
                   อ่านทั้งหมดแล้ว
                 </button>

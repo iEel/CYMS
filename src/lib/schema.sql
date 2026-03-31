@@ -107,6 +107,7 @@ CREATE TABLE Users (
     failed_login_count INT DEFAULT 0,  -- จำนวน login ผิดติดต่อกัน
     locked_at       DATETIME2 NULL,    -- เวลาที่ถูกล็อค (NULL = ไม่ถูกล็อค)
     password_changed_at DATETIME2 NULL,-- เวลาเปลี่ยนรหัสผ่านล่าสุด
+    notif_last_read_at DATETIME2 NULL, -- เวลาที่อ่านการแจ้งเตือนล่าสุด (ซิงค์ข้าม browser)
     created_at      DATETIME2 DEFAULT GETDATE(),
     updated_at      DATETIME2 DEFAULT GETDATE()
 );

@@ -2,14 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 
-// GET — ดึงกิจกรรมล่าสุด (เป็น notifications)
+// GET — ดึงกิจกรรมล่าสุด (เป็น notifications) + last_read_at ของ user
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const yardId = searchParams.get('yard_id') || '1';
     const limit = searchParams.get('limit') || '20';
+    const userId = searchParams.get('user_id');
 
     const db = await getDb();
+
+    // ดึง last_read_at ของ user จาก DB (ถ้ามี user_id)
+    let lastReadAt: string | null = null;
+    if (userId) {
+      const userRes = await db.request()
+        .input('userId', sql.Int, parseInt(userId))
+        .query('SELECT notif_last_read_at FROM Users WHERE user_id = @userId');
+      if (userRes.recordset.length > 0 && userRes.recordset[0].notif_last_read_at) {
+        lastReadAt = new Date(userRes.recordset[0].notif_last_read_at).toISOString();
+      }
+    }
 
     // 1. Recent Gate Transactions (gate_in / gate_out)
     const gateRes = await db.request()
@@ -85,9 +97,40 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => new Date(b.time as string).getTime() - new Date(a.time as string).getTime())
       .slice(0, parseInt(limit));
 
-    return NextResponse.json({ notifications });
+    return NextResponse.json({ notifications, last_read_at: lastReadAt });
   } catch (error) {
     console.error('❌ GET notifications error:', error);
-    return NextResponse.json({ notifications: [] });
+    return NextResponse.json({ notifications: [], last_read_at: null });
+  }
+}
+
+// PATCH — บันทึก last_read_at ลง Database (ใช้ร่วมกันทุก browser/device)
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { user_id } = body;
+
+    if (!user_id) {
+      return NextResponse.json({ error: 'กรุณาระบุ user_id' }, { status: 400 });
+    }
+
+    const db = await getDb();
+    await db.request()
+      .input('userId', sql.Int, parseInt(user_id))
+      .query('UPDATE Users SET notif_last_read_at = GETDATE() WHERE user_id = @userId');
+
+    // ดึงค่าที่เพิ่งอัปเดตกลับมา
+    const result = await db.request()
+      .input('userId', sql.Int, parseInt(user_id))
+      .query('SELECT notif_last_read_at FROM Users WHERE user_id = @userId');
+
+    const lastReadAt = result.recordset[0]?.notif_last_read_at
+      ? new Date(result.recordset[0].notif_last_read_at).toISOString()
+      : null;
+
+    return NextResponse.json({ success: true, last_read_at: lastReadAt });
+  } catch (error) {
+    console.error('❌ PATCH notifications error:', error);
+    return NextResponse.json({ error: 'ไม่สามารถอัปเดตสถานะการอ่านได้' }, { status: 500 });
   }
 }
