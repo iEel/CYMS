@@ -5,8 +5,24 @@ import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
 import { getPasswordPolicy, validatePassword } from '@/lib/passwordPolicy';
 
-// GET — ดึงรายชื่อผู้ใช้ทั้งหมด
-export async function GET() {
+// [Security] ตรวจ role จาก JWT header (ตั้งโดย middleware) — ต้องเป็น yard_manager เท่านั้น
+function requireYardManager(request: NextRequest): { actorId: number } | NextResponse {
+  const role = request.headers.get('x-user-role');
+  const userId = request.headers.get('x-user-id');
+  if (role !== 'yard_manager') {
+    return NextResponse.json(
+      { error: 'เฉพาะ Yard Manager เท่านั้นที่จัดการผู้ใช้งานได้' },
+      { status: 403 }
+    );
+  }
+  return { actorId: parseInt(userId || '0') };
+}
+
+// GET — ดึงรายชื่อผู้ใช้ทั้งหมด (yard_manager only)
+export async function GET(request: NextRequest) {
+  const auth = requireYardManager(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const db = await getDb();
     const result = await db.request().query(`
@@ -31,8 +47,12 @@ export async function GET() {
   }
 }
 
-// POST — เพิ่มผู้ใช้ใหม่
+// POST — เพิ่มผู้ใช้ใหม่ (yard_manager only)
 export async function POST(request: NextRequest) {
+  const auth = requireYardManager(request);
+  if (auth instanceof NextResponse) return auth;
+  const { actorId } = auth;
+
   try {
     const body = await request.json();
     const db = await getDb();
@@ -85,7 +105,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await logAudit({ userId: body.created_by, action: 'user_create', entityType: 'user', entityId: userId, details: { username: body.username, full_name: body.full_name, role_code: body.role_code } });
+    // [Security] audit actor = ผู้ใช้ที่ล็อกอินอยู่จาก JWT (ไม่ใช้ body.created_by)
+    await logAudit({ userId: actorId, action: 'user_create', entityType: 'user', entityId: userId, details: { username: body.username, full_name: body.full_name, role_code: body.role_code } });
     return NextResponse.json({ success: true, userId });
   } catch (error: unknown) {
     console.error('❌ POST user error:', error);
@@ -95,8 +116,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT — แก้ไขผู้ใช้
+// PUT — แก้ไขผู้ใช้ (yard_manager only)
 export async function PUT(request: NextRequest) {
+  const auth = requireYardManager(request);
+  if (auth instanceof NextResponse) return auth;
+  const { actorId } = auth;
+
   try {
     const body = await request.json();
     const db = await getDb();
@@ -106,7 +131,8 @@ export async function PUT(request: NextRequest) {
       await db.request()
         .input('userId', sql.Int, body.user_id)
         .query(`UPDATE Users SET failed_login_count = 0, locked_at = NULL, updated_at = GETDATE() WHERE user_id = @userId`);
-      await logAudit({ userId: body.updated_by, action: 'account_unlock', entityType: 'user', entityId: body.user_id, details: { unlocked_user_id: body.user_id } });
+      // [Security] audit actor = ผู้ใช้ที่ล็อกอินอยู่จาก JWT
+      await logAudit({ userId: actorId, action: 'account_unlock', entityType: 'user', entityId: body.user_id, details: { unlocked_user_id: body.user_id } });
       return NextResponse.json({ success: true, message: 'ปลดล็อคบัญชีเรียบร้อย' });
     }
 
@@ -138,7 +164,6 @@ export async function PUT(request: NextRequest) {
 
     // อัปเดต password ถ้ามีเปลี่ยน
     if (body.password) {
-      // Password validation
       const policy = await getPasswordPolicy();
       const validation = validatePassword(body.password, policy);
       if (!validation.valid) {
@@ -167,7 +192,8 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    await logAudit({ userId: body.updated_by, action: 'user_update', entityType: 'user', entityId: body.user_id, details: { full_name: body.full_name, role_code: body.role_code, status: body.status } });
+    // [Security] audit actor = ผู้ใช้ที่ล็อกอินอยู่จาก JWT
+    await logAudit({ userId: actorId, action: 'user_update', entityType: 'user', entityId: body.user_id, details: { full_name: body.full_name, role_code: body.role_code, status: body.status } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT user error:', error);
@@ -175,8 +201,12 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE — ลบผู้ใช้
+// DELETE — ลบผู้ใช้ (yard_manager only)
 export async function DELETE(request: NextRequest) {
+  const auth = requireYardManager(request);
+  if (auth instanceof NextResponse) return auth;
+  const { actorId } = auth;
+
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('user_id');
@@ -188,8 +218,7 @@ export async function DELETE(request: NextRequest) {
     const uid = parseInt(userId);
 
     // ห้ามลบตัวเอง
-    const reqUserId = request.headers.get('x-user-id');
-    if (reqUserId && parseInt(reqUserId) === uid) {
+    if (actorId === uid) {
       return NextResponse.json({ error: 'ไม่สามารถลบบัญชีของตัวเองได้' }, { status: 400 });
     }
 
@@ -201,7 +230,8 @@ export async function DELETE(request: NextRequest) {
     await db.request().input('uid', sql.Int, uid)
       .query('DELETE FROM Users WHERE user_id = @uid');
 
-    await logAudit({ action: 'user_delete', entityType: 'user', entityId: uid, details: { user_id: uid } });
+    // [Security] audit actor = ผู้ใช้ที่ล็อกอินอยู่จาก JWT
+    await logAudit({ userId: actorId, action: 'user_delete', entityType: 'user', entityId: uid, details: { deleted_user_id: uid } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ DELETE user error:', error);

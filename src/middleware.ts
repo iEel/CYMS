@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'cyms-default-secret'
-);
+// [Security] Fail-fast: ถ้าไม่ตั้งค่า JWT_SECRET ระบบจะปฏิเสธทุก request
+// ไม่ใช้ fallback default เพราะเดาได้และเปิดช่องให้ forge token ได้ทั้งระบบ
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('⛔ JWT_SECRET is not configured. Set JWT_SECRET in .env.local');
+  }
+  return new TextEncoder().encode(secret);
+}
 
 // Routes that don't require authentication
 const PUBLIC_PATHS = [
   '/api/auth/login',
-  '/api/gate/eir',            // EIR API — public QR scan access
-  '/api/uploads/',            // Uploaded images (EIR photos)
-  '/eir/',                    // Public EIR page (QR scan)
+  '/api/gate/eir',  // EIR API — public QR scan access (QR link ไม่มี token)
+  '/eir/',          // Public EIR page (QR scan)
+  // [Security] /api/uploads/ ถูกลบออก — ต้อง login ก่อนอัปโหลดได้
 ];
 
 // Routes that should skip auth (static, pages, etc.)
@@ -44,7 +50,7 @@ export async function middleware(request: NextRequest) {
 
   try {
     const token = authHeader.slice(7);
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
 
     // Portal routes: only customer role allowed
     if (pathname.startsWith('/api/portal/') && payload.role !== 'customer') {
@@ -54,16 +60,22 @@ export async function middleware(request: NextRequest) {
       );
     }
 
-    // Attach user info to headers for downstream use
-    const response = NextResponse.next();
-    response.headers.set('x-user-id', String(payload.userId || ''));
-    response.headers.set('x-user-role', String(payload.role || ''));
-    response.headers.set('x-user-name', String(payload.username || ''));
+    // [Fix P1] Forward user info เป็น REQUEST headers (ไม่ใช่ response headers)
+    // เพื่อให้ route handler อ่านได้จาก request.headers.get('x-user-id') ได้จริง
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-user-id', String(payload.userId || ''));
+    requestHeaders.set('x-user-role', String(payload.role || ''));
+    requestHeaders.set('x-user-name', String(payload.username || ''));
     if (payload.customerId) {
-      response.headers.set('x-customer-id', String(payload.customerId));
+      requestHeaders.set('x-customer-id', String(payload.customerId));
     }
-    return response;
-  } catch {
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  } catch (err) {
+    // Fail-fast ถ้า JWT_SECRET ไม่ถูกตั้ง
+    if (err instanceof Error && err.message.includes('JWT_SECRET')) {
+      console.error('⛔', err.message);
+      return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+    }
     return NextResponse.json(
       { error: 'Token หมดอายุหรือไม่ถูกต้อง — กรุณาเข้าสู่ระบบใหม่' },
       { status: 401 }
