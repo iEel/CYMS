@@ -22,18 +22,29 @@ const config: sql.config = {
 let pool: sql.ConnectionPool | null = null;
 
 export async function getDb(): Promise<sql.ConnectionPool> {
-  if (pool) {
+  // Return healthy pool immediately
+  if (pool && pool.connected) {
     return pool;
   }
+
+  // Clean up dead pool (e.g. after SQL Server restart)
+  if (pool && !pool.connected) {
+    console.warn('⚠️ DB pool ขาดการเชื่อมต่อ — กำลัง reconnect...');
+    try { await pool.close(); } catch { /* ignore close errors */ }
+    pool = null;
+  }
+
   try {
     pool = await sql.connect(config);
     console.log('✅ เชื่อมต่อ MS SQL Server สำเร็จ');
     return pool;
   } catch (error) {
+    pool = null; // reset ให้ retry ได้ในครั้งถัดไป
     console.error('❌ เชื่อมต่อ MS SQL Server ล้มเหลว:', error);
     throw error;
   }
 }
+
 
 export async function query<T>(
   queryString: string,

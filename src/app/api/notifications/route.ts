@@ -105,23 +105,38 @@ export async function GET(request: NextRequest) {
 }
 
 // PATCH — บันทึก last_read_at ลง Database (ใช้ร่วมกันทุก browser/device)
+// user_id ดึงจาก JWT token ที่ middleware ตรวจแล้ว — ไม่รับจาก body เพื่อป้องกัน privilege escalation
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { user_id } = body;
+    // ดึง user_id จาก header ที่ middleware แนบมา (x-user-id)
+    // หากไม่มี fallback ไปที่ Authorization header โดยตรง
+    let userId: number | null = null;
 
-    if (!user_id) {
-      return NextResponse.json({ error: 'กรุณาระบุ user_id' }, { status: 400 });
+    const headerUserId = request.headers.get('x-user-id');
+    if (headerUserId && !isNaN(parseInt(headerUserId))) {
+      userId = parseInt(headerUserId);
+    } else {
+      // Fallback: verify JWT เองถ้า middleware ไม่ได้ forward header
+      const { verifyToken } = await import('@/lib/auth');
+      const authHeader = request.headers.get('authorization');
+      if (authHeader?.startsWith('Bearer ')) {
+        const payload = await verifyToken(authHeader.slice(7));
+        if (payload?.userId) userId = payload.userId;
+      }
+    }
+
+    if (!userId) {
+      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต — กรุณาเข้าสู่ระบบ' }, { status: 401 });
     }
 
     const db = await getDb();
     await db.request()
-      .input('userId', sql.Int, parseInt(user_id))
+      .input('userId', sql.Int, userId)
       .query('UPDATE Users SET notif_last_read_at = GETDATE() WHERE user_id = @userId');
 
     // ดึงค่าที่เพิ่งอัปเดตกลับมา
     const result = await db.request()
-      .input('userId', sql.Int, parseInt(user_id))
+      .input('userId', sql.Int, userId)
       .query('SELECT notif_last_read_at FROM Users WHERE user_id = @userId');
 
     const lastReadAt = result.recordset[0]?.notif_last_read_at
@@ -134,3 +149,4 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'ไม่สามารถอัปเดตสถานะการอ่านได้' }, { status: 500 });
   }
 }
+
