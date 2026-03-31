@@ -1,20 +1,72 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { z } from 'zod';
+
+// ─── Query param schema ───
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
+
+const dailyParamsSchema = z.object({
+  type: z.enum(['daily_in', 'daily_out']),
+  yard_id: z.coerce.number().int().positive(),
+  date: dateSchema.optional(),
+});
+const summaryParamsSchema = z.object({
+  type: z.enum(['summary_in', 'summary_out']),
+  yard_id: z.coerce.number().int().positive(),
+  date_from: dateSchema.optional(),
+  date_to: dateSchema.optional(),
+});
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = parseInt(searchParams.get('yard_id') || '1');
-    const type = searchParams.get('type') || 'daily_in';
-    const date = searchParams.get('date');         // YYYY-MM-DD (daily)
-    const dateFrom = searchParams.get('date_from'); // YYYY-MM-DD (summary)
-    const dateTo = searchParams.get('date_to');     // YYYY-MM-DD (summary)
+    const rawType = searchParams.get('type') || 'daily_in';
+    const rawYardId = searchParams.get('yard_id') || '1';
+    const rawDate = searchParams.get('date');
+    const rawDateFrom = searchParams.get('date_from');
+    const rawDateTo = searchParams.get('date_to');
+
+    // ─── Validate params ───
+    const isDaily = rawType === 'daily_in' || rawType === 'daily_out';
+    const isSummary = rawType === 'summary_in' || rawType === 'summary_out';
+
+    if (!isDaily && !isSummary) {
+      return NextResponse.json({ error: 'ประเภทรายงานไม่ถูกต้อง (daily_in, daily_out, summary_in, summary_out)' }, { status: 400 });
+    }
+
+    let type: string;
+    let yardId: number;
+    let date: string | null = null;
+    let dateFrom: string | null = null;
+    let dateTo: string | null = null;
+
+    if (isDaily) {
+      const parsed = dailyParamsSchema.safeParse({ type: rawType, yard_id: rawYardId, date: rawDate || undefined });
+      if (!parsed.success) {
+        const errors = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`);
+        return NextResponse.json({ error: 'พารามิเตอร์ไม่ถูกต้อง', details: errors }, { status: 400 });
+      }
+      type = parsed.data.type;
+      yardId = parsed.data.yard_id;
+      date = parsed.data.date ?? null;
+    } else {
+      const parsed = summaryParamsSchema.safeParse({ type: rawType, yard_id: rawYardId, date_from: rawDateFrom || undefined, date_to: rawDateTo || undefined });
+      if (!parsed.success) {
+        const errors = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`);
+        return NextResponse.json({ error: 'พารามิเตอร์ไม่ถูกต้อง', details: errors }, { status: 400 });
+      }
+      type = parsed.data.type;
+      yardId = parsed.data.yard_id;
+      dateFrom = parsed.data.date_from ?? null;
+      dateTo = parsed.data.date_to ?? null;
+    }
 
     const db = await getDb();
 
     // ─────────────── DAILY IN / OUT ───────────────
     if (type === 'daily_in' || type === 'daily_out') {
+
       const txType = type === 'daily_in' ? 'gate_in' : 'gate_out';
       const targetDate = date || new Date().toISOString().slice(0, 10);
 

@@ -19,6 +19,16 @@ export function useAuth() {
   return ctx;
 }
 
+// ตรวจว่า JWT token หมดอายุแล้วหรือยัง (decode จาก payload ไม่ต้อง verify signature)
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return (payload.exp as number) * 1000 < Date.now();
+  } catch {
+    return true; // parse ไม่ได้ → ถือว่าหมดอายุ
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,13 +37,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('cyms_session');
     if (saved) {
       try {
-        setSession(JSON.parse(saved));
+        const parsed: AuthSession = JSON.parse(saved);
+        if (parsed.token && !isTokenExpired(parsed.token)) {
+          setSession(parsed); // token ยังใช้ได้
+        } else {
+          localStorage.removeItem('cyms_session'); // token หมดอายุ → clear ทันที
+        }
       } catch {
         localStorage.removeItem('cyms_session');
       }
     }
     setIsLoading(false);
   }, []);
+
 
   const login = useCallback(async (username: string, password: string): Promise<{ success: boolean; error?: string; locked?: boolean; remaining_minutes?: number; remaining_attempts?: number }> => {
     try {

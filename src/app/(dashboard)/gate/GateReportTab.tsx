@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   BarChart3, ArrowDownToLine, ArrowUpFromLine,
   Calendar, FileText, Download, Printer, RefreshCw,
@@ -159,18 +159,14 @@ export default function GateReportTab({ yardId, onViewEIR }: Props) {
     setSelectedReport(id);
     setDailyData(null);
     setSummaryData(null);
-    const mode = REPORT_TYPES.find(r => r.id === id)?.mode;
-    // auto-fetch
-    setTimeout(() => {
-      const base = `/api/reports/gate?yard_id=${yardId}&type=${id}`;
-      const url = mode === 'daily' ? `${base}&date=${date}` : `${base}&date_from=${dateFrom}&date_to=${dateTo}`;
-      setLoading(true);
-      fetch(url).then(r => r.json()).then(data => {
-        if (mode === 'daily') setDailyData(data);
-        else setSummaryData(data);
-      }).catch(console.error).finally(() => setLoading(false));
-    }, 0);
+    // fetch จะถูกเรียกโดย useEffect ด้านล่างอัตโนมัติ
   };
+
+  // auto-fetch เมื่อเลือก report ใหม่ (ใช้ useEffect แทน setTimeout)
+  useEffect(() => {
+    if (selectedReport) fetchReport(selectedReport);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedReport]);
 
   // ─── Excel Export ───
   const exportExcel = () => {

@@ -1,4 +1,4 @@
-import sql from 'mssql';
+import sql, { ConnectionPool } from 'mssql';
 
 /**
  * Smart Auto-Allocation Logic
@@ -8,8 +8,7 @@ import sql from 'mssql';
 
 interface AllocRule { id: string; enabled: boolean; value: string; }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function loadAllocationRules(db: any): Promise<Record<string, AllocRule>> {
+async function loadAllocationRules(db: ConnectionPool): Promise<Record<string, AllocRule>> {
   try {
     const result = await db.request().query(
       "SELECT setting_value FROM SystemSettings WHERE setting_key = 'allocation_rules'"
@@ -36,9 +35,8 @@ export interface AllocationResult {
   score: number;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function autoAllocate(
-  db: any,
+  db: ConnectionPool,
   yardId: number,
   size: string,
   containerType: string,
