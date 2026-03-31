@@ -54,6 +54,16 @@ import {
   type UserPayload,
 } from '../auth';
 
+// [Test Setup] ตั้งค่า JWT_SECRET สำหรับ test environment
+// auth.ts ใช้ fail-fast (ไม่มี fallback) ดังนั้นต้อง set ก่อน suite รัน
+const TEST_JWT_SECRET = 'test-secret-for-jest-do-not-use-in-production';
+beforeAll(() => {
+  process.env.JWT_SECRET = TEST_JWT_SECRET;
+});
+afterAll(() => {
+  delete process.env.JWT_SECRET;
+});
+
 // ======================== createToken + verifyToken ========================
 
 describe('JWT Token Round-Trip', () => {
