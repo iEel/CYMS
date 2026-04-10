@@ -76,6 +76,7 @@ export async function autoAllocate(
     `);
   const containers = containersResult.recordset;
 
+
   // 3. กฎวางตู้ (Allocation Rules — read from DB)
   let bestSlot: AllocationResult | null = null;
 
@@ -100,8 +101,8 @@ export async function autoAllocate(
 
     const zoneContainers = containers.filter((c: Record<string, unknown>) => c.zone_id === zone.zone_id);
 
-    // Segregate by size: skip zone if it has different-size containers (strict mode)
-    if (isEnabled('segregate_size') && ruleValue('segregate_size', 'strict') === 'strict') {
+    // Segregate by size: strict mode blocks zones with other sizes, preferred mode just adds scoring bonus
+    if (isEnabled('segregate_size') && ruleValue('segregate_size', 'preferred') === 'strict') {
       const hasOtherSize = zoneContainers.some((c: Record<string, unknown>) => c.size !== size);
       if (hasOtherSize && zoneContainers.length > 0) continue;
     }
@@ -142,6 +143,19 @@ export async function autoAllocate(
         if (isEnabled('segregate_line') && shippingLine && sameLineBays.has(bay)) {
           score += 30;
           reasons.push(`สายเรือ ${shippingLine} อยู่ Bay นี้`);
+        }
+
+        // Size preference bonus (preferred mode)
+        if (isEnabled('segregate_size') && ruleValue('segregate_size', 'preferred') === 'preferred') {
+          const sameSizeInZone = zoneContainers.filter((c: Record<string, unknown>) => c.size === size).length;
+          const otherSizeInZone = zoneContainers.filter((c: Record<string, unknown>) => c.size !== size).length;
+          if (sameSizeInZone > 0 && otherSizeInZone === 0) {
+            score += 20;
+            reasons.push(`ขนาด ${size}' ตรงกับโซน`);
+          } else if (sameSizeInZone > 0) {
+            score += 10;
+            reasons.push(`มีตู้ขนาด ${size}' ในโซน`);
+          }
         }
 
         // Type preference bonus (preferred mode)
@@ -188,6 +202,7 @@ export async function autoAllocate(
       }
     }
   }
+
 
   return bestSlot;
 }

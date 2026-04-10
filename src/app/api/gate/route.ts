@@ -462,26 +462,43 @@ export async function POST(request: NextRequest) {
     }
 
     // === Auto-create Work Order for forklift driver ===
-    if (transaction_type === 'gate_in' && assignedLocation) {
+    if (transaction_type === 'gate_in') {
       try {
-        await db.request()
-          .input('woYardId', sql.Int, yard_id)
-          .input('woOrderType', sql.NVarChar, 'move')
-          .input('woContainerId', sql.Int, finalContainerId)
-          .input('woToZoneId', sql.Int, assignedLocation.zone_id)
-          .input('woToBay', sql.Int, assignedLocation.bay)
-          .input('woToRow', sql.Int, assignedLocation.row)
-          .input('woToTier', sql.Int, assignedLocation.tier)
-          .input('woNotes', sql.NVarChar, `Gate-In → ย้ายตู้ ${container_number} ไปวางที่ Zone ${assignedLocation.zone_name} B${assignedLocation.bay}-R${assignedLocation.row}-T${assignedLocation.tier} (${assignedLocation.reason})${truck_plate ? ` | 🚛 ${truck_plate}` : ''}${driver_name ? ` | 👤 ${driver_name}` : ''}`)
-          .input('woPriority', sql.Int, 3) // ปกติ
-          .query(`
-            INSERT INTO WorkOrders (yard_id, order_type, container_id,
-              to_zone_id, to_bay, to_row, to_tier,
-              priority, notes, status)
-            VALUES (@woYardId, @woOrderType, @woContainerId,
-              @woToZoneId, @woToBay, @woToRow, @woToTier,
-              @woPriority, @woNotes, 'pending')
-          `);
+        if (assignedLocation) {
+          // Auto-allocate succeeded → work order with destination
+          await db.request()
+            .input('woYardId', sql.Int, yard_id)
+            .input('woOrderType', sql.NVarChar, 'move')
+            .input('woContainerId', sql.Int, finalContainerId)
+            .input('woToZoneId', sql.Int, assignedLocation.zone_id)
+            .input('woToBay', sql.Int, assignedLocation.bay)
+            .input('woToRow', sql.Int, assignedLocation.row)
+            .input('woToTier', sql.Int, assignedLocation.tier)
+            .input('woNotes', sql.NVarChar, `Gate-In → ย้ายตู้ ${container_number} ไปวางที่ Zone ${assignedLocation.zone_name} B${assignedLocation.bay}-R${assignedLocation.row}-T${assignedLocation.tier} (${assignedLocation.reason})${truck_plate ? ` | 🚛 ${truck_plate}` : ''}${driver_name ? ` | 👤 ${driver_name}` : ''}`)
+            .input('woPriority', sql.Int, 3)
+            .query(`
+              INSERT INTO WorkOrders (yard_id, order_type, container_id,
+                to_zone_id, to_bay, to_row, to_tier,
+                priority, notes, status)
+              VALUES (@woYardId, @woOrderType, @woContainerId,
+                @woToZoneId, @woToBay, @woToRow, @woToTier,
+                @woPriority, @woNotes, 'pending')
+            `);
+        } else {
+          // Auto-allocate failed → work order without destination (driver picks position)
+          await db.request()
+            .input('woYardId', sql.Int, yard_id)
+            .input('woOrderType', sql.NVarChar, 'move')
+            .input('woContainerId', sql.Int, finalContainerId)
+            .input('woNotes', sql.NVarChar, `Gate-In → รับตู้ ${container_number} (${size || '20'}'${containerType || 'GP'}) เข้าลาน — ⚠️ ไม่มีตำแหน่งอัตโนมัติ กรุณาเลือกตำแหน่งวางตู้${truck_plate ? ` | 🚛 ${truck_plate}` : ''}${driver_name ? ` | 👤 ${driver_name}` : ''}`)
+            .input('woPriority', sql.Int, 2) // ด่วนกว่าปกติ เพราะต้องกำหนดตำแหน่งเอง
+            .query(`
+              INSERT INTO WorkOrders (yard_id, order_type, container_id,
+                priority, notes, status)
+              VALUES (@woYardId, @woOrderType, @woContainerId,
+                @woPriority, @woNotes, 'pending')
+            `);
+        }
       } catch (woErr) {
         console.error('⚠️ Auto work order creation failed:', woErr);
         // Don't fail the gate-in if work order creation fails
