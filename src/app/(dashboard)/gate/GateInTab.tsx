@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { validateContainerNumber } from '@/lib/containerValidation';
 import {
   Loader2, CheckCircle2,
   Package, User, CreditCard,
-  ClipboardCheck, Printer, X,
+  ClipboardCheck, Printer, X, Users,
   ScanLine, AlertTriangle, Ship, FileText,
   ArrowDownToLine,
 } from 'lucide-react';
@@ -57,6 +57,12 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [gateInCustomCharges, setGateInCustomCharges] = useState<BillingCharge[]>([]);
   const [gateInSelectedCustom, setGateInSelectedCustom] = useState<Set<number>>(new Set());
   const [gateInPayLoading, setGateInPayLoading] = useState(false);
+
+  // Manual customer selection (when no auto-match)
+  const [customerList, setCustomerList] = useState<{ customer_id: number; customer_name: string; customer_type: string; credit_term: number }[]>([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [manualCustomerId, setManualCustomerId] = useState<number | null>(null);
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
 
   const [gateInLoading, setGateInLoading] = useState(false);
   const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string; assigned_location?: { zone_name: string; bay: number; row: number; tier: number; reason: string } } | null>(null);
@@ -124,6 +130,14 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gateInForm.container_number]);
 
+  // Fetch customer list for manual selection
+  useEffect(() => {
+    fetch('/api/settings/customers')
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data)) setCustomerList(data); })
+      .catch(err => console.error('Load customers error:', err));
+  }, []);
+
   // Fetch gate-in billing when form has valid data
   useEffect(() => {
     if (containerValid !== true) {
@@ -157,6 +171,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           setGateInBillingPaid(false);
           setGateInInvoiceNumber('');
           setGateInInvoiceId(null);
+          setManualCustomerId(null);
+          setShowCustomerPicker(false);
         }
       })
       .catch(err => console.error('Gate-in billing fetch error:', err))
@@ -187,6 +203,24 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     return final;
   };
   const hasGateInCharges = gateInBillingData && gateInBillingData.charges.length > 0;
+
+  // Resolved customer: auto-matched or manually selected
+  const resolvedCustomer = useMemo(() => {
+    if (gateInBillingData?.customer) return gateInBillingData.customer;
+    if (manualCustomerId) {
+      const c = customerList.find(c => c.customer_id === manualCustomerId);
+      if (c) return { customer_id: c.customer_id, customer_name: c.customer_name, credit_term: c.credit_term };
+    }
+    return null;
+  }, [gateInBillingData?.customer, manualCustomerId, customerList]);
+  const resolvedIsCredit = resolvedCustomer ? (resolvedCustomer.credit_term || 0) > 0 : false;
+
+  // Filtered customer list for search
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch) return customerList.slice(0, 10);
+    const q = customerSearch.toLowerCase();
+    return customerList.filter(c => c.customer_name.toLowerCase().includes(q)).slice(0, 10);
+  }, [customerList, customerSearch]);
 
   // Gate-In submit
   const handleGateIn = async () => {
@@ -471,12 +505,48 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                 <h4 className="text-xs font-bold text-slate-700 dark:text-white flex items-center gap-2">
                   💰 ค่าบริการ Gate-In
                 </h4>
-                {gateInBillingData.is_credit && gateInBillingData.customer && (
-                  <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold">
-                    🏢 เครดิต {gateInBillingData.credit_term} วัน • {gateInBillingData.customer.customer_name}
+                {resolvedCustomer ? (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${resolvedIsCredit ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400'}`}>
+                    {resolvedIsCredit ? `🏢 เครดิต ${resolvedCustomer.credit_term} วัน • ` : '🏢 '}{resolvedCustomer.customer_name}
                   </span>
-                )}
+                ) : null}
               </div>
+
+              {/* Customer Warning — No customer matched */}
+              {!resolvedCustomer && (
+                <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/10 border-b border-amber-200 dark:border-amber-800">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">ไม่พบข้อมูลลูกค้า — กรุณาเลือกลูกค้าก่อนชำระเงิน</p>
+                  </div>
+                  {!showCustomerPicker ? (
+                    <button onClick={() => setShowCustomerPicker(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium hover:bg-amber-200 dark:hover:bg-amber-800/40 transition-colors">
+                      <Users size={12} /> เลือกลูกค้า
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <input type="text" value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
+                        placeholder="พิมพ์ชื่อลูกค้าเพื่อค้นหา..."
+                        className="w-full h-9 px-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500" />
+                      <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 p-1">
+                        {filteredCustomers.length === 0 ? (
+                          <p className="text-xs text-slate-400 p-2 text-center">ไม่พบลูกค้า — กรุณาเพิ่มที่ ตั้งค่า → ลูกค้า</p>
+                        ) : filteredCustomers.map(c => (
+                          <button key={c.customer_id} onClick={() => { setManualCustomerId(c.customer_id); setShowCustomerPicker(false); setCustomerSearch(''); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${manualCustomerId === c.customer_id ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700' : 'hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}>
+                            <span className="font-medium">{c.customer_name}</span>
+                            <span className="text-[10px] text-slate-400">
+                              {c.customer_type === 'shipping_line' ? 'สายเรือ' : c.customer_type === 'trucker' ? 'รถบรรทุก' : 'ทั่วไป'}
+                              {c.credit_term > 0 && ` • เครดิต ${c.credit_term} วัน`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Charges Table */}
               <div className="px-4 py-2 divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -559,23 +629,30 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
               {/* Payment Action */}
               {!gateInBillingPaid && (
                 <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 space-y-3">
-                  {gateInBillingData.is_credit ? (
+                  {!resolvedCustomer ? (
+                    <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
+                      <p className="text-xs font-semibold text-amber-600 flex items-center gap-1.5">
+                        <AlertTriangle size={12} /> กรุณาเลือกลูกค้าก่อนชำระเงิน
+                      </p>
+                    </div>
+                  ) : resolvedIsCredit ? (
                     <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/10 rounded-lg p-3">
                       <div>
                         <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">🏢 ลูกค้าเครดิต — วางบิลอัตโนมัติ</p>
                         <p className="text-[10px] text-blue-500">สร้างใบแจ้งหนี้ (pending) → รับตู้ได้เลย</p>
                       </div>
                       <button disabled={gateInPayLoading} onClick={async () => {
-                        if (!gateInBillingData?.customer) return;
+                        if (!resolvedCustomer) return;
                         setGateInPayLoading(true);
                         try {
+                          const creditTerm = resolvedCustomer.credit_term || 0;
                           const res = await fetch('/api/billing/invoices', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                              yard_id: yardId, customer_id: gateInBillingData.customer.customer_id,
+                              yard_id: yardId, customer_id: resolvedCustomer.customer_id,
                               charge_type: 'gate_in', description: `ค่าบริการ Gate-In ${gateInForm.container_number}`,
                               quantity: 1, unit_price: gateInSelectedTotal,
-                              due_date: new Date(Date.now() + gateInBillingData.credit_term * 86400000).toISOString(),
+                              due_date: new Date(Date.now() + creditTerm * 86400000).toISOString(),
                               notes: JSON.stringify({ charges: buildGateInFinalCharges(), transaction_type: 'gate_in', container_number: gateInForm.container_number }),
                             }),
                           });
@@ -604,11 +681,11 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                           </button>
                         ))}
                       </div>
-                      <button disabled={gateInPayLoading || gateInSelectedGrand <= 0} onClick={async () => {
+                      <button disabled={gateInPayLoading || gateInSelectedGrand <= 0 || !resolvedCustomer} onClick={async () => {
+                        if (!resolvedCustomer) return;
                         setGateInPayLoading(true);
                         try {
-                          let custId = gateInBillingData?.customer?.customer_id;
-                          if (!custId) custId = 1;
+                          const custId = resolvedCustomer.customer_id;
                           const res = await fetch('/api/billing/invoices', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -651,9 +728,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                       {gateInInvoiceNumber && <span className="text-xs font-mono text-emerald-500">({gateInInvoiceNumber})</span>}
                     </div>
                     {gateInInvoiceId && (
-                      <button onClick={() => window.open(`/billing/print?id=${gateInInvoiceId}&type=${gateInBillingData.is_credit ? 'invoice' : 'receipt'}`, '_blank')}
+                      <button onClick={() => window.open(`/billing/print?id=${gateInInvoiceId}&type=${resolvedIsCredit ? 'invoice' : 'receipt'}`, '_blank')}
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
-                        <Printer size={12} /> 🖨️ พิมพ์{gateInBillingData.is_credit ? 'ใบแจ้งหนี้' : 'ใบเสร็จ'}
+                        <Printer size={12} /> 🖨️ พิมพ์{resolvedIsCredit ? 'ใบแจ้งหนี้' : 'ใบเสร็จ'}
                       </button>
                     )}
                   </div>

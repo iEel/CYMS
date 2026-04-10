@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Loader2, Search, CheckCircle2, Truck,
-  Package, User, FileText, X,
+  Package, User, FileText, X, Users,
   ArrowUpFromLine, AlertTriangle, ScanLine,
 } from 'lucide-react';
 import PhotoCapture from '@/components/gate/PhotoCapture';
@@ -45,6 +45,37 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [chargeOverrides, setChargeOverrides] = useState<Record<number, number>>({});
   const [customCharges, setCustomCharges] = useState<BillingCharge[]>([]);
   const [selectedCustom, setSelectedCustom] = useState<Set<number>>(new Set());
+
+  // Manual customer selection (when no auto-match)
+  const [customerList, setCustomerList] = useState<{ customer_id: number; customer_name: string; customer_type: string; credit_term: number }[]>([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [manualCustomerId, setManualCustomerId] = useState<number | null>(null);
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
+
+  // Fetch customer list for manual selection
+  useEffect(() => {
+    fetch('/api/settings/customers')
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data)) setCustomerList(data); })
+      .catch(err => console.error('Load customers error:', err));
+  }, []);
+
+  // Resolved customer: auto-matched or manually selected
+  const resolvedCustomer = useMemo(() => {
+    if (billingData?.customer) return billingData.customer;
+    if (manualCustomerId) {
+      const c = customerList.find(c => c.customer_id === manualCustomerId);
+      if (c) return { customer_id: c.customer_id, customer_name: c.customer_name, credit_term: c.credit_term };
+    }
+    return null;
+  }, [billingData?.customer, manualCustomerId, customerList]);
+  const resolvedIsCredit = resolvedCustomer ? (resolvedCustomer.credit_term || 0) > 0 : false;
+
+  const filteredGateOutCustomers = useMemo(() => {
+    if (!customerSearch) return customerList.slice(0, 10);
+    const q = customerSearch.toLowerCase();
+    return customerList.filter(c => c.customer_name.toLowerCase().includes(q)).slice(0, 10);
+  }, [customerList, customerSearch]);
 
   // Init selected charges
   const initSelectedCharges = (charges: BillingCharge[]) => {
@@ -332,12 +363,48 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                   <h4 className="text-xs font-bold text-slate-700 dark:text-white flex items-center gap-2">
                     💰 ค่าบริการ ({billingData.container.dwell_days as number} วัน)
                   </h4>
-                  {billingData.is_credit && billingData.customer && (
-                    <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold">
-                      🏢 เครดิต {billingData.credit_term} วัน • {billingData.customer.customer_name}
+                  {resolvedCustomer ? (
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${resolvedIsCredit ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400'}`}>
+                      {resolvedIsCredit ? `🏢 เครดิต ${resolvedCustomer.credit_term} วัน • ` : '🏢 '}{resolvedCustomer.customer_name}
                     </span>
-                  )}
+                  ) : null}
                 </div>
+
+                {/* Customer Warning — No customer matched */}
+                {!resolvedCustomer && (
+                  <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/10 border-b border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">ไม่พบข้อมูลลูกค้า — กรุณาเลือกลูกค้าก่อนชำระเงิน</p>
+                    </div>
+                    {!showCustomerPicker ? (
+                      <button onClick={() => setShowCustomerPicker(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium hover:bg-amber-200 dark:hover:bg-amber-800/40 transition-colors">
+                        <Users size={12} /> เลือกลูกค้า
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <input type="text" value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
+                          placeholder="พิมพ์ชื่อลูกค้าเพื่อค้นหา..."
+                          className="w-full h-9 px-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500" />
+                        <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 p-1">
+                          {filteredGateOutCustomers.length === 0 ? (
+                            <p className="text-xs text-slate-400 p-2 text-center">ไม่พบลูกค้า — กรุณาเพิ่มที่ ตั้งค่า → ลูกค้า</p>
+                          ) : filteredGateOutCustomers.map(c => (
+                            <button key={c.customer_id} onClick={() => { setManualCustomerId(c.customer_id); setShowCustomerPicker(false); setCustomerSearch(''); }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${manualCustomerId === c.customer_id ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700' : 'hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}>
+                              <span className="font-medium">{c.customer_name}</span>
+                              <span className="text-[10px] text-slate-400">
+                                {c.customer_type === 'shipping_line' ? 'สายเรือ' : c.customer_type === 'trucker' ? 'รถบรรทุก' : 'ทั่วไป'}
+                                {c.credit_term > 0 && ` • เครดิต ${c.credit_term} วัน`}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Charges Table */}
                 <div className="px-4 py-2 divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -445,24 +512,31 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                 {/* Payment Action */}
                 {!billingPaid && (
                   <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 space-y-3">
-                    {billingData.is_credit ? (
+                    {!resolvedCustomer ? (
+                      <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
+                        <p className="text-xs font-semibold text-amber-600 flex items-center gap-1.5">
+                          <AlertTriangle size={12} /> กรุณาเลือกลูกค้าก่อนชำระเงิน
+                        </p>
+                      </div>
+                    ) : resolvedIsCredit ? (
                       <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/10 rounded-lg p-3">
                         <div>
                           <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">🏢 ลูกค้าเครดิต — วางบิลอัตโนมัติ</p>
                           <p className="text-[10px] text-blue-500">สร้างใบแจ้งหนี้ (pending) → ปล่อยตู้ได้เลย</p>
                         </div>
                         <button onClick={async () => {
-                          if (!selectedContainer || !billingData?.customer) return;
+                          if (!selectedContainer || !resolvedCustomer) return;
                           try {
+                            const creditTerm = resolvedCustomer.credit_term || 0;
                             const res = await fetch('/api/billing/invoices', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({
-                                yard_id: yardId, customer_id: billingData.customer.customer_id,
+                                yard_id: yardId, customer_id: resolvedCustomer.customer_id,
                                 container_id: selectedContainer.container_id, charge_type: 'storage',
                                 description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน)`,
                                 quantity: 1, unit_price: selectedTotal,
-                                due_date: new Date(Date.now() + billingData.credit_term * 86400000).toISOString(),
+                                due_date: new Date(Date.now() + creditTerm * 86400000).toISOString(),
                                 notes: JSON.stringify({ charges: buildFinalCharges(), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
                               }),
                             });
@@ -490,11 +564,10 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                             </button>
                           ))}
                         </div>
-                        <button onClick={async () => {
-                          if (!selectedContainer || !billingData) return;
+                        <button disabled={!resolvedCustomer} onClick={async () => {
+                          if (!selectedContainer || !billingData || !resolvedCustomer) return;
                           try {
-                            let custId = billingData.customer?.customer_id;
-                            if (!custId) custId = 1;
+                            const custId = resolvedCustomer.customer_id;
                             const res = await fetch('/api/billing/invoices', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
@@ -519,7 +592,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                             }
                           } catch (err) { console.error(err); }
                         }}
-                          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all"
+                          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all"
                         >💰 รับชำระเงิน ฿{selectedGrand.toLocaleString()}</button>
                       </>
                     )}
