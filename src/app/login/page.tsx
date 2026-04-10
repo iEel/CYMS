@@ -1,11 +1,19 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { Container, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -15,6 +23,8 @@ export default function LoginPage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromPath = searchParams.get('from');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,9 +41,10 @@ export default function LoginPage() {
     const result = await login(username, password);
     
     if (result.success) {
-      // Customer role → Portal, others → Dashboard
+      // Redirect กลับไปหน้าที่ต้องการ (จาก ?from=) หรือ default ตาม role
       const session = JSON.parse(localStorage.getItem('cyms_session') || '{}');
-      router.push(session.role === 'customer' ? '/portal' : '/dashboard');
+      const defaultPath = session.role === 'customer' ? '/portal' : '/dashboard';
+      router.push(fromPath || defaultPath);
     } else {
       // Parse lockout / remaining attempts info from error response
       if (result.remaining_minutes) {

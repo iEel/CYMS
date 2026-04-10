@@ -34,20 +34,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const saved = localStorage.getItem('cyms_session');
-    if (saved) {
-      try {
-        const parsed: AuthSession = JSON.parse(saved);
-        if (parsed.token && !isTokenExpired(parsed.token)) {
-          setSession(parsed); // token ยังใช้ได้
-        } else {
-          localStorage.removeItem('cyms_session'); // token หมดอายุ → clear ทันที
+    async function initSession() {
+      // 1. ลอง restore จาก localStorage ก่อน (เร็วที่สุด)
+      const saved = localStorage.getItem('cyms_session');
+      if (saved) {
+        try {
+          const parsed: AuthSession = JSON.parse(saved);
+          if (parsed.token && !isTokenExpired(parsed.token)) {
+            setSession(parsed);
+            setIsLoading(false);
+            return; // สำเร็จ — ไม่ต้องเรียก API
+          } else {
+            localStorage.removeItem('cyms_session'); // token หมดอายุ → clear
+          }
+        } catch {
+          localStorage.removeItem('cyms_session');
         }
-      } catch {
-        localStorage.removeItem('cyms_session');
       }
+
+      // 2. localStorage ว่างหรือ token หมดอายุ → ตรวจ httpOnly cookie ผ่าน API
+      // กรณีนี้เกิดขึ้นเมื่อ: เปิด new tab, รีสตาร์ท browser, หรือ localStorage ถูก clear
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && data.session) {
+            setSession(data.session);
+            // sync กลับไปใน localStorage เพื่อให้ครั้งต่อไปเร็วขึ้น
+            localStorage.setItem('cyms_session', JSON.stringify(data.session));
+          }
+        }
+      } catch { /* network error — ปล่อยให้ middleware จัดการ */ }
+
+      setIsLoading(false);
     }
-    setIsLoading(false);
+
+    initSession();
   }, []);
 
 
@@ -80,9 +102,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     setSession(null);
     localStorage.removeItem('cyms_session');
+    // [Fix] เรียก logout API เพื่อ clear httpOnly cookie ฝั่ง server ด้วย
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch { /* ignore */ }
+    window.location.href = '/login';
   }, []);
 
   const switchYard = useCallback((yardId: number) => {

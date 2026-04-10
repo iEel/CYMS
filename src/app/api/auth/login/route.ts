@@ -169,19 +169,47 @@ export async function POST(request: NextRequest) {
         VALUES (@userId, @yardId, @action, @entityType, @entityId, @details, GETDATE())
       `);
 
-    return NextResponse.json({
-      success: true,
-      session: {
-        userId: user.user_id,
-        username: user.username,
-        fullName: user.full_name,
-        role: user.role_code,
-        yardIds,
-        activeYardId: yardIds[0] || 1,
-        customerId,
-        token,
-      },
-    });
+    const sessionData = {
+      userId: user.user_id,
+      username: user.username,
+      fullName: user.full_name,
+      role: user.role_code,
+      yardIds,
+      activeYardId: yardIds[0] || 1,
+      customerId,
+      token,
+    };
+
+    // [Fix] ตั้ง httpOnly cookie ผ่าน Set-Cookie header ตรงๆ
+    // เพื่อความเสถียรกับ Next.js 16 — NextResponse.cookies.set() อาจไม่ทำงาน
+    const expiresIn = process.env.JWT_EXPIRES_IN || '8h';
+    const maxAgeSeconds = expiresIn.endsWith('h')
+      ? parseInt(expiresIn) * 3600
+      : expiresIn.endsWith('d')
+        ? parseInt(expiresIn) * 86400
+        : 28800; // default 8h
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieParts = [
+      `cyms_token=${token}`,
+      `Path=/`,
+      `Max-Age=${maxAgeSeconds}`,
+      `HttpOnly`,
+      `SameSite=Lax`,
+    ];
+    if (isProduction) cookieParts.push('Secure');
+    const setCookieHeader = cookieParts.join('; ');
+
+    return new Response(
+      JSON.stringify({ success: true, session: sessionData }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': setCookieHeader,
+        },
+      }
+    );
 
   } catch (error) {
     console.error('❌ Login error:', error);

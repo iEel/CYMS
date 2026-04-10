@@ -12,7 +12,9 @@ if (typeof window !== 'undefined') {
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
-    if (url.startsWith('/api/') && !url.includes('/api/auth/login')) {
+    // [Fix] ข้าม /api/auth/ ทั้งหมด — ไม่ใส่ token, ไม่ auto-logout
+    // เพราะ auth routes จัดการ auth เอง (อ่าน cookie โดยตรง)
+    if (url.startsWith('/api/') && !url.startsWith('/api/auth/')) {
       const headers = new Headers(init?.headers);
       if (!headers.has('Authorization')) {
         try {
@@ -24,16 +26,21 @@ if (typeof window !== 'undefined') {
         } catch { /* */ }
       }
       const response = await originalFetch(input, { ...init, headers });
-      // Auto-logout on 401
+      // Auto-logout on 401 — แต่เฉพาะเมื่อ session เคยถูก set แล้ว
+      // (ป้องกัน race condition ตอน page กำลัง hydrate ยังไม่ได้ restore session)
       if (response.status === 401 && !window.location.pathname.includes('/login')) {
-        localStorage.removeItem('cyms_session');
-        window.location.href = '/login';
+        const hasExistingSession = localStorage.getItem('cyms_session');
+        if (hasExistingSession) {
+          localStorage.removeItem('cyms_session');
+          window.location.href = '/login';
+        }
       }
       return response;
     }
     return originalFetch(input, init);
   };
 }
+
 
 export default function DashboardLayout({
   children,
