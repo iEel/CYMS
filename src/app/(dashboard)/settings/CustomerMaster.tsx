@@ -277,72 +277,120 @@ export default function CustomerMaster() {
               const TypeIcon = typeOpt.icon;
               const isEditing = editId === c.customer_id;
 
-              return (
-                <div key={c.customer_id}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-all
-                    ${isEditing ? 'border-violet-300 dark:border-violet-700 bg-violet-50/30 dark:bg-violet-900/10' : 'border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
-
-                  {isEditing ? (
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-2">
+              return isEditing ? (
+                <div key={c.customer_id} className="p-4 rounded-xl border-2 border-violet-300 dark:border-violet-700 bg-violet-50/30 dark:bg-violet-900/10 transition-all">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-sm text-slate-800 dark:text-white flex items-center gap-2">
+                      <Pencil size={14} className="text-violet-500" /> แก้ไขข้อมูลลูกค้า
+                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={handleEdit} disabled={saving || !form.customer_name}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-all">
+                        {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} บันทึก
+                      </button>
+                      <button onClick={() => setEditId(null)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-300 text-sm hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">
+                        <X size={14} /> ยกเลิก
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">ชื่อลูกค้า *</label>
                       <input type="text" value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })}
-                        className={inputClass} placeholder="ชื่อ" />
-                      <select value={form.customer_type} onChange={e => setForm({ ...form, customer_type: e.target.value })} className={inputClass}>
+                        placeholder="ชื่อลูกค้า" className={inputClass} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">ประเภท</label>
+                      <select value={form.customer_type} onChange={e => setForm({ ...form, customer_type: e.target.value })}
+                        className={inputClass}>
                         {TYPE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                       </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">เลขประจำตัวผู้เสียภาษี</label>
+                      <input type="text" value={form.tax_id} onChange={e => setForm({ ...form, tax_id: e.target.value })}
+                        placeholder="0-0000-00000-00-0" className={`${inputClass} font-mono`} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">ผู้ติดต่อ</label>
+                      <input type="text" value={form.contact_name} onChange={e => setForm({ ...form, contact_name: e.target.value })}
+                        placeholder="ชื่อผู้ติดต่อ" className={inputClass} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">โทรศัพท์</label>
                       <input type="text" value={form.contact_phone} onChange={e => setForm({ ...form, contact_phone: e.target.value })}
-                        className={inputClass} placeholder="โทร" />
-                      <div className="relative">
-                        <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
-                          className={inputClass} placeholder="วันเครดิต" />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">วัน</span>
+                        placeholder="0xx-xxx-xxxx" className={inputClass} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">อีเมล</label>
+                      <input type="email" value={form.contact_email} onChange={e => setForm({ ...form, contact_email: e.target.value })}
+                        placeholder="email@example.com" className={inputClass} />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs text-slate-500 mb-1">ที่อยู่</label>
+                      <input type="text" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
+                        placeholder="ที่อยู่บริษัท" className={inputClass} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">วันเครดิต (Credit Term)</label>
+                      <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
+                        placeholder="0" className={inputClass} />
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-xs text-slate-500 mb-1">ประเภทสาขา</label>
+                      <div className="flex items-center gap-4 h-10">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name={`branch_type_edit_${c.customer_id}`} value="head_office" checked={form.branch_type === 'head_office'}
+                            onChange={() => setForm({ ...form, branch_type: 'head_office', branch_number: '00000' })}
+                            className="accent-violet-600" />
+                          <span className="text-sm text-slate-700 dark:text-slate-300">สำนักงานใหญ่</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name={`branch_type_edit_${c.customer_id}`} value="branch" checked={form.branch_type === 'branch'}
+                            onChange={() => setForm({ ...form, branch_type: 'branch', branch_number: '' })}
+                            className="accent-violet-600" />
+                          <span className="text-sm text-slate-700 dark:text-slate-300">สาขาที่</span>
+                        </label>
+                        {form.branch_type === 'branch' && (
+                          <input type="text" value={form.branch_number} onChange={e => setForm({ ...form, branch_number: e.target.value })}
+                            placeholder="00001" className="h-10 w-28 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm font-mono text-slate-800 dark:text-white outline-none focus:border-violet-500" />
+                        )}
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${typeOpt.color}`}>
-                        <TypeIcon size={16} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm text-slate-800 dark:text-white truncate">{c.customer_name}</span>
-                          {!c.is_active && <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded">ปิดใช้งาน</span>}
-                        </div>
-                        <p className="text-xs text-slate-400 truncate">
-                          {typeOpt.label}
-                          {c.tax_id && <span> • {c.tax_id}</span>}
-                          {c.contact_name && <span> • {c.contact_name}</span>}
-                          {c.contact_phone && <span> • {c.contact_phone}</span>}
-                          {c.credit_term > 0 && <span> • เครดิต {c.credit_term} วัน</span>}
-                          <span> • {c.branch_type === 'head_office' ? 'สำนักงานใหญ่' : `สาขาที่ ${c.branch_number}`}</span>
-                        </p>
-                      </div>
+                  </div>
+                </div>
+              ) : (
+                <div key={c.customer_id}
+                  className="flex items-center justify-between p-4 rounded-xl border transition-all border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${typeOpt.color}`}>
+                      <TypeIcon size={16} />
                     </div>
-                  )}
-
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm text-slate-800 dark:text-white truncate">{c.customer_name}</span>
+                        {!c.is_active && <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded">ปิดใช้งาน</span>}
+                      </div>
+                      <p className="text-xs text-slate-400 truncate">
+                        {typeOpt.label}
+                        {c.tax_id && <span> • {c.tax_id}</span>}
+                        {c.contact_name && <span> • {c.contact_name}</span>}
+                        {c.contact_phone && <span> • {c.contact_phone}</span>}
+                        {c.credit_term > 0 && <span> • เครดิต {c.credit_term} วัน</span>}
+                        <span> • {c.branch_type === 'head_office' ? 'สำนักงานใหญ่' : `สาขาที่ ${c.branch_number}`}</span>
+                      </p>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-1.5 ml-3 shrink-0">
-                    {isEditing ? (
-                      <>
-                        <button onClick={handleEdit} disabled={saving}
-                          className="w-8 h-8 rounded-lg bg-violet-600 text-white flex items-center justify-center hover:bg-violet-700 disabled:opacity-50">
-                          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                        </button>
-                        <button onClick={() => setEditId(null)}
-                          className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-600 text-slate-400 flex items-center justify-center hover:bg-slate-300">
-                          <X size={14} />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => startEdit(c)}
-                          className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-blue-50 hover:text-blue-500 transition-colors" title="แก้ไข">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => handleDelete(c.customer_id)}
-                          className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-colors" title="ลบ">
-                          <Trash2 size={14} />
-                        </button>
-                      </>
-                    )}
+                    <button onClick={() => startEdit(c)}
+                      className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-blue-50 hover:text-blue-500 transition-colors" title="แก้ไข">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => handleDelete(c.customer_id)}
+                      className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-colors" title="ลบ">
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               );
