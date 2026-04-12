@@ -2,6 +2,44 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 
+type StorageRateTier = {
+  tier_name: string;
+  from_day: number;
+  to_day: number;
+  rate_20: number;
+  rate_40: number;
+  rate_45: number;
+  customer_id: number | null;
+  cargo_status: string;
+};
+
+function normalizeCargoStatus(value: unknown): 'any' | 'laden' | 'empty' {
+  return value === 'laden' || value === 'empty' ? value : 'any';
+}
+
+function chooseStorageRateTiers(
+  tiers: StorageRateTier[],
+  hasBillingCustomer: boolean,
+  cargoStatus: 'laden' | 'empty'
+) {
+  const exactCargo = (t: StorageRateTier) => normalizeCargoStatus(t.cargo_status) === cargoStatus;
+  const anyCargo = (t: StorageRateTier) => normalizeCargoStatus(t.cargo_status) === 'any';
+
+  const customerExact = hasBillingCustomer
+    ? tiers.filter(t => t.customer_id !== null && exactCargo(t))
+    : [];
+  const customerAny = hasBillingCustomer
+    ? tiers.filter(t => t.customer_id !== null && anyCargo(t))
+    : [];
+  const defaultExact = tiers.filter(t => t.customer_id === null && exactCargo(t));
+  const defaultAny = tiers.filter(t => t.customer_id === null && anyCargo(t));
+
+  if (customerExact.length > 0) return { tiers: customerExact, hasCustomerRate: true, rateSource: 'customer_exact' };
+  if (customerAny.length > 0) return { tiers: customerAny, hasCustomerRate: true, rateSource: 'customer_any' };
+  if (defaultExact.length > 0) return { tiers: defaultExact, hasCustomerRate: false, rateSource: 'default_exact' };
+  return { tiers: defaultAny, hasCustomerRate: false, rateSource: defaultAny.length > 0 ? 'default_any' : 'none' };
+}
+
 /**
  * POST /api/billing/gate-check
  * Gate-Out billing check: calculate charges using tiered storage rates + detect credit customer
@@ -33,7 +71,7 @@ export async function POST(request: NextRequest) {
     const container = cResult.recordset[0];
     const dwellDays = container.dwell_days || 0;
     const containerSize = parseInt(container.size) || 20;
-    const cargoStatus = container.is_laden ? 'laden' : 'empty';
+    const cargoStatus: 'laden' | 'empty' = container.is_laden ? 'laden' : 'empty';
 
     // 2. Resolve Owner + Billing Customer
     let owner = null;
@@ -165,16 +203,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Filter by cargo status
-    tierQuery += ` AND (cargo_status = @cargoSt OR cargo_status = 'any')`;
+    tierQuery += ` AND (ISNULL(cargo_status, 'any') = @cargoSt OR ISNULL(cargo_status, 'any') = 'any')`;
     tierReq.input('cargoSt', sql.VarChar, cargoStatus);
 
-    tierQuery += ' ORDER BY customer_id DESC, sort_order, from_day'; // Customer-specific first
+    tierQuery += `
+      ORDER BY
+        CASE WHEN customer_id IS NOT NULL THEN 0 ELSE 1 END,
+        CASE WHEN ISNULL(cargo_status, 'any') = @cargoSt THEN 0 ELSE 1 END,
+        sort_order,
+        from_day
+    `;
     const tierResult = await tierReq.query(tierQuery);
 
-    // Use customer-specific tiers if available, else fallback to default
-    const allTiers = tierResult.recordset;
-    const customerTiers = allTiers.filter((t: { customer_id: number | null }) => t.customer_id !== null);
-    const tiers = customerTiers.length > 0 ? customerTiers : allTiers.filter((t: { customer_id: number | null }) => t.customer_id === null);
+    const selectedRate = chooseStorageRateTiers(
+      tierResult.recordset,
+      Boolean(billingCustomer?.customer_id),
+      cargoStatus
+    );
+    const tiers = selectedRate.tiers;
 
     const charges: Array<{
       charge_type: string;
@@ -325,7 +371,8 @@ export async function POST(request: NextRequest) {
       is_credit: isCredit,
       credit_term: creditTerm,
       // Customer-specific rate info
-      has_customer_rate: customerTiers.length > 0,
+      has_customer_rate: selectedRate.hasCustomerRate,
+      storage_rate_source: selectedRate.rateSource,
       // Halt rule: multi-match
       needs_customer_selection: needsCustomerSelection,
       candidates,

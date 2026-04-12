@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Save, TrendingUp, CheckCircle2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Save, TrendingUp, CheckCircle2, Loader2, Copy } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 
 interface TierRate {
@@ -20,7 +20,11 @@ interface TierRate {
 interface CustomerOption {
   customer_id: number;
   customer_name: string;
-  is_line: boolean;
+  is_line?: boolean;
+  is_forwarder?: boolean;
+  is_trucking?: boolean;
+  is_shipper?: boolean;
+  is_consignee?: boolean;
 }
 
 export default function TieredStorageRate() {
@@ -37,12 +41,13 @@ export default function TieredStorageRate() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [cargoStatus, setCargoStatus] = useState<'any' | 'laden' | 'empty'>('any');
   const [hasCustomerRate, setHasCustomerRate] = useState(false);
+  const [rateSource, setRateSource] = useState('none');
 
   // Load customer list
   useEffect(() => {
     fetch('/api/settings/customers')
       .then(res => res.json())
-      .then(data => { if (Array.isArray(data)) setCustomers(data.filter((c: CustomerOption) => c.is_line)); })
+      .then(data => { if (Array.isArray(data)) setCustomers(data.filter((c: CustomerOption & { is_active?: boolean }) => c.is_active !== false)); })
       .catch(err => console.error('Load customers error:', err));
   }, []);
 
@@ -52,12 +57,12 @@ export default function TieredStorageRate() {
     try {
       let url = `/api/settings/storage-rates?yard_id=${yardId}`;
       if (selectedCustomerId) url += `&customer_id=${selectedCustomerId}`;
-      if (cargoStatus !== 'any') url += `&cargo_status=${cargoStatus}`;
+      url += `&cargo_status=${cargoStatus}`;
       const res = await fetch(url);
       const data = await res.json();
       setHasCustomerRate(data.has_customer_rate || false);
-      const displayTiers = selectedCustomerId && data.customer_tiers?.length > 0
-        ? data.customer_tiers : data.default_tiers || data.tiers || [];
+      setRateSource(data.rate_source || 'none');
+      const displayTiers = data.tiers || [];
       if (displayTiers.length > 0) {
         setTiers(displayTiers.map((t: TierRate & { tier_id: number }) => ({
           ...t,
@@ -83,6 +88,35 @@ export default function TieredStorageRate() {
   };
   const removeTier = (id: number) => setTiers(tiers.filter(t => t.id !== id));
   const update = (id: number, field: string, value: string | number) => setTiers(tiers.map(t => t.id === id ? { ...t, [field]: value } : t));
+
+  const copyDefaultRates = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/settings/storage-rates?yard_id=${yardId}&cargo_status=${cargoStatus}`);
+      const data = await res.json();
+      const defaultTiers = data.tiers || [];
+      setTiers(defaultTiers.map((t: TierRate & { tier_id?: number }, index: number) => ({
+        ...t,
+        id: Date.now() + index,
+        tier_id: undefined,
+        cargo_status: cargoStatus,
+      })));
+      setHasCustomerRate(false);
+      setRateSource('default_exact');
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  };
+
+  const customerRoleLabel = (customer: CustomerOption) => {
+    const roles = [
+      customer.is_line ? 'Line' : '',
+      customer.is_forwarder ? 'Forwarder' : '',
+      customer.is_trucking ? 'Trucking' : '',
+      customer.is_shipper ? 'Shipper' : '',
+      customer.is_consignee ? 'Consignee' : '',
+    ].filter(Boolean);
+    return roles.length ? ` (${roles.join('/')})` : '';
+  };
 
   // Save to DB
   const handleSave = async () => {
@@ -142,7 +176,7 @@ export default function TieredStorageRate() {
             className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-cyan-500">
             <option value="">ค่าเริ่มต้นของลาน (Default)</option>
             {customers.map(c => (
-              <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>
+              <option key={c.customer_id} value={c.customer_id}>{c.customer_name}{customerRoleLabel(c)}</option>
             ))}
           </select>
         </div>
@@ -161,8 +195,18 @@ export default function TieredStorageRate() {
         </div>
         {selectedCustomerId && (
           <div className={`text-xs px-2 py-1 rounded-lg ${hasCustomerRate ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
-            {hasCustomerRate ? '✅ ใช้ rate เฉพาะลูกค้า' : '⚠️ ใช้ rate ค่าเริ่มต้นของลาน (กดบันทึกเพื่อตั้งค่าเฉพาะ)'}
+            {hasCustomerRate
+              ? rateSource === 'customer_any' && cargoStatus !== 'any'
+                ? 'ใช้ rate เฉพาะลูกค้าแบบทุกสถานะ'
+                : 'ใช้ rate เฉพาะลูกค้า'
+              : 'ใช้ rate ค่าเริ่มต้นของลาน'}
           </div>
+        )}
+        {selectedCustomerId && (
+          <button onClick={copyDefaultRates}
+            className="flex items-center gap-2 px-3 h-9 rounded-lg border border-slate-200 dark:border-slate-600 text-xs font-medium text-slate-500 hover:text-cyan-600 hover:border-cyan-300">
+            <Copy size={13} /> คัดลอกจาก Default
+          </button>
         )}
       </div>
 

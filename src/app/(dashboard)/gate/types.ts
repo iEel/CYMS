@@ -42,6 +42,8 @@ export interface BillingCharge {
 export interface BillingData {
   container: Record<string, unknown>;
   customer: { customer_id: number; customer_name: string; credit_term: number } | null;
+  owner?: { customer_id: number; customer_name: string; credit_term: number } | null;
+  billing_customer?: { customer_id: number; customer_name: string; credit_term: number } | null;
   is_credit: boolean;
   credit_term: number;
   charges: BillingCharge[];

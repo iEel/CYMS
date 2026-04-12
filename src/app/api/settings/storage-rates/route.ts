@@ -3,6 +3,11 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 
+type StorageRateTier = {
+  customer_id: number | null;
+  cargo_status: string;
+};
+
 // Auto-migrate: ensure customer_id + cargo_status columns
 async function ensureColumns(pool: Awaited<ReturnType<typeof getDb>>) {
   try {
@@ -17,6 +22,47 @@ async function ensureColumns(pool: Awaited<ReturnType<typeof getDb>>) {
   } catch { /* columns may already exist */ }
 }
 
+function normalizeCargoStatus(value: unknown): 'any' | 'laden' | 'empty' {
+  return value === 'laden' || value === 'empty' ? value : 'any';
+}
+
+function chooseTierSet<T extends StorageRateTier>(
+  tiers: T[],
+  customerId: number | null,
+  cargoStatus: 'any' | 'laden' | 'empty'
+) {
+  const exactCargo = (t: T) => normalizeCargoStatus(t.cargo_status) === cargoStatus;
+  const anyCargo = (t: T) => normalizeCargoStatus(t.cargo_status) === 'any';
+
+  const customerExact = customerId !== null
+    ? tiers.filter(t => t.customer_id !== null && exactCargo(t))
+    : [];
+  const customerAny = customerId !== null
+    ? tiers.filter(t => t.customer_id !== null && anyCargo(t))
+    : [];
+  const defaultExact = tiers.filter(t => t.customer_id === null && exactCargo(t));
+  const defaultAny = tiers.filter(t => t.customer_id === null && anyCargo(t));
+
+  const selected = customerExact.length > 0 ? customerExact
+    : customerAny.length > 0 ? customerAny
+      : defaultExact.length > 0 ? defaultExact
+        : defaultAny;
+
+  return {
+    selected,
+    customerExact,
+    customerAny,
+    defaultExact,
+    defaultAny,
+    hasCustomerRate: customerExact.length > 0 || customerAny.length > 0,
+    rateSource: customerExact.length > 0 ? 'customer_exact'
+      : customerAny.length > 0 ? 'customer_any'
+        : defaultExact.length > 0 ? 'default_exact'
+          : defaultAny.length > 0 ? 'default_any'
+            : 'none',
+  };
+}
+
 /**
  * GET /api/settings/storage-rates?yard_id=1&customer_id=5&cargo_status=laden
  * Returns tiered storage rates (customer-specific or yard default)
@@ -26,7 +72,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const yardId = parseInt(searchParams.get('yard_id') || '1');
     const customerId = searchParams.get('customer_id') ? parseInt(searchParams.get('customer_id')!) : null;
-    const cargoStatus = searchParams.get('cargo_status') || null; // 'laden', 'empty', or null (= all)
+    const cargoStatus = normalizeCargoStatus(searchParams.get('cargo_status')); // any/laden/empty
 
     const db = await getDb();
     await ensureColumns(db);
@@ -49,28 +95,31 @@ export async function GET(request: NextRequest) {
       query += ' AND customer_id IS NULL';
     }
 
-    if (cargoStatus && cargoStatus !== 'any') {
-      query += ` AND (cargo_status = @cargoStatus OR cargo_status = 'any')`;
-      req.input('cargoStatus', sql.VarChar, cargoStatus);
-    }
+    query += ` AND (ISNULL(cargo_status, 'any') = @cargoStatus OR ISNULL(cargo_status, 'any') = 'any')`;
+    req.input('cargoStatus', sql.VarChar, cargoStatus);
 
-    query += ' ORDER BY customer_id DESC, sort_order, from_day'; // Customer-specific first
+    query += `
+      ORDER BY
+        CASE WHEN customer_id IS NOT NULL THEN 0 ELSE 1 END,
+        CASE WHEN ISNULL(cargo_status, 'any') = @cargoStatus THEN 0 ELSE 1 END,
+        sort_order,
+        from_day
+    `;
 
     const result = await req.query(query);
 
-    // Separate customer-specific and default tiers
-    const customerTiers = result.recordset.filter((t: { customer_id: number | null }) => t.customer_id !== null);
-    const defaultTiers = result.recordset.filter((t: { customer_id: number | null }) => t.customer_id === null);
+    const selected = chooseTierSet(result.recordset, customerId, cargoStatus);
 
     return NextResponse.json({
-      tiers: customerTiers.length > 0 ? customerTiers : defaultTiers,
-      customer_tiers: customerTiers,
-      default_tiers: defaultTiers,
-      has_customer_rate: customerTiers.length > 0,
+      tiers: selected.selected,
+      customer_tiers: selected.customerExact.length > 0 ? selected.customerExact : selected.customerAny,
+      default_tiers: selected.defaultExact.length > 0 ? selected.defaultExact : selected.defaultAny,
+      has_customer_rate: selected.hasCustomerRate,
+      rate_source: selected.rateSource,
     });
   } catch (error) {
     console.error('❌ GET storage-rates error:', error);
-    return NextResponse.json({ tiers: [], customer_tiers: [], default_tiers: [], has_customer_rate: false });
+    return NextResponse.json({ tiers: [], customer_tiers: [], default_tiers: [], has_customer_rate: false, rate_source: 'none' });
   }
 }
 
@@ -88,23 +137,25 @@ export async function POST(request: NextRequest) {
 
     const db = await getDb();
     await ensureColumns(db);
+    const selectedCargoStatus = normalizeCargoStatus(cargo_status);
 
-    // Soft-delete all existing tiers for this yard + customer combination
+    // Soft-delete only this yard + customer + cargo status combination.
     if (customer_id) {
       await db.request()
         .input('yardId', sql.Int, yard_id)
         .input('customerId', sql.Int, customer_id)
-        .query('UPDATE StorageRateTiers SET is_active = 0, updated_at = GETDATE() WHERE yard_id = @yardId AND customer_id = @customerId');
+        .input('cargoStatus', sql.VarChar, selectedCargoStatus)
+        .query('UPDATE StorageRateTiers SET is_active = 0, updated_at = GETDATE() WHERE yard_id = @yardId AND customer_id = @customerId AND ISNULL(cargo_status, \'any\') = @cargoStatus');
     } else {
       await db.request()
         .input('yardId', sql.Int, yard_id)
-        .query('UPDATE StorageRateTiers SET is_active = 0, updated_at = GETDATE() WHERE yard_id = @yardId AND customer_id IS NULL');
+        .input('cargoStatus', sql.VarChar, selectedCargoStatus)
+        .query('UPDATE StorageRateTiers SET is_active = 0, updated_at = GETDATE() WHERE yard_id = @yardId AND customer_id IS NULL AND ISNULL(cargo_status, \'any\') = @cargoStatus');
     }
 
     // Insert new tiers
     for (let i = 0; i < tiers.length; i++) {
       const t = tiers[i];
-      const tierCargoStatus = t.cargo_status || cargo_status || 'any';
       await db.request()
         .input('yardId', sql.Int, yard_id)
         .input('tierName', sql.NVarChar, t.tier_name || `ขั้นที่ ${i + 1}`)
@@ -116,7 +167,7 @@ export async function POST(request: NextRequest) {
         .input('appliesTo', sql.NVarChar, t.applies_to || 'all')
         .input('sortOrder', sql.Int, i + 1)
         .input('customerId', sql.Int, customer_id || null)
-        .input('cargoStatus', sql.VarChar, tierCargoStatus)
+        .input('cargoStatus', sql.VarChar, selectedCargoStatus)
         .query(`
           INSERT INTO StorageRateTiers (yard_id, tier_name, from_day, to_day, rate_20, rate_40, rate_45, applies_to, sort_order, customer_id, cargo_status)
           VALUES (@yardId, @tierName, @fromDay, @toDay, @rate20, @rate40, @rate45, @appliesTo, @sortOrder, @customerId, @cargoStatus)
@@ -127,7 +178,7 @@ export async function POST(request: NextRequest) {
       yardId: yard_id,
       action: 'storage_rates_update',
       entityType: 'storage_rate',
-      details: { yard_id, customer_id: customer_id || 'default', cargo_status: cargo_status || 'any', tier_count: tiers.length },
+      details: { yard_id, customer_id: customer_id || 'default', cargo_status: selectedCargoStatus, tier_count: tiers.length },
     });
     return NextResponse.json({ success: true, message: `บันทึก ${tiers.length} ขั้นอัตราสำเร็จ` });
   } catch (error) {

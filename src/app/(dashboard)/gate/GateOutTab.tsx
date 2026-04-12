@@ -62,13 +62,12 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
 
   // Resolved customer: auto-matched or manually selected
   const resolvedCustomer = useMemo(() => {
-    if (billingData?.customer) return billingData.customer;
     if (manualCustomerId) {
       const c = customerList.find(c => c.customer_id === manualCustomerId);
       if (c) return { customer_id: c.customer_id, customer_name: c.customer_name, credit_term: c.credit_term };
     }
-    return null;
-  }, [billingData?.customer, manualCustomerId, customerList]);
+    return billingData?.billing_customer || billingData?.customer || null;
+  }, [billingData?.billing_customer, billingData?.customer, manualCustomerId, customerList]);
   const resolvedIsCredit = resolvedCustomer ? (resolvedCustomer.credit_term || 0) > 0 : false;
 
   const filteredGateOutCustomers = useMemo(() => {
@@ -113,6 +112,41 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     return final;
   };
 
+  const loadGateOutBilling = async (container: ContainerResult, billingCustomerId?: number | null, bookingRef?: string) => {
+    setBillingLoading(true);
+    try {
+      const billRes = await fetch('/api/billing/gate-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yard_id: yardId,
+          container_id: container.container_id,
+          ...(billingCustomerId ? { billing_customer_id: billingCustomerId } : {}),
+          ...(bookingRef ? { booking_ref: bookingRef } : {}),
+        }),
+      });
+      const billData = await billRes.json();
+      setBillingData(billData);
+      if (billData.charges) initSelectedCharges(billData.charges);
+      if (billData.billing_customer?.customer_id) setManualCustomerId(billData.billing_customer.customer_id);
+      else if (billData.customer?.customer_id) setManualCustomerId(billData.customer.customer_id);
+      if (billData.is_credit) setPaymentMethod('credit');
+      else setPaymentMethod('cash');
+    } catch (err) { console.error(err); }
+    finally { setBillingLoading(false); }
+  };
+
+  const handleBillingCustomerChange = async (customerId: number) => {
+    if (!selectedContainer) return;
+    setManualCustomerId(customerId);
+    setShowCustomerPicker(false);
+    setCustomerSearch('');
+    setBillingPaid(false);
+    setBillingInvoiceNumber('');
+    setBillingInvoiceId(null);
+    await loadGateOutBilling(selectedContainer, customerId, gateOutForm.booking_ref);
+  };
+
   // Search containers
   const searchContainers = async () => {
     if (!searchQuery) return;
@@ -131,23 +165,24 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     setSelectedContainer(c);
     setGateOutPhase('search');
     setBillingData(null);
+    setManualCustomerId(null);
+    setShowCustomerPicker(false);
+    setCustomerSearch('');
     setBillingPaid(false);
     setBillingInvoiceNumber('');
     setBillingInvoiceId(null);
 
-    setBillingLoading(true);
+    let bookingRef = gateOutForm.booking_ref;
     try {
-      const billRes = await fetch('/api/billing/gate-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yard_id: yardId, container_id: c.container_id }),
-      });
-      const billData = await billRes.json();
-      setBillingData(billData);
-      if (billData.charges) initSelectedCharges(billData.charges);
-      if (billData.is_credit) setPaymentMethod('credit');
-    } catch (err) { console.error(err); }
-    finally { setBillingLoading(false); }
+      const bkRes = await fetch(`/api/edi/bookings?lookup=1&container_id=${c.container_id}&yard_id=${yardId}`);
+      const bkData = await bkRes.json();
+      if (bkData.booking) {
+        bookingRef = bookingRef || bkData.booking.booking_number;
+        setGateOutForm(prev => ({ ...prev, booking_ref: prev.booking_ref || bkData.booking.booking_number }));
+      }
+    } catch (err) { console.error('Booking lookup error:', err); }
+
+    await loadGateOutBilling(c, null, bookingRef);
 
     // Check existing work orders
     try {
@@ -177,14 +212,6 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       }
     } catch (err) { console.error(err); }
 
-    // Auto-fill Booking Ref
-    try {
-      const bkRes = await fetch(`/api/edi/bookings?lookup=1&container_id=${c.container_id}&yard_id=${yardId}`);
-      const bkData = await bkRes.json();
-      if (bkData.booking) {
-        setGateOutForm(prev => ({ ...prev, booking_ref: prev.booking_ref || bkData.booking.booking_number }));
-      }
-    } catch (err) { console.error('Booking lookup error:', err); }
   };
 
   // Phase 1: Request release
@@ -236,6 +263,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           user_id: userId,
           container_id: selectedContainer.container_id,
           container_number: selectedContainer.container_number,
+          billing_customer_id: resolvedCustomer?.customer_id || undefined,
           ...(gateOutPhotos.length > 0 ? { damage_report: { exit_photos: gateOutPhotos } } : {}),
           ...gateOutForm,
         }),
@@ -363,12 +391,47 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                   <h4 className="text-xs font-bold text-slate-700 dark:text-white flex items-center gap-2">
                     💰 ค่าบริการ ({billingData.container.dwell_days as number} วัน)
                   </h4>
-                  {resolvedCustomer ? (
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${resolvedIsCredit ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400'}`}>
-                      {resolvedIsCredit ? `🏢 เครดิต ${resolvedCustomer.credit_term} วัน • ` : '🏢 '}{resolvedCustomer.customer_name}
-                    </span>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    {resolvedCustomer ? (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${resolvedIsCredit ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400'}`}>
+                        {resolvedIsCredit ? `🏢 เครดิต ${resolvedCustomer.credit_term} วัน • ` : '🏢 '}{resolvedCustomer.customer_name}
+                      </span>
+                    ) : null}
+                    <button onClick={() => setShowCustomerPicker(v => !v)}
+                      className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white/80 dark:bg-slate-800/80 text-[10px] font-semibold text-slate-500 hover:text-blue-600 hover:border-blue-300">
+                      {resolvedCustomer ? 'เปลี่ยนคนจ่ายเงิน' : 'เลือกคนจ่ายเงิน'}
+                    </button>
+                  </div>
                 </div>
+
+                {showCustomerPicker && (
+                  <div className="px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Billing Customer สำหรับ Gate Out</p>
+                      {billingData.owner && (
+                        <p className="text-[10px] text-slate-400">เจ้าของตู้: {billingData.owner.customer_name}</p>
+                      )}
+                    </div>
+                    <input type="text" value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
+                      placeholder="พิมพ์ชื่อลูกค้าเพื่อค้นหา..."
+                      className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500" />
+                    <div className="max-h-44 overflow-y-auto space-y-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 p-1">
+                      {filteredGateOutCustomers.length === 0 ? (
+                        <p className="text-xs text-slate-400 p-2 text-center">ไม่พบลูกค้า — กรุณาเพิ่มที่ ตั้งค่า → ลูกค้า</p>
+                      ) : filteredGateOutCustomers.map(c => (
+                        <button key={c.customer_id} onClick={() => handleBillingCustomerChange(c.customer_id)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${resolvedCustomer?.customer_id === c.customer_id ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700' : 'hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}>
+                          <span className="font-medium">{c.customer_name}</span>
+                          <span className="text-[10px] text-slate-400">
+                            {c.is_line ? 'สายเรือ' : c.is_trucking ? 'รถบรรทุก' : c.is_forwarder ? 'Forwarder' : 'ทั่วไป'}
+                            {c.credit_term > 0 && ` • เครดิต ${c.credit_term} วัน`}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400">เมื่อเปลี่ยนคนจ่ายเงิน ระบบจะคำนวณค่าฝากและเครดิตเทอมใหม่ตามลูกค้ารายนั้น</p>
+                  </div>
+                )}
 
                 {/* Customer Warning — No customer matched */}
                 {!resolvedCustomer && (
@@ -391,7 +454,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                           {filteredGateOutCustomers.length === 0 ? (
                             <p className="text-xs text-slate-400 p-2 text-center">ไม่พบลูกค้า — กรุณาเพิ่มที่ ตั้งค่า → ลูกค้า</p>
                           ) : filteredGateOutCustomers.map(c => (
-                            <button key={c.customer_id} onClick={() => { setManualCustomerId(c.customer_id); setShowCustomerPicker(false); setCustomerSearch(''); }}
+                            <button key={c.customer_id} onClick={() => handleBillingCustomerChange(c.customer_id)}
                               className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${manualCustomerId === c.customer_id ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700' : 'hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}>
                               <span className="font-medium">{c.customer_name}</span>
                               <span className="text-[10px] text-slate-400">
