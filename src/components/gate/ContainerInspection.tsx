@@ -15,7 +15,9 @@ interface DamagePoint {
 }
 
 interface ContainerInspectionProps {
-  onComplete: (report: { points: DamagePoint[]; condition_grade: string; inspector_notes: string; photos: string[] }) => void;
+  containerType?: string;
+  containerSize?: string;
+  onComplete: (report: { points: DamagePoint[]; condition_grade: string; inspector_notes: string; photos: string[]; container_type?: string; container_size?: string; inspection_template?: string }) => void;
   onCancel: () => void;
 }
 
@@ -43,7 +45,23 @@ const SEVERITY_COLORS = {
   severe: { bg: 'bg-red-600', text: 'text-red-700', label: 'รุนแรง' },
 };
 
-export default function ContainerInspection({ onComplete, onCancel }: ContainerInspectionProps) {
+const INSPECTION_TEMPLATES: Record<string, { key: string; label: string; kind: 'dry' | 'reefer' | 'open_top' | 'flat_rack' | 'tank' | 'dangerous' }> = {
+  GP: { key: 'dry', label: 'Dry Container', kind: 'dry' },
+  HC: { key: 'dry_high_cube', label: 'High Cube', kind: 'dry' },
+  RF: { key: 'reefer', label: 'Reefer Container', kind: 'reefer' },
+  OT: { key: 'open_top', label: 'Open Top Container', kind: 'open_top' },
+  FR: { key: 'flat_rack', label: 'Flat Rack', kind: 'flat_rack' },
+  TK: { key: 'tank', label: 'Tank Container', kind: 'tank' },
+  DG: { key: 'dangerous_goods', label: 'Dangerous Goods', kind: 'dangerous' },
+};
+
+function getInspectionTemplate(containerType?: string) {
+  const normalized = (containerType || 'GP').toUpperCase();
+  return INSPECTION_TEMPLATES[normalized] || INSPECTION_TEMPLATES.GP;
+}
+
+export default function ContainerInspection({ containerType = 'GP', containerSize, onComplete, onCancel }: ContainerInspectionProps) {
+  const template = getInspectionTemplate(containerType);
   const [activeSide, setActiveSide] = useState<typeof SIDES[0]['key']>('front');
   const [points, setPoints] = useState<DamagePoint[]>([]);
   const [selectedType, setSelectedType] = useState('dent');
@@ -146,6 +164,13 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
         ))}
       </div>
 
+      <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+        <span className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold">
+          Template: {containerSize ? `${containerSize}' ` : ''}{containerType.toUpperCase()} - {template.label}
+        </span>
+        <span>ตำแหน่งจุดเสียหายบันทึกเป็นเปอร์เซ็นต์ตามด้านที่เลือก</span>
+      </div>
+
       {/* Inspection Panel */}
       <div className="relative rounded-xl overflow-hidden cursor-crosshair"
         style={{ height: 280 }} onClick={handlePanelClick}>
@@ -157,10 +182,22 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
         <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 600 280" preserveAspectRatio="xMidYMid meet">
           {/* Side label */}
           <text x="300" y="20" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600" fontFamily="sans-serif">
-            {SIDES.find(s => s.key === activeSide)?.label}
+            {SIDES.find(s => s.key === activeSide)?.label} - {template.label}
           </text>
 
-          {activeSide === 'front' && (
+          {activeSide === 'front' && template.kind === 'tank' && (
+            <g>
+              <rect x="110" y="45" width="380" height="200" rx="8" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
+              <circle cx="300" cy="145" r="78" fill="#F8FAFC" stroke="#94A3B8" strokeWidth="3" />
+              <circle cx="300" cy="145" r="50" fill="none" stroke="#CBD5E1" strokeWidth="2" />
+              <rect x="120" y="60" width="55" height="170" rx="2" fill="none" stroke="#64748B" strokeWidth="5" />
+              <rect x="425" y="60" width="55" height="170" rx="2" fill="none" stroke="#64748B" strokeWidth="5" />
+              <rect x="285" y="60" width="30" height="18" rx="3" fill="#94A3B8" />
+              <text x="300" y="235" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="sans-serif">Tank end frame / manway</text>
+            </g>
+          )}
+
+          {activeSide === 'front' && template.kind !== 'tank' && (
             <g>
               {/* Container body */}
               <rect x="80" y="30" width="440" height="230" rx="3" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
@@ -189,10 +226,47 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
               <rect x="500" y="30" width="20" height="20" fill="#94A3B8" rx="2" />
               <rect x="80" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
               <rect x="500" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
+              {template.kind === 'reefer' && (
+                <g>
+                  <rect x="108" y="58" width="132" height="174" rx="4" fill="#DBEAFE" stroke="#3B82F6" strokeWidth="2" />
+                  <circle cx="174" cy="122" r="34" fill="none" stroke="#2563EB" strokeWidth="3" />
+                  {Array.from({ length: 8 }, (_, i) => (
+                    <line key={i} x1="174" y1="122" x2={174 + Math.cos(i * Math.PI / 4) * 30} y2={122 + Math.sin(i * Math.PI / 4) * 30} stroke="#2563EB" strokeWidth="2" />
+                  ))}
+                  <rect x="132" y="176" width="84" height="28" rx="3" fill="#BFDBFE" stroke="#60A5FA" />
+                  <text x="174" y="248" textAnchor="middle" fill="#2563EB" fontSize="9" fontFamily="sans-serif">Reefer unit</text>
+                </g>
+              )}
+              {template.kind === 'flat_rack' && (
+                <g>
+                  <rect x="112" y="50" width="70" height="190" rx="3" fill="none" stroke="#64748B" strokeWidth="6" />
+                  <rect x="418" y="50" width="70" height="190" rx="3" fill="none" stroke="#64748B" strokeWidth="6" />
+                  <line x1="182" y1="228" x2="418" y2="228" stroke="#64748B" strokeWidth="8" />
+                  <text x="300" y="75" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="sans-serif">End frames / open sides</text>
+                </g>
+              )}
+              {template.kind === 'dangerous' && (
+                <g>
+                  <polygon points="300,70 330,120 270,120" fill="#FDE68A" stroke="#F59E0B" strokeWidth="2" />
+                  <text x="300" y="112" textAnchor="middle" fill="#92400E" fontSize="28" fontWeight="700" fontFamily="sans-serif">!</text>
+                  <text x="300" y="135" textAnchor="middle" fill="#92400E" fontSize="9" fontWeight="700" fontFamily="sans-serif">DG placard area</text>
+                </g>
+              )}
             </g>
           )}
 
-          {activeSide === 'back' && (
+          {activeSide === 'back' && template.kind === 'tank' && (
+            <g>
+              <rect x="110" y="45" width="380" height="200" rx="8" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
+              <circle cx="300" cy="145" r="76" fill="#F8FAFC" stroke="#94A3B8" strokeWidth="3" />
+              <path d="M255 145h90M300 100v90" stroke="#CBD5E1" strokeWidth="2" />
+              <rect x="120" y="60" width="55" height="170" rx="2" fill="none" stroke="#64748B" strokeWidth="5" />
+              <rect x="425" y="60" width="55" height="170" rx="2" fill="none" stroke="#64748B" strokeWidth="5" />
+              <text x="300" y="235" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="sans-serif">Tank rear frame</text>
+            </g>
+          )}
+
+          {activeSide === 'back' && template.kind !== 'tank' && (
             <g>
               <rect x="80" y="30" width="440" height="230" rx="3" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
               {/* Corrugated wall - horizontal ribs */}
@@ -205,10 +279,47 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
               <rect x="80" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
               <rect x="500" y="240" width="20" height="20" fill="#94A3B8" rx="2" />
               <text x="300" y="145" textAnchor="middle" fill="#94A3B8" fontSize="14" fontFamily="sans-serif" fontWeight="600">ผนังด้านหลัง</text>
+              {template.kind === 'reefer' && (
+                <text x="300" y="170" textAnchor="middle" fill="#3B82F6" fontSize="10" fontFamily="sans-serif">Reefer rear panel</text>
+              )}
+              {template.kind === 'flat_rack' && (
+                <g>
+                  <rect x="105" y="55" width="90" height="180" rx="3" fill="none" stroke="#64748B" strokeWidth="6" />
+                  <rect x="405" y="55" width="90" height="180" rx="3" fill="none" stroke="#64748B" strokeWidth="6" />
+                  <line x1="195" y1="225" x2="405" y2="225" stroke="#64748B" strokeWidth="8" />
+                </g>
+              )}
             </g>
           )}
 
-          {(activeSide === 'left' || activeSide === 'right') && (
+          {(activeSide === 'left' || activeSide === 'right') && template.kind === 'tank' && (
+            <g>
+              <rect x="40" y="42" width="520" height="210" rx="8" fill="none" stroke="#64748B" strokeWidth="5" />
+              <ellipse cx="300" cy="145" rx="205" ry="70" fill="#F8FAFC" stroke="#94A3B8" strokeWidth="3" />
+              <line x1="100" y1="145" x2="500" y2="145" stroke="#CBD5E1" strokeWidth="1.5" />
+              <rect x="260" y="58" width="80" height="24" rx="4" fill="#CBD5E1" stroke="#94A3B8" />
+              <line x1="125" y1="68" x2="125" y2="222" stroke="#64748B" strokeWidth="5" />
+              <line x1="475" y1="68" x2="475" y2="222" stroke="#64748B" strokeWidth="5" />
+              <text x="300" y="235" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="sans-serif">Cylindrical tank shell / top valve</text>
+            </g>
+          )}
+
+          {(activeSide === 'left' || activeSide === 'right') && template.kind === 'flat_rack' && (
+            <g>
+              <rect x="40" y="205" width="520" height="34" rx="3" fill="#CBD5E1" stroke="#64748B" strokeWidth="3" />
+              <rect x="52" y="58" width="52" height="150" rx="3" fill="none" stroke="#64748B" strokeWidth="6" />
+              <rect x="496" y="58" width="52" height="150" rx="3" fill="none" stroke="#64748B" strokeWidth="6" />
+              {[155, 255, 355, 455].map(x => (
+                <line key={x} x1={x} y1="92" x2={x} y2="205" stroke="#94A3B8" strokeWidth="3" strokeDasharray="8,6" />
+              ))}
+              <text x="300" y="145" textAnchor="middle" fill="#64748B" fontSize="14" fontFamily="sans-serif" fontWeight="600">โครง Flat Rack เปิดด้านข้าง</text>
+              <text x="300" y="275" textAnchor="middle" fill="#94A3B8" fontSize="9" fontFamily="sans-serif">
+                {activeSide === 'left' ? '← หน้า                                                    หลัง →' : '← หลัง                                                    หน้า →'}
+              </text>
+            </g>
+          )}
+
+          {(activeSide === 'left' || activeSide === 'right') && template.kind !== 'tank' && template.kind !== 'flat_rack' && (
             <g>
               <rect x="40" y="30" width="520" height="230" rx="3" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
               {/* Corrugated wall - horizontal ribs */}
@@ -228,12 +339,47 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
               <text x="300" y="275" textAnchor="middle" fill="#94A3B8" fontSize="9" fontFamily="sans-serif">
                 {activeSide === 'left' ? '← หน้า                                                    หลัง →' : '← หลัง                                                    หน้า →'}
               </text>
+              {template.kind === 'reefer' && activeSide === 'left' && (
+                <g>
+                  <rect x="54" y="58" width="92" height="170" rx="4" fill="#DBEAFE" stroke="#3B82F6" strokeWidth="2" />
+                  <circle cx="100" cy="126" r="24" fill="none" stroke="#2563EB" strokeWidth="2" />
+                  <text x="100" y="218" textAnchor="middle" fill="#2563EB" fontSize="8" fontFamily="sans-serif">Unit end</text>
+                </g>
+              )}
+              {template.kind === 'open_top' && (
+                <g>
+                  <rect x="70" y="48" width="460" height="34" rx="4" fill="#DBEAFE" stroke="#3B82F6" strokeWidth="2" strokeDasharray="7,4" opacity="0.75" />
+                  <text x="300" y="72" textAnchor="middle" fill="#2563EB" fontSize="9" fontFamily="sans-serif">ผ้าใบ / Open top rail</text>
+                </g>
+              )}
             </g>
           )}
 
-          {activeSide === 'top' && (
+          {activeSide === 'top' && template.kind === 'tank' && (
             <g>
-              <rect x="40" y="50" width="520" height="180" rx="3" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="2" />
+              <rect x="40" y="48" width="520" height="184" rx="8" fill="none" stroke="#64748B" strokeWidth="5" />
+              <ellipse cx="300" cy="140" rx="220" ry="58" fill="#F8FAFC" stroke="#94A3B8" strokeWidth="3" />
+              <rect x="260" y="122" width="80" height="36" rx="6" fill="#CBD5E1" stroke="#94A3B8" />
+              <circle cx="300" cy="140" r="14" fill="#E2E8F0" stroke="#64748B" strokeWidth="2" />
+              <text x="300" y="42" textAnchor="middle" fill="#94A3B8" fontSize="9" fontFamily="sans-serif">← หน้า                                                    หลัง →</text>
+            </g>
+          )}
+
+          {activeSide === 'top' && template.kind === 'flat_rack' && (
+            <g>
+              <rect x="40" y="78" width="520" height="124" rx="3" fill="#E2E8F0" stroke="#64748B" strokeWidth="3" />
+              {[90, 150, 210, 270, 330, 390, 450, 510].map(x => (
+                <line key={x} x1={x} y1="78" x2={x} y2="202" stroke="#94A3B8" strokeWidth="2" />
+              ))}
+              <line x1="40" y1="78" x2="560" y2="202" stroke="#CBD5E1" strokeWidth="2" strokeDasharray="10,6" />
+              <line x1="560" y1="78" x2="40" y2="202" stroke="#CBD5E1" strokeWidth="2" strokeDasharray="10,6" />
+              <text x="300" y="62" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="sans-serif">Flat rack deck - no roof</text>
+            </g>
+          )}
+
+          {activeSide === 'top' && template.kind !== 'tank' && template.kind !== 'flat_rack' && (
+            <g>
+              <rect x="40" y="50" width="520" height="180" rx="3" fill={template.kind === 'open_top' ? '#EFF6FF' : '#E2E8F0'} stroke={template.kind === 'open_top' ? '#3B82F6' : '#94A3B8'} strokeWidth="2" strokeDasharray={template.kind === 'open_top' ? '10,6' : undefined} />
               {/* Roof lines */}
               {Array.from({ length: 10 }, (_, i) => (
                 <line key={i} x1={90 + i * 48} y1="50" x2={90 + i * 48} y2="230" stroke="#CBD5E1" strokeWidth="1" />
@@ -246,12 +392,18 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
               <rect x="40" y="214" width="20" height="16" fill="#94A3B8" rx="2" />
               <rect x="540" y="214" width="20" height="16" fill="#94A3B8" rx="2" />
               <text x="300" y="42" textAnchor="middle" fill="#94A3B8" fontSize="9" fontFamily="sans-serif">← หน้า                                                    หลัง →</text>
+              {template.kind === 'open_top' && (
+                <text x="300" y="145" textAnchor="middle" fill="#2563EB" fontSize="14" fontFamily="sans-serif" fontWeight="700">Open top / removable tarpaulin</text>
+              )}
+              {template.kind === 'reefer' && (
+                <rect x="55" y="70" width="65" height="140" rx="4" fill="#DBEAFE" stroke="#3B82F6" strokeWidth="2" />
+              )}
             </g>
           )}
 
           {activeSide === 'floor' && (
             <g>
-              <rect x="40" y="50" width="520" height="180" rx="3" fill="#DDD6C8" stroke="#A89F91" strokeWidth="2" />
+              <rect x="40" y="50" width="520" height="180" rx="3" fill={template.kind === 'tank' ? '#E2E8F0' : '#DDD6C8'} stroke={template.kind === 'tank' ? '#64748B' : '#A89F91'} strokeWidth="2" />
               {/* Wooden floorboards */}
               {Array.from({ length: 8 }, (_, i) => (
                 <line key={i} x1="40" y1={73 + i * 22} x2="560" y2={73 + i * 22} stroke="#C4B99A" strokeWidth="1" />
@@ -266,6 +418,12 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
               <text x="160" y="244" textAnchor="middle" fill="#FFF" fontSize="7" fontFamily="sans-serif">Fork Pocket</text>
               <text x="440" y="244" textAnchor="middle" fill="#FFF" fontSize="7" fontFamily="sans-serif">Fork Pocket</text>
               <text x="300" y="42" textAnchor="middle" fill="#94A3B8" fontSize="9" fontFamily="sans-serif">← หน้า                                                    หลัง →</text>
+              {template.kind === 'flat_rack' && (
+                <text x="300" y="145" textAnchor="middle" fill="#64748B" fontSize="13" fontFamily="sans-serif" fontWeight="700">Heavy deck / lashing points</text>
+              )}
+              {template.kind === 'tank' && (
+                <ellipse cx="300" cy="140" rx="210" ry="56" fill="none" stroke="#94A3B8" strokeWidth="2" strokeDasharray="8,5" />
+              )}
             </g>
           )}
         </svg>
@@ -397,7 +555,15 @@ export default function ContainerInspection({ onComplete, onCancel }: ContainerI
 
       {/* Actions */}
       <div className="flex gap-2">
-        <button onClick={() => onComplete({ points, condition_grade: getConditionGrade(), inspector_notes: inspectorNotes, photos: overviewPhotos })}
+        <button onClick={() => onComplete({
+          points,
+          condition_grade: getConditionGrade(),
+          inspector_notes: inspectorNotes,
+          photos: overviewPhotos,
+          container_type: containerType.toUpperCase(),
+          container_size: containerSize,
+          inspection_template: template.key,
+        })}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-all">
           <CheckCircle2 size={16} /> บันทึกผลตรวจ
         </button>

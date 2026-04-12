@@ -284,7 +284,7 @@ export default function CustomerMaster() {
   /* ========= Form Fields ========= */
   const FormFields = () => (
     <div className="space-y-3">
-      <RoleCheckboxes />
+      {RoleCheckboxes()}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
           <label className="block text-xs text-slate-500 mb-1">ชื่อลูกค้า *</label>
@@ -355,7 +355,7 @@ export default function CustomerMaster() {
             placeholder="ที่อยู่สำหรับออกใบแจ้งหนี้" className={inputClass} />
         </div>
       </div>
-      <BranchManager />
+      {BranchManager()}
     </div>
   );
 
@@ -408,7 +408,7 @@ export default function CustomerMaster() {
             <h3 className="font-semibold text-sm text-slate-800 dark:text-white">เพิ่มลูกค้าใหม่</h3>
             <button onClick={() => setShowAdd(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
           </div>
-          <FormFields />
+          {FormFields()}
           <div className="flex justify-end gap-2 mt-3">
             <button onClick={() => setShowAdd(false)}
               className="px-4 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">ยกเลิก</button>
@@ -451,7 +451,7 @@ export default function CustomerMaster() {
                       </button>
                     </div>
                   </div>
-                  <FormFields />
+                  {FormFields()}
                 </div>
               ) : (
                 <div key={c.customer_id}

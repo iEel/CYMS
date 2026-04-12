@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { validateContainerNumber } from '@/lib/containerValidation';
 import {
   Loader2, CheckCircle2,
@@ -32,7 +32,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [driverSignature, setDriverSignature] = useState('');
   const [showOCR, setShowOCR] = useState<'container' | 'plate' | 'seal' | null>(null);
   const [showInspection, setShowInspection] = useState(false);
-  const [inspectionReport, setInspectionReport] = useState<{ points: unknown[]; condition_grade: string; inspector_notes: string; photos: string[] } | null>(null);
+  const [inspectionReport, setInspectionReport] = useState<{ points: unknown[]; condition_grade: string; inspector_notes: string; photos: string[]; container_type?: string; container_size?: string; inspection_template?: string } | null>(null);
 
   // Check Digit + Boxtech states
   const [containerValid, setContainerValid] = useState<null | boolean>(null);
@@ -235,8 +235,16 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       })
       .catch(err => console.error('Gate-in billing fetch error:', err))
       .finally(() => setGateInBillingLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerValid, gateInForm.size, gateInForm.shipping_line]);
+  }, [
+    containerValid,
+    gateInForm.container_number,
+    gateInForm.size,
+    gateInForm.shipping_line,
+    gateInForm.booking_ref,
+    containerOwnerId,
+    billingCustomerId,
+    yardId,
+  ]);
 
   // Gate-In billing helpers
   const getGateInChargeSubtotal = (i: number) => {
@@ -264,13 +272,17 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
 
   // Resolved customer: auto-matched or manually selected
   const resolvedCustomer = useMemo(() => {
+    if (billingCustomerId) {
+      const c = customerList.find(c => c.customer_id === billingCustomerId);
+      if (c) return { customer_id: c.customer_id, customer_name: c.customer_name, credit_term: c.credit_term };
+    }
     if (gateInBillingData?.customer) return gateInBillingData.customer;
     if (manualCustomerId) {
       const c = customerList.find(c => c.customer_id === manualCustomerId);
       if (c) return { customer_id: c.customer_id, customer_name: c.customer_name, credit_term: c.credit_term };
     }
     return null;
-  }, [gateInBillingData?.customer, manualCustomerId, customerList]);
+  }, [billingCustomerId, gateInBillingData?.customer, manualCustomerId, customerList]);
   const resolvedIsCredit = resolvedCustomer ? (resolvedCustomer.credit_term || 0) > 0 : false;
 
   // Filtered customer list for search
@@ -659,6 +671,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
             {showInspection && (
               <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
                 <ContainerInspection
+                  containerType={gateInForm.type}
+                  containerSize={gateInForm.size}
                   onComplete={(report) => {
                     setInspectionReport(report);
                     setShowInspection(false);
@@ -934,7 +948,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-emerald-600">
                       <CheckCircle2 size={16} />
-                      <span className="text-sm font-bold">✅ {gateInBillingData.is_credit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'}</span>
+                      <span className="text-sm font-bold">✅ {resolvedIsCredit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'}</span>
                       {gateInInvoiceNumber && <span className="text-xs font-mono text-emerald-500">({gateInInvoiceNumber})</span>}
                     </div>
                     {gateInInvoiceId && (
