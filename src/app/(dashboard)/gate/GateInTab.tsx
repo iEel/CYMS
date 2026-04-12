@@ -26,7 +26,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [gateInForm, setGateInForm] = useState({
     container_number: '', size: '20', type: 'GP', shipping_line: '',
     is_laden: false, seal_number: '', driver_name: '', driver_license: '',
-    truck_plate: '', booking_ref: '', notes: '',
+    truck_plate: '', truck_company: '', booking_ref: '', notes: '',
   });
   const [sealPhoto, setSealPhoto] = useState('');
   const [driverSignature, setDriverSignature] = useState('');
@@ -306,7 +306,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         }
 
         setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
-        setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', booking_ref: '', notes: '' });
+        setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '' });
         setInspectionReport(null);
         setBoxtechResult(null);
         setContainerValid(null);
@@ -570,6 +570,11 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                     <ScanLine size={14} />
                   </button>
                 </div>
+              </div>
+              <div>
+                <label className={labelClass}>บริษัทรถขนส่ง</label>
+                <input type="text" placeholder="ชื่อบริษัท" value={gateInForm.truck_company}
+                  onChange={e => setGateInForm({ ...gateInForm, truck_company: e.target.value })} className={inputClass} />
               </div>
             </div>
           </div>

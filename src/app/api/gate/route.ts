@@ -20,6 +20,7 @@ const gateBodySchema = z.object({
   driver_name: z.string().max(100).optional(),
   driver_license: z.string().max(50).optional(),
   truck_plate: z.string().max(20).optional(),
+  truck_company: z.string().max(100).optional(),
   seal_number: z.string().max(50).optional(),
   booking_ref: z.string().max(50).optional(),
   notes: z.string().max(500).optional(),
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
       transaction_type,
       container_number, size, type: containerType, shipping_line, is_laden, is_soc,
       yard_id, zone_id, bay, row, tier,
-      driver_name, driver_license, truck_plate, seal_number, booking_ref, notes,
+      driver_name, driver_license, truck_plate, truck_company, seal_number, booking_ref, notes,
       damage_report,
       container_id,
       user_id,
@@ -235,6 +236,7 @@ export async function POST(request: NextRequest) {
       .input('driverName', sql.NVarChar, driver_name || null)
       .input('driverLicense', sql.NVarChar, driver_license || null)
       .input('truckPlate', sql.NVarChar, truck_plate || null)
+      .input('truckCompany', sql.NVarChar, truck_company || null)
       .input('sealNumber', sql.NVarChar, seal_number || null)
       .input('bookingRef', sql.NVarChar, booking_ref || null)
       .input('eirNumber', sql.NVarChar, eirNumber)
@@ -245,12 +247,12 @@ export async function POST(request: NextRequest) {
       .input('billingId', sql.Int, billing_customer_id || null)
       .query(`
         INSERT INTO GateTransactions (container_id, yard_id, transaction_type,
-          driver_name, driver_license, truck_plate, seal_number, booking_ref,
+          driver_name, driver_license, truck_plate, truck_company, seal_number, booking_ref,
           eir_number, notes, damage_report, processed_by,
           container_owner_id, billing_customer_id)
         OUTPUT INSERTED.*
         VALUES (@containerId, @yardId, @transactionType,
-          @driverName, @driverLicense, @truckPlate, @sealNumber, @bookingRef,
+          @driverName, @driverLicense, @truckPlate, @truckCompany, @sealNumber, @bookingRef,
           @eirNumber, @notes, @damageReport, @processedBy,
           @ownerId, @billingId)
       `);

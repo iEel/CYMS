@@ -246,6 +246,7 @@ CREATE TABLE GateTransactions (
     driver_name     NVARCHAR(100),
     driver_license  NVARCHAR(50),
     truck_plate     NVARCHAR(20),
+    truck_company   NVARCHAR(100),                -- บริษัทรถขนส่ง
     seal_number     NVARCHAR(50),
     booking_ref     NVARCHAR(50),
     eir_number      NVARCHAR(50),
