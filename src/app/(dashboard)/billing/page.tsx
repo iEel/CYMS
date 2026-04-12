@@ -3,12 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/providers/ToastProvider';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import {
   Loader2, Calculator, Receipt, CreditCard, FileText, Plus, Search,
   CheckCircle2, XCircle, Clock, RotateCcw, DollarSign, TrendingUp,
   AlertTriangle, Lock, Unlock, Ban, ArrowDownToLine,
-  Printer, FileDown, Zap, FileSpreadsheet, BarChart3, ChevronLeft, ChevronRight, Users,
+  Printer, FileDown, FileSpreadsheet, BarChart3, ChevronLeft, ChevronRight, Users, Eye,
 } from 'lucide-react';
 import DemurrageTab from './DemurrageTab';
 
@@ -23,6 +23,39 @@ interface InvoiceRow {
   quantity: number; unit_price: number; total_amount: number;
   vat_amount: number; grand_total: number; status: string;
   due_date: string; paid_at: string; created_at: string;
+}
+
+interface ClearanceRow {
+  clearance_id: number;
+  transaction_type: 'gate_in' | 'gate_out';
+  container_number: string;
+  customer_name: string;
+  clearance_type: 'paid' | 'credit' | 'no_charge' | 'waived';
+  original_amount: number;
+  final_amount: number;
+  reason?: string;
+  invoice_id?: number;
+  invoice_number?: string;
+  invoice_status?: string;
+  transaction_id?: number;
+  eir_number?: string;
+  booking_ref?: string;
+  approved_by_name?: string;
+  created_by_name?: string;
+  created_at: string;
+}
+
+interface ClearanceStats {
+  total_count: number;
+  paid_count: number;
+  credit_count: number;
+  no_charge_count: number;
+  waived_count: number;
+  paid_amount: number;
+  credit_amount: number;
+  waived_amount: number;
+  gate_in_amount: number;
+  gate_out_amount: number;
 }
 
 interface Stats {
@@ -40,7 +73,7 @@ const UNIT_LABELS: Record<string, string> = {
 export default function BillingPage() {
   const { session } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'invoices' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'clearance' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging'>('invoices');
 
   // Credit Note Modal
   const [cnModal, setCnModal] = useState<{ open: boolean; invoice: InvoiceRow | null }>({ open: false, invoice: null });
@@ -55,6 +88,8 @@ export default function BillingPage() {
   const [stats, setStats] = useState<Stats>({ total_outstanding: 0, total_paid: 0, total_overdue: 0, pending_count: 0 });
   const [invLoading, setInvLoading] = useState(false);
   const [invFilter, setInvFilter] = useState('');
+  const [invChargeFilter, setInvChargeFilter] = useState('');
+  const [invSearch, setInvSearch] = useState('');
   const [invPage, setInvPage] = useState(1);
   const invPerPage = 25;
 
@@ -74,10 +109,10 @@ export default function BillingPage() {
   const [custOpen, setCustOpen] = useState(false);
   const [selectedCust, setSelectedCust] = useState<{ customer_id: number; customer_name: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean; tax_id?: string } | null>(null);
 
-  // Auto-calc
-  const [autoCalcContainer, setAutoCalcContainer] = useState('');
-  const [autoCalcLoading, setAutoCalcLoading] = useState(false);
-  const [autoCalcResult, setAutoCalcResult] = useState<{ container: Record<string, unknown>; dwell_days: number; charges: Array<{ charge_type: string; description: string; quantity: number; unit_price: number; subtotal: number }>; summary: { total_before_vat: number; vat_amount: number; grand_total: number } } | null>(null);
+  // Billing clearance audit
+  const [clearances, setClearances] = useState<ClearanceRow[]>([]);
+  const [clearanceStats, setClearanceStats] = useState<ClearanceStats | null>(null);
+  const [clearanceLoading, setClearanceLoading] = useState(false);
 
   // Tariff create
   const [tariffForm, setTariffForm] = useState({
@@ -107,15 +142,28 @@ export default function BillingPage() {
     finally { setTariffLoading(false); }
   }, [yardId]);
 
+  const fetchClearances = useCallback(async () => {
+    setClearanceLoading(true);
+    try {
+      const res = await fetch(`/api/billing/clearance?yard_id=${yardId}`);
+      const data = await res.json();
+      setClearances(data.clearances || []);
+      setClearanceStats(data.stats || null);
+    } catch (err) { console.error(err); }
+    finally { setClearanceLoading(false); }
+  }, [yardId]);
+
   useEffect(() => {
-    if (activeTab === 'invoices' || activeTab === 'hold') fetchInvoices();
+    if (activeTab === 'invoices' || activeTab === 'hold' || activeTab === 'documents' || activeTab === 'reports') fetchInvoices();
+    if (activeTab === 'invoices') fetchClearances();
+    if (activeTab === 'clearance' || activeTab === 'documents' || activeTab === 'reports') fetchClearances();
     if (activeTab === 'tariffs') fetchTariffs();
     if (activeTab === 'create' && customers.length === 0) {
       fetch('/api/settings/customers').then(r => r.json()).then(d => {
         if (Array.isArray(d)) setCustomers(d.filter((c: { is_active: boolean }) => c.is_active));
       }).catch(() => {});
     }
-  }, [activeTab, fetchInvoices, fetchTariffs, customers.length]);
+  }, [activeTab, fetchInvoices, fetchTariffs, fetchClearances, customers.length]);
 
   const updateInvoice = async (id: number, action: string) => {
     const res = await fetch('/api/billing/invoices', {
@@ -192,7 +240,16 @@ export default function BillingPage() {
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
 
   // Invoice pagination
-  const invFiltered = invoices;
+  const invFiltered = invoices.filter(inv => {
+    const matchesCharge = !invChargeFilter || inv.charge_type === invChargeFilter;
+    const q = invSearch.toLowerCase();
+    const matchesSearch = !q ||
+      inv.invoice_number?.toLowerCase().includes(q) ||
+      inv.customer_name?.toLowerCase().includes(q) ||
+      inv.container_number?.toLowerCase().includes(q) ||
+      inv.description?.toLowerCase().includes(q);
+    return matchesCharge && matchesSearch;
+  });
   const invTotalPages = Math.ceil(invFiltered.length / invPerPage);
   const invPaginated = invFiltered.slice((invPage - 1) * invPerPage, invPage * invPerPage);
 
@@ -209,7 +266,7 @@ export default function BillingPage() {
           { label: 'ค้างชำระ', value: stats.total_outstanding, color: 'text-blue-600', icon: <Receipt size={16} />, count: stats.pending_count },
           { label: 'ชำระแล้ว', value: stats.total_paid, color: 'text-emerald-600', icon: <CheckCircle2 size={16} /> },
           { label: 'เกินกำหนด', value: stats.total_overdue, color: 'text-rose-500', icon: <AlertTriangle size={16} /> },
-          { label: 'รวมทั้งหมด', value: stats.total_outstanding + stats.total_paid, color: 'text-slate-800 dark:text-white', icon: <TrendingUp size={16} /> },
+          { label: 'ยกเว้น/ไม่เก็บ', value: clearanceStats?.waived_amount || 0, color: 'text-amber-600', icon: <Ban size={16} />, count: (clearanceStats?.waived_count || 0) + (clearanceStats?.no_charge_count || 0) },
         ].map((kpi, i) => (
           <div key={i} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
             <div className="flex items-center gap-2 text-slate-400 text-xs mb-2">{kpi.icon} {kpi.label}</div>
@@ -222,6 +279,7 @@ export default function BillingPage() {
       <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1 overflow-x-auto">
         {[
           { id: 'invoices' as const, label: 'ใบแจ้งหนี้', icon: <Receipt size={14} /> },
+          { id: 'clearance' as const, label: 'Clearance', icon: <CheckCircle2 size={14} /> },
           { id: 'create' as const, label: 'สร้างบิล', icon: <Plus size={14} /> },
           { id: 'tariffs' as const, label: 'Tariff', icon: <Calculator size={14} /> },
           { id: 'hold' as const, label: 'Hold', icon: <Lock size={14} /> },
@@ -246,6 +304,14 @@ export default function BillingPage() {
           <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Receipt size={16} /> ใบแจ้งหนี้ ({invoices.length})</h3>
             <div className="flex items-center gap-2">
+              <input value={invSearch} onChange={e => { setInvSearch(e.target.value); setInvPage(1); }}
+                placeholder="ค้นหาเลขบิล/ลูกค้า/ตู้"
+                className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs outline-none focus:border-blue-500" />
+              <select value={invChargeFilter} onChange={e => { setInvChargeFilter(e.target.value); setInvPage(1); }}
+                className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
+                <option value="">ทุกประเภท</option>
+                {Object.entries(CHARGE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
               <select value={invFilter} onChange={e => setInvFilter(e.target.value)}
                 className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
                 <option value="">ทุกสถานะ</option>
@@ -257,7 +323,7 @@ export default function BillingPage() {
           </div>
           {invLoading ? (
             <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
-          ) : invoices.length === 0 ? (
+          ) : invFiltered.length === 0 ? (
             <div className="p-8 text-center text-sm text-slate-400">ยังไม่มีใบแจ้งหนี้ — กดแท็บ &quot;สร้างบิล&quot; เพื่อเริ่ม</div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -278,6 +344,7 @@ export default function BillingPage() {
                           <span>• {CHARGE_LABELS[inv.charge_type] || inv.charge_type}</span>
                           {inv.container_number && <span>• 🏷️ {inv.container_number}</span>}
                           <span>• {formatDateTime(inv.created_at)}</span>
+                          <span>• {inv.charge_type === 'storage' ? 'Gate-Out/Storage' : inv.charge_type === 'gate_in' ? 'Gate-In' : 'Manual/Service'}</span>
                         </div>
                       </div>
                     </div>
@@ -295,6 +362,10 @@ export default function BillingPage() {
                         {/* Print: invoice for unpaid, receipt for paid */}
                         <button onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=${inv.status === 'paid' ? 'receipt' : 'invoice'}`, '_blank')}
                           className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-100 flex items-center gap-1"><Printer size={10} /> พิมพ์</button>
+                        {inv.container_number && (
+                          <button onClick={() => setActiveTab('clearance')}
+                            className="px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-medium hover:bg-indigo-100 flex items-center gap-1"><Eye size={10} /> Clearance</button>
+                        )}
                         {['issued', 'paid'].includes(inv.status) && (
                           <button onClick={() => { setCnModal({ open: true, invoice: inv }); setCnAmount(inv.grand_total); setCnReason(''); setCnResult(null); }}
                             className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 text-xs font-medium hover:bg-amber-100 flex items-center gap-1"><ArrowDownToLine size={10} /> ใบลดหนี้</button>
@@ -331,6 +402,16 @@ export default function BillingPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* =================== BILLING CLEARANCE TAB =================== */}
+      {activeTab === 'clearance' && (
+        <BillingClearanceTab
+          clearances={clearances}
+          stats={clearanceStats}
+          loading={clearanceLoading}
+          onRefresh={fetchClearances}
+        />
       )}
 
       {/* =================== CREATE TAB =================== */}
@@ -440,6 +521,20 @@ export default function BillingPage() {
       {/* =================== TARIFFS TAB =================== */}
       {activeTab === 'tariffs' && (
         <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/10">
+              <p className="text-xs font-bold text-blue-700 dark:text-blue-300">Storage / ค่าฝาก</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">ตั้งที่ ตั้งค่าระบบ → ค่าฝาก รองรับ rate ขั้นบันได แยกขนาดตู้ และ rate เฉพาะลูกค้า</p>
+            </div>
+            <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10">
+              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">Gate In</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">ใช้ Tariff หน่วย per_container เช่น Gate fee, LOLO, PTI, Washing ที่คิดตอนรับตู้</p>
+            </div>
+            <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10">
+              <p className="text-xs font-bold text-amber-700 dark:text-amber-300">Gate Out</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Storage คิดจากค่าฝากขั้นบันได ส่วนรายการเสริมยังใช้ Tariff และพนักงานเลือก/แก้ราคาได้ก่อนออกบิล</p>
+            </div>
+          </div>
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="p-4 border-b border-slate-100 dark:border-slate-700">
               <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Calculator size={16} /> ตั้งค่า Tariff</h3>
@@ -802,6 +897,176 @@ const CHARGE_LABELS_RPT: Record<string, string> = {
 // Lazy import for PDF (avoid SSR bundling issues)
 const loadPdfExport = () => import('@/lib/pdfExport');
 
+function clearanceLabel(type: string) {
+  const map: Record<string, { label: string; color: string }> = {
+    paid: { label: 'Paid', color: 'bg-emerald-50 text-emerald-600' },
+    credit: { label: 'Credit', color: 'bg-blue-50 text-blue-600' },
+    no_charge: { label: 'No Charge', color: 'bg-slate-100 text-slate-600' },
+    waived: { label: 'Waived', color: 'bg-amber-50 text-amber-600' },
+  };
+  return map[type] || { label: type, color: 'bg-slate-100 text-slate-500' };
+}
+
+function BillingClearanceTab({
+  clearances,
+  stats,
+  loading,
+  onRefresh,
+}: {
+  clearances: ClearanceRow[];
+  stats: ClearanceStats | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const [typeFilter, setTypeFilter] = useState('');
+  const [txFilter, setTxFilter] = useState('');
+  const [search, setSearch] = useState('');
+
+  const rows = clearances.filter(row => {
+    const q = search.toLowerCase();
+    return (!typeFilter || row.clearance_type === typeFilter)
+      && (!txFilter || row.transaction_type === txFilter)
+      && (!q ||
+        row.container_number?.toLowerCase().includes(q) ||
+        row.customer_name?.toLowerCase().includes(q) ||
+        row.invoice_number?.toLowerCase().includes(q) ||
+        row.eir_number?.toLowerCase().includes(q));
+  });
+
+  const reportRows = rows.filter(r => ['credit', 'no_charge', 'waived'].includes(r.clearance_type));
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: 'Paid', value: stats?.paid_amount || 0, count: stats?.paid_count || 0, color: 'text-emerald-600' },
+          { label: 'Credit', value: stats?.credit_amount || 0, count: stats?.credit_count || 0, color: 'text-blue-600' },
+          { label: 'Waived', value: stats?.waived_amount || 0, count: stats?.waived_count || 0, color: 'text-amber-600' },
+          { label: 'Gate In', value: stats?.gate_in_amount || 0, count: 0, color: 'text-cyan-600' },
+          { label: 'Gate Out', value: stats?.gate_out_amount || 0, count: 0, color: 'text-violet-600' },
+        ].map(kpi => (
+          <div key={kpi.label} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-xs text-slate-400">{kpi.label}</p>
+            <p className={`text-lg font-bold ${kpi.color}`}>฿{kpi.value.toLocaleString()}</p>
+            {kpi.count > 0 && <p className="text-[10px] text-slate-400">{kpi.count} รายการ</p>}
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><CheckCircle2 size={16} /> Billing Clearance ({rows.length})</h3>
+            <p className="text-xs text-slate-400 mt-1">หลักฐานเคลียร์เงินก่อน Gate/EIR พร้อม link ย้อนกลับเอกสาร</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหา ตู้/EIR/ลูกค้า/บิล" className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs" />
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
+              <option value="">ทุก clearance</option>
+              <option value="paid">Paid</option>
+              <option value="credit">Credit</option>
+              <option value="no_charge">No Charge</option>
+              <option value="waived">Waived</option>
+            </select>
+            <select value={txFilter} onChange={e => setTxFilter(e.target.value)} className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
+              <option value="">Gate In/Out</option>
+              <option value="gate_in">Gate-In</option>
+              <option value="gate_out">Gate-Out</option>
+            </select>
+            <button onClick={onRefresh} className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1"><RotateCcw size={12} /> รีเฟรช</button>
+          </div>
+        </div>
+        {loading ? (
+          <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
+        ) : rows.length === 0 ? (
+          <div className="p-8 text-center text-sm text-slate-400">ยังไม่มีรายการ Billing Clearance</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500">
+                <tr>
+                  <th className="text-left px-4 py-2.5">เวลา</th>
+                  <th className="text-left px-4 py-2.5">Gate/EIR</th>
+                  <th className="text-left px-4 py-2.5">ตู้/ลูกค้า</th>
+                  <th className="text-center px-4 py-2.5">Clearance</th>
+                  <th className="text-right px-4 py-2.5">ยอดเดิม</th>
+                  <th className="text-right px-4 py-2.5">ยอดสุทธิ</th>
+                  <th className="text-left px-4 py-2.5">เหตุผล/ผู้อนุมัติ</th>
+                  <th className="text-center px-4 py-2.5">เอกสาร</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {rows.map(row => {
+                  const badge = clearanceLabel(row.clearance_type);
+                  return (
+                    <tr key={row.clearance_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                      <td className="px-4 py-2 text-slate-500">{formatDateTime(row.created_at)}</td>
+                      <td className="px-4 py-2">
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">{row.transaction_type === 'gate_in' ? 'Gate-In' : 'Gate-Out'}</p>
+                        {row.eir_number ? <button onClick={() => window.open(`/eir/${row.eir_number}`, '_blank')} className="font-mono text-blue-500 hover:text-blue-700">{row.eir_number}</button> : <span className="text-slate-400">-</span>}
+                        {row.booking_ref && <p className="font-mono text-[10px] text-slate-400">BK: {row.booking_ref}</p>}
+                      </td>
+                      <td className="px-4 py-2">
+                        <p className="font-mono font-semibold text-slate-800 dark:text-white">{row.container_number || '-'}</p>
+                        <p className="text-slate-400">{row.customer_name || '-'}</p>
+                      </td>
+                      <td className="px-4 py-2 text-center"><span className={`px-2 py-1 rounded-lg font-semibold ${badge.color}`}>{badge.label}</span></td>
+                      <td className="px-4 py-2 text-right font-mono">฿{(row.original_amount || 0).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right font-mono font-bold">฿{(row.final_amount || 0).toLocaleString()}</td>
+                      <td className="px-4 py-2 max-w-[240px]">
+                        <p className="truncate text-slate-600 dark:text-slate-300">{row.reason || '-'}</p>
+                        {(row.approved_by_name || row.created_by_name) && <p className="text-[10px] text-slate-400">โดย {row.approved_by_name || row.created_by_name}</p>}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        {row.invoice_id ? (
+                          <button onClick={() => window.open(`/billing/print?id=${row.invoice_id}&type=${row.clearance_type === 'paid' ? 'receipt' : 'invoice'}`, '_blank')}
+                            className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200">
+                            {row.invoice_number || 'Print'}
+                          </button>
+                        ) : <span className="text-slate-400">-</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+          <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Ban size={16} /> รายงานควบคุม No Charge / Waived / Credit</h3>
+          <p className="text-xs text-slate-400 mt-1">ใช้ตรวจสอบรายการที่ไม่มีรับเงินสดทันทีหรือมีการยกเว้นค่าใช้จ่าย</p>
+        </div>
+        <div className="divide-y divide-slate-100 dark:divide-slate-700">
+          {reportRows.length === 0 ? (
+            <div className="p-6 text-sm text-slate-400 text-center">ไม่มีรายการควบคุมพิเศษใน filter นี้</div>
+          ) : reportRows.slice(0, 30).map(row => {
+            const badge = clearanceLabel(row.clearance_type);
+            return (
+              <div key={`report-${row.clearance_id}`} className="p-4 flex items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded-lg text-xs font-bold ${badge.color}`}>{badge.label}</span>
+                    <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">{row.container_number || '-'}</span>
+                    {row.eir_number && <span className="font-mono text-xs text-slate-400">{row.eir_number}</span>}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">{row.customer_name || '-'} • {row.reason || 'ไม่มีเหตุผลระบุ'} • {formatDateTime(row.created_at)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-400">ผลกระทบ</p>
+                  <p className="font-bold text-amber-600">฿{((row.original_amount || 0) - (row.final_amount || 0)).toLocaleString()}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BillingReports({ yardId }: { yardId: number }) {
   const [reportType, setReportType] = useState<'daily' | 'monthly'>('daily');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
@@ -811,6 +1076,8 @@ function BillingReports({ yardId }: { yardId: number }) {
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
+  const [controlRows, setControlRows] = useState<ClearanceRow[]>([]);
+  const [controlStats, setControlStats] = useState<ClearanceStats | null>(null);
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -819,6 +1086,14 @@ function BillingReports({ yardId }: { yardId: number }) {
       const res = await fetch(`/api/billing/reports?yard_id=${yardId}&type=${reportType}&date=${dateParam}`);
       const json = await res.json();
       if (!json.error) setData(json);
+      const clearanceFrom = dateParam.length === 7 ? `${dateParam}-01` : dateParam;
+      const clearanceTo = dateParam.length === 7
+        ? new Date(Number(dateParam.slice(0, 4)), Number(dateParam.slice(5, 7)), 0).toISOString().slice(0, 10)
+        : dateParam;
+      const cRes = await fetch(`/api/billing/clearance?yard_id=${yardId}&date_from=${clearanceFrom}&date_to=${clearanceTo}`);
+      const cJson = await cRes.json();
+      setControlRows(cJson.clearances || []);
+      setControlStats(cJson.stats || null);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [yardId, reportType, selectedDate, selectedMonth]);
@@ -958,6 +1233,21 @@ function BillingReports({ yardId }: { yardId: number }) {
             ))}
           </div>
 
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'เครดิต', value: controlStats?.credit_amount || 0, count: controlRows.filter(r => r.clearance_type === 'credit').length, color: 'text-blue-600' },
+              { label: 'No Charge', value: 0, count: controlRows.filter(r => r.clearance_type === 'no_charge').length, color: 'text-slate-600' },
+              { label: 'Waived', value: controlRows.filter(r => r.clearance_type === 'waived').reduce((s, r) => s + ((r.original_amount || 0) - (r.final_amount || 0)), 0), count: controlRows.filter(r => r.clearance_type === 'waived').length, color: 'text-amber-600' },
+              { label: 'รับเงินสด/โอน', value: controlStats?.paid_amount || 0, count: controlRows.filter(r => r.clearance_type === 'paid').length, color: 'text-emerald-600' },
+            ].map(item => (
+              <div key={item.label} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                <p className="text-xs text-slate-400">{item.label}</p>
+                <p className={`text-lg font-bold ${item.color}`}>฿{item.value.toLocaleString()}</p>
+                <p className="text-[10px] text-slate-400">{item.count} รายการ</p>
+              </div>
+            ))}
+          </div>
+
           {/* Gate Activity */}
           {data.gateActivity && (
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
@@ -976,6 +1266,33 @@ function BillingReports({ yardId }: { yardId: number }) {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {controlRows.filter(r => ['credit', 'no_charge', 'waived'].includes(r.clearance_type)).length > 0 && (
+              <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+                  <h3 className="text-sm font-semibold text-slate-700 dark:text-white">🛡️ รายงานควบคุม Credit / No Charge / Waived</h3>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {controlRows.filter(r => ['credit', 'no_charge', 'waived'].includes(r.clearance_type)).slice(0, 15).map(row => {
+                    const badge = clearanceLabel(row.clearance_type);
+                    return (
+                      <div key={row.clearance_id} className="p-3 px-4 flex items-center justify-between">
+                        <div>
+                          <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${badge.color}`}>{badge.label}</span>
+                          <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-200 ml-2">{row.container_number || '-'}</span>
+                          <span className="text-xs text-slate-400 ml-2">{row.customer_name || '-'}</span>
+                          {row.eir_number && <span className="font-mono text-[10px] text-slate-400 ml-2">{row.eir_number}</span>}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-slate-800 dark:text-white">฿{(row.final_amount || 0).toLocaleString()}</p>
+                          {row.clearance_type === 'waived' && <p className="text-[10px] text-amber-600">ยกเว้น ฿{((row.original_amount || 0) - (row.final_amount || 0)).toLocaleString()}</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Breakdown by Charge Type */}
             {data.byChargeType && data.byChargeType.length > 0 && (
               <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -1151,7 +1468,6 @@ function ARAgingTab({ yardId }: { yardId: number }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
     fetch(`/api/billing/ar-aging?yard_id=${yardId}`)
       .then(r => r.json())
       .then(d => { if (!d.error) setData(d); })
