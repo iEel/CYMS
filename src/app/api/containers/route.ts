@@ -3,6 +3,13 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 
+async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
+  await db.request().query(`
+    IF COL_LENGTH('Containers', 'container_grade') IS NULL
+      ALTER TABLE Containers ADD container_grade NVARCHAR(1) NOT NULL CONSTRAINT DF_Containers_Grade DEFAULT 'A'
+  `);
+}
+
 // GET — ดึง containers ตาม yard_id + filter, หรือ check_position (conflict detection)
 export async function GET(request: NextRequest) {
   try {
@@ -17,6 +24,7 @@ export async function GET(request: NextRequest) {
     const tier = searchParams.get('tier');
 
     const db = await getDb();
+    await ensureContainerGradeColumn(db);
 
     // Position check mode — ตรวจว่ามีตู้ที่ตำแหน่งนี้ไหม
     if (checkPosition === '1' && zoneId && bay && row && tier) {
@@ -82,6 +90,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    await ensureContainerGradeColumn(db);
 
     const result = await db.request()
       .input('containerNumber', sql.NVarChar, body.container_number)
@@ -95,14 +104,15 @@ export async function POST(request: NextRequest) {
       .input('tier', sql.Int, body.tier || null)
       .input('shippingLine', sql.NVarChar, body.shipping_line || null)
       .input('isLaden', sql.Bit, body.is_laden || false)
+      .input('containerGrade', sql.NVarChar, body.container_grade || 'A')
       .input('sealNumber', sql.NVarChar, body.seal_number || null)
       .input('gateInDate', sql.DateTime2, new Date())
       .query(`
         INSERT INTO Containers (container_number, size, type, status, yard_id, zone_id,
-          bay, [row], tier, shipping_line, is_laden, seal_number, gate_in_date)
+          bay, [row], tier, shipping_line, is_laden, container_grade, seal_number, gate_in_date)
         OUTPUT INSERTED.*
         VALUES (@containerNumber, @size, @type, @status, @yardId, @zoneId,
-          @bay, @row, @tier, @shippingLine, @isLaden, @sealNumber, @gateInDate)
+          @bay, @row, @tier, @shippingLine, @isLaden, @containerGrade, @sealNumber, @gateInDate)
       `);
 
     const created = result.recordset[0];
@@ -123,6 +133,7 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    await ensureContainerGradeColumn(db);
 
     // Build dynamic SET clauses — only update fields that are provided
     const setClauses: string[] = ['updated_at = GETDATE()'];
@@ -156,13 +167,21 @@ export async function PUT(request: NextRequest) {
       setClauses.push('seal_number = @sealNumber');
       req.input('sealNumber', sql.NVarChar, body.seal_number);
     }
+    if (body.container_grade !== undefined) {
+      const grade = String(body.container_grade).toUpperCase();
+      if (!['A', 'B', 'C', 'D'].includes(grade)) {
+        return NextResponse.json({ error: 'container_grade ต้องเป็น A, B, C หรือ D' }, { status: 400 });
+      }
+      setClauses.push('container_grade = @containerGrade');
+      req.input('containerGrade', sql.NVarChar, grade);
+    }
     if (body.status === 'released') {
       setClauses.push('gate_out_date = GETDATE()');
     }
 
     await req.query(`UPDATE Containers SET ${setClauses.join(', ')} WHERE container_id = @containerId`);
 
-    await logAudit({ action: 'container_update', entityType: 'container', entityId: body.container_id, details: { status: body.status, zone_id: body.zone_id, bay: body.bay, row: body.row, tier: body.tier } });
+    await logAudit({ action: 'container_update', entityType: 'container', entityId: body.container_id, details: { status: body.status, container_grade: body.container_grade, zone_id: body.zone_id, bay: body.bay, row: body.row, tier: body.tier } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

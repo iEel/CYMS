@@ -50,9 +50,8 @@ export async function GET(request: NextRequest) {
       LEFT JOIN Users uc ON w.created_by = uc.user_id
       ${where}
       ORDER BY
-        CASE w.status WHEN 'in_progress' THEN 0 WHEN 'assigned' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,
-        w.priority ASC,
-        w.created_at DESC
+        w.created_at DESC,
+        w.order_id DESC
     `);
 
     return NextResponse.json({ orders: result.recordset });

@@ -9,10 +9,12 @@ import YardAudit from '@/components/yard/YardAudit';
 import ContainerCardPWA from '@/components/yard/ContainerCardPWA';
 import BayCrossSection from '@/components/yard/BayCrossSection';
 import ContainerDetailModal from '@/components/yard/ContainerDetailModal';
+import EIRDocument from '@/components/gate/EIRDocument';
+import type { EIRData } from '@/components/gate/EIRDocument';
 
 const ContainerTimeline = dynamic(() => import('@/components/containers/ContainerTimeline'), { ssr: false });
 import {
-  MapPin, Search, Filter, ChevronDown, Cuboid, ClipboardCheck, SearchIcon,
+  MapPin, Search, Filter, ChevronDown, Cuboid, ClipboardCheck,
   Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star, Clock,
 } from 'lucide-react';
 
@@ -52,6 +54,7 @@ interface ContainerData {
   shipping_line: string;
   is_laden: boolean;
   gate_in_date: string;
+  container_grade?: string;
 }
 
 const ZONE_ICONS: Record<string, React.ReactNode> = {
@@ -80,6 +83,13 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   available:  { label: 'ว่าง', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
 };
 
+const GRADE_INFO: Record<string, { desc: string; color: string; bg: string }> = {
+  A: { desc: 'สภาพดี', color: 'text-emerald-700', bg: 'bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  B: { desc: 'พอใช้', color: 'text-amber-700', bg: 'bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400' },
+  C: { desc: 'ต้องซ่อม', color: 'text-orange-700', bg: 'bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400' },
+  D: { desc: 'Hold', color: 'text-red-700', bg: 'bg-red-100 dark:bg-red-900/30 dark:text-red-400' },
+};
+
 export default function YardPage() {
   const { session } = useAuth();
   const [zones, setZones] = useState<ZoneData[]>([]);
@@ -89,12 +99,15 @@ export default function YardPage() {
   const [search, setSearch] = useState('');
   const [filterZone, setFilterZone] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
+  const [filterGrade, setFilterGrade] = useState<string>('');
   const [viewMode, setViewMode] = useState<'2d' | '3d' | 'bay'>('2d');
   const [selectedContainer, setSelectedContainer] = useState<ContainerData | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'search' | 'allocate' | 'audit'>('overview');
   const [highlightNumber, setHighlightNumber] = useState<string>('');
   const [detailContainerId, setDetailContainerId] = useState<number | null>(null);
   const [timelineId, setTimelineId] = useState<number | null>(null);
+  const [showEIR, setShowEIR] = useState<string | null>(null);
+  const [eirData, setEirData] = useState<EIRData | null>(null);
 
   // Allocate state
   const [allocForm, setAllocForm] = useState({ size: '20', type: 'GP', shipping_line: '', container_number: '' });
@@ -138,11 +151,24 @@ export default function YardPage() {
       // By default, hide gated_out containers
       if (c.status === 'gated_out') return false;
     }
+    if (filterGrade && (c.container_grade || 'A').toUpperCase() !== filterGrade) return false;
     return true;
   });
 
   // Reset page when filters change
-  useEffect(() => { setCurrentPage(1); }, [search, filterZone, filterStatus]);
+  useEffect(() => { setCurrentPage(1); }, [search, filterZone, filterStatus, filterGrade]);
+
+  const viewEIR = useCallback(async (eirNumber: string) => {
+    setShowEIR(eirNumber);
+    setEirData(null);
+    try {
+      const res = await fetch(`/api/gate/eir?eir_number=${eirNumber}`);
+      const data = await res.json();
+      setEirData(data.eir || null);
+    } catch {
+      setEirData(null);
+    }
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const paginated = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
@@ -376,9 +402,23 @@ export default function YardPage() {
                 </select>
                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
+              <div className="relative">
+                <Star size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <select value={filterGrade} onChange={(e) => setFilterGrade(e.target.value)}
+                  className="h-10 pl-8 pr-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
+                    text-sm text-slate-800 dark:text-white outline-none appearance-none">
+                  <option value="">ทุกเกรด</option>
+                  <option value="A">Grade A - สภาพดี</option>
+                  <option value="B">Grade B - พอใช้</option>
+                  <option value="C">Grade C - ต้องซ่อม</option>
+                  <option value="D">Grade D - Hold</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
               <span className="text-xs text-slate-400">
                 แสดง {filtered.length} / {containers.length} ตู้
                 {filterZone && <span className="ml-1 text-blue-500 font-medium">• Zone {filterZone}</span>}
+                {filterGrade && <span className="ml-1 text-amber-500 font-medium">• Grade {filterGrade}</span>}
               </span>
             </div>
 
@@ -393,6 +433,7 @@ export default function YardPage() {
                     <th className="px-4 py-3">พิกัด</th>
                     <th className="px-4 py-3">สายเรือ</th>
                     <th className="px-4 py-3">สถานะ</th>
+                    <th className="px-4 py-3">เกรด</th>
                     <th className="px-4 py-3">สินค้า</th>
                     <th className="px-4 py-3">เข้าลานเมื่อ</th>
                     <th className="px-4 py-3">อยู่ในลาน</th>
@@ -401,6 +442,8 @@ export default function YardPage() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {paginated.map((c) => {
                     const st = STATUS_LABELS[c.status] || STATUS_LABELS.available;
+                    const grade = (c.container_grade || 'A').toUpperCase();
+                    const gradeInfo = GRADE_INFO[grade] || GRADE_INFO.A;
                     return (
                       <tr key={c.container_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer" onClick={() => setDetailContainerId(c.container_id)}>
                         <td className="px-4 py-3">
@@ -425,6 +468,12 @@ export default function YardPage() {
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium ${st.color}`}>
                             {st.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${gradeInfo.bg} ${gradeInfo.color}`}>
+                            {grade}
+                            <span className="font-medium">{gradeInfo.desc}</span>
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -724,7 +773,7 @@ export default function YardPage() {
           {allocSuggestions.length === 0 && !allocLoading && (
             <div className="p-12 text-center">
               <Wand2 size={32} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-              <p className="text-slate-400 text-sm">ระบุข้อมูลตู้แล้วกด "ขอแนะนำพิกัด" เพื่อดูตำแหน่งที่ดีที่สุด</p>
+              <p className="text-slate-400 text-sm">ระบุข้อมูลตู้แล้วกด &quot;ขอแนะนำพิกัด&quot; เพื่อดูตำแหน่งที่ดีที่สุด</p>
             </div>
           )}
         </div>
@@ -745,7 +794,24 @@ export default function YardPage() {
           containerId={detailContainerId}
           onClose={() => setDetailContainerId(null)}
           onRefresh={fetchData}
+          onViewEIR={viewEIR}
         />
+      )}
+
+      {showEIR && eirData && (
+        <EIRDocument
+          data={eirData}
+          onClose={() => { setShowEIR(null); setEirData(null); }}
+        />
+      )}
+
+      {showEIR && !eirData && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 text-center shadow-xl">
+            <Loader2 size={24} className="animate-spin mx-auto text-blue-500" />
+            <p className="text-sm text-slate-500 mt-3">กำลังโหลด EIR...</p>
+          </div>
+        </div>
       )}
 
       {/* Container Timeline Modal */}
@@ -753,4 +819,3 @@ export default function YardPage() {
     </div>
   );
 }
-

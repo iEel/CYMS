@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import {
   Loader2, Search, Truck, Package, ArrowRight, Play, CheckCircle2,
-  XCircle, Clock, AlertTriangle, Plus, Layers, Shuffle, ChevronDown,
-  ArrowDown, ArrowUp, ArrowUpFromLine, ArrowDownToLine, MapPin, User, ListOrdered, RotateCcw,
+  XCircle, Clock, AlertTriangle, Plus, Layers, Shuffle,
+  ArrowUpFromLine, ArrowDownToLine, MapPin, User, ListOrdered, RotateCcw,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
@@ -31,6 +31,15 @@ interface WorkOrderRow {
   created_at: string;
   started_at: string;
   completed_at: string;
+}
+
+function sortOrdersByCreatedAt(orders: WorkOrderRow[]) {
+  return [...orders].sort((a, b) => {
+    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+    if (bTime !== aTime) return bTime - aTime;
+    return b.order_id - a.order_id;
+  });
 }
 
 interface ContainerOption {
@@ -107,7 +116,7 @@ export default function OperationsPage() {
       if (statusFilter) url += `&status=${statusFilter}`;
       const res = await fetch(url);
       const data = await res.json();
-      setOrders(data.orders || []);
+      setOrders(sortOrdersByCreatedAt(data.orders || []));
     } catch (err) { console.error(err); }
     finally { setQueueLoading(false); }
   }, [yardId, statusFilter]);
@@ -143,7 +152,7 @@ export default function OperationsPage() {
           if (statusFilter) {
             filtered = filtered.filter((o: WorkOrderRow) => o.status === statusFilter);
           }
-          setOrders(filtered);
+          setOrders(sortOrdersByCreatedAt(filtered));
           setQueueLoading(false);
         } catch { /* ignore parse errors */ }
       });

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   Search, MapPin, Package, Ship, ArrowUpFromLine, ClipboardCheck,
-  ArrowRightLeft, Eye, Phone, Loader2, Filter, ChevronDown, Box, Clock,
+  ArrowRightLeft, ChevronDown, Box, Clock,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { calcDwellDays } from '@/lib/utils';
 
 interface ContainerCard {
@@ -20,6 +21,7 @@ interface ContainerCard {
   shipping_line: string;
   is_laden: boolean;
   gate_in_date: string;
+  container_grade?: string;
 }
 
 interface Props {
@@ -35,27 +37,30 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
   in_transit: { label: 'ขนส่ง', color: 'text-blue-700', bg: 'bg-blue-100 dark:bg-blue-900/30' },
 };
 
-export default function ContainerCardPWA({ yardId, containers }: Props) {
+const GRADE_MAP: Record<string, { label: string; color: string; bg: string }> = {
+  A: { label: 'สภาพดี', color: 'text-emerald-700', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+  B: { label: 'พอใช้', color: 'text-amber-700', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+  C: { label: 'ต้องซ่อม', color: 'text-orange-700', bg: 'bg-orange-100 dark:bg-orange-900/30' },
+  D: { label: 'Hold', color: 'text-red-700', bg: 'bg-red-100 dark:bg-red-900/30' },
+};
+
+export default function ContainerCardPWA({ containers }: Props) {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [gradeFilter, setGradeFilter] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const filtered = containers.filter(c => {
     if (search && !c.container_number.toLowerCase().includes(search.toLowerCase())
         && !c.shipping_line?.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter && c.status !== statusFilter) return false;
+    if (gradeFilter && (c.container_grade || 'A').toUpperCase() !== gradeFilter) return false;
     return true;
   });
 
-  const handleAction = (action: string, container: ContainerCard) => {
-    // Navigate to relevant page
-    if (action === 'gate_out') {
-      window.location.href = '/gate';
-    } else if (action === 'inspect') {
-      window.location.href = '/gate';
-    } else if (action === 'transfer') {
-      window.location.href = '/gate';
-    }
+  const handleAction = () => {
+    router.push('/gate');
   };
 
   return (
@@ -84,6 +89,17 @@ export default function ContainerCardPWA({ yardId, containers }: Props) {
           </select>
           <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
         </div>
+        <div className="relative">
+          <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)}
+            className="h-12 pl-3 pr-8 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm appearance-none">
+            <option value="">ทุกเกรด</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+            <option value="D">D</option>
+          </select>
+          <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        </div>
       </div>
 
       {/* Count */}
@@ -98,6 +114,8 @@ export default function ContainerCardPWA({ yardId, containers }: Props) {
         )}
         {filtered.slice(0, 30).map(c => {
           const st = STATUS_MAP[c.status] || STATUS_MAP.in_yard;
+          const grade = (c.container_grade || 'A').toUpperCase();
+          const gradeInfo = GRADE_MAP[grade] || GRADE_MAP.A;
           const isSelected = selectedId === c.container_id;
           return (
             <div key={c.container_id}
@@ -145,6 +163,9 @@ export default function ContainerCardPWA({ yardId, containers }: Props) {
                   }`}>
                     {c.is_laden ? 'LADEN' : 'EMPTY'}
                   </span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${gradeInfo.color} ${gradeInfo.bg}`}>
+                    Grade {grade}
+                  </span>
                   {c.gate_in_date && (() => {
                     const days = calcDwellDays(c.gate_in_date);
                     const color = days <= 7 ? 'text-emerald-700 bg-emerald-100' : days <= 14 ? 'text-amber-700 bg-amber-100' : 'text-red-700 bg-red-100';
@@ -157,17 +178,17 @@ export default function ContainerCardPWA({ yardId, containers }: Props) {
               {isSelected && (
                 <div className="px-4 pb-4 pt-1 border-t border-slate-100 dark:border-slate-700">
                   <div className="grid grid-cols-3 gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); handleAction('gate_out', c); }}
+                    <button onClick={(e) => { e.stopPropagation(); handleAction(); }}
                       className="flex flex-col items-center gap-1 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 transition-colors active:scale-95">
                       <ArrowUpFromLine size={22} />
                       <span className="text-[10px] font-semibold">ปล่อยออก</span>
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); handleAction('inspect', c); }}
+                    <button onClick={(e) => { e.stopPropagation(); handleAction(); }}
                       className="flex flex-col items-center gap-1 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 text-violet-600 hover:bg-violet-100 transition-colors active:scale-95">
                       <ClipboardCheck size={22} />
                       <span className="text-[10px] font-semibold">ตรวจสภาพ</span>
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); handleAction('transfer', c); }}
+                    <button onClick={(e) => { e.stopPropagation(); handleAction(); }}
                       className="flex flex-col items-center gap-1 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 hover:bg-amber-100 transition-colors active:scale-95">
                       <ArrowRightLeft size={22} />
                       <span className="text-[10px] font-semibold">ย้ายลาน</span>

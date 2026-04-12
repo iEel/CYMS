@@ -151,6 +151,7 @@ CREATE TABLE Containers (
     is_laden            BIT DEFAULT 0,
     is_soc              BIT DEFAULT 0,                   -- Shipper Owned Container (ตู้ของลูกค้าเอง)
     container_owner_id  INT NULL,                        -- FK→Customers (เจ้าของกรรมสิทธิ์ตู้)
+    container_grade     NVARCHAR(1) DEFAULT 'A',          -- A/B/C/D current operational grade
     seal_number         NVARCHAR(50),
     gate_in_date        DATETIME2,
     gate_out_date       DATETIME2,

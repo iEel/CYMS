@@ -41,9 +41,8 @@ export async function GET(request: NextRequest) {
                 LEFT JOIN Users uc ON w.created_by = uc.user_id
                 WHERE w.yard_id = @yardId
                 ORDER BY
-                  CASE w.status WHEN 'in_progress' THEN 0 WHEN 'assigned' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,
-                  w.priority ASC,
-                  w.created_at DESC
+                  w.created_at DESC,
+                  w.order_id DESC
               `);
 
             const orders = result.recordset;

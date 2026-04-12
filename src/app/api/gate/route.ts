@@ -4,6 +4,13 @@ import sql from 'mssql';
 import { z } from 'zod';
 import { logAudit } from '@/lib/audit';
 
+async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
+  await db.request().query(`
+    IF COL_LENGTH('Containers', 'container_grade') IS NULL
+      ALTER TABLE Containers ADD container_grade NVARCHAR(1) NOT NULL CONSTRAINT DF_Containers_Grade DEFAULT 'A'
+  `);
+}
+
 const gateBodySchema = z.object({
   transaction_type: z.enum(['gate_in', 'gate_out']),
   container_number: z.string().min(4).max(15).optional(),
@@ -41,6 +48,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
 
     const db = await getDb();
+    await ensureContainerGradeColumn(db);
     const req = db.request();
     const conditions: string[] = [];
 
@@ -108,6 +116,11 @@ export async function POST(request: NextRequest) {
     } = body;
 
     const db = await getDb();
+    await ensureContainerGradeColumn(db);
+    const containerGrade = typeof damage_report?.condition_grade === 'string'
+      && ['A', 'B', 'C', 'D'].includes(damage_report.condition_grade.toUpperCase())
+      ? damage_report.condition_grade.toUpperCase()
+      : 'A';
 
     // Generate EIR number with random suffix (prevents URL guessing on public QR pages)
     const eirPrefix = transaction_type === 'gate_in' ? 'EIR-IN' : 'EIR-OUT';
@@ -171,6 +184,7 @@ export async function POST(request: NextRequest) {
           .input('isLaden', sql.Bit, is_laden || false)
           .input('isSoc', sql.Bit, is_soc || false)
           .input('ownerId', sql.Int, container_owner_id || null)
+          .input('containerGrade', sql.NVarChar, containerGrade)
           .input('sealNumber', sql.NVarChar, seal_number || null)
           .input('gateInDate', sql.DateTime2, new Date())
           .query(`
@@ -179,6 +193,7 @@ export async function POST(request: NextRequest) {
               bay = @bay, [row] = @row, tier = @tier,
               shipping_line = @shippingLine, is_laden = @isLaden,
               is_soc = @isSoc, container_owner_id = @ownerId,
+              container_grade = @containerGrade,
               seal_number = @sealNumber, gate_in_date = @gateInDate,
               gate_out_date = NULL, updated_at = GETDATE()
             WHERE container_id = @containerId
@@ -199,14 +214,15 @@ export async function POST(request: NextRequest) {
           .input('isLaden', sql.Bit, is_laden || false)
           .input('isSoc', sql.Bit, is_soc || false)
           .input('ownerId', sql.Int, container_owner_id || null)
+          .input('containerGrade', sql.NVarChar, containerGrade)
           .input('sealNumber', sql.NVarChar, seal_number || null)
           .input('gateInDate', sql.DateTime2, new Date())
           .query(`
             INSERT INTO Containers (container_number, size, type, status, yard_id, zone_id,
-              bay, [row], tier, shipping_line, is_laden, is_soc, container_owner_id, seal_number, gate_in_date)
+              bay, [row], tier, shipping_line, is_laden, is_soc, container_owner_id, container_grade, seal_number, gate_in_date)
             OUTPUT INSERTED.container_id
             VALUES (@containerNumber, @size, @type, @status, @yardId, @zoneId,
-              @bay, @row, @tier, @shippingLine, @isLaden, @isSoc, @ownerId, @sealNumber, @gateInDate)
+              @bay, @row, @tier, @shippingLine, @isLaden, @isSoc, @ownerId, @containerGrade, @sealNumber, @gateInDate)
           `);
         finalContainerId = insertResult.recordset[0].container_id;
       }

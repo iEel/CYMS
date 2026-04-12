@@ -15,7 +15,7 @@ interface DamagePoint {
   photo?: string;
 }
 
-interface EIRData {
+export interface EIRData {
   eir_number: string;
   transaction_type: 'gate_in' | 'gate_out';
   date: string;

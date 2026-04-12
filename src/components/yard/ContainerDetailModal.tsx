@@ -32,6 +32,7 @@ interface ContainerDetail {
     tier: number;
     booking_ref: string;
     seal_number: string;
+    container_grade: string;
     dwell_days: number;
   };
   gate_in: {
@@ -60,6 +61,7 @@ interface ContainerDetailModalProps {
   containerId: number;
   onClose: () => void;
   onRefresh?: () => void;
+  onViewEIR?: (eirNumber: string) => void;
 }
 
 const SIDES = [
@@ -89,11 +91,18 @@ const GRADE_INFO: Record<string, { desc: string; color: string }> = {
   D: { desc: 'ชำรุดหนัก', color: '#EF4444' },
 };
 
+const GRADE_OPTIONS = [
+  { grade: 'A', desc: 'สภาพดี', color: 'bg-emerald-500' },
+  { grade: 'B', desc: 'พอใช้', color: 'bg-amber-500' },
+  { grade: 'C', desc: 'ต้องซ่อม', color: 'bg-orange-500' },
+  { grade: 'D', desc: 'Hold', color: 'bg-red-600' },
+];
+
 const STATUS_LABELS: Record<string, string> = {
   in_yard: 'ในลาน', hold: 'ค้างจ่าย', repair: 'ซ่อม', gated_out: 'ปล่อยแล้ว', available: 'ว่าง',
 };
 
-export default function ContainerDetailModal({ containerId, onClose, onRefresh }: ContainerDetailModalProps) {
+export default function ContainerDetailModal({ containerId, onClose, onRefresh, onViewEIR }: ContainerDetailModalProps) {
   const [data, setData] = useState<ContainerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSide, setActiveSide] = useState('front');
@@ -101,6 +110,8 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh }
   const [fullPhoto, setFullPhoto] = useState<string | null>(null);
   const [statusChanging, setStatusChanging] = useState(false);
   const [newStatus, setNewStatus] = useState('');
+  const [gradeChanging, setGradeChanging] = useState(false);
+  const [newGrade, setNewGrade] = useState('A');
 
   useEffect(() => {
     async function fetchDetail() {
@@ -109,6 +120,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh }
         const json = await res.json();
         setData(json);
         if (json.container) setNewStatus(json.container.status);
+        if (json.container) setNewGrade(json.container.container_grade || 'A');
       } catch { /* ignore */ }
       finally { setLoading(false); }
     }
@@ -165,6 +177,21 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh }
     finally { setStatusChanging(false); }
   };
 
+  const handleGradeChange = async () => {
+    if (!newGrade || newGrade === (c.container_grade || 'A')) return;
+    setGradeChanging(true);
+    try {
+      await fetch('/api/containers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ container_id: c.container_id, container_grade: newGrade }),
+      });
+      setData(prev => prev ? { ...prev, container: { ...prev.container, container_grade: newGrade } } : prev);
+      onRefresh?.();
+    } catch { /* ignore */ }
+    finally { setGradeChanging(false); }
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
@@ -182,6 +209,10 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh }
                 'bg-slate-100 text-slate-500'
               }`}>{STATUS_LABELS[c.status] || c.status}</span>
               <span className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded font-mono">{c.size}&apos;{c.type}</span>
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-white text-xs font-black"
+                style={{ backgroundColor: (GRADE_INFO[c.container_grade || 'A'] || GRADE_INFO.A).color }}>
+                {c.container_grade || 'A'}
+              </span>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors">
               <X size={16} />
@@ -196,6 +227,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh }
               <InfoField label="ซีล" value={c.seal_number || '—'} />
               <InfoField label="สินค้า" value={c.is_laden ? '📦 มีสินค้า' : '📭 ตู้เปล่า'} />
               <InfoField label="Booking" value={c.booking_ref || '—'} />
+              <InfoField label="เกรด" value={`Grade ${c.container_grade || 'A'} · ${(GRADE_INFO[c.container_grade || 'A'] || GRADE_INFO.A).desc}`} highlight />
               <InfoField label="ลาน" value={c.yard_name || '—'} />
               <InfoField label="โซน" value={c.zone_name || '—'} />
               <InfoField label="พิกัด" value={c.bay && c.row && c.tier ? `B${c.bay}-R${c.row}-T${c.tier}` : '—'} mono />
@@ -207,7 +239,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh }
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/10 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                   <h3 className="text-xs font-bold text-emerald-700 dark:text-emerald-400">📥 Gate-In</h3>
-                  <button onClick={() => window.open(`/eir/${gi.eir_number}`, '_blank')}
+                  <button onClick={() => onViewEIR ? onViewEIR(gi.eir_number) : window.open(`/eir/${gi.eir_number}`, '_blank')}
                     className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
                     <ExternalLink size={10} /> {gi.eir_number}
                   </button>
@@ -410,7 +442,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh }
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-4 py-2 bg-blue-50 dark:bg-blue-900/10 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                   <h3 className="text-xs font-bold text-blue-700 dark:text-blue-400">📤 Gate-Out</h3>
-                  <button onClick={() => window.open(`/eir/${go.eir_number}`, '_blank')}
+                  <button onClick={() => onViewEIR ? onViewEIR(go.eir_number) : window.open(`/eir/${go.eir_number}`, '_blank')}
                     className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
                     <ExternalLink size={10} /> {go.eir_number}
                   </button>
@@ -428,7 +460,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh }
             <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
               {/* View EIR */}
               {gi?.eir_number && (
-                <button onClick={() => window.open(`/eir/${gi.eir_number}`, '_blank')}
+                <button onClick={() => onViewEIR ? onViewEIR(gi.eir_number) : window.open(`/eir/${gi.eir_number}`, '_blank')}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors">
                   <ExternalLink size={12} /> ดู EIR
                 </button>
@@ -451,6 +483,21 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh }
                   </button>
                 </div>
               )}
+
+              <div className="flex items-center gap-1.5">
+                <select value={newGrade} onChange={e => setNewGrade(e.target.value)}
+                  className="h-9 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-700 dark:text-white outline-none">
+                  {GRADE_OPTIONS.map(g => (
+                    <option key={g.grade} value={g.grade}>Grade {g.grade} - {g.desc}</option>
+                  ))}
+                </select>
+                <button onClick={handleGradeChange}
+                  disabled={gradeChanging || newGrade === (c.container_grade || 'A')}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-xs font-medium hover:bg-blue-100 disabled:opacity-30 transition-colors">
+                  {gradeChanging ? <Loader2 size={12} className="animate-spin" /> : null}
+                  บันทึกเกรด
+                </button>
+              </div>
             </div>
           </div>
         </div>

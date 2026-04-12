@@ -3,6 +3,13 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { calcDwellDays } from '@/lib/utils';
 
+async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
+  await db.request().query(`
+    IF COL_LENGTH('Containers', 'container_grade') IS NULL
+      ALTER TABLE Containers ADD container_grade NVARCHAR(1) NOT NULL CONSTRAINT DF_Containers_Grade DEFAULT 'A'
+  `);
+}
+
 // GET — ดึงรายละเอียดตู้ + Gate Transactions + damage_report
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +21,7 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    await ensureContainerGradeColumn(db);
 
     // 1. Container info
     const containerResult = await db.request()
@@ -84,6 +92,7 @@ export async function GET(request: NextRequest) {
         tier: container.tier,
         booking_ref: container.booking_ref,
         seal_number: container.seal_number,
+        container_grade: container.container_grade || 'A',
         dwell_days: dwellDays,
       },
       gate_in: gateIn ? {
