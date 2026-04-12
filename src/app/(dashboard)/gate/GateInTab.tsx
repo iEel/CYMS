@@ -42,6 +42,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     shipping_line?: string; size?: string; type?: string; source?: string;
     customer?: { customer_id: number; customer_name: string; credit_term: number } | null;
     unknown_prefix?: boolean;
+    multiple_customers?: boolean;
+    customer_source?: string;
+    candidates?: Array<{ customer_id: number; customer_name: string; is_line: boolean; is_forwarder: boolean; is_trucking: boolean; credit_term: number; is_primary: boolean }>;
   } | null>(null);
   const boxtechAbortRef = useRef<AbortController | null>(null);
 
@@ -63,6 +66,16 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [customerSearch, setCustomerSearch] = useState('');
   const [manualCustomerId, setManualCustomerId] = useState<number | null>(null);
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
+
+  // Owner / Billing customer separation
+  const [containerOwnerId, setContainerOwnerId] = useState<number | null>(null);
+  const [billingCustomerId, setBillingCustomerId] = useState<number | null>(null);
+  const [billingDiffFromOwner, setBillingDiffFromOwner] = useState(false);
+  const [isSoc, setIsSoc] = useState(false);
+
+  // Halt Rule popup (multi-customer prefix conflict)
+  const [showHaltPopup, setShowHaltPopup] = useState(false);
+  const [haltCandidates, setHaltCandidates] = useState<Array<{ customer_id: number; customer_name: string; is_line: boolean; is_forwarder: boolean; is_trucking: boolean; credit_term: number; is_primary: boolean }>>([]);
 
   const [gateInLoading, setGateInLoading] = useState(false);
   const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string; assigned_location?: { zone_name: string; bay: number; row: number; tier: number; reason: string } } | null>(null);
@@ -94,7 +107,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     boxtechAbortRef.current = controller;
     
     setBoxtechLoading(true);
-    fetch(`/api/boxtech?container_number=${num}`, { signal: controller.signal })
+    const bUrl = `/api/boxtech?container_number=${num}${gateInForm.booking_ref ? `&booking_ref=${encodeURIComponent(gateInForm.booking_ref)}` : ''}`;
+    fetch(bUrl, { signal: controller.signal })
       .then(res => res.json())
       .then(data => {
         if (!data.success) {
@@ -108,6 +122,17 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           size: data.size || prev.size,
           type: data.type || prev.type,
         }));
+
+        // Handle customer resolution
+        if (data.customer) {
+          setContainerOwnerId(data.customer.customer_id);
+          if (!billingDiffFromOwner) setBillingCustomerId(data.customer.customer_id);
+        }
+        // HALT RULE: Multiple customers for same prefix → force popup
+        if (data.multiple_customers && data.candidates?.length > 0) {
+          setHaltCandidates(data.candidates);
+          setShowHaltPopup(true);
+        }
       })
       .catch(err => {
         if (err.name !== 'AbortError') console.error('Boxtech lookup error:', err);
@@ -154,6 +179,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         container_number: gateInForm.container_number,
         size: gateInForm.size,
         shipping_line: gateInForm.shipping_line,
+        booking_ref: gateInForm.booking_ref || undefined,
+        container_owner_id: containerOwnerId || undefined,
+        billing_customer_id: billingCustomerId || undefined,
       }),
     })
       .then(res => res.json())
@@ -237,6 +265,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           yard_id: yardId,
           user_id: userId,
           ...gateInForm,
+          is_soc: isSoc,
+          container_owner_id: containerOwnerId || undefined,
+          billing_customer_id: billingCustomerId || undefined,
           damage_report: inspectionReport || null,
         }),
       });
@@ -399,8 +430,65 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                 <label className={labelClass}>Booking Ref</label>
                 <input type="text" placeholder="BK-123456" value={gateInForm.booking_ref}
                   onChange={e => setGateInForm({ ...gateInForm, booking_ref: e.target.value })} className={inputClass} />
+                {boxtechResult?.customer_source === 'booking' && (
+                  <span className="text-xs text-emerald-600 flex items-center gap-1 mt-1">&#x1F4CB; ยึดตาม Booking</span>
+                )}
+              </div>
+              {/* SOC Toggle */}
+              <div>
+                <label className={labelClass}>ประเภทกรรมสิทธิ์</label>
+                <div className="flex gap-2 mt-1">
+                  <button onClick={() => setIsSoc(false)}
+                    className={`flex-1 h-10 rounded-lg text-sm font-medium border transition-all ${!isSoc ? 'border-purple-400 bg-purple-50 dark:bg-purple-900/20 text-purple-600' : 'border-slate-200 dark:border-slate-600 text-slate-400'}`}>
+                    COC (ของสายเรือ)
+                  </button>
+                  <button onClick={() => setIsSoc(true)}
+                    className={`flex-1 h-10 rounded-lg text-sm font-medium border transition-all ${isSoc ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/20 text-orange-600' : 'border-slate-200 dark:border-slate-600 text-slate-400'}`}>
+                    SOC (ของลูกค้า)
+                  </button>
+                </div>
               </div>
             </div>
+
+            {/* Owner / Billing Customer Separator */}
+            {(containerOwnerId || billingCustomerId || resolvedCustomer) && (
+              <div className="mt-4 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-800/30">
+                <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-2">&#x2696;&#xFE0F; เจ้าของตู้ / คนจ่ายเงิน</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">&#x1F4E6; เจ้าของตู้ (Container Owner)</label>
+                    <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                      {containerOwnerId ? customerList.find(c => c.customer_id === containerOwnerId)?.customer_name || resolvedCustomer?.customer_name || '-' : resolvedCustomer?.customer_name || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 flex items-center gap-2">
+                      &#x1F4B0; คนจ่ายเงิน (Billing Customer)
+                      <label className="inline-flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" checked={billingDiffFromOwner} onChange={e => {
+                          setBillingDiffFromOwner(e.target.checked);
+                          if (!e.target.checked) setBillingCustomerId(containerOwnerId);
+                        }} className="accent-blue-600" />
+                        <span className="text-xs text-blue-500">คนละคน</span>
+                      </label>
+                    </label>
+                    {billingDiffFromOwner ? (
+                      <select value={billingCustomerId || ''} onChange={e => setBillingCustomerId(e.target.value ? parseInt(e.target.value) : null)}
+                        className={`${inputClass} text-sm`}>
+                        <option value="">เลือกลูกค้าผู้จ่ายเงิน...</option>
+                        {customerList.map(c => (
+                          <option key={c.customer_id} value={c.customer_id}>{c.customer_name} {c.is_forwarder ? '(ตัวแทน)' : c.is_trucking ? '(รถบรรทุก)' : ''}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                        เหมือนเจ้าของตู้
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Driver Info */}
@@ -789,6 +877,50 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           onResult={handleOCRResult}
           onClose={() => setShowOCR(null)}
         />
+      )}
+
+      {/* === HALT RULE POPUP: Multi-customer prefix conflict === */}
+      {showHaltPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 animate-in zoom-in-95">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="text-amber-500" size={24} />
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">&#x26A0;&#xFE0F; เลือกเจ้าของตู้</h3>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">
+              Prefix <span className="font-mono font-bold">{gateInForm.container_number.substring(0, 4).toUpperCase()}</span> ผูกกับลูกค้าหลายราย กรุณาเลือกว่างานนี้เป็นของใคร
+            </p>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {haltCandidates.map(c => (
+                <button key={c.customer_id}
+                  onClick={() => {
+                    setContainerOwnerId(c.customer_id);
+                    if (!billingDiffFromOwner) setBillingCustomerId(c.customer_id);
+                    setManualCustomerId(c.customer_id);
+                    setShowHaltPopup(false);
+                    setBoxtechResult(prev => prev ? { ...prev, customer: { customer_id: c.customer_id, customer_name: c.customer_name, credit_term: c.credit_term }, multiple_customers: false } : null);
+                  }}
+                  className={`w-full text-left p-3 rounded-xl border-2 transition-all hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 ${
+                    c.is_primary ? 'border-amber-300 bg-amber-50/50 dark:bg-amber-900/10' : 'border-slate-200 dark:border-slate-600'
+                  }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm text-slate-800 dark:text-white">{c.customer_name}</span>
+                    {c.is_primary && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">&#x2B50; แนะนำ</span>}
+                  </div>
+                  <div className="flex gap-1 mt-1">
+                    {c.is_line && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">สายเรือ</span>}
+                    {c.is_forwarder && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">ตัวแทน</span>}
+                    {c.is_trucking && <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">รถบรรทุก</span>}
+                    {c.credit_term > 0 && <span className="text-xs text-slate-500">Credit {c.credit_term} วัน</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-red-500 mt-3 flex items-center gap-1">
+              <AlertTriangle size={12} /> ต้องเลือกลูกค้าก่อนดำเนินการ Gate-In (ป้องกันวางบิลผิดคน)
+            </p>
+          </div>
+        </div>
       )}
     </>
   );

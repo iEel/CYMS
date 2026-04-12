@@ -15,6 +15,7 @@ interface PrefixMap {
   is_line: boolean;
   is_forwarder: boolean;
   is_trucking: boolean;
+  is_primary: boolean;
   notes: string;
   created_at: string;
 }
@@ -35,7 +36,7 @@ export default function PrefixMapping() {
   const [saving, setSaving] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState({ prefix_code: '', customer_id: '', notes: '' });
+  const [form, setForm] = useState({ prefix_code: '', customer_id: '', notes: '', is_primary: false });
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchData = useCallback(async () => {
@@ -68,18 +69,31 @@ export default function PrefixMapping() {
           prefix_code: form.prefix_code.toUpperCase(),
           customer_id: parseInt(form.customer_id),
           notes: form.notes,
+          is_primary: form.is_primary,
         }),
       });
       const data = await res.json();
       if (data.success) {
         setShowAdd(false);
-        setForm({ prefix_code: '', customer_id: '', notes: '' });
+        setForm({ prefix_code: '', customer_id: '', notes: '', is_primary: false });
         fetchData();
       } else {
         toast('error', data.error || 'Error');
       }
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
+  };
+
+  const handleTogglePrimary = async (mapping: PrefixMap) => {
+    try {
+      const res = await fetch('/api/settings/prefix-mapping', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prefix_id: mapping.prefix_id, is_primary: !mapping.is_primary }),
+      });
+      const data = await res.json();
+      if (data.success) fetchData();
+    } catch (err) { console.error(err); }
   };
 
   const handleDelete = async (id: number, code: string) => {
@@ -103,7 +117,14 @@ export default function PrefixMapping() {
     m.notes?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Group by customer
+  // Group by prefix (for multi-owner detection)
+  const prefixGroups = filtered.reduce<Record<string, PrefixMap[]>>((acc, m) => {
+    if (!acc[m.prefix_code]) acc[m.prefix_code] = [];
+    acc[m.prefix_code].push(m);
+    return acc;
+  }, {});
+
+  // Group by customer for display
   const grouped = filtered.reduce<Record<number, { customer: Customer; prefixes: PrefixMap[] }>>((acc, m) => {
     if (!acc[m.customer_id]) {
       acc[m.customer_id] = {
@@ -139,7 +160,7 @@ export default function PrefixMapping() {
             <p className="text-xs text-slate-400">ผูกรหัส BIC Prefix (4 ตัวอักษร) กับลูกค้าในระบบ ({mappings.length} prefix)</p>
           </div>
         </div>
-        <button onClick={() => { setShowAdd(true); setForm({ prefix_code: '', customer_id: '', notes: '' }); }}
+        <button onClick={() => { setShowAdd(true); setForm({ prefix_code: '', customer_id: '', notes: '', is_primary: false }); }}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-600 text-white text-sm font-medium
             hover:bg-cyan-700 active:scale-[0.98] transition-all shadow-sm">
           <Plus size={16} /> เพิ่ม Prefix
@@ -174,8 +195,8 @@ export default function PrefixMapping() {
               <label className="block text-xs text-slate-500 mb-1">ลูกค้า *</label>
               <select value={form.customer_id} onChange={e => setForm({ ...form, customer_id: e.target.value })} className={inputClass}>
                 <option value="">-- เลือกลูกค้า --</option>
-                {customers.filter(c => c.is_line).map(c => (
-                  <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>
+                {customers.map(c => (
+                  <option key={c.customer_id} value={c.customer_id}>{c.customer_name} {c.is_line ? '(สายเรือ)' : c.is_forwarder ? '(ตัวแทน)' : c.is_trucking ? '(รถบรรทุก)' : ''}</option>
                 ))}
               </select>
             </div>
@@ -185,13 +206,19 @@ export default function PrefixMapping() {
                 placeholder="เช่น main code" className={inputClass} />
             </div>
           </div>
-          <div className="flex justify-end gap-2 mt-3">
-            <button onClick={() => setShowAdd(false)}
-              className="px-4 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">ยกเลิก</button>
-            <button onClick={handleAdd} disabled={saving || !form.prefix_code || !form.customer_id || form.prefix_code.length < 4}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-700 disabled:opacity-50 transition-all">
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} เพิ่ม
-            </button>
+          <div className="flex items-center justify-between mt-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.is_primary} onChange={e => setForm({ ...form, is_primary: e.target.checked })} className="accent-amber-500" />
+              <span className="text-xs text-slate-500">&#x2B50; ตั้งเป็นลูกค้าหลัก (Primary)</span>
+            </label>
+            <div className="flex gap-2">
+              <button onClick={() => setShowAdd(false)}
+                className="px-4 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">ยกเลิก</button>
+              <button onClick={handleAdd} disabled={saving || !form.prefix_code || !form.customer_id || form.prefix_code.length < 4}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-700 disabled:opacity-50 transition-all">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} เพิ่ม
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -220,9 +247,18 @@ export default function PrefixMapping() {
                 <div className="px-4 py-3 flex flex-wrap gap-2">
                   {prefixes.map(m => (
                     <div key={m.prefix_id}
-                      className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800">
+                      className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg border ${m.is_primary ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' : 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800'}`}>
                       <span className="font-mono font-bold text-cyan-700 dark:text-cyan-300 text-sm tracking-wider">{m.prefix_code}</span>
+                      {m.is_primary && <span className="text-amber-500 text-xs">&#x2B50;</span>}
+                      {prefixGroups[m.prefix_code]?.length > 1 && (
+                        <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded">&#x26A0;&#xFE0F; {prefixGroups[m.prefix_code].length} เจ้าของ</span>
+                      )}
                       {m.notes && <span className="text-[10px] text-slate-400">({m.notes})</span>}
+                      <button onClick={() => handleTogglePrimary(m)}
+                        title={m.is_primary ? 'ยกเลิก Primary' : 'ตั้งเป็น Primary'}
+                        className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all text-xs">
+                        {m.is_primary ? '✕' : '★'}
+                      </button>
                       <button onClick={() => handleDelete(m.prefix_id, m.prefix_code)}
                         className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all">
                         <Trash2 size={12} />

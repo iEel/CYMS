@@ -14,6 +14,13 @@ interface TierRate {
   rate_40: number;
   rate_45: number;
   applies_to: string;
+  cargo_status?: string;
+}
+
+interface CustomerOption {
+  customer_id: number;
+  customer_name: string;
+  is_line: boolean;
 }
 
 export default function TieredStorageRate() {
@@ -25,19 +32,38 @@ export default function TieredStorageRate() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Customer-specific tariff
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [cargoStatus, setCargoStatus] = useState<'any' | 'laden' | 'empty'>('any');
+  const [hasCustomerRate, setHasCustomerRate] = useState(false);
+
+  // Load customer list
+  useEffect(() => {
+    fetch('/api/settings/customers')
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data)) setCustomers(data.filter((c: CustomerOption) => c.is_line)); })
+      .catch(err => console.error('Load customers error:', err));
+  }, []);
+
   // Load from DB
   const fetchTiers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/settings/storage-rates?yard_id=${yardId}`);
+      let url = `/api/settings/storage-rates?yard_id=${yardId}`;
+      if (selectedCustomerId) url += `&customer_id=${selectedCustomerId}`;
+      if (cargoStatus !== 'any') url += `&cargo_status=${cargoStatus}`;
+      const res = await fetch(url);
       const data = await res.json();
-      if (data.tiers?.length > 0) {
-        setTiers(data.tiers.map((t: TierRate & { tier_id: number }) => ({
+      setHasCustomerRate(data.has_customer_rate || false);
+      const displayTiers = selectedCustomerId && data.customer_tiers?.length > 0
+        ? data.customer_tiers : data.default_tiers || data.tiers || [];
+      if (displayTiers.length > 0) {
+        setTiers(displayTiers.map((t: TierRate & { tier_id: number }) => ({
           ...t,
           id: t.tier_id,
         })));
       } else {
-        // Default if nothing in DB
         setTiers([
           { id: 1, tier_name: 'Free Period', from_day: 1, to_day: 3, rate_20: 0, rate_40: 0, rate_45: 0, applies_to: 'all' },
           { id: 2, tier_name: 'Standard Rate', from_day: 4, to_day: 7, rate_20: 150, rate_40: 250, rate_45: 300, applies_to: 'all' },
@@ -47,7 +73,7 @@ export default function TieredStorageRate() {
       }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, [yardId]);
+  }, [yardId, selectedCustomerId, cargoStatus]);
 
   useEffect(() => { fetchTiers(); }, [fetchTiers]);
 
@@ -65,7 +91,12 @@ export default function TieredStorageRate() {
       const res = await fetch('/api/settings/storage-rates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yard_id: yardId, tiers }),
+        body: JSON.stringify({
+          yard_id: yardId,
+          tiers,
+          customer_id: selectedCustomerId || undefined,
+          cargo_status: cargoStatus,
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -101,6 +132,38 @@ export default function TieredStorageRate() {
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
           {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <><CheckCircle2 size={14} /> บันทึกแล้ว</> : <><Save size={14} /> บันทึก</>}
         </button>
+      </div>
+
+      {/* Customer + Cargo Status selectors */}
+      <div className="px-5 pt-4 flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-[200px]">
+          <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">ลูกค้า</label>
+          <select value={selectedCustomerId || ''} onChange={e => setSelectedCustomerId(e.target.value ? parseInt(e.target.value) : null)}
+            className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-cyan-500">
+            <option value="">ค่าเริ่มต้นของลาน (Default)</option>
+            {customers.map(c => (
+              <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">สถานะสินค้า</label>
+          <div className="flex gap-1">
+            {(['any', 'laden', 'empty'] as const).map(s => (
+              <button key={s} onClick={() => setCargoStatus(s)}
+                className={`px-3 h-9 rounded-lg text-xs font-medium border transition-all ${cargoStatus === s
+                  ? 'border-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600'
+                  : 'border-slate-200 dark:border-slate-600 text-slate-400'}`}>
+                {s === 'any' ? 'ทุกสถานะ' : s === 'laden' ? 'มีสินค้า' : 'ตู้เปล่า'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {selectedCustomerId && (
+          <div className={`text-xs px-2 py-1 rounded-lg ${hasCustomerRate ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
+            {hasCustomerRate ? '✅ ใช้ rate เฉพาะลูกค้า' : '⚠️ ใช้ rate ค่าเริ่มต้นของลาน (กดบันทึกเพื่อตั้งค่าเฉพาะ)'}
+          </div>
+        )}
       </div>
 
       <div className="p-5">

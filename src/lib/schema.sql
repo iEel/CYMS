@@ -149,6 +149,8 @@ CREATE TABLE Containers (
     tier                INT,
     shipping_line       NVARCHAR(50),
     is_laden            BIT DEFAULT 0,
+    is_soc              BIT DEFAULT 0,                   -- Shipper Owned Container (ตู้ของลูกค้าเอง)
+    container_owner_id  INT NULL,                        -- FK→Customers (เจ้าของกรรมสิทธิ์ตู้)
     seal_number         NVARCHAR(50),
     gate_in_date        DATETIME2,
     gate_out_date       DATETIME2,
@@ -251,6 +253,8 @@ CREATE TABLE GateTransactions (
     damage_report   NVARCHAR(MAX),              -- JSON damage data
     processed_by    INT REFERENCES Users(user_id),
     to_yard_id      INT REFERENCES Yards(yard_id),  -- ลานปลายทาง (สำหรับ transfer)
+    container_owner_id  INT NULL,               -- เจ้าของกรรมสิทธิ์ตู้ (FK→Customers)
+    billing_customer_id INT NULL,               -- คนรับผิดชอบจ่ายเงิน (FK→Customers)
     created_at      DATETIME2 DEFAULT GETDATE()
 );
 

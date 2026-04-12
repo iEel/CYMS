@@ -11,6 +11,7 @@ const gateBodySchema = z.object({
   type: z.string().max(20).optional(),
   shipping_line: z.string().max(50).optional(),
   is_laden: z.boolean().optional(),
+  is_soc: z.boolean().optional(),
   yard_id: z.coerce.number().int().positive(),
   zone_id: z.coerce.number().int().positive().optional().nullable(),
   bay: z.coerce.number().int().min(0).optional().nullable(),
@@ -25,6 +26,8 @@ const gateBodySchema = z.object({
   damage_report: z.any().optional(),
   container_id: z.number().int().positive().optional(),
   user_id: z.number().int().positive().optional(),
+  container_owner_id: z.number().int().positive().optional().nullable(),
+  billing_customer_id: z.number().int().positive().optional().nullable(),
 }).passthrough();
 
 // GET — ดึง gate transactions
@@ -94,12 +97,13 @@ export async function POST(request: NextRequest) {
     const body = parsed.data;
     const {
       transaction_type,
-      container_number, size, type: containerType, shipping_line, is_laden,
+      container_number, size, type: containerType, shipping_line, is_laden, is_soc,
       yard_id, zone_id, bay, row, tier,
       driver_name, driver_license, truck_plate, seal_number, booking_ref, notes,
       damage_report,
       container_id,
       user_id,
+      container_owner_id, billing_customer_id,
     } = body;
 
     const db = await getDb();
@@ -164,6 +168,8 @@ export async function POST(request: NextRequest) {
           .input('tier', sql.Int, finalTier)
           .input('shippingLine', sql.NVarChar, shipping_line || null)
           .input('isLaden', sql.Bit, is_laden || false)
+          .input('isSoc', sql.Bit, is_soc || false)
+          .input('ownerId', sql.Int, container_owner_id || null)
           .input('sealNumber', sql.NVarChar, seal_number || null)
           .input('gateInDate', sql.DateTime2, new Date())
           .query(`
@@ -171,6 +177,7 @@ export async function POST(request: NextRequest) {
               status = @status, yard_id = @yardId, zone_id = @zoneId,
               bay = @bay, [row] = @row, tier = @tier,
               shipping_line = @shippingLine, is_laden = @isLaden,
+              is_soc = @isSoc, container_owner_id = @ownerId,
               seal_number = @sealNumber, gate_in_date = @gateInDate,
               gate_out_date = NULL, updated_at = GETDATE()
             WHERE container_id = @containerId
@@ -189,14 +196,16 @@ export async function POST(request: NextRequest) {
           .input('tier', sql.Int, finalTier)
           .input('shippingLine', sql.NVarChar, shipping_line || null)
           .input('isLaden', sql.Bit, is_laden || false)
+          .input('isSoc', sql.Bit, is_soc || false)
+          .input('ownerId', sql.Int, container_owner_id || null)
           .input('sealNumber', sql.NVarChar, seal_number || null)
           .input('gateInDate', sql.DateTime2, new Date())
           .query(`
             INSERT INTO Containers (container_number, size, type, status, yard_id, zone_id,
-              bay, [row], tier, shipping_line, is_laden, seal_number, gate_in_date)
+              bay, [row], tier, shipping_line, is_laden, is_soc, container_owner_id, seal_number, gate_in_date)
             OUTPUT INSERTED.container_id
             VALUES (@containerNumber, @size, @type, @status, @yardId, @zoneId,
-              @bay, @row, @tier, @shippingLine, @isLaden, @sealNumber, @gateInDate)
+              @bay, @row, @tier, @shippingLine, @isLaden, @isSoc, @ownerId, @sealNumber, @gateInDate)
           `);
         finalContainerId = insertResult.recordset[0].container_id;
       }
@@ -218,7 +227,7 @@ export async function POST(request: NextRequest) {
         `);
     }
 
-    // Create GateTransaction record
+    // Create GateTransaction record (with owner/billing separation)
     const txResult = await db.request()
       .input('containerId', sql.Int, finalContainerId)
       .input('yardId', sql.Int, yard_id)
@@ -232,14 +241,18 @@ export async function POST(request: NextRequest) {
       .input('notes', sql.NVarChar, notes || null)
       .input('damageReport', sql.NVarChar, damage_report ? JSON.stringify(damage_report) : null)
       .input('processedBy', sql.Int, user_id || null)
+      .input('ownerId', sql.Int, container_owner_id || null)
+      .input('billingId', sql.Int, billing_customer_id || null)
       .query(`
         INSERT INTO GateTransactions (container_id, yard_id, transaction_type,
           driver_name, driver_license, truck_plate, seal_number, booking_ref,
-          eir_number, notes, damage_report, processed_by)
+          eir_number, notes, damage_report, processed_by,
+          container_owner_id, billing_customer_id)
         OUTPUT INSERTED.*
         VALUES (@containerId, @yardId, @transactionType,
           @driverName, @driverLicense, @truckPlate, @sealNumber, @bookingRef,
-          @eirNumber, @notes, @damageReport, @processedBy)
+          @eirNumber, @notes, @damageReport, @processedBy,
+          @ownerId, @billingId)
       `);
 
     // === Booking Auto-Link ===

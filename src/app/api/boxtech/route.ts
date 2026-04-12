@@ -14,10 +14,11 @@ async function ensureTable(pool: Awaited<ReturnType<typeof getDb>>) {
           prefix_id    INT IDENTITY PRIMARY KEY,
           prefix_code  NVARCHAR(4) NOT NULL,
           customer_id  INT NOT NULL,
+          is_primary   BIT DEFAULT 0,
           notes        NVARCHAR(200),
           created_at   DATETIME2 DEFAULT GETDATE(),
           CONSTRAINT FK_Prefix_Customer FOREIGN KEY (customer_id) REFERENCES Customers(customer_id),
-          CONSTRAINT UQ_Prefix UNIQUE (prefix_code)
+          CONSTRAINT UQ_Prefix_Customer UNIQUE (prefix_code, customer_id)
         );
       END
     `);
@@ -125,6 +126,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const containerNumber = searchParams.get('container_number')?.toUpperCase().replace(/[\s-]/g, '');
+    const bookingRef = searchParams.get('booking_ref') || '';
 
     if (!containerNumber || containerNumber.length < 4) {
       return NextResponse.json({ success: false, error: 'container_number required (min 4 chars)' }, { status: 400 });
@@ -132,41 +134,56 @@ export async function GET(request: NextRequest) {
 
     const prefix = containerNumber.substring(0, 4); // e.g. "MSCU"
 
-    // 1. Look up prefix → customer mapping in our DB
+    // 1. Look up prefix → customer mapping in our DB (ALL matches, not TOP 1)
     const pool = await getDb();
     await ensureTable(pool);
 
     const prefixResult = await pool.request()
       .input('prefix', sql.NVarChar, prefix)
       .query(`
-        SELECT pm.prefix_code, pm.customer_id, pm.notes,
+        SELECT pm.prefix_code, pm.customer_id, pm.notes, pm.is_primary,
                c.customer_name, c.credit_term,
                ISNULL(c.is_line, 0) as is_line,
                ISNULL(c.is_forwarder, 0) as is_forwarder,
                ISNULL(c.is_trucking, 0) as is_trucking
         FROM PrefixMapping pm
         JOIN Customers c ON pm.customer_id = c.customer_id
-        WHERE pm.prefix_code = @prefix
+        WHERE pm.prefix_code = @prefix AND c.is_active = 1
+        ORDER BY pm.is_primary DESC, c.customer_name
       `);
 
-    const customerMatch = prefixResult.recordset.length > 0 ? prefixResult.recordset[0] : null;
+    const allMatches = prefixResult.recordset;
 
-    // 2. Try Boxtech API
+    // 2. Booking Priority — if booking_ref provided, find customer from booking first
+    let bookingCustomer = null;
+    if (bookingRef) {
+      const bResult = await pool.request()
+        .input('bref', sql.NVarChar, bookingRef)
+        .query(`
+          SELECT TOP 1 b.customer_id, c.customer_name, c.credit_term,
+                 ISNULL(c.is_line, 0) as is_line, ISNULL(c.is_trucking, 0) as is_trucking
+          FROM Bookings b
+          JOIN Customers c ON b.customer_id = c.customer_id
+          WHERE b.booking_number = @bref AND c.is_active = 1
+        `);
+      if (bResult.recordset.length > 0) {
+        bookingCustomer = bResult.recordset[0];
+      }
+    }
+
+    // 3. Try Boxtech API
     const token = await getBoxtechToken();
     let bicData = null;
     let containerData = null;
 
     if (token) {
-      // BIC Code lookup (always try, uses just prefix)
       bicData = await lookupBICCode(token, prefix);
-
-      // Container detail lookup (requires full 11-digit number)
       if (containerNumber.length === 11) {
         containerData = await lookupContainer(token, containerNumber);
       }
     }
 
-    // 3. Build response
+    // 4. Build response
     const response: Record<string, unknown> = {
       success: true,
       prefix,
@@ -194,18 +211,48 @@ export async function GET(request: NextRequest) {
     if (containerData?.max_gross_mass_kg) response.max_gross_mass_kg = containerData.max_gross_mass_kg;
     if (containerData?.manufacture_date) response.manufacture_date = containerData.manufacture_date;
 
-    // Customer match from prefix mapping
-    if (customerMatch) {
+    // 5. Customer resolution with priority logic
+    if (bookingCustomer) {
+      // HIGHEST PRIORITY: Booking/D.O. overrides prefix mapping
       response.customer = {
-        customer_id: customerMatch.customer_id,
-        customer_name: customerMatch.customer_name,
-        is_line: customerMatch.is_line,
-        is_trucking: customerMatch.is_trucking,
-        credit_term: customerMatch.credit_term,
+        customer_id: bookingCustomer.customer_id,
+        customer_name: bookingCustomer.customer_name,
+        is_line: bookingCustomer.is_line,
+        is_trucking: bookingCustomer.is_trucking,
+        credit_term: bookingCustomer.credit_term,
       };
+      response.customer_source = 'booking';
+      response.multiple_customers = false;
+    } else if (allMatches.length === 1) {
+      // Single match — auto-select
+      const m = allMatches[0];
+      response.customer = {
+        customer_id: m.customer_id,
+        customer_name: m.customer_name,
+        is_line: m.is_line,
+        is_trucking: m.is_trucking,
+        credit_term: m.credit_term,
+      };
+      response.customer_source = 'prefix';
+      response.multiple_customers = false;
+    } else if (allMatches.length > 1) {
+      // HALT RULE: Multiple matches — force manual selection
+      response.customer = null;
+      response.multiple_customers = true;
+      response.candidates = allMatches.map(m => ({
+        customer_id: m.customer_id,
+        customer_name: m.customer_name,
+        is_line: m.is_line,
+        is_forwarder: m.is_forwarder,
+        is_trucking: m.is_trucking,
+        credit_term: m.credit_term,
+        is_primary: m.is_primary,
+      }));
+      response.customer_source = 'prefix_multi';
     } else {
       response.customer = null;
       response.unknown_prefix = true;
+      response.multiple_customers = false;
     }
 
     response.source = token ? 'boxtech' : 'prefix_only';

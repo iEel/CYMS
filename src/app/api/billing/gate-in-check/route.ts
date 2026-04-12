@@ -5,59 +5,120 @@ import sql from 'mssql';
 /**
  * POST /api/billing/gate-in-check
  * Gate-In billing: calculate upfront charges (lift-on, gate fee, etc.) — NO storage
- * Body: { yard_id, container_number, size, shipping_line }
+ * Body: { yard_id, container_number, size, shipping_line, booking_ref?, billing_customer_id?, container_owner_id? }
  */
 export async function POST(request: NextRequest) {
   try {
-    const { yard_id, container_number, size, shipping_line } = await request.json();
+    const { yard_id, container_number, size, shipping_line, booking_ref, billing_customer_id, container_owner_id } = await request.json();
     const db = await getDb();
     const containerSize = parseInt(size) || 20;
 
-    // 1. Find customer via PrefixMapping (container prefix) or shipping_line match
-    let customer = null;
+    // 1. Resolve Owner + Billing Customer (with priority logic)
+    let owner = null;
+    let billingCustomer = null;
     let isCredit = false;
     let creditTerm = 0;
+    let needsCustomerSelection = false;
+    let candidates: Array<{ customer_id: number; customer_name: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean; credit_term: number; is_primary: boolean }> = [];
 
-    // Extract 4-char prefix from container number (e.g. MSCU from MSCU1234566)
-    const prefix = container_number ? container_number.substring(0, 4).toUpperCase() : '';
-
-    if (prefix) {
-      // Try PrefixMapping first — most accurate for gate-in
-      const prefixResult = await db.request()
-        .input('prefix', sql.NVarChar, prefix)
+    // 1a. Booking Priority — highest priority
+    if (booking_ref) {
+      const bResult = await db.request()
+        .input('bref', sql.NVarChar, booking_ref)
         .query(`
-          SELECT TOP 1 c.customer_id, c.customer_name, c.credit_term, c.tax_id, c.address,
+          SELECT TOP 1 b.customer_id, c.customer_name, c.credit_term, c.tax_id, c.address,
                  ISNULL(c.is_line, 0) as is_line, ISNULL(c.is_trucking, 0) as is_trucking
-          FROM Customers c
-          INNER JOIN PrefixMapping pm ON pm.customer_id = c.customer_id
-          WHERE pm.prefix_code = @prefix AND c.is_active = 1
-          ORDER BY c.customer_id
+          FROM Bookings b
+          JOIN Customers c ON b.customer_id = c.customer_id
+          WHERE b.booking_number = @bref AND c.is_active = 1
         `);
-
-      if (prefixResult.recordset.length > 0) {
-        customer = prefixResult.recordset[0];
+      if (bResult.recordset.length > 0) {
+        owner = bResult.recordset[0];
+        billingCustomer = owner;
       }
     }
 
-    // Fallback: match by shipping_line name
-    if (!customer && shipping_line) {
-      const codeResult = await db.request()
-        .input('slCode', sql.NVarChar, shipping_line)
+    // 1b. Use explicit IDs if provided
+    if (billing_customer_id) {
+      const bcResult = await db.request()
+        .input('bcId', sql.Int, billing_customer_id)
         .query(`
-          SELECT TOP 1 customer_id, customer_name, credit_term, tax_id, address,
+          SELECT customer_id, customer_name, credit_term, tax_id, address,
                  ISNULL(is_line, 0) as is_line, ISNULL(is_trucking, 0) as is_trucking
-          FROM Customers
-          WHERE (shipping_line_code = @slCode OR customer_name = @slCode OR customer_name LIKE '%' + @slCode + '%') AND is_active = 1
-          ORDER BY CASE WHEN shipping_line_code = @slCode THEN 0 WHEN customer_name = @slCode THEN 1 ELSE 2 END, customer_id
+          FROM Customers WHERE customer_id = @bcId AND is_active = 1
         `);
+      if (bcResult.recordset.length > 0) billingCustomer = bcResult.recordset[0];
+    }
 
-      if (codeResult.recordset.length > 0) {
-        customer = codeResult.recordset[0];
+    if (container_owner_id && !owner) {
+      const owResult = await db.request()
+        .input('ownId', sql.Int, container_owner_id)
+        .query(`
+          SELECT customer_id, customer_name, credit_term, tax_id, address,
+                 ISNULL(is_line, 0) as is_line, ISNULL(is_trucking, 0) as is_trucking
+          FROM Customers WHERE customer_id = @ownId AND is_active = 1
+        `);
+      if (owResult.recordset.length > 0) {
+        owner = owResult.recordset[0];
+        if (!billingCustomer) billingCustomer = owner;
       }
     }
 
-    if (customer) {
-      creditTerm = customer.credit_term || 0;
+    // 1c. PrefixMapping (with multi-match detection)
+    if (!owner) {
+      const prefix = container_number ? container_number.substring(0, 4).toUpperCase() : '';
+      if (prefix) {
+        const prefixResult = await db.request()
+          .input('prefix', sql.NVarChar, prefix)
+          .query(`
+            SELECT c.customer_id, c.customer_name, c.credit_term, c.tax_id, c.address,
+                   ISNULL(c.is_line, 0) as is_line, ISNULL(c.is_trucking, 0) as is_trucking,
+                   ISNULL(c.is_forwarder, 0) as is_forwarder,
+                   ISNULL(pm.is_primary, 0) as is_primary
+            FROM Customers c
+            INNER JOIN PrefixMapping pm ON pm.customer_id = c.customer_id
+            WHERE pm.prefix_code = @prefix AND c.is_active = 1
+            ORDER BY pm.is_primary DESC, c.customer_name
+          `);
+
+        if (prefixResult.recordset.length === 1) {
+          owner = prefixResult.recordset[0];
+          if (!billingCustomer) billingCustomer = owner;
+        } else if (prefixResult.recordset.length > 1) {
+          // HALT RULE
+          needsCustomerSelection = true;
+          candidates = prefixResult.recordset.map((r: Record<string, unknown>) => ({
+            customer_id: r.customer_id as number,
+            customer_name: r.customer_name as string,
+            is_line: r.is_line as boolean,
+            is_trucking: r.is_trucking as boolean,
+            is_forwarder: r.is_forwarder as boolean,
+            credit_term: r.credit_term as number,
+            is_primary: r.is_primary as boolean,
+          }));
+        }
+      }
+
+      // Fallback: shipping_line name match
+      if (!owner && !needsCustomerSelection && shipping_line) {
+        const codeResult = await db.request()
+          .input('slCode', sql.NVarChar, shipping_line)
+          .query(`
+            SELECT TOP 1 customer_id, customer_name, credit_term, tax_id, address,
+                   ISNULL(is_line, 0) as is_line, ISNULL(is_trucking, 0) as is_trucking
+            FROM Customers
+            WHERE (shipping_line_code = @slCode OR customer_name = @slCode OR customer_name LIKE '%' + @slCode + '%') AND is_active = 1
+            ORDER BY CASE WHEN shipping_line_code = @slCode THEN 0 WHEN customer_name = @slCode THEN 1 ELSE 2 END, customer_id
+          `);
+        if (codeResult.recordset.length > 0) {
+          owner = codeResult.recordset[0];
+          if (!billingCustomer) billingCustomer = owner;
+        }
+      }
+    }
+
+    if (billingCustomer) {
+      creditTerm = billingCustomer.credit_term || 0;
       isCredit = creditTerm > 0;
     }
 
@@ -96,11 +157,8 @@ export async function POST(request: NextRequest) {
       // Skip storage — it's calculated at gate-out
       if (tariff.charge_type === 'storage') continue;
 
-      // Per-container charges
       if (tariff.unit === 'per_container') {
-        let rate = tariff.rate;
-        // If rate varies by size and there are size-specific rates, adjust
-        // (for now use flat rate from Tariffs)
+        const rate = tariff.rate;
         charges.push({
           charge_type: tariff.charge_type,
           description: tariff.description || CHARGE_LABELS[tariff.charge_type] || tariff.charge_type,
@@ -118,10 +176,17 @@ export async function POST(request: NextRequest) {
     const grandTotal = totalBeforeVat + vatAmount;
 
     return NextResponse.json({
-      customer,
+      // Separation of concerns: owner vs billing
+      owner,
+      billing_customer: billingCustomer,
+      customer: billingCustomer, // Legacy compat
       is_credit: isCredit,
       credit_term: creditTerm,
       container_size: containerSize,
+      // Halt rule
+      needs_customer_selection: needsCustomerSelection,
+      candidates,
+      // Charges
       charges,
       summary: {
         total_before_vat: totalBeforeVat,
