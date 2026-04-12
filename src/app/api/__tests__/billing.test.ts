@@ -24,7 +24,10 @@ let queryQueue: Array<{ recordset: unknown[] } | Error> = [];
 
 function makeChain() {
   const input = jest.fn().mockReturnThis();
-  const query = jest.fn().mockImplementation(() => {
+  const query = jest.fn().mockImplementation((statement?: unknown) => {
+    if (typeof statement === 'string' && statement.includes("COL_LENGTH('Invoices'")) {
+      return Promise.resolve({ recordset: [] });
+    }
     const nxt = queryQueue.shift();
     if (!nxt) return Promise.resolve({ recordset: [] });
     if (nxt instanceof Error) return Promise.reject(nxt);
@@ -175,5 +178,68 @@ describe('PUT /api/billing/invoices — status actions', () => {
       invoice_id: 1, action: 'pay', yard_id: 1,
     }));
     expect(res.status).toBe(500);
+  });
+
+  it('creates credit note and revised invoice', async () => {
+    const original = {
+      invoice_id: 1,
+      invoice_number: 'INV-2026-000001',
+      yard_id: 1,
+      customer_id: 2,
+      container_id: 3,
+      charge_type: 'storage',
+      description: 'ค่าฝากตู้',
+      quantity: 1,
+      unit_price: 1000,
+      grand_total: 1070,
+      due_date: null,
+      status: 'issued',
+    };
+    queryQueue = [
+      q([original]), // original invoice
+      q([{ credited_total: 0 }]), // previous CN
+      q([{ cnt: 0 }]), // CN number
+      q([{ invoice_id: 21, invoice_number: 'CN-2026-000001', grand_total: -1070 }]), // insert CN
+      q([]), // cancel original
+      q([{ cnt: 1 }]), // revised invoice number
+      q([{ invoice_id: 22, invoice_number: 'INV-2026-000002', grand_total: 535 }]), // insert revised
+    ];
+
+    const res = await PUT(makeRequest('PUT', 'http://localhost/api/billing/invoices', {
+      invoice_id: 1,
+      action: 'credit_note',
+      ref_invoice_id: 1,
+      reason: 'ยอดเดิมผิด',
+      credit_amount: 1070,
+      create_revised_invoice: true,
+      revised_invoice: { description: 'ค่าฝากตู้แก้ไข', quantity: 1, unit_price: 500 },
+      yard_id: 1,
+    }));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.cn_number).toMatch(/^CN-/);
+    expect(body.revised_invoice_number).toMatch(/^INV-/);
+    expect(body.remaining_amount).toBe(0);
+  });
+
+  it('rejects cumulative credit notes over original invoice total', async () => {
+    queryQueue = [
+      q([{ invoice_id: 1, invoice_number: 'INV-2026-000001', grand_total: 1070, status: 'issued' }]),
+      q([{ credited_total: 1000 }]),
+    ];
+
+    const res = await PUT(makeRequest('PUT', 'http://localhost/api/billing/invoices', {
+      invoice_id: 1,
+      action: 'credit_note',
+      ref_invoice_id: 1,
+      credit_amount: 100,
+      yard_id: 1,
+    }));
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('ยอดลดหนี้เกินยอดคงเหลือ');
   });
 });

@@ -76,6 +76,18 @@ async function migrate() {
       console.log('✅ Invoices table created!');
     }
 
+    await sql.query`
+      IF COL_LENGTH('Invoices', 'ref_invoice_id') IS NULL
+        ALTER TABLE Invoices ADD ref_invoice_id INT NULL;
+      IF COL_LENGTH('Invoices', 'replaces_invoice_id') IS NULL
+        ALTER TABLE Invoices ADD replaces_invoice_id INT NULL;
+      IF COL_LENGTH('Invoices', 'document_type') IS NULL
+        ALTER TABLE Invoices ADD document_type NVARCHAR(30) NULL;
+      IF COL_LENGTH('Invoices', 'balance_amount') IS NULL
+        ALTER TABLE Invoices ADD balance_amount DECIMAL(12,2) NULL;
+    `;
+    console.log('✅ Invoice document relationship columns checked/added');
+
     // === Add hold_status to Containers if not exists ===
     try {
       await sql.query`

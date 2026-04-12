@@ -23,6 +23,9 @@ interface InvoiceRow {
   quantity: number; unit_price: number; total_amount: number;
   vat_amount: number; grand_total: number; status: string;
   due_date: string; paid_at: string; created_at: string;
+  ref_invoice_id?: number; ref_invoice_number?: string;
+  replaces_invoice_id?: number; replaces_invoice_number?: string;
+  balance_amount?: number | null;
 }
 
 interface ClearanceRow {
@@ -81,6 +84,10 @@ export default function BillingPage() {
   const [cnAmount, setCnAmount] = useState(0);
   const [cnLoading, setCnLoading] = useState(false);
   const [cnResult, setCnResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [cnCreateRevised, setCnCreateRevised] = useState(false);
+  const [cnRevisedDescription, setCnRevisedDescription] = useState('');
+  const [cnRevisedQuantity, setCnRevisedQuantity] = useState(1);
+  const [cnRevisedUnitPrice, setCnRevisedUnitPrice] = useState(0);
   const yardId = session?.activeYardId || 1;
 
   // Invoices
@@ -253,6 +260,19 @@ export default function BillingPage() {
   const invTotalPages = Math.ceil(invFiltered.length / invPerPage);
   const invPaginated = invFiltered.slice((invPage - 1) * invPerPage, invPage * invPerPage);
 
+  const openCreditNoteModal = (invoice: InvoiceRow) => {
+    const remainingAmount = invoice.balance_amount != null ? Math.max(invoice.balance_amount, 0) : invoice.grand_total;
+    const suggestedUnitPrice = Math.max(remainingAmount / 1.07, 0);
+    setCnModal({ open: true, invoice });
+    setCnAmount(remainingAmount);
+    setCnReason('');
+    setCnResult(null);
+    setCnCreateRevised(false);
+    setCnRevisedDescription(invoice.description ? `${invoice.description} (แก้ไขจาก ${invoice.invoice_number})` : `ออกใหม่แทน ${invoice.invoice_number}`);
+    setCnRevisedQuantity(1);
+    setCnRevisedUnitPrice(Number(suggestedUnitPrice.toFixed(2)));
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -317,6 +337,7 @@ export default function BillingPage() {
                 <option value="">ทุกสถานะ</option>
                 <option value="draft">ร่าง</option><option value="issued">แจ้งหนี้</option>
                 <option value="paid">ชำระแล้ว</option><option value="overdue">เกินกำหนด</option>
+                <option value="cancelled">ยกเลิก</option><option value="credit_note">ใบลดหนี้</option>
               </select>
               <button onClick={fetchInvoices} className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1"><RotateCcw size={12} /> รีเฟรช</button>
             </div>
@@ -346,6 +367,15 @@ export default function BillingPage() {
                           <span>• {formatDateTime(inv.created_at)}</span>
                           <span>• {inv.charge_type === 'storage' ? 'Gate-Out/Storage' : inv.charge_type === 'gate_in' ? 'Gate-In' : 'Manual/Service'}</span>
                         </div>
+                        {(inv.ref_invoice_number || inv.replaces_invoice_number || inv.balance_amount != null) && (
+                          <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                            {inv.ref_invoice_number && <span>อ้างอิง {inv.ref_invoice_number}</span>}
+                            {inv.replaces_invoice_number && <span>ออกใหม่แทน {inv.replaces_invoice_number}</span>}
+                            {inv.balance_amount != null && !['credit_note', 'cancelled'].includes(inv.status) && (
+                              <span>คงเหลือหลังลดหนี้ ฿{Math.max(inv.balance_amount, 0).toLocaleString()}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -366,8 +396,8 @@ export default function BillingPage() {
                           <button onClick={() => setActiveTab('clearance')}
                             className="px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-medium hover:bg-indigo-100 flex items-center gap-1"><Eye size={10} /> Clearance</button>
                         )}
-                        {['issued', 'paid'].includes(inv.status) && (
-                          <button onClick={() => { setCnModal({ open: true, invoice: inv }); setCnAmount(inv.grand_total); setCnReason(''); setCnResult(null); }}
+                        {['issued', 'paid'].includes(inv.status) && Math.max(inv.balance_amount ?? inv.grand_total, 0) > 0 && (
+                          <button onClick={() => openCreditNoteModal(inv)}
                             className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 text-xs font-medium hover:bg-amber-100 flex items-center gap-1"><ArrowDownToLine size={10} /> ใบลดหนี้</button>
                         )}
                         {['draft', 'issued'].includes(inv.status) && (
@@ -802,7 +832,7 @@ export default function BillingPage() {
       {/* =================== CREDIT NOTE MODAL =================== */}
       {cnModal.open && cnModal.invoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setCnModal({ open: false, invoice: null })}>
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg mx-4 animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-slate-100 dark:border-slate-700">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600"><ArrowDownToLine size={20} /></div>
@@ -813,22 +843,28 @@ export default function BillingPage() {
               </div>
             </div>
             <div className="p-5 space-y-4">
+              {(() => {
+                const remainingAmount = cnModal.invoice.balance_amount != null ? Math.max(cnModal.invoice.balance_amount, 0) : cnModal.invoice.grand_total;
+                const revisedGrandTotal = cnCreateRevised ? cnRevisedQuantity * cnRevisedUnitPrice * 1.07 : 0;
+                return (
+                  <>
               <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 space-y-1 text-xs">
                 <div className="flex justify-between"><span className="text-slate-500">ลูกค้า</span><span className="font-medium text-slate-800 dark:text-white">{cnModal.invoice.customer_name}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">ประเภท</span><span>{CHARGE_LABELS[cnModal.invoice.charge_type] || cnModal.invoice.charge_type}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">ยอดบิลเดิม</span><span className="font-bold text-blue-600">฿{cnModal.invoice.grand_total.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">ยอดที่ยังลดหนี้ได้</span><span className="font-bold text-amber-600">฿{remainingAmount.toLocaleString()}</span></div>
               </div>
               <div><label className={labelClass}>เหตุผลการลดหนี้ *</label>
                 <input type="text" value={cnReason} onChange={e => setCnReason(e.target.value)} className={inputClass} placeholder="เช่น คิดค่าบริการเกิน, คืนเงินมัดจำ..." />
               </div>
               <div><label className={labelClass}>ยอดลดหนี้ (฿) *</label>
-                <input type="number" min={0.01} max={cnModal.invoice.grand_total} step={0.01} value={cnAmount || ''}
-                  onChange={e => setCnAmount(Math.min(parseFloat(e.target.value) || 0, cnModal.invoice!.grand_total))}
+                <input type="number" min={0.01} max={remainingAmount} step={0.01} value={cnAmount || ''}
+                  onChange={e => setCnAmount(Math.min(parseFloat(e.target.value) || 0, remainingAmount))}
                   className={inputClass} />
                 <div className="flex gap-2 mt-1">
-                  <button onClick={() => setCnAmount(cnModal.invoice!.grand_total)} className="text-[10px] text-blue-500 hover:text-blue-700">เต็มจำนวน</button>
-                  <button onClick={() => setCnAmount(cnModal.invoice!.grand_total / 2)} className="text-[10px] text-blue-500 hover:text-blue-700">50%</button>
-                  <button onClick={() => setCnAmount(cnModal.invoice!.grand_total * 0.25)} className="text-[10px] text-blue-500 hover:text-blue-700">25%</button>
+                  <button onClick={() => setCnAmount(remainingAmount)} className="text-[10px] text-blue-500 hover:text-blue-700">เต็มจำนวน</button>
+                  <button onClick={() => setCnAmount(remainingAmount / 2)} className="text-[10px] text-blue-500 hover:text-blue-700">50%</button>
+                  <button onClick={() => setCnAmount(remainingAmount * 0.25)} className="text-[10px] text-blue-500 hover:text-blue-700">25%</button>
                 </div>
               </div>
               {cnAmount > 0 && (
@@ -836,11 +872,43 @@ export default function BillingPage() {
                   <div className="flex justify-between"><span className="text-amber-700">ยอดลดหนี้ (ก่อน VAT)</span><span className="font-semibold">฿{(cnAmount / 1.07).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
                   <div className="flex justify-between"><span className="text-amber-700">VAT 7%</span><span className="font-semibold">฿{(cnAmount - cnAmount / 1.07).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
                   <div className="flex justify-between border-t border-amber-200 pt-1"><span className="text-amber-800 font-bold">ยอดลดหนี้สุทธิ</span><span className="text-lg font-bold text-amber-800">-฿{cnAmount.toLocaleString()}</span></div>
-                  {Math.abs(cnAmount - cnModal.invoice.grand_total) < 0.01 && (
-                    <p className="text-[10px] text-rose-500 mt-1">⚠️ ลดเต็มจำนวน — บิลต้นฉบับจะถูกยกเลิกอัตโนมัติ</p>
+                  {Math.abs(cnAmount - remainingAmount) < 0.01 && (
+                    <p className="text-[10px] text-rose-500 mt-1">⚠️ ลดครบยอดคงเหลือ — บิลต้นฉบับจะถูกยกเลิกอัตโนมัติ</p>
                   )}
                 </div>
               )}
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">
+                <input type="checkbox" checked={cnCreateRevised} onChange={e => setCnCreateRevised(e.target.checked)} className="mt-1" />
+                <span>
+                  <span className="block text-sm font-medium text-slate-800 dark:text-white">สร้างใบแจ้งหนี้ใหม่แทนใบเดิม</span>
+                  <span className="block text-xs text-slate-400 mt-0.5">ใช้เมื่อยอดเดิมผิดและต้องออกเอกสารใหม่ต่อจากใบลดหนี้</span>
+                </span>
+              </label>
+              {cnCreateRevised && (
+                <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/50 space-y-3">
+                  <div>
+                    <label className={labelClass}>รายละเอียดใบใหม่</label>
+                    <input type="text" value={cnRevisedDescription} onChange={e => setCnRevisedDescription(e.target.value)} className={inputClass} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>จำนวน</label>
+                      <input type="number" min={0.01} step={0.01} value={cnRevisedQuantity || ''} onChange={e => setCnRevisedQuantity(parseFloat(e.target.value) || 0)} className={inputClass} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>ราคาต่อหน่วยก่อน VAT</label>
+                      <input type="number" min={0.01} step={0.01} value={cnRevisedUnitPrice || ''} onChange={e => setCnRevisedUnitPrice(parseFloat(e.target.value) || 0)} className={inputClass} />
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-xs text-blue-700">
+                    <span>ยอดใบใหม่รวม VAT 7%</span>
+                    <span className="font-bold">฿{revisedGrandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              )}
+                  </>
+                );
+              })()}
               {cnResult && (
                 <div className={`p-3 rounded-xl text-sm ${cnResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                   {cnResult.message}
@@ -850,7 +918,7 @@ export default function BillingPage() {
             <div className="p-5 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2">
               <button onClick={() => setCnModal({ open: false, invoice: null })} className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200">ยกเลิก</button>
               <button
-                disabled={cnLoading || !cnReason || cnAmount <= 0}
+                disabled={cnLoading || !cnReason || cnAmount <= 0 || (cnCreateRevised && (!cnRevisedDescription || cnRevisedQuantity <= 0 || cnRevisedUnitPrice <= 0))}
                 onClick={async () => {
                   setCnLoading(true); setCnResult(null);
                   try {
@@ -862,13 +930,21 @@ export default function BillingPage() {
                         ref_invoice_id: cnModal.invoice!.invoice_id,
                         reason: cnReason,
                         credit_amount: cnAmount,
+                        create_revised_invoice: cnCreateRevised,
+                        revised_invoice: cnCreateRevised ? {
+                          description: cnRevisedDescription,
+                          quantity: cnRevisedQuantity,
+                          unit_price: cnRevisedUnitPrice,
+                        } : undefined,
                         user_id: session?.userId,
                         yard_id: yardId,
                       }),
                     });
                     const data = await res.json();
                     if (data.success) {
-                      setCnResult({ success: true, message: `✅ สร้างใบลดหนี้ ${data.cn_number} — ยอด -฿${cnAmount.toLocaleString()} อ้างอิง ${data.ref_invoice}` });
+                      const revisedText = data.revised_invoice_number ? ` และใบแจ้งหนี้ใหม่ ${data.revised_invoice_number}` : '';
+                      const remainingText = data.remaining_amount > 0 ? ` | ยอดคงเหลือเดิม ฿${data.remaining_amount.toLocaleString()}` : '';
+                      setCnResult({ success: true, message: `✅ สร้างใบลดหนี้ ${data.cn_number}${revisedText} — ยอด -฿${cnAmount.toLocaleString()} อ้างอิง ${data.ref_invoice}${remainingText}` });
                       fetchInvoices();
                     } else {
                       setCnResult({ success: false, message: `❌ ${data.error}` });

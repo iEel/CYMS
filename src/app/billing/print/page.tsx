@@ -14,6 +14,9 @@ interface InvoiceData {
   customer_branch_type?: string; customer_branch_number?: string;
   notes?: string;
   container_id?: number; yard_id?: number;
+  ref_invoice_number?: string;
+  replaces_invoice_number?: string;
+  balance_amount?: number | null;
 }
 
 interface InvoiceNotes {
@@ -23,6 +26,9 @@ interface InvoiceNotes {
   document_type?: 'invoice' | 'receipt';
   transaction_type?: string;
   container_number?: string;
+  ref_invoice_number?: string;
+  credit_note_number?: string;
+  reason?: string | null;
 }
 
 interface CompanyData {
@@ -35,6 +41,8 @@ function numberToThaiText(num: number): string {
   const digits = ['', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
   const units = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
   if (num === 0) return 'ศูนย์บาทถ้วน';
+  const prefix = num < 0 ? 'ลบ' : '';
+  num = Math.abs(num);
 
   const intPart = Math.floor(num);
   const decimalPart = Math.round((num - intPart) * 100);
@@ -61,7 +69,7 @@ function numberToThaiText(num: number): string {
   } else {
     text += 'ถ้วน';
   }
-  return text;
+  return prefix + text;
 }
 
 export default function PrintInvoicePage() {
@@ -161,8 +169,10 @@ export default function PrintInvoicePage() {
   const isReceipt = !isCreditNote && invoice.status === 'paid';
   const documentTitle = isCreditNote ? 'ใบลดหนี้' : isReceipt ? 'ใบเสร็จรับเงิน' : 'ใบแจ้งหนี้';
   const documentSubtitle = isCreditNote ? 'Credit Note' : isReceipt ? 'Receipt' : 'Invoice';
+  const referenceNumber = invoice.ref_invoice_number || invoiceNotes?.ref_invoice_number;
+  const replacementNumber = invoice.replaces_invoice_number;
   const statusLabel = (() => {
-    if (isCreditNote) return { text: 'ใบลดหนี้', color: '#7c3aed', bg: '#f3e8ff', border: '#c4b5fd' };
+    if (isCreditNote) return { text: 'ใบลดหนี้', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' };
     if (invoice.status === 'paid') return { text: 'ชำระเงินแล้ว', color: '#059669', bg: '#ecfdf5', border: '#6ee7b7' };
     if (invoice.status === 'cancelled') return { text: 'ยกเลิกแล้ว', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' };
     if (invoice.status === 'overdue') return { text: 'เกินกำหนดชำระ', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' };
@@ -239,6 +249,12 @@ export default function PrintInvoicePage() {
             <div className="mt-3 text-sm">
               <p><span className="text-slate-500">เลขที่:</span> <strong className="font-mono">{invoice.invoice_number}</strong></p>
               <p><span className="text-slate-500">วันที่:</span> {formatDate(invoice.created_at)}</p>
+              {referenceNumber && (
+                <p><span className="text-slate-500">อ้างอิง:</span> <strong className="font-mono">{referenceNumber}</strong></p>
+              )}
+              {replacementNumber && (
+                <p><span className="text-slate-500">แทนที่:</span> <strong className="font-mono">{replacementNumber}</strong></p>
+              )}
               {isReceipt && invoice.paid_at && (
                 <p><span className="text-slate-500">วันที่ชำระ:</span> {formatDate(invoice.paid_at)}</p>
               )}
@@ -264,6 +280,12 @@ export default function PrintInvoicePage() {
             <p className="text-xs text-slate-500">เลขประจำตัวผู้เสียภาษี: {invoice.customer_tax_id}</p>
           )}
           {invoice.container_number && <p className="text-xs text-slate-500 mt-1">เลขตู้: <strong className="font-mono">{invoice.container_number}</strong></p>}
+          {isCreditNote && referenceNumber && (
+            <p className="text-xs text-amber-700 mt-2">เอกสารนี้ลดหนี้จากใบแจ้งหนี้เลขที่ <strong className="font-mono">{referenceNumber}</strong></p>
+          )}
+          {!isCreditNote && replacementNumber && (
+            <p className="text-xs text-blue-700 mt-2">ใบแจ้งหนี้นี้ออกใหม่แทนใบเดิมเลขที่ <strong className="font-mono">{replacementNumber}</strong></p>
+          )}
         </div>
 
         {/* Items Table */}
@@ -294,7 +316,7 @@ export default function PrintInvoicePage() {
         <div className="flex justify-end mb-6">
           <div className="w-64">
             <div className="flex justify-between py-1 text-sm">
-              <span className="text-slate-500">รวมเป็นเงิน</span>
+              <span className="text-slate-500">{isCreditNote ? 'ยอดลดหนี้ก่อน VAT' : 'รวมเป็นเงิน'}</span>
               <span className="font-mono">฿{invoice.total_amount?.toLocaleString()}</span>
             </div>
             <div className="flex justify-between py-1 text-sm">
@@ -302,8 +324,8 @@ export default function PrintInvoicePage() {
               <span className="font-mono">฿{invoice.vat_amount?.toLocaleString()}</span>
             </div>
             <div className="flex justify-between py-2 text-base font-bold border-t-2 border-slate-800 mt-1">
-              <span>ยอดรวมทั้งสิ้น</span>
-              <span className="font-mono" style={{ color: isReceipt ? '#059669' : '#2563eb' }}>฿{invoice.grand_total?.toLocaleString()}</span>
+              <span>{isCreditNote ? 'ยอดลดหนี้สุทธิ' : 'ยอดรวมทั้งสิ้น'}</span>
+              <span className="font-mono" style={{ color: isCreditNote ? '#d97706' : isReceipt ? '#059669' : '#2563eb' }}>฿{invoice.grand_total?.toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -319,6 +341,8 @@ export default function PrintInvoicePage() {
           <p className="text-lg font-bold" style={{ color: statusLabel.color }}>{statusLabel.text}</p>
           {isReceipt ? (
             <p className="text-xs text-slate-500 mt-1">วันที่ชำระ: {formatDate(invoice.paid_at)}</p>
+          ) : isCreditNote && referenceNumber ? (
+            <p className="text-xs text-slate-500 mt-1">อ้างอิงใบแจ้งหนี้: {referenceNumber}</p>
           ) : invoice.due_date ? (
             <p className="text-xs text-slate-500 mt-1">ครบกำหนดชำระ: {formatDate(invoice.due_date)}</p>
           ) : (
