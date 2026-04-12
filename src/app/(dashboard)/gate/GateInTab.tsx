@@ -32,7 +32,18 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [driverSignature, setDriverSignature] = useState('');
   const [showOCR, setShowOCR] = useState<'container' | 'plate' | 'seal' | null>(null);
   const [showInspection, setShowInspection] = useState(false);
-  const [inspectionReport, setInspectionReport] = useState<{ points: unknown[]; condition_grade: string; inspector_notes: string; photos: string[]; container_type?: string; container_size?: string; inspection_template?: string } | null>(null);
+  const [inspectionReport, setInspectionReport] = useState<{
+    points: unknown[];
+    condition_grade: string;
+    suggested_condition_grade?: string;
+    grade_override?: boolean;
+    grade_reasons?: string[];
+    inspector_notes: string;
+    photos: string[];
+    container_type?: string;
+    container_size?: string;
+    inspection_template?: string;
+  } | null>(null);
 
   // Check Digit + Boxtech states
   const [containerValid, setContainerValid] = useState<null | boolean>(null);
@@ -692,7 +703,12 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                     }`}>{inspectionReport.condition_grade}</div>
                     <div>
                       <p className="text-sm font-semibold text-slate-800 dark:text-white">✅ ตรวจแล้ว — เกรด {inspectionReport.condition_grade}</p>
-                      <p className="text-[10px] text-slate-400">พบ {inspectionReport.points.length} จุดเสียหาย · {inspectionReport.photos.length} รูปถ่าย</p>
+                      <p className="text-[10px] text-slate-400">
+                        พบ {inspectionReport.points.length} จุดเสียหาย · {inspectionReport.photos.length} รูปถ่าย
+                        {inspectionReport.grade_override && inspectionReport.suggested_condition_grade
+                          ? ` · ปรับจากเกรดแนะนำ ${inspectionReport.suggested_condition_grade}`
+                          : ''}
+                      </p>
                     </div>
                   </div>
                   <button onClick={() => { setInspectionReport(null); setShowInspection(true); }}

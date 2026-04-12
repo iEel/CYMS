@@ -34,8 +34,8 @@ export interface EIRData {
   is_laden?: boolean;
   seal_number?: string;
   driver_name?: string;
-  driver_license?: string;
   truck_plate?: string;
+  truck_company?: string;
   booking_ref?: string;
   yard_name?: string;
   yard_code?: string;
@@ -157,7 +157,7 @@ export function generateEIRPDF(data: EIRData): Buffer {
   // ─── Transport Info ───
   const transportInfo = [
     ['Driver', data.driver_name || '-'],
-    ['License', data.driver_license || '-'],
+    ['Driver Company', data.truck_company || '-'],
     ['Truck Plate', data.truck_plate || '-'],
     ['Processed By', data.processed_by || '-'],
   ];

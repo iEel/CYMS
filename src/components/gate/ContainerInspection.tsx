@@ -14,10 +14,24 @@ interface DamagePoint {
   photo?: string;
 }
 
+type ConditionGrade = 'A' | 'B' | 'C' | 'D';
+type TemplateKind = 'dry' | 'reefer' | 'open_top' | 'flat_rack' | 'tank' | 'dangerous';
+
 interface ContainerInspectionProps {
   containerType?: string;
   containerSize?: string;
-  onComplete: (report: { points: DamagePoint[]; condition_grade: string; inspector_notes: string; photos: string[]; container_type?: string; container_size?: string; inspection_template?: string }) => void;
+  onComplete: (report: {
+    points: DamagePoint[];
+    condition_grade: ConditionGrade;
+    suggested_condition_grade: ConditionGrade;
+    grade_override: boolean;
+    grade_reasons: string[];
+    inspector_notes: string;
+    photos: string[];
+    container_type?: string;
+    container_size?: string;
+    inspection_template?: string;
+  }) => void;
   onCancel: () => void;
 }
 
@@ -45,7 +59,7 @@ const SEVERITY_COLORS = {
   severe: { bg: 'bg-red-600', text: 'text-red-700', label: 'รุนแรง' },
 };
 
-const INSPECTION_TEMPLATES: Record<string, { key: string; label: string; kind: 'dry' | 'reefer' | 'open_top' | 'flat_rack' | 'tank' | 'dangerous' }> = {
+const INSPECTION_TEMPLATES: Record<string, { key: string; label: string; kind: TemplateKind }> = {
   GP: { key: 'dry', label: 'Dry Container', kind: 'dry' },
   HC: { key: 'dry_high_cube', label: 'High Cube', kind: 'dry' },
   RF: { key: 'reefer', label: 'Reefer Container', kind: 'reefer' },
@@ -60,12 +74,122 @@ function getInspectionTemplate(containerType?: string) {
   return INSPECTION_TEMPLATES[normalized] || INSPECTION_TEMPLATES.GP;
 }
 
+const GRADE_ORDER: Record<ConditionGrade, number> = { A: 0, B: 1, C: 2, D: 3 };
+const GRADE_LABELS: Record<ConditionGrade, string> = {
+  A: 'ใช้งานได้',
+  B: 'เสียหายเล็กน้อย',
+  C: 'ต้องซ่อม / จำกัดการใช้งาน',
+  D: 'Hold / ห้ามปล่อยใช้งาน',
+};
+
+function worseGrade(a: ConditionGrade, b: ConditionGrade): ConditionGrade {
+  return GRADE_ORDER[a] >= GRADE_ORDER[b] ? a : b;
+}
+
+function isStructuralEdge(point: DamagePoint) {
+  return point.x <= 12 || point.x >= 88 || point.y <= 18 || point.y >= 88;
+}
+
+function isDoorLockArea(point: DamagePoint) {
+  return point.side === 'front' && point.x >= 43 && point.x <= 57 && point.y >= 34 && point.y <= 72;
+}
+
+function isReeferUnitArea(point: DamagePoint) {
+  return (point.side === 'front' && point.x >= 17 && point.x <= 40 && point.y >= 20 && point.y <= 86)
+    || ((point.side === 'left' || point.side === 'top') && point.x <= 24);
+}
+
+function isTankCriticalArea(point: DamagePoint) {
+  return ['front', 'back', 'left', 'right', 'top'].includes(point.side);
+}
+
+function isFlatRackFrameArea(point: DamagePoint) {
+  return point.side === 'front' || point.side === 'back' || point.x <= 18 || point.x >= 82 || point.y >= 72;
+}
+
+function evaluateCondition(points: DamagePoint[], templateKind: TemplateKind): { grade: ConditionGrade; reasons: string[] } {
+  let grade: ConditionGrade = 'A';
+  const reasons: string[] = [];
+
+  if (points.length === 0) {
+    return { grade: 'A', reasons: ['ไม่พบจุดเสียหาย'] };
+  }
+
+  const severeCount = points.filter(p => p.severity === 'severe').length;
+  const majorCount = points.filter(p => p.severity === 'major').length;
+  const structuralTypes = ['hole', 'crack', 'missing_part'];
+
+  if (severeCount > 0) {
+    grade = worseGrade(grade, 'D');
+    reasons.push('มีความเสียหายระดับรุนแรง');
+  }
+
+  for (const point of points) {
+    const isStructuralType = structuralTypes.includes(point.type);
+
+    if (templateKind === 'tank' && isTankCriticalArea(point) && isStructuralType) {
+      grade = worseGrade(grade, 'D');
+      reasons.push('ตู้ Tank มีความเสียหายที่ shell/frame/valve area');
+      continue;
+    }
+
+    if (templateKind === 'reefer' && isReeferUnitArea(point) && (point.severity !== 'minor' || isStructuralType)) {
+      grade = worseGrade(grade, point.severity === 'severe' ? 'D' : 'C');
+      reasons.push('ความเสียหายบริเวณ reefer unit หรือ insulation area');
+    }
+
+    if (templateKind === 'flat_rack' && isFlatRackFrameArea(point) && point.severity !== 'minor') {
+      grade = worseGrade(grade, point.severity === 'severe' ? 'D' : 'C');
+      reasons.push('ความเสียหายบริเวณ frame/deck ของ Flat Rack');
+    }
+
+    if (templateKind === 'dangerous' && isStructuralType) {
+      grade = worseGrade(grade, point.severity === 'minor' ? 'C' : 'D');
+      reasons.push('ตู้ DG มีความเสียหายที่กระทบความพร้อมด้าน safety/security');
+    }
+
+    if (isStructuralEdge(point) && point.severity !== 'minor') {
+      grade = worseGrade(grade, point.severity === 'severe' ? 'D' : 'C');
+      reasons.push('ความเสียหายใกล้โครงสร้างหลัก เช่น rail/post/corner area');
+    }
+
+    if (isDoorLockArea(point) && (isStructuralType || point.severity !== 'minor')) {
+      grade = worseGrade(grade, 'C');
+      reasons.push('ความเสียหายบริเวณประตู/locking gear/seal area');
+    }
+
+    if (isStructuralType) {
+      grade = worseGrade(grade, point.severity === 'minor' ? 'C' : 'D');
+      reasons.push('พบรูทะลุ รอยร้าว หรือชิ้นส่วนหาย');
+    }
+
+    if (point.side === 'floor' && point.severity !== 'minor') {
+      grade = worseGrade(grade, point.severity === 'severe' ? 'D' : 'C');
+      reasons.push('พื้นตู้เสียหาย อาจกระทบการรับน้ำหนัก/ความสะอาดสินค้า');
+    }
+  }
+
+  if (majorCount >= 3 || points.length >= 5) {
+    grade = worseGrade(grade, 'C');
+    reasons.push('จำนวนจุดเสียหายหรือระดับปานกลางเกินเกณฑ์ใช้งานปกติ');
+  } else if (majorCount > 0 || points.length >= 2) {
+    grade = worseGrade(grade, 'B');
+    reasons.push('พบความเสียหายมากกว่าหนึ่งจุดหรือมีระดับปานกลาง');
+  } else {
+    grade = worseGrade(grade, 'B');
+    reasons.push('พบความเสียหายเล็กน้อยหนึ่งจุด');
+  }
+
+  return { grade, reasons: Array.from(new Set(reasons)) };
+}
+
 export default function ContainerInspection({ containerType = 'GP', containerSize, onComplete, onCancel }: ContainerInspectionProps) {
   const template = getInspectionTemplate(containerType);
   const [activeSide, setActiveSide] = useState<typeof SIDES[0]['key']>('front');
   const [points, setPoints] = useState<DamagePoint[]>([]);
   const [selectedType, setSelectedType] = useState('dent');
   const [selectedSeverity, setSelectedSeverity] = useState<'minor' | 'major' | 'severe'>('minor');
+  const [manualGrade, setManualGrade] = useState<ConditionGrade | null>(null);
   const [inspectorNotes, setInspectorNotes] = useState('');
   const [overviewPhotos, setOverviewPhotos] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,17 +220,8 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
 
   const currentSidePoints = points.filter(p => p.side === activeSide);
   const totalPoints = points.length;
-
-  // Calculate condition grade based on damage
-  const getConditionGrade = () => {
-    if (totalPoints === 0) return 'A';
-    const severeCount = points.filter(p => p.severity === 'severe').length;
-    const majorCount = points.filter(p => p.severity === 'major').length;
-    if (severeCount > 0) return 'D';
-    if (majorCount >= 3 || totalPoints >= 5) return 'C';
-    if (majorCount > 0 || totalPoints >= 2) return 'B';
-    return 'A';
-  };
+  const conditionEvaluation = evaluateCondition(points, template.kind);
+  const finalGrade = manualGrade || conditionEvaluation.grade;
 
   const gradeColors: Record<string, string> = {
     A: 'bg-emerald-500', B: 'bg-amber-500', C: 'bg-orange-500', D: 'bg-red-600',
@@ -528,20 +643,63 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
         }} />
 
       {/* Condition Grade */}
-      <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold ${gradeColors[getConditionGrade()]}`}>
-          {getConditionGrade()}
+      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold ${gradeColors[finalGrade]}`}>
+            {finalGrade}
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-slate-800 dark:text-white">
+              สภาพตู้: เกรด {finalGrade} {manualGrade ? '(พนักงานปรับเอง)' : '(ระบบแนะนำ)'}
+            </p>
+            <p className="text-xs text-slate-400">
+              {finalGrade === 'A' ? 'สภาพดี — ไม่พบความเสียหายสำคัญ' :
+                finalGrade === 'B' ? 'สภาพพอใช้ — พบความเสียหายเล็กน้อย' :
+                finalGrade === 'C' ? 'ชำรุด — ต้องซ่อมหรือจำกัดการใช้งาน' :
+                'ชำรุดหนัก — ห้ามใช้งาน'}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              ระบบแนะนำเกรด {conditionEvaluation.grade}: {GRADE_LABELS[conditionEvaluation.grade]}
+            </p>
+          </div>
         </div>
+
+        {conditionEvaluation.reasons.length > 0 && (
+          <div className="rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">เหตุผลจากระบบ</p>
+            <div className="flex flex-wrap gap-1.5">
+              {conditionEvaluation.reasons.map(reason => (
+                <span key={reason} className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-[11px] text-slate-600 dark:text-slate-300">
+                  {reason}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
-          <p className="text-sm font-semibold text-slate-800 dark:text-white">
-            สภาพตู้: เกรด {getConditionGrade()}
-          </p>
-          <p className="text-xs text-slate-400">
-            {getConditionGrade() === 'A' ? 'สภาพดี — ไม่พบความเสียหาย' :
-              getConditionGrade() === 'B' ? 'สภาพพอใช้ — พบความเสียหายเล็กน้อย' :
-              getConditionGrade() === 'C' ? 'ชำรุด — ต้องซ่อมก่อนใช้งาน' :
-              'ชำรุดหนัก — ห้ามใช้งาน'}
-          </p>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase">ปรับเกรดโดยพนักงาน</p>
+            {manualGrade && (
+              <button type="button" onClick={() => setManualGrade(null)}
+                className="text-[10px] text-blue-500 hover:text-blue-700">
+                ใช้เกรดที่ระบบแนะนำ
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {(['A', 'B', 'C', 'D'] as ConditionGrade[]).map(grade => (
+              <button key={grade} type="button" onClick={() => setManualGrade(grade)}
+                className={`py-2 px-2 rounded-lg border text-xs font-semibold transition-all ${
+                  finalGrade === grade
+                    ? `${gradeColors[grade]} text-white border-transparent shadow-sm`
+                    : 'border-slate-200 dark:border-slate-600 text-slate-500 hover:border-blue-300'
+                }`}>
+                <span className="block text-sm">{grade}</span>
+                <span className="font-normal">{GRADE_LABELS[grade]}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -557,7 +715,10 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
       <div className="flex gap-2">
         <button onClick={() => onComplete({
           points,
-          condition_grade: getConditionGrade(),
+          condition_grade: finalGrade,
+          suggested_condition_grade: conditionEvaluation.grade,
+          grade_override: manualGrade !== null,
+          grade_reasons: conditionEvaluation.reasons,
           inspector_notes: inspectorNotes,
           photos: overviewPhotos,
           container_type: containerType.toUpperCase(),

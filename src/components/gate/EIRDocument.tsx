@@ -26,8 +26,8 @@ interface EIRData {
   seal_number: string;
   is_laden: boolean;
   driver_name: string;
-  driver_license: string;
   truck_plate: string;
+  truck_company: string;
   booking_ref: string;
   yard_name: string;
   yard_code: string;
@@ -197,7 +197,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
               </div>
               <div className="grid grid-cols-3 divide-x divide-slate-200">
                 <InfoCell label="ชื่อคนขับ" value={data.driver_name || '-'} className="p-2" />
-                <InfoCell label="ใบขับขี่" value={data.driver_license || '-'} className="p-2" />
+                <InfoCell label="บริษัทคนขับ" value={data.truck_company || '-'} className="p-2" />
                 <InfoCell label="ทะเบียนรถ" value={data.truck_plate || '-'} mono className="p-2" />
               </div>
             </div>
