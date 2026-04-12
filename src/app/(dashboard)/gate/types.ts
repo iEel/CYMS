@@ -39,6 +39,15 @@ export interface BillingCharge {
   billable_days: number;
 }
 
+export type BillingClearanceType = 'paid' | 'credit' | 'no_charge' | 'waived';
+
+export interface BillingClearance {
+  clearance_id: number;
+  clearance_type: BillingClearanceType;
+  reason?: string;
+  invoice_id?: number | null;
+}
+
 export interface BillingData {
   container: Record<string, unknown>;
   customer: { customer_id: number; customer_name: string; credit_term: number } | null;

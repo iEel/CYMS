@@ -13,7 +13,7 @@ import CameraOCR from '@/components/gate/CameraOCR';
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import SignaturePad from '@/components/gate/SignaturePad';
 import ContainerInspection from '@/components/gate/ContainerInspection';
-import { BillingCharge, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
+import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 
 interface GateInTabProps {
   yardId: number;
@@ -66,6 +66,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [gateInBillingPaid, setGateInBillingPaid] = useState(false);
   const [gateInInvoiceNumber, setGateInInvoiceNumber] = useState('');
   const [gateInInvoiceId, setGateInInvoiceId] = useState<number | null>(null);
+  const [gateInClearance, setGateInClearance] = useState<BillingClearance | null>(null);
   const [gateInSelectedCharges, setGateInSelectedCharges] = useState<Set<number>>(new Set());
   const [gateInChargeOverrides, setGateInChargeOverrides] = useState<Record<number, number>>({});
   const [gateInCustomCharges, setGateInCustomCharges] = useState<BillingCharge[]>([]);
@@ -238,6 +239,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           setGateInCustomCharges([]);
           setGateInSelectedCustom(new Set());
           setGateInBillingPaid(false);
+          setGateInClearance(null);
           setGateInInvoiceNumber('');
           setGateInInvoiceId(null);
           setManualCustomerId(null);
@@ -267,6 +269,10 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     + gateInCustomCharges.filter((_, i) => gateInSelectedCustom.has(i)).reduce((s, c) => s + c.subtotal, 0);
   const gateInSelectedVat = Math.round(gateInSelectedTotal * 0.07 * 100) / 100;
   const gateInSelectedGrand = gateInSelectedTotal + gateInSelectedVat;
+  const gateInOriginalSelectedTotal = (gateInBillingData ? gateInBillingData.charges
+    .reduce((s, ch, i) => s + (gateInSelectedCharges.has(i) ? ch.subtotal : 0), 0) : 0)
+    + gateInCustomCharges.filter((_, i) => gateInSelectedCustom.has(i)).reduce((s, c) => s + c.subtotal, 0);
+  const gateInBillingCleared = gateInBillingPaid || !!gateInClearance;
   const buildGateInFinalCharges = () => {
     const final: BillingCharge[] = [];
     if (gateInBillingData) {
@@ -279,7 +285,42 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     gateInCustomCharges.forEach((ch, i) => { if (gateInSelectedCustom.has(i)) final.push(ch); });
     return final;
   };
-  const hasGateInCharges = gateInBillingData && gateInBillingData.charges.length > 0;
+  const gateInRequiresBillingClearance = !!gateInBillingData;
+
+  const createGateInClearance = async (
+    clearanceType: BillingClearanceType,
+    invoiceId?: number | null,
+    reason?: string
+  ) => {
+    const res = await fetch('/api/billing/clearance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        yard_id: yardId,
+        transaction_type: 'gate_in',
+        container_number: gateInForm.container_number,
+        customer_id: resolvedCustomer?.customer_id,
+        clearance_type: clearanceType,
+        original_amount: gateInOriginalSelectedTotal,
+        final_amount: gateInSelectedTotal,
+        reason,
+        invoice_id: invoiceId || null,
+        approved_by: clearanceType === 'waived' ? userId : null,
+        charges: buildGateInFinalCharges(),
+        user_id: userId,
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Billing clearance failed');
+    setGateInClearance({
+      clearance_id: data.clearance_id,
+      clearance_type: clearanceType,
+      reason,
+      invoice_id: invoiceId || null,
+    });
+    setGateInBillingPaid(true);
+    return data.clearance_id as number;
+  };
 
   // Resolved customer: auto-matched or manually selected
   const resolvedCustomer = useMemo(() => {
@@ -321,6 +362,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           is_soc: isSoc,
           container_owner_id: containerOwnerId || undefined,
           billing_customer_id: billingCustomerId || undefined,
+          billing_clearance_id: gateInClearance?.clearance_id || undefined,
           damage_report: inspectionReport || null,
         }),
       });
@@ -346,6 +388,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
 
         setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '' });
+        setGateInClearance(null);
         setInspectionReport(null);
         setBoxtechResult(null);
         setContainerValid(null);
@@ -898,6 +941,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                           });
                           const data = await res.json();
                           if (data.success) {
+                            await createGateInClearance('credit', data.invoice?.invoice_id || null, 'ลูกค้าเครดิต');
                             setGateInBillingPaid(true);
                             setGateInInvoiceNumber(data.invoice_number || '');
                             setGateInInvoiceId(data.invoice?.invoice_id || null);
@@ -910,6 +954,24 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                     </div>
                   ) : (
                     <>
+                      {gateInSelectedGrand <= 0 && (
+                        <button disabled={gateInPayLoading || !resolvedCustomer} onClick={async () => {
+                          setGateInPayLoading(true);
+                          try {
+                            const isWaived = gateInOriginalSelectedTotal > 0;
+                            const reason = isWaived
+                              ? window.prompt('ระบุเหตุผลการยกเว้นค่าใช้จ่าย') || ''
+                              : 'ไม่มีค่าบริการ';
+                            if (isWaived && !reason.trim()) return;
+                            await createGateInClearance(isWaived ? 'waived' : 'no_charge', null, reason);
+                          } catch (err) { console.error(err); }
+                          finally { setGateInPayLoading(false); }
+                        }}
+                          className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                          {gateInPayLoading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                          {gateInOriginalSelectedTotal > 0 ? 'อนุมัติยกเว้นค่าใช้จ่าย' : 'ยืนยัน No Charge ฿0'}
+                        </button>
+                      )}
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-500 whitespace-nowrap">วิธีชำระ:</span>
                         {(['cash', 'transfer'] as const).map(m => (
@@ -943,6 +1005,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                                 body: JSON.stringify({ invoice_id: data.invoice.invoice_id, action: 'pay' }),
                               });
                             }
+                            await createGateInClearance('paid', data.invoice?.invoice_id || null, gateInPaymentMethod === 'cash' ? 'ชำระเงินสด' : 'ชำระเงินโอน');
                             setGateInBillingPaid(true);
                             setGateInInvoiceNumber(data.invoice_number || '');
                             setGateInInvoiceId(data.invoice?.invoice_id || null);
@@ -964,7 +1027,11 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-emerald-600">
                       <CheckCircle2 size={16} />
-                      <span className="text-sm font-bold">✅ {resolvedIsCredit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'}</span>
+                      <span className="text-sm font-bold">✅ {
+                        gateInClearance?.clearance_type === 'no_charge' ? 'No Charge' :
+                        gateInClearance?.clearance_type === 'waived' ? 'Waived' :
+                        resolvedIsCredit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'
+                      }</span>
                       {gateInInvoiceNumber && <span className="text-xs font-mono text-emerald-500">({gateInInvoiceNumber})</span>}
                     </div>
                     {gateInInvoiceId && (
@@ -977,17 +1044,27 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                 </div>
               )}
             </div>
+          ) : gateInBillingData && gateInBillingData.charges.length === 0 ? (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-600 flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2"><CheckCircle2 size={14} /> ไม่มีค่าบริการ Gate-In</span>
+              {!gateInBillingCleared && (
+                <button onClick={() => createGateInClearance('no_charge', null, 'ไม่มีค่าบริการ Gate-In')}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">
+                  ยืนยัน No Charge
+                </button>
+              )}
+            </div>
           ) : null}
 
           {/* Submit — Gate-In + EIR */}
           <div className="flex items-center gap-3 pt-2">
             <button onClick={handleGateIn}
-              disabled={gateInLoading || !gateInForm.container_number || containerValid === false || (!!hasGateInCharges && !gateInBillingPaid)}
+              disabled={gateInLoading || !gateInForm.container_number || containerValid === false || (gateInRequiresBillingClearance && !gateInBillingCleared)}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
               {gateInLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowDownToLine size={16} />}
               รับตู้เข้าลาน + ออก EIR
             </button>
-            {hasGateInCharges && !gateInBillingPaid && (
+            {gateInRequiresBillingClearance && !gateInBillingCleared && (
               <span className="text-[11px] text-amber-500 flex items-center gap-1">
                 <AlertTriangle size={12} /> กรุณาชำระเงินก่อนรับตู้
               </span>

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import CameraOCR from '@/components/gate/CameraOCR';
-import { BillingCharge, BillingData, ContainerResult, GateOutBooking, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
+import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 
 interface GateOutTabProps {
   yardId: number;
@@ -41,6 +41,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [billingPaid, setBillingPaid] = useState(false);
   const [billingInvoiceNumber, setBillingInvoiceNumber] = useState('');
   const [billingInvoiceId, setBillingInvoiceId] = useState<number | null>(null);
+  const [billingClearance, setBillingClearance] = useState<BillingClearance | null>(null);
   const [selectedCharges, setSelectedCharges] = useState<Set<number>>(new Set());
   const [chargeOverrides, setChargeOverrides] = useState<Record<number, number>>({});
   const [customCharges, setCustomCharges] = useState<BillingCharge[]>([]);
@@ -113,6 +114,10 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     + customCharges.filter((_, i) => selectedCustom.has(i)).reduce((s, c) => s + c.subtotal, 0);
   const selectedVat = Math.round(selectedTotal * 0.07 * 100) / 100;
   const selectedGrand = selectedTotal + selectedVat;
+  const originalSelectedTotal = (billingData ? billingData.charges
+    .reduce((s, ch, i) => s + (selectedCharges.has(i) ? ch.subtotal : 0), 0) : 0)
+    + customCharges.filter((_, i) => selectedCustom.has(i)).reduce((s, c) => s + c.subtotal, 0);
+  const billingCleared = billingPaid || !!billingClearance;
 
   const buildFinalCharges = () => {
     const final: BillingCharge[] = [];
@@ -125,6 +130,42 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     }
     customCharges.forEach((ch, i) => { if (selectedCustom.has(i)) final.push(ch); });
     return final;
+  };
+
+  const createGateOutClearance = async (
+    clearanceType: BillingClearanceType,
+    invoiceId?: number | null,
+    reason?: string
+  ) => {
+    const res = await fetch('/api/billing/clearance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        yard_id: yardId,
+        transaction_type: 'gate_out',
+        container_id: selectedContainer?.container_id,
+        container_number: selectedContainer?.container_number,
+        customer_id: resolvedCustomer?.customer_id,
+        clearance_type: clearanceType,
+        original_amount: originalSelectedTotal,
+        final_amount: selectedTotal,
+        reason,
+        invoice_id: invoiceId || null,
+        approved_by: clearanceType === 'waived' ? userId : null,
+        charges: buildFinalCharges(),
+        user_id: userId,
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Billing clearance failed');
+    setBillingClearance({
+      clearance_id: data.clearance_id,
+      clearance_type: clearanceType,
+      reason,
+      invoice_id: invoiceId || null,
+    });
+    setBillingPaid(true);
+    return data.clearance_id as number;
   };
 
   const loadGateOutBilling = async (container: ContainerResult, billingCustomerId?: number | null, bookingRef?: string) => {
@@ -157,6 +198,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     const bookingRef = booking?.booking_number || '';
     setGateOutForm(prev => ({ ...prev, booking_ref: bookingRef }));
     setBillingPaid(false);
+    setBillingClearance(null);
     setBillingInvoiceNumber('');
     setBillingInvoiceId(null);
     if (booking?.customer_id) setManualCustomerId(booking.customer_id);
@@ -202,6 +244,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     setShowCustomerPicker(false);
     setCustomerSearch('');
     setBillingPaid(false);
+    setBillingClearance(null);
     setBillingInvoiceNumber('');
     setBillingInvoiceId(null);
     await loadGateOutBilling(selectedContainer, customerId, gateOutForm.booking_ref);
@@ -234,6 +277,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     setBookingSearch('');
     setBookingWarning('');
     setBillingPaid(false);
+    setBillingClearance(null);
     setBillingInvoiceNumber('');
     setBillingInvoiceId(null);
 
@@ -330,6 +374,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           container_id: selectedContainer.container_id,
           container_number: selectedContainer.container_number,
           billing_customer_id: resolvedCustomer?.customer_id || undefined,
+          billing_clearance_id: billingClearance?.clearance_id || undefined,
           ...(gateOutPhotos.length > 0 ? { damage_report: { exit_photos: gateOutPhotos } } : {}),
           ...gateOutForm,
         }),
@@ -346,6 +391,8 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
         setGateOutPhase('search');
         setBillingData(null);
         setBillingPaid(false);
+        setBillingClearance(null);
+    setBillingClearance(null);
         setBillingInvoiceNumber('');
         setBillingInvoiceId(null);
         setTimeout(() => setGateOutResult(null), 15000);
@@ -742,6 +789,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                             });
                             const data = await res.json();
                             if (data.success) {
+                              await createGateOutClearance('credit', data.invoice?.invoice_id || null, 'ลูกค้าเครดิต');
                               setBillingPaid(true);
                               setBillingInvoiceNumber(data.invoice_number || '');
                               setBillingInvoiceId(data.invoice?.invoice_id || null);
@@ -753,6 +801,22 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                       </div>
                     ) : (
                       <>
+                        {selectedGrand <= 0 && (
+                          <button disabled={!resolvedCustomer} onClick={async () => {
+                            try {
+                              const isWaived = originalSelectedTotal > 0;
+                              const reason = isWaived
+                                ? window.prompt('ระบุเหตุผลการยกเว้นค่าใช้จ่าย') || ''
+                                : 'ไม่มีค่าบริการ';
+                              if (isWaived && !reason.trim()) return;
+                              await createGateOutClearance(isWaived ? 'waived' : 'no_charge', null, reason);
+                            } catch (err) { console.error(err); }
+                          }}
+                            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all">
+                            <CheckCircle2 size={14} />
+                            {originalSelectedTotal > 0 ? 'อนุมัติยกเว้นค่าใช้จ่าย' : 'ยืนยัน No Charge ฿0'}
+                          </button>
+                        )}
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-slate-500 whitespace-nowrap">วิธีชำระ:</span>
                           {(['cash', 'transfer'] as const).map(m => (
@@ -786,6 +850,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ invoice_id: data.invoice.invoice_id, action: 'pay' }),
                               });
+                              await createGateOutClearance('paid', data.invoice?.invoice_id || null, paymentMethod === 'cash' ? 'ชำระเงินสด' : 'ชำระเงินโอน');
                               setBillingPaid(true);
                               setBillingInvoiceNumber(data.invoice_number || '');
                               setBillingInvoiceId(data.invoice?.invoice_id || null);
@@ -803,7 +868,11 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                 {billingPaid && (
                   <div className="px-4 py-3 border-t border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10 flex items-center justify-between">
                     <span className="flex items-center gap-2 text-xs text-emerald-600 font-bold">
-                      <CheckCircle2 size={14} /> {billingData.is_credit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'} — {billingInvoiceNumber}
+                      <CheckCircle2 size={14} /> {
+                        billingClearance?.clearance_type === 'no_charge' ? 'No Charge' :
+                        billingClearance?.clearance_type === 'waived' ? 'Waived' :
+                        billingData.is_credit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'
+                      }{billingInvoiceNumber ? ` — ${billingInvoiceNumber}` : ''}
                     </span>
                     {(billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id) && (
                       <button onClick={() => {
@@ -818,8 +887,14 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                 )}
               </div>
             ) : billingData && billingData.charges.length === 0 ? (
-              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-600 flex items-center gap-2">
-                <CheckCircle2 size={14} /> ไม่มีค่าบริการ (อยู่ในช่วง Free Days หรือไม่มี Tariff)
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-600 flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2"><CheckCircle2 size={14} /> ไม่มีค่าบริการ (อยู่ในช่วง Free Days หรือไม่มี Tariff)</span>
+                {!billingCleared && (
+                  <button onClick={() => createGateOutClearance('no_charge', null, 'ไม่มีค่าบริการ Gate-Out')}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">
+                    ยืนยัน No Charge
+                  </button>
+                )}
               </div>
             ) : null}
 
@@ -870,7 +945,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                 </div>
 
                 <button onClick={handleRequestRelease}
-                  disabled={releaseLoading || !!(billingData && billingData.charges.length > 0 && selectedGrand > 0 && !billingPaid)}
+                  disabled={releaseLoading || !!(billingData && !billingCleared)}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-50 transition-all w-full justify-center">
                   {releaseLoading ? <Loader2 size={16} className="animate-spin" /> : <Truck size={16} />}
                   ขอดึงตู้ → สร้างคำสั่งรถยก

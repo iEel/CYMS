@@ -9,6 +9,59 @@ async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
     IF COL_LENGTH('Containers', 'container_grade') IS NULL
       ALTER TABLE Containers ADD container_grade NVARCHAR(1) NOT NULL CONSTRAINT DF_Containers_Grade DEFAULT 'A'
   `);
+  await db.request().query(`
+    IF OBJECT_ID('BillingClearances', 'U') IS NULL
+    BEGIN
+      CREATE TABLE BillingClearances (
+        clearance_id INT PRIMARY KEY IDENTITY(1,1),
+        yard_id INT NOT NULL,
+        transaction_type NVARCHAR(20) NOT NULL,
+        container_id INT NULL,
+        container_number NVARCHAR(15) NULL,
+        customer_id INT NULL,
+        clearance_type NVARCHAR(20) NOT NULL,
+        original_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+        final_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+        reason NVARCHAR(500) NULL,
+        invoice_id INT NULL,
+        approved_by INT NULL,
+        charges NVARCHAR(MAX) NULL,
+        created_by INT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE()
+      );
+    END
+  `);
+  await db.request().query(`
+    IF COL_LENGTH('GateTransactions', 'billing_clearance_id') IS NULL
+      ALTER TABLE GateTransactions ADD billing_clearance_id INT NULL
+  `);
+}
+
+async function validateBillingClearance(
+  db: sql.ConnectionPool,
+  yardId: number,
+  transactionType: string,
+  clearanceId?: number | null
+) {
+  if (!clearanceId) return { ok: true };
+
+  const result = await db.request()
+    .input('clearanceId', sql.Int, clearanceId)
+    .input('yardId', sql.Int, yardId)
+    .input('transactionType', sql.NVarChar, transactionType)
+    .query(`
+      SELECT clearance_id, clearance_type
+      FROM BillingClearances
+      WHERE clearance_id = @clearanceId
+        AND yard_id = @yardId
+        AND transaction_type = @transactionType
+        AND clearance_type IN ('paid', 'credit', 'no_charge', 'waived')
+    `);
+
+  if (result.recordset.length === 0) {
+    return { ok: false, error: 'Billing Clearance ไม่ถูกต้องหรือไม่ตรงกับรายการ Gate' };
+  }
+  return { ok: true };
 }
 
 async function validateGateOutBooking(
@@ -95,6 +148,7 @@ const gateBodySchema = z.object({
   user_id: z.number().int().positive().optional(),
   container_owner_id: z.number().int().positive().optional().nullable(),
   billing_customer_id: z.number().int().positive().optional().nullable(),
+  billing_clearance_id: z.number().int().positive().optional().nullable(),
 }).passthrough();
 
 // GET — ดึง gate transactions
@@ -172,6 +226,7 @@ export async function POST(request: NextRequest) {
       container_id,
       user_id,
       container_owner_id, billing_customer_id,
+      billing_clearance_id,
     } = body;
 
     const db = await getDb();
@@ -191,6 +246,10 @@ export async function POST(request: NextRequest) {
 
     let finalContainerId = container_id;
     let assignedLocation: { zone_name: string; zone_id: number; bay: number; row: number; tier: number; reason: string } | null = null;
+    const clearanceValidation = await validateBillingClearance(db, yard_id, transaction_type, billing_clearance_id || null);
+    if (!clearanceValidation.ok) {
+      return NextResponse.json({ error: clearanceValidation.error }, { status: 400 });
+    }
 
     if (transaction_type === 'gate_in') {
       // === GATE-IN ===
@@ -332,16 +391,17 @@ export async function POST(request: NextRequest) {
       .input('processedBy', sql.Int, user_id || null)
       .input('ownerId', sql.Int, container_owner_id || null)
       .input('billingId', sql.Int, billing_customer_id || null)
+      .input('billingClearanceId', sql.Int, billing_clearance_id || null)
       .query(`
         INSERT INTO GateTransactions (container_id, yard_id, transaction_type,
           driver_name, driver_license, truck_plate, truck_company, seal_number, booking_ref,
           eir_number, notes, damage_report, processed_by,
-          container_owner_id, billing_customer_id)
+          container_owner_id, billing_customer_id, billing_clearance_id)
         OUTPUT INSERTED.*
         VALUES (@containerId, @yardId, @transactionType,
           @driverName, @driverLicense, @truckPlate, @truckCompany, @sealNumber, @bookingRef,
           @eirNumber, @notes, @damageReport, @processedBy,
-          @ownerId, @billingId)
+          @ownerId, @billingId, @billingClearanceId)
       `);
 
     // === Booking Auto-Link ===
