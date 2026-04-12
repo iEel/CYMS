@@ -9,11 +9,13 @@ export interface EDITemplate {
   template_name: string;
   base_format: 'csv' | 'json' | 'edifact';
   field_mapping: string | null; // JSON
+  required_fields?: string | null; // JSON string[]
   csv_delimiter: string;
   csv_headers: string | null;
   date_format: string;
   edifact_version: string;
   edifact_sender: string | null;
+  edifact_config?: string | null; // JSON rules for EDIFACT segment/qualifier variants
 }
 
 export interface CODECOTransaction {
@@ -22,12 +24,15 @@ export interface CODECOTransaction {
   eir_number: string;
   driver_name: string;
   truck_plate: string;
+  truck_company?: string;
   seal_number: string;
   booking_ref: string;
   transaction_date: string;
   container_number: string;
   size: string;
   container_type: string;
+  container_grade?: string;
+  condition?: string;
   shipping_line: string;
   is_laden: boolean;
   yard_name: string;
@@ -45,6 +50,23 @@ interface FieldMapping {
   fields: FieldDef[];
 }
 
+interface EDIFACTConfig {
+  bgm_code?: string;
+  gate_in_function?: string;
+  gate_out_function?: string;
+  location_qualifier?: string;
+  location_agency?: string;
+  container_agency?: string;
+  seal_issuer?: string;
+  truck_mode?: string;
+  include_driver?: boolean;
+  include_truck_company?: boolean;
+  include_condition?: boolean;
+  include_grade?: boolean;
+  include_booking?: boolean;
+  free_text_qualifier?: string;
+}
+
 // ========== Date Formatters ==========
 
 function formatDateStr(date: Date, fmt: string): string {
@@ -54,7 +76,6 @@ function formatDateStr(date: Date, fmt: string): string {
   const d = String(date.getDate()).padStart(2, '0');
   const H = String(date.getHours()).padStart(2, '0');
   const m = String(date.getMinutes()).padStart(2, '0');
-  const s = String(date.getSeconds()).padStart(2, '0');
 
   switch (fmt) {
     case 'YYYYMMDD': return `${y4}${M}${d}`;
@@ -91,7 +112,11 @@ function resolveValue(tx: CODECOTransaction, field: FieldDef, dateFormat: string
 function parseFieldMapping(mappingJson: string | null): FieldMapping {
   if (!mappingJson) return getDefaultFieldMapping();
   try {
-    return JSON.parse(mappingJson) as FieldMapping;
+    const parsed = JSON.parse(mappingJson) as FieldMapping;
+    const defaults = getDefaultFieldMapping().fields;
+    const fields = Array.isArray(parsed.fields) ? parsed.fields : [];
+    const missing = defaults.filter(df => !fields.some(f => f.source === df.source));
+    return { fields: [...fields, ...missing] };
   } catch {
     return getDefaultFieldMapping();
   }
@@ -110,11 +135,72 @@ function getDefaultFieldMapping(): FieldMapping {
       { source: 'is_laden', header: 'F/E', format: 'laden_fe', enabled: true },
       { source: 'seal_number', header: 'SEAL', enabled: true },
       { source: 'truck_plate', header: 'TRUCK', enabled: true },
+      { source: 'truck_company', header: 'TRUCK COMPANY', enabled: true },
       { source: 'driver_name', header: 'DRIVER', enabled: true },
       { source: 'booking_ref', header: 'BOOKING', enabled: true },
+      { source: 'container_grade', header: 'GRADE', enabled: true },
+      { source: 'condition', header: 'CONDITION', enabled: true },
       { source: 'yard_code', header: 'YARD', enabled: true },
     ],
   };
+}
+
+function parseStringArray(json: string | null | undefined, fallback: string[]): string[] {
+  if (!json) return fallback;
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseEDIFACTConfig(json: string | null | undefined): EDIFACTConfig {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' ? parsed as EDIFACTConfig : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getDefaultRequiredFields(): string[] {
+  return [
+    'container_number',
+    'transaction_type',
+    'eir_number',
+    'transaction_date',
+    'size',
+    'container_type',
+    'shipping_line',
+    'yard_code',
+  ];
+}
+
+export function validateCODECOTransactions(transactions: CODECOTransaction[], template: EDITemplate | null): {
+  valid: boolean;
+  errors: { transaction_id: number; container_number: string; field: string; message: string }[];
+  required_fields: string[];
+} {
+  const requiredFields = parseStringArray(template?.required_fields, getDefaultRequiredFields());
+  const errors: { transaction_id: number; container_number: string; field: string; message: string }[] = [];
+
+  transactions.forEach(tx => {
+    requiredFields.forEach(field => {
+      const value = (tx as unknown as Record<string, unknown>)[field];
+      if (value === null || value === undefined || String(value).trim() === '') {
+        errors.push({
+          transaction_id: tx.transaction_id,
+          container_number: tx.container_number || '-',
+          field,
+          message: `รายการ ${tx.eir_number || tx.transaction_id} ขาดข้อมูล ${field}`,
+        });
+      }
+    });
+  });
+
+  return { valid: errors.length === 0, errors, required_fields: requiredFields };
 }
 
 // ========== CSV Formatter ==========
@@ -182,6 +268,7 @@ function formatEDIFACT(transactions: CODECOTransaction[], template: EDITemplate,
 
   const sender = template.edifact_sender || companyName.substring(0, 35);
   const version = template.edifact_version || 'D:95B:UN';
+  const config = parseEDIFACTConfig(template.edifact_config);
   const msgRef = `CODECO${now.getTime()}`;
 
   const lines: string[] = [];
@@ -190,25 +277,31 @@ function formatEDIFACT(transactions: CODECOTransaction[], template: EDITemplate,
   // Message header
   lines.push(`UNH+1+CODECO:${version}'`);
   // Beginning of message
-  lines.push(`BGM+36+${msgRef}+9'`);
+  lines.push(`BGM+${config.bgm_code || '36'}+${msgRef}+9'`);
 
   transactions.forEach(tx => {
     const txDate = new Date(tx.transaction_date);
-    const giFn = tx.transaction_type === 'gate_in' ? '34' : '36';
+    const giFn = tx.transaction_type === 'gate_in'
+      ? (config.gate_in_function || '34')
+      : (config.gate_out_function || '36');
     lines.push(`TDT+${giFn}'`);
-    lines.push(`LOC+89+${tx.yard_code || 'YARD'}:139:6'`);
+    lines.push(`LOC+${config.location_qualifier || '89'}+${tx.yard_code || 'YARD'}:${config.location_agency || '139'}:6'`);
     lines.push(`DTM+137:${fmtDT(txDate)}:203'`);
 
     const sizeCode = tx.size === '40' ? '42' : tx.size === '45' ? '45' : '22';
     const typeCode = tx.container_type || 'GP';
     const isoType = typeCode === 'GP' || typeCode === 'HC' ? 'G1' : typeCode === 'RF' ? 'R1' : 'G1';
-    lines.push(`EQD+CN+${tx.container_number}+${sizeCode}${isoType}:102:5'`);
+    lines.push(`EQD+CN+${tx.container_number}+${sizeCode}${isoType}:${config.container_agency || '102'}:5'`);
     lines.push(`MEA+AAE+VGM+KGM'`);
-    if (tx.seal_number) lines.push(`SEL+${tx.seal_number}+CA'`);
-    if (tx.truck_plate) lines.push(`TDT+1++3+++++${tx.truck_plate}'`);
-    if (tx.driver_name) lines.push(`NAD+CA+${tx.driver_name}'`);
-    if (tx.booking_ref) lines.push(`RFF+BN:${tx.booking_ref}'`);
-    lines.push(`FTX+AAA+++${tx.is_laden ? 'LADEN' : 'EMPTY'}'`);
+    if (tx.seal_number) lines.push(`SEL+${tx.seal_number}+${config.seal_issuer || 'CA'}'`);
+    if (tx.truck_plate) lines.push(`TDT+1++${config.truck_mode || '3'}+++++${tx.truck_plate}'`);
+    if (config.include_driver !== false && tx.driver_name) lines.push(`NAD+CA+${tx.driver_name}'`);
+    if (config.include_truck_company && tx.truck_company) lines.push(`NAD+TR+${tx.truck_company}'`);
+    if (config.include_booking !== false && tx.booking_ref) lines.push(`RFF+BN:${tx.booking_ref}'`);
+    const freeText = [tx.is_laden ? 'LADEN' : 'EMPTY'];
+    if (config.include_grade && tx.container_grade) freeText.push(`GRADE ${tx.container_grade}`);
+    if (config.include_condition && tx.condition) freeText.push(tx.condition);
+    lines.push(`FTX+${config.free_text_qualifier || 'AAA'}+++${freeText.join(' / ')}'`);
   });
 
   lines.push(`UNT+${lines.length - 1}+1'`);
@@ -242,11 +335,13 @@ export function formatCODECO(
     template_name: 'Default CSV',
     base_format: 'csv',
     field_mapping: null,
+    required_fields: JSON.stringify(getDefaultRequiredFields()),
     csv_delimiter: ',',
     csv_headers: null,
     date_format: 'DD/MM/YYYY HH:mm',
     edifact_version: 'D:95B:UN',
     edifact_sender: null,
+    edifact_config: null,
   };
 
   let content: string;
@@ -289,10 +384,12 @@ export function legacyFormatToTemplate(format: string): EDITemplate {
     template_name: `Legacy ${format}`,
     base_format: base === 'edifact' ? 'edifact' : base === 'json' ? 'json' : 'csv',
     field_mapping: null,
+    required_fields: JSON.stringify(getDefaultRequiredFields()),
     csv_delimiter: ',',
     csv_headers: null,
     date_format: base === 'edifact' ? 'YYMMDD:HHmm' : base === 'json' ? 'ISO8601' : 'DD/MM/YYYY HH:mm',
     edifact_version: 'D:95B:UN',
     edifact_sender: null,
+    edifact_config: null,
   };
 }

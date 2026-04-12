@@ -92,6 +92,23 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     return `${received}/${total} received, ${released}/${total} released`;
   };
 
+  const getBookingCompatibility = (booking: GateOutBooking, container = selectedContainer) => {
+    const warnings: string[] = [];
+    if (container && booking.container_size && booking.container_size !== container.size) {
+      warnings.push(`ขนาดไม่ตรง: Booking ${booking.container_size}' / ตู้ ${container.size}'`);
+    }
+    if (container && booking.container_type && booking.container_type !== container.type) {
+      warnings.push(`ประเภทไม่ตรง: Booking ${booking.container_type} / ตู้ ${container.type}`);
+    }
+    if (resolvedCustomer?.customer_id && booking.customer_id && booking.customer_id !== resolvedCustomer.customer_id) {
+      warnings.push(`ลูกค้าไม่ตรง: ${booking.customer_name || booking.customer_id}`);
+    }
+    if (['cancelled', 'completed'].includes(booking.status)) {
+      warnings.push('Booking นี้ปิดหรือยกเลิกแล้ว');
+    }
+    return { ok: warnings.length === 0, warnings };
+  };
+
   // Init selected charges
   const initSelectedCharges = (charges: BillingCharge[]) => {
     const selected = new Set<number>();
@@ -193,6 +210,13 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   };
 
   const applyGateOutBooking = async (booking: GateOutBooking | null, container = selectedContainer) => {
+    if (booking) {
+      const check = getBookingCompatibility(booking, container);
+      if (!check.ok) {
+        setBookingWarning(check.warnings.join(' • '));
+        return;
+      }
+    }
     setSelectedBooking(booking);
     setBookingWarning('');
     const bookingRef = booking?.booking_number || '';
@@ -233,7 +257,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       const res = await fetch(url);
       const data = await res.json();
       const rows = Array.isArray(data.bookings) ? data.bookings : [];
-      setBookingResults(rows.filter((b: GateOutBooking) => !['cancelled', 'completed'].includes(b.status)));
+      setBookingResults(rows.filter((b: GateOutBooking) => getBookingCompatibility(b).ok));
     } catch (err) { console.error('Booking search error:', err); }
     finally { setBookingLoading(false); }
   };
@@ -507,6 +531,9 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                       <p className="text-xs text-slate-500 mt-1">
                         {selectedBooking.customer_name || '-'} • {selectedBooking.vessel_name || '-'}{selectedBooking.voyage_number ? ` / ${selectedBooking.voyage_number}` : ''}
                       </p>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Rule: เลขตู้ใน Booking หรือ Booking ว่างที่ลูกค้า/ขนาด/ประเภทตรงกัน • {selectedBooking.container_size || 'Any size'}&apos; / {selectedBooking.container_type || 'Any type'}
+                      </p>
                       <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-300 mt-2">
                         จำนวนตู้: {bookingProgressText(selectedBooking)}
                       </p>
@@ -515,6 +542,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                     <>
                       <p className="font-semibold text-amber-700 dark:text-amber-300">ยังไม่ได้ผูก Booking</p>
                       <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">เลือก Booking เพื่อคุมการปล่อยตู้และอัปเดตสถานะ received/released</p>
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">ระบบจะกัน Booking ที่ลูกค้า/ขนาด/ประเภทไม่ตรง หรือมีรายการตู้แต่ไม่มีตู้ใบนี้</p>
                     </>
                   )}
                   {bookingWarning && <p className="text-xs text-red-500 mt-2">{bookingWarning}</p>}
@@ -555,7 +583,9 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                           <span className="font-mono font-semibold">{b.booking_number}</span>
                           <span className="text-[10px] text-indigo-500">{bookingProgressText(b)}</span>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{b.customer_name || '-'} • {b.vessel_name || '-'}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {b.customer_name || '-'} • {b.vessel_name || '-'} • {b.container_size || 'Any size'}&apos; / {b.container_type || 'Any type'}
+                        </p>
                       </button>
                     ))}
                   </div>
@@ -784,7 +814,15 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                                 description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน)`,
                                 quantity: 1, unit_price: selectedTotal,
                                 due_date: new Date(Date.now() + creditTerm * 86400000).toISOString(),
-                                notes: JSON.stringify({ charges: buildFinalCharges(), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
+                                notes: JSON.stringify({
+                                  charges: buildFinalCharges(),
+                                  dwell_days: billingData.container.dwell_days,
+                                  container_size: billingData.container.size,
+                                  payment_method: 'credit',
+                                  payment_status: 'credit',
+                                  document_type: 'invoice',
+                                  transaction_type: 'gate_out',
+                                }),
                               }),
                             });
                             const data = await res.json();
@@ -840,7 +878,15 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                                 container_id: selectedContainer.container_id, charge_type: 'storage',
                                 description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน) — ชำระ ${paymentMethod === 'cash' ? 'เงินสด' : 'โอน'}`,
                                 quantity: 1, unit_price: selectedTotal,
-                                notes: JSON.stringify({ charges: buildFinalCharges(), dwell_days: billingData.container.dwell_days, container_size: billingData.container.size }),
+                                notes: JSON.stringify({
+                                  charges: buildFinalCharges(),
+                                  dwell_days: billingData.container.dwell_days,
+                                  container_size: billingData.container.size,
+                                  payment_method: paymentMethod,
+                                  payment_status: 'paid',
+                                  document_type: 'receipt',
+                                  transaction_type: 'gate_out',
+                                }),
                               }),
                             });
                             const data = await res.json();
@@ -877,7 +923,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                     {(billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id) && (
                       <button onClick={() => {
                         const invId = billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id;
-                        const printType = billingData.is_credit ? 'invoice' : 'receipt';
+                        const printType = billingClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt';
                         window.open(`/billing/print?id=${invId}&type=${printType}`, '_blank');
                       }}
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"

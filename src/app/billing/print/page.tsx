@@ -16,6 +16,15 @@ interface InvoiceData {
   container_id?: number; yard_id?: number;
 }
 
+interface InvoiceNotes {
+  charges?: { description: string; quantity: number; unit_price: number; subtotal: number }[];
+  payment_method?: 'cash' | 'transfer' | 'credit';
+  payment_status?: 'paid' | 'credit';
+  document_type?: 'invoice' | 'receipt';
+  transaction_type?: string;
+  container_number?: string;
+}
+
 interface CompanyData {
   company_name: string; tax_id: string; address: string;
   phone: string; email: string; logo_url: string;
@@ -65,6 +74,7 @@ export default function PrintInvoicePage() {
   const [loading, setLoading] = useState(true);
 
   const [chargeLines, setChargeLines] = useState<{ description: string; quantity: number; unit_price: number; subtotal: number }[]>([]);
+  const [invoiceNotes, setInvoiceNotes] = useState<InvoiceNotes | null>(null);
 
   useEffect(() => {
     if (!invoiceId) return;
@@ -91,9 +101,11 @@ export default function PrintInvoicePage() {
           let parsed = false;
           try {
             if (inv.notes) {
-              const notesData = JSON.parse(inv.notes);
-              if (notesData.charges?.length > 0) {
-                setChargeLines(notesData.charges.filter((c: { subtotal: number }) => c.subtotal > 0));
+              const notesData = JSON.parse(inv.notes) as InvoiceNotes;
+              setInvoiceNotes(notesData);
+              const noteCharges = notesData.charges || [];
+              if (noteCharges.length > 0) {
+                setChargeLines(noteCharges.filter((c: { subtotal: number }) => c.subtotal > 0));
                 parsed = true;
               }
             }
@@ -145,7 +157,24 @@ export default function PrintInvoicePage() {
     return <div className="p-8 text-center text-red-500">ไม่พบใบแจ้งหนี้</div>;
   }
 
-  const isReceipt = docType === 'receipt';
+  const isCreditNote = invoice.status === 'credit_note' || invoice.invoice_number?.startsWith('CN-');
+  const isReceipt = !isCreditNote && invoice.status === 'paid';
+  const documentTitle = isCreditNote ? 'ใบลดหนี้' : isReceipt ? 'ใบเสร็จรับเงิน' : 'ใบแจ้งหนี้';
+  const documentSubtitle = isCreditNote ? 'Credit Note' : isReceipt ? 'Receipt' : 'Invoice';
+  const statusLabel = (() => {
+    if (isCreditNote) return { text: 'ใบลดหนี้', color: '#7c3aed', bg: '#f3e8ff', border: '#c4b5fd' };
+    if (invoice.status === 'paid') return { text: 'ชำระเงินแล้ว', color: '#059669', bg: '#ecfdf5', border: '#6ee7b7' };
+    if (invoice.status === 'cancelled') return { text: 'ยกเลิกแล้ว', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' };
+    if (invoice.status === 'overdue') return { text: 'เกินกำหนดชำระ', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' };
+    return { text: 'รอชำระ / วางบิล', color: '#2563eb', bg: '#eff6ff', border: '#93c5fd' };
+  })();
+  const paymentMethodText = invoiceNotes?.payment_method === 'cash'
+    ? 'เงินสด'
+    : invoiceNotes?.payment_method === 'transfer'
+      ? 'โอน'
+      : invoiceNotes?.payment_method === 'credit'
+        ? 'เครดิต'
+        : '';
   const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-';
 
   return (
@@ -204,9 +233,9 @@ export default function PrintInvoicePage() {
           </div>
           <div className="text-right">
             <h1 className="text-2xl font-bold" style={{ color: isReceipt ? '#059669' : '#2563eb' }}>
-              {isReceipt ? 'ใบเสร็จรับเงิน' : 'ใบแจ้งหนี้'}
+              {documentTitle}
             </h1>
-            <p className="text-sm text-slate-500 mt-1">{isReceipt ? 'Receipt' : 'Invoice'}</p>
+            <p className="text-sm text-slate-500 mt-1">{documentSubtitle}</p>
             <div className="mt-3 text-sm">
               <p><span className="text-slate-500">เลขที่:</span> <strong className="font-mono">{invoice.invoice_number}</strong></p>
               <p><span className="text-slate-500">วันที่:</span> {formatDate(invoice.created_at)}</p>
@@ -216,6 +245,9 @@ export default function PrintInvoicePage() {
               {!isReceipt && invoice.due_date && (
                 <p><span className="text-slate-500">ครบกำหนด:</span> {formatDate(invoice.due_date)}</p>
               )}
+            </div>
+            <div className="mt-2 inline-block px-3 py-1 rounded-full text-xs font-bold" style={{ color: statusLabel.color, background: statusLabel.bg, border: `1px solid ${statusLabel.border}` }}>
+              {statusLabel.text}{paymentMethodText ? ` • ${paymentMethodText}` : ''}
             </div>
           </div>
         </div>
@@ -282,11 +314,21 @@ export default function PrintInvoicePage() {
           <strong>{numberToThaiText(invoice.grand_total || 0)}</strong>
         </div>
 
-        {/* Payment Status (for receipt) */}
-        {isReceipt && (
-          <div className="p-4 border-2 border-emerald-500 rounded-lg text-center mb-6">
-            <p className="text-lg font-bold text-emerald-600">✅ ชำระเงินแล้ว</p>
+        {/* Document Status */}
+        <div className="p-4 rounded-lg text-center mb-6" style={{ border: `2px solid ${statusLabel.border}`, background: statusLabel.bg }}>
+          <p className="text-lg font-bold" style={{ color: statusLabel.color }}>{statusLabel.text}</p>
+          {isReceipt ? (
             <p className="text-xs text-slate-500 mt-1">วันที่ชำระ: {formatDate(invoice.paid_at)}</p>
+          ) : invoice.due_date ? (
+            <p className="text-xs text-slate-500 mt-1">ครบกำหนดชำระ: {formatDate(invoice.due_date)}</p>
+          ) : (
+            <p className="text-xs text-slate-500 mt-1">เอกสารนี้ยังไม่ใช่ใบเสร็จรับเงิน</p>
+          )}
+        </div>
+
+        {docType === 'receipt' && !isReceipt && !isCreditNote && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-6 text-xs text-amber-700">
+            ระบบแสดงเป็นใบแจ้งหนี้ เพราะรายการนี้ยังไม่มีสถานะชำระเงิน
           </div>
         )}
 
@@ -295,12 +337,12 @@ export default function PrintInvoicePage() {
           <div className="grid grid-cols-2 gap-8">
             <div className="text-center">
               <div className="border-b border-slate-300 mb-1 h-12"></div>
-              <p className="text-xs text-slate-500">ผู้จ่าย / Paid by</p>
+              <p className="text-xs text-slate-500">{isReceipt ? 'ผู้จ่าย / Paid by' : 'ผู้รับวางบิล / Acknowledged by'}</p>
               <p className="text-xs text-slate-400 mt-0.5">วันที่ ____/____/____</p>
             </div>
             <div className="text-center">
               <div className="border-b border-slate-300 mb-1 h-12"></div>
-              <p className="text-xs text-slate-500">ผู้รับเงิน / Received by</p>
+              <p className="text-xs text-slate-500">{isReceipt ? 'ผู้รับเงิน / Received by' : 'ผู้ออกเอกสาร / Issued by'}</p>
               <p className="text-xs text-slate-400 mt-0.5">วันที่ ____/____/____</p>
             </div>
           </div>

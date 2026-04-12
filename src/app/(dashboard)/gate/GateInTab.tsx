@@ -936,7 +936,14 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                               charge_type: 'gate_in', description: `ค่าบริการ Gate-In ${gateInForm.container_number}`,
                               quantity: 1, unit_price: gateInSelectedTotal,
                               due_date: new Date(Date.now() + creditTerm * 86400000).toISOString(),
-                              notes: JSON.stringify({ charges: buildGateInFinalCharges(), transaction_type: 'gate_in', container_number: gateInForm.container_number }),
+                              notes: JSON.stringify({
+                                charges: buildGateInFinalCharges(),
+                                transaction_type: 'gate_in',
+                                container_number: gateInForm.container_number,
+                                payment_method: 'credit',
+                                payment_status: 'credit',
+                                document_type: 'invoice',
+                              }),
                             }),
                           });
                           const data = await res.json();
@@ -994,7 +1001,14 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                               yard_id: yardId, customer_id: custId,
                               charge_type: 'gate_in', description: `ค่าบริการ Gate-In ${gateInForm.container_number} — ชำระ${gateInPaymentMethod === 'cash' ? 'เงินสด' : 'โอน'}`,
                               quantity: 1, unit_price: gateInSelectedTotal,
-                              notes: JSON.stringify({ charges: buildGateInFinalCharges(), transaction_type: 'gate_in', container_number: gateInForm.container_number }),
+                              notes: JSON.stringify({
+                                charges: buildGateInFinalCharges(),
+                                transaction_type: 'gate_in',
+                                container_number: gateInForm.container_number,
+                                payment_method: gateInPaymentMethod,
+                                payment_status: 'paid',
+                                document_type: 'receipt',
+                              }),
                             }),
                           });
                           const data = await res.json();
@@ -1035,9 +1049,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                       {gateInInvoiceNumber && <span className="text-xs font-mono text-emerald-500">({gateInInvoiceNumber})</span>}
                     </div>
                     {gateInInvoiceId && (
-                      <button onClick={() => window.open(`/billing/print?id=${gateInInvoiceId}&type=${resolvedIsCredit ? 'invoice' : 'receipt'}`, '_blank')}
+                      <button onClick={() => window.open(`/billing/print?id=${gateInInvoiceId}&type=${gateInClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt'}`, '_blank')}
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
-                        <Printer size={12} /> 🖨️ พิมพ์{resolvedIsCredit ? 'ใบแจ้งหนี้' : 'ใบเสร็จ'}
+                        <Printer size={12} /> 🖨️ พิมพ์{gateInClearance?.clearance_type === 'credit' ? 'ใบแจ้งหนี้' : 'ใบเสร็จ'}
                       </button>
                     )}
                   </div>

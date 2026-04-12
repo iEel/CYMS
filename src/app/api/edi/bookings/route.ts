@@ -61,15 +61,21 @@ export async function GET(request: NextRequest) {
       }
 
       if (containerId) {
-        // Gate-Out: find booking linked to this container. Try container_id first, then container_number.
+        // Gate-Out: find a safe booking candidate. Exact pre-advised links win;
+        // otherwise use an open booking only when size/type/customer rules match.
         const req = db.request().input('cId', sql.Int, parseInt(containerId));
         if (yardId) req.input('yardId', sql.Int, parseInt(yardId));
         const result = await req.query(`
-          WITH CandidateBookings AS (
+          WITH TargetContainer AS (
+            SELECT container_id, container_number, size, type, container_owner_id
+            FROM Containers
+            WHERE container_id = @cId
+          ),
+          CandidateBookings AS (
             SELECT b.booking_id, 0 AS match_priority
             FROM BookingContainers bc
             JOIN Bookings b ON bc.booking_id = b.booking_id
-            WHERE bc.container_id = @cId AND bc.status = 'received'
+            WHERE bc.container_id = @cId AND bc.status IN ('pending', 'received')
             ${yardId ? 'AND b.yard_id = @yardId' : ''}
 
             UNION ALL
@@ -80,7 +86,19 @@ export async function GET(request: NextRequest) {
             JOIN Containers ct ON ct.container_id = @cId
             WHERE bc.container_id IS NULL
               AND bc.container_number = ct.container_number
-              AND bc.status = 'received'
+              AND bc.status IN ('pending', 'received')
+            ${yardId ? 'AND b.yard_id = @yardId' : ''}
+
+            UNION ALL
+
+            SELECT b.booking_id, 2 AS match_priority
+            FROM Bookings b
+            CROSS JOIN TargetContainer ct
+            WHERE b.status IN ('pending', 'confirmed')
+              AND NOT EXISTS (SELECT 1 FROM BookingContainers bc WHERE bc.booking_id = b.booking_id)
+              AND (b.container_size IS NULL OR b.container_size = '' OR b.container_size = ct.size)
+              AND (b.container_type IS NULL OR b.container_type = '' OR b.container_type = ct.type)
+              AND (b.customer_id IS NULL OR ct.container_owner_id IS NULL OR b.customer_id = ct.container_owner_id)
             ${yardId ? 'AND b.yard_id = @yardId' : ''}
           )
           SELECT TOP 1 ${bookingSummarySelect()}

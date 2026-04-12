@@ -3,10 +3,20 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 
+async function ensureTemplateColumns(db: sql.ConnectionPool) {
+  await db.request().query(`
+    IF COL_LENGTH('EDITemplates', 'required_fields') IS NULL
+      ALTER TABLE EDITemplates ADD required_fields NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('EDITemplates', 'edifact_config') IS NULL
+      ALTER TABLE EDITemplates ADD edifact_config NVARCHAR(MAX) NULL;
+  `);
+}
+
 // GET — list all templates
 export async function GET() {
   try {
     const db = await getDb();
+    await ensureTemplateColumns(db);
     const result = await db.request().query(`
       SELECT * FROM EDITemplates WHERE is_active = 1 ORDER BY is_system DESC, template_name
     `);
@@ -21,26 +31,32 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { template_name, base_format, description, field_mapping, csv_delimiter, date_format, edifact_version, edifact_sender } = body;
+    const {
+      template_name, base_format, description, field_mapping, required_fields,
+      csv_delimiter, date_format, edifact_version, edifact_sender, edifact_config,
+    } = body;
 
     if (!template_name || !base_format) {
       return NextResponse.json({ error: 'กรุณาระบุชื่อ template และ format' }, { status: 400 });
     }
 
     const db = await getDb();
+    await ensureTemplateColumns(db);
     const result = await db.request()
       .input('name', sql.NVarChar, template_name)
       .input('format', sql.NVarChar, base_format)
       .input('desc', sql.NVarChar, description || null)
       .input('fields', sql.NVarChar, typeof field_mapping === 'string' ? field_mapping : JSON.stringify(field_mapping))
+      .input('requiredFields', sql.NVarChar, typeof required_fields === 'string' ? required_fields : JSON.stringify(required_fields || []))
       .input('delimiter', sql.NVarChar, csv_delimiter || ',')
       .input('dateFormat', sql.NVarChar, date_format || 'DD/MM/YYYY HH:mm')
       .input('edifactVer', sql.NVarChar, edifact_version || 'D:95B:UN')
       .input('edifactSender', sql.NVarChar, edifact_sender || null)
+      .input('edifactConfig', sql.NVarChar, typeof edifact_config === 'string' ? edifact_config : JSON.stringify(edifact_config || {}))
       .query(`
-        INSERT INTO EDITemplates (template_name, base_format, description, field_mapping, csv_delimiter, date_format, edifact_version, edifact_sender)
+        INSERT INTO EDITemplates (template_name, base_format, description, field_mapping, required_fields, csv_delimiter, date_format, edifact_version, edifact_sender, edifact_config)
         OUTPUT INSERTED.*
-        VALUES (@name, @format, @desc, @fields, @delimiter, @dateFormat, @edifactVer, @edifactSender)
+        VALUES (@name, @format, @desc, @fields, @requiredFields, @delimiter, @dateFormat, @edifactVer, @edifactSender, @edifactConfig)
       `);
 
     await logAudit({
@@ -62,13 +78,17 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { template_id, template_name, base_format, description, field_mapping, csv_delimiter, date_format, edifact_version, edifact_sender } = body;
+    const {
+      template_id, template_name, base_format, description, field_mapping, required_fields,
+      csv_delimiter, date_format, edifact_version, edifact_sender, edifact_config,
+    } = body;
 
     if (!template_id) {
       return NextResponse.json({ error: 'กรุณาระบุ template_id' }, { status: 400 });
     }
 
     const db = await getDb();
+    await ensureTemplateColumns(db);
 
     // Check if system template
     const check = await db.request().input('id', sql.Int, template_id)
@@ -83,15 +103,19 @@ export async function PUT(request: NextRequest) {
       .input('format', sql.NVarChar, base_format)
       .input('desc', sql.NVarChar, description || null)
       .input('fields', sql.NVarChar, typeof field_mapping === 'string' ? field_mapping : JSON.stringify(field_mapping))
+      .input('requiredFields', sql.NVarChar, typeof required_fields === 'string' ? required_fields : JSON.stringify(required_fields || []))
       .input('delimiter', sql.NVarChar, csv_delimiter || ',')
       .input('dateFormat', sql.NVarChar, date_format || 'DD/MM/YYYY HH:mm')
       .input('edifactVer', sql.NVarChar, edifact_version || 'D:95B:UN')
       .input('edifactSender', sql.NVarChar, edifact_sender || null)
+      .input('edifactConfig', sql.NVarChar, typeof edifact_config === 'string' ? edifact_config : JSON.stringify(edifact_config || {}))
       .query(`
         UPDATE EDITemplates SET
           template_name = @name, base_format = @format, description = @desc,
-          field_mapping = @fields, csv_delimiter = @delimiter, date_format = @dateFormat,
+          field_mapping = @fields, required_fields = @requiredFields,
+          csv_delimiter = @delimiter, date_format = @dateFormat,
           edifact_version = @edifactVer, edifact_sender = @edifactSender,
+          edifact_config = @edifactConfig,
           updated_at = GETDATE()
         WHERE template_id = @id
       `);
@@ -122,6 +146,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const db = await getDb();
+    await ensureTemplateColumns(db);
 
     // Check if system template
     const check = await db.request().input('id', sql.Int, templateId)

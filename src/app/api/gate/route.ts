@@ -69,13 +69,16 @@ async function validateGateOutBooking(
   yardId: number,
   bookingRef: string,
   containerId: number,
-  containerNumber?: string
+  containerNumber?: string,
+  containerOwnerId?: number | null,
+  billingCustomerId?: number | null
 ) {
   const bookingResult = await db.request()
     .input('bkRef', sql.NVarChar, bookingRef)
     .input('yardId', sql.Int, yardId)
     .query(`
       SELECT TOP 1 b.booking_id, b.booking_number, b.status, b.container_count,
+        b.customer_id, b.container_size, b.container_type,
         (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id) AS linked_count
       FROM Bookings b
       WHERE b.booking_number = @bkRef AND b.yard_id = @yardId
@@ -93,13 +96,18 @@ async function validateGateOutBooking(
     return { ok: false, error: `Booking ${bookingRef} ปิดงานแล้ว` };
   }
 
-  let finalContainerNumber = containerNumber;
-  if (!finalContainerNumber) {
-    const cResult = await db.request()
-      .input('containerId', sql.Int, containerId)
-      .query('SELECT container_number FROM Containers WHERE container_id = @containerId');
-    finalContainerNumber = cResult.recordset[0]?.container_number;
+  const cResult = await db.request()
+    .input('containerId', sql.Int, containerId)
+    .query(`
+      SELECT container_id, container_number, size, type, container_owner_id
+      FROM Containers
+      WHERE container_id = @containerId
+    `);
+  const container = cResult.recordset[0];
+  if (!container) {
+    return { ok: false, error: 'ไม่พบข้อมูลตู้สำหรับตรวจ Booking' };
   }
+  const finalContainerNumber = containerNumber || container.container_number;
 
   const linkResult = await db.request()
     .input('bkId', sql.Int, booking.booking_id)
@@ -116,8 +124,23 @@ async function validateGateOutBooking(
     return { ok: false, error: `ตู้ ${finalContainerNumber || containerId} ถูกปล่อยออกใน Booking ${bookingRef} แล้ว` };
   }
 
-  if (linkResult.recordset.length === 0 && booking.linked_count >= booking.container_count) {
-    return { ok: false, error: `Booking ${bookingRef} ครบจำนวนตู้แล้ว` };
+  if (linkResult.recordset.length === 0) {
+    if (booking.linked_count > 0) {
+      return { ok: false, error: `ตู้ ${finalContainerNumber} ไม่อยู่ในรายการตู้ของ Booking ${bookingRef}` };
+    }
+    if (booking.linked_count >= booking.container_count) {
+      return { ok: false, error: `Booking ${bookingRef} ครบจำนวนตู้แล้ว` };
+    }
+    if (booking.container_size && booking.container_size !== container.size) {
+      return { ok: false, error: `ขนาดตู้ไม่ตรงกับ Booking ${bookingRef} (${container.size}' ≠ ${booking.container_size}')` };
+    }
+    if (booking.container_type && booking.container_type !== container.type) {
+      return { ok: false, error: `ประเภทตู้ไม่ตรงกับ Booking ${bookingRef} (${container.type} ≠ ${booking.container_type})` };
+    }
+    const acceptedCustomerIds = [container.container_owner_id, containerOwnerId, billingCustomerId].filter(Boolean);
+    if (booking.customer_id && acceptedCustomerIds.length > 0 && !acceptedCustomerIds.includes(booking.customer_id)) {
+      return { ok: false, error: `ลูกค้าของตู้ไม่ตรงกับลูกค้าใน Booking ${bookingRef}` };
+    }
   }
 
   return { ok: true, bookingId: booking.booking_id, containerNumber: finalContainerNumber };
@@ -356,7 +379,9 @@ export async function POST(request: NextRequest) {
           yard_id,
           booking_ref,
           finalContainerId,
-          container_number
+          container_number,
+          container_owner_id || null,
+          billing_customer_id || null
         );
         if (!bookingValidation.ok) {
           return NextResponse.json({ error: bookingValidation.error }, { status: 400 });

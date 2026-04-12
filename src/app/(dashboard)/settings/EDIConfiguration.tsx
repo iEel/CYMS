@@ -42,10 +42,12 @@ interface EDITemplate {
   base_format: 'csv' | 'json' | 'edifact';
   description: string;
   field_mapping: string;
+  required_fields?: string;
   csv_delimiter: string;
   date_format: string;
   edifact_version: string;
   edifact_sender: string;
+  edifact_config?: string;
   is_system: boolean;
   is_active: boolean;
 }
@@ -61,9 +63,23 @@ const DEFAULT_FIELDS: FieldDef[] = [
   { source: 'is_laden', header: 'F/E', format: 'laden_fe', enabled: true },
   { source: 'seal_number', header: 'SEAL', enabled: true },
   { source: 'truck_plate', header: 'TRUCK', enabled: true },
+  { source: 'truck_company', header: 'TRUCK COMPANY', enabled: true },
   { source: 'driver_name', header: 'DRIVER', enabled: true },
   { source: 'booking_ref', header: 'BOOKING', enabled: true },
+  { source: 'container_grade', header: 'GRADE', enabled: true },
+  { source: 'condition', header: 'CONDITION', enabled: true },
   { source: 'yard_code', header: 'YARD', enabled: true },
+];
+
+const DEFAULT_REQUIRED_FIELDS = [
+  'container_number',
+  'transaction_type',
+  'eir_number',
+  'transaction_date',
+  'size',
+  'container_type',
+  'shipping_line',
+  'yard_code',
 ];
 
 const DATE_FORMAT_OPTIONS = [
@@ -81,8 +97,14 @@ const SAMPLE_DATA = {
   container_number: 'MSCU1234567', transaction_type: 'gate_in', eir_number: 'EIR-IN-2026-000001-a3f8b2',
   transaction_date: '2026-03-25T14:30:00', size: '40', container_type: 'GP',
   shipping_line: 'MSC', is_laden: true, seal_number: 'SL202601', truck_plate: 'กท-1234',
-  driver_name: 'สมชาย', booking_ref: 'BK2026001', yard_code: 'YD01',
+  truck_company: 'ABC Transport', driver_name: 'สมชาย', booking_ref: 'BK2026001',
+  container_grade: 'A', condition: 'GOOD', yard_code: 'YD01',
 };
+
+function mergeTemplateFields(fields: FieldDef[]) {
+  const missing = DEFAULT_FIELDS.filter(df => !fields.some(f => f.source === df.source));
+  return [...fields, ...missing];
+}
 
 export default function EDIConfiguration() {
   const { toast } = useToast();
@@ -103,10 +125,22 @@ export default function EDIConfiguration() {
   const [tplFormat, setTplFormat] = useState<'csv' | 'json' | 'edifact'>('csv');
   const [tplDesc, setTplDesc] = useState('');
   const [tplFields, setTplFields] = useState<FieldDef[]>(DEFAULT_FIELDS);
+  const [tplRequiredFields, setTplRequiredFields] = useState<string[]>(DEFAULT_REQUIRED_FIELDS);
   const [tplDelimiter, setTplDelimiter] = useState(',');
   const [tplDateFormat, setTplDateFormat] = useState('DD/MM/YYYY HH:mm');
   const [tplEdifactVer, setTplEdifactVer] = useState('D:95B:UN');
   const [tplEdifactSender, setTplEdifactSender] = useState('');
+  const [tplEdifactConfig, setTplEdifactConfig] = useState({
+    bgm_code: '36',
+    gate_in_function: '34',
+    gate_out_function: '36',
+    location_qualifier: '89',
+    include_driver: true,
+    include_booking: true,
+    include_truck_company: false,
+    include_grade: false,
+    include_condition: false,
+  });
   const [tplSaving, setTplSaving] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
@@ -201,18 +235,36 @@ export default function EDIConfiguration() {
       setTplEdifactSender(tpl.edifact_sender || '');
       try {
         const parsed = JSON.parse(tpl.field_mapping);
-        setTplFields(parsed.fields || DEFAULT_FIELDS);
+        setTplFields(mergeTemplateFields(parsed.fields || DEFAULT_FIELDS));
       } catch { setTplFields(DEFAULT_FIELDS); }
+      try {
+        setTplRequiredFields(tpl.required_fields ? JSON.parse(tpl.required_fields) : DEFAULT_REQUIRED_FIELDS);
+      } catch { setTplRequiredFields(DEFAULT_REQUIRED_FIELDS); }
+      try {
+        setTplEdifactConfig(prev => ({ ...prev, ...(tpl.edifact_config ? JSON.parse(tpl.edifact_config) : {}) }));
+      } catch { /* keep defaults */ }
     } else {
       setEditingTemplate(null);
       setTplName('');
       setTplFormat('csv');
       setTplDesc('');
       setTplFields(DEFAULT_FIELDS.map(f => ({ ...f })));
+      setTplRequiredFields(DEFAULT_REQUIRED_FIELDS);
       setTplDelimiter(',');
       setTplDateFormat('DD/MM/YYYY HH:mm');
       setTplEdifactVer('D:95B:UN');
       setTplEdifactSender('');
+      setTplEdifactConfig({
+        bgm_code: '36',
+        gate_in_function: '34',
+        gate_out_function: '36',
+        location_qualifier: '89',
+        include_driver: true,
+        include_booking: true,
+        include_truck_company: false,
+        include_grade: false,
+        include_condition: false,
+      });
     }
     setShowEditor(true);
   };
@@ -227,10 +279,12 @@ export default function EDIConfiguration() {
         base_format: tplFormat,
         description: tplDesc,
         field_mapping: JSON.stringify({ fields: tplFields }),
+        required_fields: JSON.stringify(tplRequiredFields),
         csv_delimiter: tplDelimiter,
         date_format: tplDateFormat,
         edifact_version: tplEdifactVer,
         edifact_sender: tplEdifactSender,
+        edifact_config: JSON.stringify(tplEdifactConfig),
       };
       const method = editingTemplate ? 'PUT' : 'POST';
       await fetch('/api/edi/templates', {
@@ -269,8 +323,14 @@ export default function EDIConfiguration() {
     setTplEdifactSender(tpl.edifact_sender || '');
     try {
       const parsed = JSON.parse(tpl.field_mapping);
-      setTplFields(parsed.fields || DEFAULT_FIELDS);
+      setTplFields(mergeTemplateFields(parsed.fields || DEFAULT_FIELDS));
     } catch { setTplFields(DEFAULT_FIELDS); }
+    try {
+      setTplRequiredFields(tpl.required_fields ? JSON.parse(tpl.required_fields) : DEFAULT_REQUIRED_FIELDS);
+    } catch { setTplRequiredFields(DEFAULT_REQUIRED_FIELDS); }
+    try {
+      setTplEdifactConfig(prev => ({ ...prev, ...(tpl.edifact_config ? JSON.parse(tpl.edifact_config) : {}) }));
+    } catch { /* keep defaults */ }
   };
 
   const toggleField = (idx: number) => {
@@ -278,6 +338,9 @@ export default function EDIConfiguration() {
   };
   const updateFieldHeader = (idx: number, header: string) => {
     setTplFields(prev => prev.map((f, i) => i === idx ? { ...f, header } : f));
+  };
+  const toggleRequiredField = (source: string) => {
+    setTplRequiredFields(prev => prev.includes(source) ? prev.filter(f => f !== source) : [...prev, source]);
   };
   const moveField = (idx: number, dir: 'up' | 'down') => {
     const swap = dir === 'up' ? idx - 1 : idx + 1;
@@ -673,6 +736,59 @@ UNZ+1+CODECO...'`;
 
                 <div><label className={labelClass}>คำอธิบาย</label>
                   <input value={tplDesc} onChange={e => setTplDesc(e.target.value)} className={inputClass} placeholder="รายละเอียด template นี้..." /></div>
+
+                {/* Required Fields */}
+                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40">
+                  <h5 className="text-xs font-semibold text-amber-700 dark:text-amber-300 mb-3">Required Fields — ตรวจข้อมูลก่อนส่ง EDI</h5>
+                  <div className="flex flex-wrap gap-2">
+                    {tplFields.map(f => (
+                      <button key={f.source} type="button" onClick={() => toggleRequiredField(f.source)}
+                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                          tplRequiredFields.includes(f.source)
+                            ? 'bg-amber-500 border-amber-500 text-white'
+                            : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-500'
+                        }`}>
+                        {f.header || f.source}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-2">
+                    ถ้ารายการ Gate ขาด field ที่เลือกไว้ ระบบจะไม่ส่งไฟล์ให้สายเรือ
+                  </p>
+                </div>
+
+                {/* EDIFACT Rule Overrides */}
+                {tplFormat === 'edifact' && (
+                  <div className="p-4 rounded-xl bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800/40">
+                    <h5 className="text-xs font-semibold text-purple-700 dark:text-purple-300 mb-3">EDIFACT Rules — ปรับ qualifier ต่อสายเรือ</h5>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div><label className={labelClass}>BGM Code</label>
+                        <input value={tplEdifactConfig.bgm_code} onChange={e => setTplEdifactConfig(prev => ({ ...prev, bgm_code: e.target.value }))} className={inputClass} /></div>
+                      <div><label className={labelClass}>Gate-In Function</label>
+                        <input value={tplEdifactConfig.gate_in_function} onChange={e => setTplEdifactConfig(prev => ({ ...prev, gate_in_function: e.target.value }))} className={inputClass} /></div>
+                      <div><label className={labelClass}>Gate-Out Function</label>
+                        <input value={tplEdifactConfig.gate_out_function} onChange={e => setTplEdifactConfig(prev => ({ ...prev, gate_out_function: e.target.value }))} className={inputClass} /></div>
+                      <div><label className={labelClass}>LOC Qualifier</label>
+                        <input value={tplEdifactConfig.location_qualifier} onChange={e => setTplEdifactConfig(prev => ({ ...prev, location_qualifier: e.target.value }))} className={inputClass} /></div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {[
+                        ['include_driver', 'Driver NAD'],
+                        ['include_booking', 'Booking RFF'],
+                        ['include_truck_company', 'Trucking NAD'],
+                        ['include_grade', 'Grade FTX'],
+                        ['include_condition', 'Condition FTX'],
+                      ].map(([key, label]) => (
+                        <label key={key} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-700 border border-purple-100 dark:border-purple-800 text-[11px] text-slate-600 dark:text-slate-300 cursor-pointer">
+                          <input type="checkbox" checked={Boolean((tplEdifactConfig as unknown as Record<string, boolean>)[key])}
+                            onChange={e => setTplEdifactConfig(prev => ({ ...prev, [key]: e.target.checked }))}
+                            className="accent-purple-600" />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Field Mapping — CSV/JSON only */}
                 {tplFormat !== 'edifact' && (

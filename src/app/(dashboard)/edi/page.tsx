@@ -144,7 +144,12 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [selectedEp, setSelectedEp] = useState<number>(0);
   const [sending, setSending] = useState(false);
-  const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [sendResult, setSendResult] = useState<{
+    success: boolean;
+    message: string;
+    validationErrors?: { transaction_id: number; container_number: string; field: string; message: string }[];
+    errorCount?: number;
+  } | null>(null);
 
   const buildUrl = useCallback((format = 'json') => {
     let url = `/api/edi/codeco?yard_id=${yardId}&format=${format}`;
@@ -199,7 +204,12 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
         setSendResult({ success: true, message: data.message });
         fetchEndpoints(); // refresh last_sent
       } else {
-        setSendResult({ success: false, message: data.error || 'เกิดข้อผิดพลาด' });
+        setSendResult({
+          success: false,
+          message: data.error || 'เกิดข้อผิดพลาด',
+          validationErrors: data.validation_errors,
+          errorCount: data.error_count,
+        });
       }
     } catch { setSendResult({ success: false, message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ' }); }
     finally { setSending(false); }
@@ -289,7 +299,7 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
               <select value={selectedEp} onChange={e => setSelectedEp(parseInt(e.target.value))} className={inputClass + ' w-full'}>
                 {endpoints.map(ep => (
                   <option key={ep.endpoint_id} value={ep.endpoint_id}>
-                    {ep.type === 'email' ? '📧' : '📁'} {ep.name} ({ep.type === 'email' ? ep.host : `${ep.host}:${ep.format}`}) {ep.shipping_line ? `— ${ep.shipping_line}` : ''}
+                    {ep.type === 'email' ? '📧' : ep.type === 'api' ? '🌐' : ep.type === 'ftp' ? '📂' : '📁'} {ep.name} ({ep.type === 'email' || ep.type === 'api' ? ep.host : `${ep.host}:${ep.format}`}) {ep.shipping_line ? `— ${ep.shipping_line}` : ''}
                   </option>
                 ))}
               </select>
@@ -298,9 +308,12 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
               const sel = endpoints.find(e => e.endpoint_id === selectedEp);
               return sel ? (
                 <span className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                  sel.type === 'email' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20' : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20'
+                  sel.type === 'email' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20' :
+                  sel.type === 'api' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20' :
+                  sel.type === 'ftp' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20' :
+                  'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20'
                 }`}>
-                  {sel.type === 'email' ? '📧 Email' : '📁 SFTP'} • {sel.format}
+                  {sel.type === 'email' ? '📧 Email' : sel.type === 'api' ? '🌐 API' : sel.type === 'ftp' ? '📂 FTP' : '📁 SFTP'} • {sel.format}
                 </span>
               ) : null;
             })()}
@@ -314,6 +327,16 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
         {sendResult && (
           <div className={`mt-3 p-3 rounded-xl text-sm ${sendResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
             {sendResult.message}
+            {sendResult.validationErrors && sendResult.validationErrors.length > 0 && (
+              <div className="mt-2 space-y-1 text-xs">
+                <p className="font-semibold">พบข้อมูลไม่ครบ {sendResult.errorCount || sendResult.validationErrors.length} จุด ตัวอย่าง:</p>
+                {sendResult.validationErrors.slice(0, 8).map((err, idx) => (
+                  <p key={`${err.transaction_id}-${err.field}-${idx}`} className="font-mono">
+                    {err.container_number} • {err.field} • {err.message}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -387,7 +410,7 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{fmtDate(tx.date)}</td>
                     <td className="px-3 py-2 font-mono font-semibold text-slate-800 dark:text-white">{tx.container_number}</td>
-                    <td className="px-3 py-2">{tx.size}'{tx.type}</td>
+                    <td className="px-3 py-2">{tx.size}&apos;{tx.type}</td>
                     <td className="px-3 py-2">{tx.shipping_line || '-'}</td>
                     <td className="px-3 py-2 text-center">
                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${tx.laden_empty === 'LADEN' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>

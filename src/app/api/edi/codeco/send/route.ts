@@ -3,9 +3,16 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import SftpClient from 'ssh2-sftp-client';
 import { logAudit } from '@/lib/audit';
-import { formatCODECO, legacyFormatToTemplate, type CODECOTransaction, type EDITemplate } from '@/lib/ediFormatter';
+import {
+  formatCODECO,
+  legacyFormatToTemplate,
+  validateCODECOTransactions,
+  type CODECOTransaction,
+  type EDITemplate,
+} from '@/lib/ediFormatter';
+import { uploadFTP } from '@/lib/ftpClient';
 
-// POST — Send CODECO file via SFTP/Email to a specific endpoint
+// POST — Send CODECO file via Email/SFTP/FTP/API to a specific endpoint
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -22,15 +29,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ไม่พบ Endpoint' }, { status: 404 });
     }
     const ep = epResult.recordset[0];
+    if (ep.is_active === false || ep.is_active === 0) {
+      return NextResponse.json({ error: 'Endpoint นี้ถูกปิดใช้งาน' }, { status: 400 });
+    }
 
     // 2. Generate CODECO data
     const req = db.request().input('yardId', sql.Int, yard_id || 1);
+    await db.request().query(`
+      IF COL_LENGTH('GateTransactions', 'truck_company') IS NULL
+        ALTER TABLE GateTransactions ADD truck_company NVARCHAR(100) NULL;
+      IF COL_LENGTH('Containers', 'container_grade') IS NULL
+        ALTER TABLE Containers ADD container_grade NVARCHAR(1) NULL;
+      IF COL_LENGTH('EDITemplates', 'required_fields') IS NULL
+        ALTER TABLE EDITemplates ADD required_fields NVARCHAR(MAX) NULL;
+      IF COL_LENGTH('EDITemplates', 'edifact_config') IS NULL
+        ALTER TABLE EDITemplates ADD edifact_config NVARCHAR(MAX) NULL;
+    `);
     let query = `
       SELECT g.transaction_id, g.transaction_type, g.eir_number,
-             g.driver_name, g.truck_plate, g.seal_number, g.booking_ref,
+             g.driver_name, g.truck_plate, g.truck_company, g.seal_number, g.booking_ref,
              g.created_at as transaction_date,
              c.container_number, c.size, c.type as container_type,
-             c.shipping_line, c.is_laden,
+             c.container_grade, c.shipping_line, c.is_laden,
+             CASE
+               WHEN c.container_grade = 'A' THEN 'GOOD'
+               WHEN c.container_grade = 'B' THEN 'MINOR_DAMAGE'
+               WHEN c.container_grade = 'C' THEN 'MAJOR_DAMAGE'
+               WHEN c.container_grade = 'D' THEN 'UNSERVICEABLE'
+               ELSE NULL
+             END AS condition,
              y.yard_name, y.yard_code
       FROM GateTransactions g
       LEFT JOIN Containers c ON g.container_id = c.container_id
@@ -42,9 +69,10 @@ export async function POST(request: NextRequest) {
       query += ` AND g.transaction_type = @txType`;
       req.input('txType', sql.NVarChar, type);
     }
-    if (shipping_line) {
+    const effectiveShippingLine = shipping_line || ep.shipping_line;
+    if (effectiveShippingLine) {
       query += ` AND c.shipping_line = @sl`;
-      req.input('sl', sql.NVarChar, shipping_line);
+      req.input('sl', sql.NVarChar, effectiveShippingLine);
     }
     if (date_from) {
       query += ` AND CAST(g.created_at AS DATE) >= @df`;
@@ -85,8 +113,19 @@ export async function POST(request: NextRequest) {
       template = legacyFormatToTemplate(ep.format || 'CSV');
     }
 
+    const validation = validateCODECOTransactions(transactions, template);
+    if (!validation.valid) {
+      return NextResponse.json({
+        success: false,
+        error: 'ข้อมูล EDI ยังไม่ครบตาม Required Fields ของ Template',
+        required_fields: validation.required_fields,
+        validation_errors: validation.errors.slice(0, 50),
+        error_count: validation.errors.length,
+      }, { status: 400 });
+    }
+
     // 5. Generate file content using shared formatter
-    const output = formatCODECO(transactions, template, companyName, ep.shipping_line || shipping_line || undefined);
+    const output = formatCODECO(transactions, template, companyName, effectiveShippingLine || undefined);
     const { content: fileContent, filename } = output;
 
     // 6. Send based on endpoint type
@@ -105,13 +144,13 @@ export async function POST(request: NextRequest) {
 
         const result = await sendEmail({
           to: recipients,
-          subject: `[CYMS EDI] CODECO — ${ep.shipping_line || 'ALL'} — ${transactions.length} records — ${new Date().toLocaleDateString('th-TH')}`,
+          subject: `[CYMS EDI] CODECO — ${effectiveShippingLine || 'ALL'} — ${transactions.length} records — ${new Date().toLocaleDateString('th-TH')}`,
           html: `
             <div style="font-family:sans-serif;padding:20px">
               <h2 style="color:#1E40AF">📦 CODECO EDI Message</h2>
               <table style="border-collapse:collapse;font-size:14px;margin:16px 0">
                 <tr><td style="padding:6px 12px;color:#64748B">Sender</td><td style="padding:6px 12px;font-weight:bold">${companyName}</td></tr>
-                <tr><td style="padding:6px 12px;color:#64748B">Shipping Line</td><td style="padding:6px 12px">${ep.shipping_line || 'ALL'}</td></tr>
+                <tr><td style="padding:6px 12px;color:#64748B">Shipping Line</td><td style="padding:6px 12px">${effectiveShippingLine || 'ALL'}</td></tr>
                 <tr><td style="padding:6px 12px;color:#64748B">Records</td><td style="padding:6px 12px;font-weight:bold">${transactions.length}</td></tr>
                 <tr><td style="padding:6px 12px;color:#64748B">Format</td><td style="padding:6px 12px">${template?.template_name || ep.format}</td></tr>
                 <tr><td style="padding:6px 12px;color:#64748B">Generated</td><td style="padding:6px 12px">${new Date().toLocaleString('th-TH')}</td></tr>
@@ -137,8 +176,8 @@ export async function POST(request: NextRequest) {
         errorMsg = emailError instanceof Error ? emailError.message : String(emailError);
       }
 
-    } else {
-      // ===== SFTP DELIVERY (default) =====
+    } else if (ep.type === 'sftp') {
+      // ===== SFTP DELIVERY =====
       const sftp = new SftpClient();
       try {
         await sftp.connect({
@@ -157,6 +196,50 @@ export async function POST(request: NextRequest) {
         errorMsg = sftpError instanceof Error ? sftpError.message : String(sftpError);
         try { await sftp.end(); } catch { /* */ }
       }
+    } else if (ep.type === 'ftp') {
+      // ===== FTP DELIVERY =====
+      try {
+        const remotePath = `${(ep.remote_path || '/').replace(/\/$/, '')}/${filename}`;
+        await uploadFTP({
+          host: ep.host,
+          port: ep.port || 21,
+          username: ep.username || 'anonymous',
+          password: ep.password || 'anonymous@',
+          remotePath,
+          content: Buffer.from(fileContent, 'utf-8'),
+        });
+        deliveryInfo = `📁 ส่ง FTP ไปที่ ${ep.host}:${ep.remote_path}/${filename}`;
+      } catch (ftpError: unknown) {
+        sendStatus = 'failed';
+        errorMsg = ftpError instanceof Error ? ftpError.message : String(ftpError);
+      }
+    } else if (ep.type === 'api') {
+      // ===== REST API DELIVERY =====
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': output.contentType.includes('json') ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8',
+          'X-CYMS-EDI-Filename': filename,
+          'X-CYMS-EDI-Message-Type': 'CODECO',
+        };
+        if (ep.username || ep.password) {
+          headers.Authorization = `Basic ${Buffer.from(`${ep.username || ''}:${ep.password || ''}`).toString('base64')}`;
+        }
+        const res = await fetch(ep.host, {
+          method: 'POST',
+          headers,
+          body: fileContent,
+        });
+        if (!res.ok) {
+          throw new Error(`API responded ${res.status}: ${(await res.text()).slice(0, 500)}`);
+        }
+        deliveryInfo = `🌐 ส่ง API ไปที่ ${ep.host}`;
+      } catch (apiError: unknown) {
+        sendStatus = 'failed';
+        errorMsg = apiError instanceof Error ? apiError.message : String(apiError);
+      }
+    } else {
+      sendStatus = 'failed';
+      errorMsg = `ไม่รองรับ Endpoint type: ${ep.type}`;
     }
 
     // 7. Log the send
@@ -187,14 +270,14 @@ export async function POST(request: NextRequest) {
         entityType: 'edi_endpoint', entityId: endpoint_id,
         details: {
           endpoint_name: ep.name, delivery_type: ep.type, format: template?.template_name || ep.format,
-          shipping_line: ep.shipping_line || 'ALL', record_count: transactions.length, filename,
+          shipping_line: effectiveShippingLine || 'ALL', record_count: transactions.length, filename,
           date_from: date_from || 'today', date_to: date_to || 'today', error: errorMsg,
         },
       });
 
       return NextResponse.json({
         success: false,
-        error: `${ep.type === 'email' ? 'Email' : 'SFTP'} failed: ${errorMsg}`,
+        error: `${String(ep.type).toUpperCase()} failed: ${errorMsg}`,
         filename, record_count: transactions.length,
       });
     }
@@ -205,7 +288,7 @@ export async function POST(request: NextRequest) {
       entityType: 'edi_endpoint', entityId: endpoint_id,
       details: {
         endpoint_name: ep.name, delivery_type: ep.type, format: template?.template_name || ep.format,
-        shipping_line: ep.shipping_line || 'ALL', record_count: transactions.length, filename,
+        shipping_line: effectiveShippingLine || 'ALL', record_count: transactions.length, filename,
         date_from: date_from || 'today', date_to: date_to || 'today',
         recipients: ep.type === 'email' ? ep.host : `${ep.host}:${ep.remote_path}`,
       },

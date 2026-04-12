@@ -23,10 +23,36 @@ const DEFAULT_FIELDS = JSON.stringify({
     { source: 'is_laden', header: 'F/E', format: 'laden_fe', enabled: true },
     { source: 'seal_number', header: 'SEAL', enabled: true },
     { source: 'truck_plate', header: 'TRUCK', enabled: true },
+    { source: 'truck_company', header: 'TRUCK COMPANY', enabled: true },
     { source: 'driver_name', header: 'DRIVER', enabled: true },
     { source: 'booking_ref', header: 'BOOKING', enabled: true },
+    { source: 'container_grade', header: 'GRADE', enabled: true },
+    { source: 'condition', header: 'CONDITION', enabled: true },
     { source: 'yard_code', header: 'YARD', enabled: true },
   ],
+});
+
+const DEFAULT_REQUIRED_FIELDS = JSON.stringify([
+  'container_number',
+  'transaction_type',
+  'eir_number',
+  'transaction_date',
+  'size',
+  'container_type',
+  'shipping_line',
+  'yard_code',
+]);
+
+const DEFAULT_EDIFACT_CONFIG = JSON.stringify({
+  bgm_code: '36',
+  gate_in_function: '34',
+  gate_out_function: '36',
+  location_qualifier: '89',
+  include_driver: true,
+  include_booking: true,
+  include_truck_company: false,
+  include_grade: false,
+  include_condition: false,
 });
 
 async function migrate() {
@@ -42,11 +68,13 @@ async function migrate() {
       base_format     NVARCHAR(20) NOT NULL DEFAULT 'csv',
       description     NVARCHAR(500),
       field_mapping   NVARCHAR(MAX),
+      required_fields NVARCHAR(MAX),
       csv_delimiter   NVARCHAR(5) DEFAULT ',',
       csv_headers     NVARCHAR(MAX),
       date_format     NVARCHAR(50) DEFAULT 'DD/MM/YYYY HH:mm',
       edifact_version NVARCHAR(20) DEFAULT 'D:95B:UN',
       edifact_sender  NVARCHAR(100),
+      edifact_config  NVARCHAR(MAX),
       is_system       BIT DEFAULT 0,
       is_active       BIT DEFAULT 1,
       created_at      DATETIME2 DEFAULT GETDATE(),
@@ -54,6 +82,14 @@ async function migrate() {
     )
   `);
   console.log('✅ EDITemplates table ready');
+
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'EDITemplates' AND COLUMN_NAME = 'required_fields')
+      ALTER TABLE EDITemplates ADD required_fields NVARCHAR(MAX) NULL;
+    IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'EDITemplates' AND COLUMN_NAME = 'edifact_config')
+      ALTER TABLE EDITemplates ADD edifact_config NVARCHAR(MAX) NULL;
+  `);
+  console.log('✅ EDITemplates extra columns ready');
 
   // 2. Seed 3 default system templates (if not already seeded)
   const existing = await pool.request().query(`SELECT COUNT(*) as cnt FROM EDITemplates WHERE is_system = 1`);
@@ -64,9 +100,11 @@ async function migrate() {
       .input('format', sql.NVarChar, 'edifact')
       .input('desc', sql.NVarChar, 'UN/EDIFACT CODECO D:95B:UN — มาตรฐานสากลสำหรับสายเรือทั่วไป')
       .input('fields', sql.NVarChar, DEFAULT_FIELDS)
+      .input('required', sql.NVarChar, DEFAULT_REQUIRED_FIELDS)
+      .input('ediConfig', sql.NVarChar, DEFAULT_EDIFACT_CONFIG)
       .input('dateFormat', sql.NVarChar, 'YYMMDD:HHmm')
-      .query(`INSERT INTO EDITemplates (template_name, base_format, description, field_mapping, date_format, edifact_version, is_system)
-              VALUES (@name, @format, @desc, @fields, @dateFormat, 'D:95B:UN', 1)`);
+      .query(`INSERT INTO EDITemplates (template_name, base_format, description, field_mapping, required_fields, date_format, edifact_version, edifact_config, is_system)
+              VALUES (@name, @format, @desc, @fields, @required, @dateFormat, 'D:95B:UN', @ediConfig, 1)`);
 
     // CSV default
     await pool.request()
@@ -74,9 +112,10 @@ async function migrate() {
       .input('format', sql.NVarChar, 'csv')
       .input('desc', sql.NVarChar, 'CSV คั่นด้วยจุลภาค — header ภาษาอังกฤษมาตรฐาน')
       .input('fields', sql.NVarChar, DEFAULT_FIELDS)
+      .input('required', sql.NVarChar, DEFAULT_REQUIRED_FIELDS)
       .input('dateFormat', sql.NVarChar, 'DD/MM/YYYY HH:mm')
-      .query(`INSERT INTO EDITemplates (template_name, base_format, description, field_mapping, date_format, csv_delimiter, is_system)
-              VALUES (@name, @format, @desc, @fields, @dateFormat, ',', 1)`);
+      .query(`INSERT INTO EDITemplates (template_name, base_format, description, field_mapping, required_fields, date_format, csv_delimiter, is_system)
+              VALUES (@name, @format, @desc, @fields, @required, @dateFormat, ',', 1)`);
 
     // JSON default
     await pool.request()
@@ -84,9 +123,10 @@ async function migrate() {
       .input('format', sql.NVarChar, 'json')
       .input('desc', sql.NVarChar, 'JSON — สำหรับ REST API integration')
       .input('fields', sql.NVarChar, DEFAULT_FIELDS)
+      .input('required', sql.NVarChar, DEFAULT_REQUIRED_FIELDS)
       .input('dateFormat', sql.NVarChar, 'ISO8601')
-      .query(`INSERT INTO EDITemplates (template_name, base_format, description, field_mapping, date_format, is_system)
-              VALUES (@name, @format, @desc, @fields, @dateFormat, 1)`);
+      .query(`INSERT INTO EDITemplates (template_name, base_format, description, field_mapping, required_fields, date_format, is_system)
+              VALUES (@name, @format, @desc, @fields, @required, @dateFormat, 1)`);
 
     console.log('✅ Seeded 3 default templates');
   } else {

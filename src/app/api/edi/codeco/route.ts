@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { formatCODECO, legacyFormatToTemplate, type CODECOTransaction, type EDITemplate } from '@/lib/ediFormatter';
+import {
+  formatCODECO,
+  legacyFormatToTemplate,
+  validateCODECOTransactions,
+  type CODECOTransaction,
+  type EDITemplate,
+} from '@/lib/ediFormatter';
 
 // CODECO — Container Departure/Arrival Message (Outbound EDI)
 // Generate CODECO messages from gate transactions for shipping lines
@@ -18,14 +24,31 @@ export async function GET(request: NextRequest) {
     const templateId = searchParams.get('template_id'); // NEW: optional template_id
 
     const db = await getDb();
+    await db.request().query(`
+      IF COL_LENGTH('GateTransactions', 'truck_company') IS NULL
+        ALTER TABLE GateTransactions ADD truck_company NVARCHAR(100) NULL;
+      IF COL_LENGTH('Containers', 'container_grade') IS NULL
+        ALTER TABLE Containers ADD container_grade NVARCHAR(1) NULL;
+      IF COL_LENGTH('EDITemplates', 'required_fields') IS NULL
+        ALTER TABLE EDITemplates ADD required_fields NVARCHAR(MAX) NULL;
+      IF COL_LENGTH('EDITemplates', 'edifact_config') IS NULL
+        ALTER TABLE EDITemplates ADD edifact_config NVARCHAR(MAX) NULL;
+    `);
     const req = db.request().input('yardId', sql.Int, yardId);
 
     let query = `
       SELECT g.transaction_id, g.transaction_type, g.eir_number,
-             g.driver_name, g.truck_plate, g.seal_number, g.booking_ref,
+             g.driver_name, g.truck_plate, g.truck_company, g.seal_number, g.booking_ref,
              g.created_at as transaction_date,
              c.container_number, c.size, c.type as container_type,
-             c.shipping_line, c.is_laden,
+             c.container_grade, c.shipping_line, c.is_laden,
+             CASE
+               WHEN c.container_grade = 'A' THEN 'GOOD'
+               WHEN c.container_grade = 'B' THEN 'MINOR_DAMAGE'
+               WHEN c.container_grade = 'C' THEN 'MAJOR_DAMAGE'
+               WHEN c.container_grade = 'D' THEN 'UNSERVICEABLE'
+               ELSE NULL
+             END AS condition,
              y.yard_name, y.yard_code
       FROM GateTransactions g
       LEFT JOIN Containers c ON g.container_id = c.container_id
@@ -53,6 +76,23 @@ export async function GET(request: NextRequest) {
 
     const result = await req.query(query);
     const transactions = result.recordset as CODECOTransaction[];
+
+    // Load template before validation/formatting.
+    let template: EDITemplate | null = null;
+    if (templateId) {
+      try {
+        const tplResult = await db.request()
+          .input('tplId', sql.Int, parseInt(templateId))
+          .query('SELECT * FROM EDITemplates WHERE template_id = @tplId');
+        if (tplResult.recordset[0]) {
+          template = tplResult.recordset[0] as EDITemplate;
+        }
+      } catch { /* fallback to legacy */ }
+    }
+    if (!template) {
+      template = legacyFormatToTemplate(format);
+    }
+    const validation = validateCODECOTransactions(transactions, template);
 
     // Get company info for message header
     let companyName = 'CYMS';
@@ -101,25 +141,13 @@ export async function GET(request: NextRequest) {
           truck_plate: tx.truck_plate,
           driver_name: tx.driver_name,
           booking_ref: tx.booking_ref,
+          truck_company: tx.truck_company,
+          container_grade: tx.container_grade,
+          condition: tx.condition,
           yard_code: tx.yard_code,
         })),
+        validation,
       });
-    }
-
-    // Load template (from DB or legacy format)
-    let template: EDITemplate | null = null;
-    if (templateId) {
-      try {
-        const tplResult = await db.request()
-          .input('tplId', sql.Int, parseInt(templateId))
-          .query('SELECT * FROM EDITemplates WHERE template_id = @tplId');
-        if (tplResult.recordset[0]) {
-          template = tplResult.recordset[0] as EDITemplate;
-        }
-      } catch { /* fallback to legacy */ }
-    }
-    if (!template) {
-      template = legacyFormatToTemplate(format);
     }
 
     // Use shared formatter
