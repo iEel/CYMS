@@ -278,6 +278,8 @@ export default function BookingPage() {
   };
   const statusLabels: Record<string, string> = { pending: 'รอยืนยัน', confirmed: 'ยืนยันแล้ว', completed: 'เสร็จ', cancelled: 'ยกเลิก' };
   const typeLabels: Record<string, string> = { import: '📥 นำเข้า', export: '📤 ส่งออก', empty_pickup: '📦 รับตู้เปล่า', empty_return: '🔄 คืนตู้เปล่า' };
+  const bookingProgressText = (bk: BookingRow) =>
+    `${bk.received_count || 0}/${bk.container_count || 0} received, ${bk.released_count || 0}/${bk.container_count || 0} released`;
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
 
@@ -364,8 +366,7 @@ export default function BookingPage() {
                                 <div className={`h-full rounded-full transition-all ${progress >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }} />
                               </div>
                               <span className="text-[10px] text-slate-400">
-                                รับ {bk.received_count}/{bk.container_count}
-                                {bk.released_count > 0 && ` • ออก ${bk.released_count}`}
+                                จำนวนตู้: {bookingProgressText(bk)}
                               </span>
                             </div>
                           </div>
@@ -461,7 +462,7 @@ export default function BookingPage() {
                   <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-medium text-slate-600 dark:text-slate-300">ความคืบหน้า</span>
-                      <span className="text-xs text-slate-400">รับ {selectedBooking.received_count}/{selectedBooking.container_count} • ออก {selectedBooking.released_count}</span>
+                      <span className="text-xs text-slate-400">จำนวนตู้: {bookingProgressText(selectedBooking)}</span>
                     </div>
                     <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${selectedBooking.received_count >= selectedBooking.container_count ? 'bg-emerald-500' : 'bg-blue-500'}`}
@@ -687,7 +688,7 @@ export default function BookingPage() {
                     <th className="text-left px-3 py-2.5">ประเภท</th>
                     <th className="text-left px-3 py-2.5">เรือ</th>
                     <th className="text-center px-3 py-2.5">ตู้</th>
-                    <th className="text-center px-3 py-2.5">รับ/จำนวน</th>
+                    <th className="text-center px-3 py-2.5">รับ/ออก</th>
                     <th className="text-center px-3 py-2.5">สถานะ</th>
                     <th className="text-left px-3 py-2.5">Valid To</th>
                   </tr>
@@ -706,7 +707,7 @@ export default function BookingPage() {
                             <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
                               <div className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(100, pct)}%` }} />
                             </div>
-                            <span className="text-[10px] text-slate-400">{bk.received_count}/{bk.container_count}</span>
+                            <span className="text-[10px] text-slate-400 whitespace-nowrap">{bookingProgressText(bk)}</span>
                           </div>
                         </td>
                         <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${statusColors[bk.status]}`}>{statusLabels[bk.status]}</span></td>
