@@ -76,6 +76,11 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const billingSearchRef = useRef<HTMLDivElement>(null);
   const [isSoc, setIsSoc] = useState(false);
 
+  // Truck company searchable combobox
+  const [truckCompanySearch, setTruckCompanySearch] = useState('');
+  const [truckCompanyOpen, setTruckCompanyOpen] = useState(false);
+  const truckCompanyRef = useRef<HTMLDivElement>(null);
+
   // Close billing search dropdown on click outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -86,6 +91,17 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     if (billingSearchOpen) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [billingSearchOpen]);
+
+  // Close truck company dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (truckCompanyRef.current && !truckCompanyRef.current.contains(e.target as Node)) {
+        setTruckCompanyOpen(false);
+      }
+    };
+    if (truckCompanyOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [truckCompanyOpen]);
 
   // Halt Rule popup (multi-customer prefix conflict)
   const [showHaltPopup, setShowHaltPopup] = useState(false);
@@ -573,8 +589,53 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
               </div>
               <div>
                 <label className={labelClass}>บริษัทรถขนส่ง</label>
-                <input type="text" placeholder="ชื่อบริษัท" value={gateInForm.truck_company}
-                  onChange={e => setGateInForm({ ...gateInForm, truck_company: e.target.value })} className={inputClass} />
+                <div className="relative" ref={truckCompanyRef}>
+                  <input type="text"
+                    placeholder="พิมพ์ชื่อบริษัทเพื่อค้นหา..."
+                    value={truckCompanySearch || gateInForm.truck_company}
+                    onChange={e => {
+                      setTruckCompanySearch(e.target.value);
+                      setTruckCompanyOpen(true);
+                      setGateInForm({ ...gateInForm, truck_company: e.target.value });
+                    }}
+                    onFocus={() => setTruckCompanyOpen(true)}
+                    className={inputClass}
+                  />
+                  {gateInForm.truck_company && !truckCompanyOpen && (
+                    <button onClick={() => { setGateInForm({ ...gateInForm, truck_company: '' }); setTruckCompanySearch(''); setTruckCompanyOpen(true); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors">
+                      <X size={14} />
+                    </button>
+                  )}
+                  {truckCompanyOpen && (
+                    <div className="absolute z-30 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl">
+                      {customerList
+                        .filter(c => c.is_trucking)
+                        .filter(c => {
+                          const q = truckCompanySearch.toLowerCase();
+                          return !q || c.customer_name.toLowerCase().includes(q);
+                        })
+                        .slice(0, 15)
+                        .map(c => (
+                          <button key={c.customer_id}
+                            onClick={() => {
+                              setGateInForm({ ...gateInForm, truck_company: c.customer_name });
+                              setTruckCompanySearch(c.customer_name);
+                              setTruckCompanyOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center justify-between ${
+                              gateInForm.truck_company === c.customer_name ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-slate-700 dark:text-slate-200'
+                            }`}>
+                            <span>{c.customer_name}</span>
+                            <span className="text-[10px] text-slate-400">รถบรรทุก</span>
+                          </button>
+                        ))}
+                      {customerList.filter(c => c.is_trucking).filter(c => !truckCompanySearch || c.customer_name.toLowerCase().includes(truckCompanySearch.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-2 text-sm text-slate-400">ไม่พบบริษัทรถบรรทุก</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
