@@ -140,7 +140,10 @@ export async function GET(request: NextRequest) {
       .input('prefix', sql.NVarChar, prefix)
       .query(`
         SELECT pm.prefix_code, pm.customer_id, pm.notes,
-               c.customer_name, c.customer_type, c.credit_term
+               c.customer_name, c.credit_term,
+               ISNULL(c.is_line, 0) as is_line,
+               ISNULL(c.is_forwarder, 0) as is_forwarder,
+               ISNULL(c.is_trucking, 0) as is_trucking
         FROM PrefixMapping pm
         JOIN Customers c ON pm.customer_id = c.customer_id
         WHERE pm.prefix_code = @prefix
@@ -196,7 +199,8 @@ export async function GET(request: NextRequest) {
       response.customer = {
         customer_id: customerMatch.customer_id,
         customer_name: customerMatch.customer_name,
-        customer_type: customerMatch.customer_type,
+        is_line: customerMatch.is_line,
+        is_trucking: customerMatch.is_trucking,
         credit_term: customerMatch.credit_term,
       };
     } else {

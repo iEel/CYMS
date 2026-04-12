@@ -47,7 +47,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [selectedCustom, setSelectedCustom] = useState<Set<number>>(new Set());
 
   // Manual customer selection (when no auto-match)
-  const [customerList, setCustomerList] = useState<{ customer_id: number; customer_name: string; customer_type: string; credit_term: number }[]>([]);
+  const [customerList, setCustomerList] = useState<{ customer_id: number; customer_name: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean; credit_term: number }[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [manualCustomerId, setManualCustomerId] = useState<number | null>(null);
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
@@ -395,7 +395,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                               className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${manualCustomerId === c.customer_id ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700' : 'hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}>
                               <span className="font-medium">{c.customer_name}</span>
                               <span className="text-[10px] text-slate-400">
-                                {c.customer_type === 'shipping_line' ? 'สายเรือ' : c.customer_type === 'trucker' ? 'รถบรรทุก' : 'ทั่วไป'}
+                                {c.is_line ? 'สายเรือ' : c.is_trucking ? 'รถบรรทุก' : c.is_forwarder ? 'Forwarder' : 'ทั่วไป'}
                                 {c.credit_term > 0 && ` • เครดิต ${c.credit_term} วัน`}
                               </span>
                             </button>

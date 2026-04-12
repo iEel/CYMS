@@ -30,7 +30,10 @@ export async function GET() {
     await ensureTable(pool);
     const result = await pool.request().query(`
       SELECT pm.prefix_id, pm.prefix_code, pm.customer_id, pm.notes, pm.created_at,
-             c.customer_name, c.customer_type
+             c.customer_name,
+             ISNULL(c.is_line, 0) as is_line,
+             ISNULL(c.is_forwarder, 0) as is_forwarder,
+             ISNULL(c.is_trucking, 0) as is_trucking
       FROM PrefixMapping pm
       JOIN Customers c ON pm.customer_id = c.customer_id
       ORDER BY pm.prefix_code

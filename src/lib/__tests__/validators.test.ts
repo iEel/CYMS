@@ -334,11 +334,12 @@ describe('userCreateSchema', () => {
 // ======================== customerCreateSchema ========================
 
 describe('customerCreateSchema', () => {
-  it('should accept valid customer', () => {
+  it('should accept valid customer with roles', () => {
     const result = customerCreateSchema.safeParse({
       customer_name: 'Evergreen',
-      customer_type: 'shipping_line',
-      email: 'test@example.com',
+      is_line: true,
+      edi_prefix: 'EGLV',
+      contact_email: 'test@example.com',
     });
     expect(result.success).toBe(true);
   });
@@ -346,7 +347,7 @@ describe('customerCreateSchema', () => {
   it('should reject invalid email', () => {
     const result = customerCreateSchema.safeParse({
       customer_name: 'Test',
-      email: 'not-an-email',
+      contact_email: 'not-an-email',
     });
     expect(result.success).toBe(false);
   });
@@ -354,7 +355,7 @@ describe('customerCreateSchema', () => {
   it('should accept empty email string', () => {
     const result = customerCreateSchema.safeParse({
       customer_name: 'Test',
-      email: '',
+      contact_email: '',
     });
     expect(result.success).toBe(true);
   });
@@ -367,14 +368,23 @@ describe('customerCreateSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('should accept all valid customer types', () => {
-    ['shipping_line', 'trucking', 'general'].forEach((type) => {
-      const result = customerCreateSchema.safeParse({
-        customer_name: 'Test',
-        customer_type: type,
-      });
-      expect(result.success).toBe(true);
+  it('should require edi_prefix when is_line is true', () => {
+    const result = customerCreateSchema.safeParse({
+      customer_name: 'Test Line',
+      is_line: true,
     });
+    expect(result.success).toBe(false);
+  });
+
+  it('should accept multi-role customer', () => {
+    const result = customerCreateSchema.safeParse({
+      customer_name: 'Multi Corp',
+      is_line: true,
+      is_trucking: true,
+      is_forwarder: true,
+      edi_prefix: 'MULT',
+    });
+    expect(result.success).toBe(true);
   });
 });
 

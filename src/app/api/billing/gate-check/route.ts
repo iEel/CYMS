@@ -44,7 +44,8 @@ export async function POST(request: NextRequest) {
       const prefixResult = await db.request()
         .input('prefix', sql.NVarChar, prefix)
         .query(`
-          SELECT TOP 1 c.customer_id, c.customer_name, c.customer_type, c.credit_term, c.tax_id, c.address, c.shipping_line_code
+          SELECT TOP 1 c.customer_id, c.customer_name, c.credit_term, c.tax_id, c.address, c.shipping_line_code,
+                 ISNULL(c.is_line, 0) as is_line, ISNULL(c.is_trucking, 0) as is_trucking
           FROM Customers c
           INNER JOIN PrefixMapping pm ON pm.customer_id = c.customer_id
           WHERE pm.prefix_code = @prefix AND c.is_active = 1
@@ -61,7 +62,8 @@ export async function POST(request: NextRequest) {
       const codeResult = await db.request()
         .input('slCode', sql.NVarChar, container.shipping_line)
         .query(`
-          SELECT TOP 1 customer_id, customer_name, customer_type, credit_term, tax_id, address, shipping_line_code
+          SELECT TOP 1 customer_id, customer_name, credit_term, tax_id, address, shipping_line_code,
+                 ISNULL(is_line, 0) as is_line, ISNULL(is_trucking, 0) as is_trucking
           FROM Customers
           WHERE shipping_line_code = @slCode AND is_active = 1
           ORDER BY customer_id
@@ -73,7 +75,8 @@ export async function POST(request: NextRequest) {
         const nameResult = await db.request()
           .input('shippingLine', sql.NVarChar, container.shipping_line)
           .query(`
-            SELECT TOP 1 customer_id, customer_name, customer_type, credit_term, tax_id, address, shipping_line_code
+            SELECT TOP 1 customer_id, customer_name, credit_term, tax_id, address, shipping_line_code,
+                   ISNULL(is_line, 0) as is_line, ISNULL(is_trucking, 0) as is_trucking
             FROM Customers
             WHERE (customer_name = @shippingLine OR customer_name LIKE '%' + @shippingLine + '%') AND is_active = 1
             ORDER BY CASE WHEN customer_name = @shippingLine THEN 0 ELSE 1 END, customer_id

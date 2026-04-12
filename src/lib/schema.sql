@@ -157,21 +157,55 @@ CREATE TABLE Containers (
 );
 
 -- ===================================
--- ตาราง: ลูกค้า (Customers)
+-- ตาราง: ลูกค้า (Customers) — Multi-role
 -- ===================================
 CREATE TABLE Customers (
-    customer_id     INT PRIMARY KEY IDENTITY(1,1),
-    customer_name   NVARCHAR(200) NOT NULL,
-    customer_type   NVARCHAR(30) NOT NULL,     -- 'shipping_line','trucker','general'
-    tax_id          NVARCHAR(20),
-    address         NVARCHAR(500),
-    contact_name    NVARCHAR(100),
-    contact_phone   NVARCHAR(50),
-    contact_email   NVARCHAR(100),
-    credit_term     INT DEFAULT 0,              -- วันเครดิต
-    is_active       BIT DEFAULT 1,
-    created_at      DATETIME2 DEFAULT GETDATE(),
-    updated_at      DATETIME2 DEFAULT GETDATE()
+    customer_id         INT PRIMARY KEY IDENTITY(1,1),
+    customer_code       VARCHAR(20) UNIQUE,           -- รหัสอ้างอิง EDI/Accounting (auto-generated)
+    customer_name       NVARCHAR(200) NOT NULL,
+    customer_type       NVARCHAR(30) NULL,            -- legacy: 'shipping_line','trucker','general'
+
+    -- *** Multi-role Boolean Flags ***
+    is_line             BIT DEFAULT 0,                -- เจ้าของตู้ / สายเรือ
+    is_forwarder        BIT DEFAULT 0,                -- ตัวแทนจัดการขนส่ง
+    is_trucking         BIT DEFAULT 0,                -- บริษัทรถบรรทุก
+    is_shipper          BIT DEFAULT 0,                -- ผู้ส่งออก
+    is_consignee        BIT DEFAULT 0,                -- ผู้นำเข้า
+
+    -- ข้อมูลภาษี
+    tax_id              NVARCHAR(20),                 -- เลขประจำตัวผู้เสียภาษี 13 หลัก
+    address             NVARCHAR(500),
+    billing_address     NVARCHAR(MAX),                -- ที่อยู่สำหรับออกบิล
+    contact_name        NVARCHAR(100),
+    contact_phone       NVARCHAR(50),
+    contact_email       NVARCHAR(100),
+
+    -- เงื่อนไขการชำระเงิน
+    default_payment_type VARCHAR(20) DEFAULT 'CASH',  -- 'CASH' หรือ 'CREDIT'
+    credit_term         INT DEFAULT 0,                -- วันเครดิต
+    edi_prefix          NVARCHAR(10),                 -- EDI prefix (บังคับเมื่อ is_line=1)
+
+    is_active           BIT DEFAULT 1,
+    created_at          DATETIME2 DEFAULT GETDATE(),
+    updated_at          DATETIME2 DEFAULT GETDATE()
+);
+
+-- ===================================
+-- ตาราง: สาขาลูกค้า (Customer Branches)
+-- ===================================
+CREATE TABLE CustomerBranches (
+    branch_id           INT PRIMARY KEY IDENTITY(1,1),
+    customer_id         INT NOT NULL REFERENCES Customers(customer_id),
+    branch_code         VARCHAR(10) NOT NULL DEFAULT '00000',  -- 00000 = สำนักงานใหญ่
+    branch_name         NVARCHAR(200),                         -- เช่น 'สำนักงานใหญ่', 'สาขาแหลมฉบัง'
+    billing_address     NVARCHAR(MAX),
+    contact_name        NVARCHAR(100),
+    contact_phone       NVARCHAR(50),
+    contact_email       NVARCHAR(100),
+    is_default          BIT DEFAULT 0,
+    is_active           BIT DEFAULT 1,
+    created_at          DATETIME2 DEFAULT GETDATE(),
+    CONSTRAINT UQ_Customer_Branch UNIQUE (customer_id, branch_code)
 );
 
 -- ===================================

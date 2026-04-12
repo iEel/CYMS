@@ -17,7 +17,10 @@ export async function GET(request: NextRequest) {
         SELECT 
           i.invoice_id, i.invoice_number, i.customer_id, i.grand_total,
           i.status, i.created_at, i.due_date,
-          c.customer_name, c.customer_type,
+          c.customer_name,
+          ISNULL(c.is_line, 0) as is_line,
+          ISNULL(c.is_forwarder, 0) as is_forwarder,
+          ISNULL(c.is_trucking, 0) as is_trucking,
           DATEDIFF(DAY, i.created_at, GETDATE()) as age_days
         FROM Invoices i
         LEFT JOIN Customers c ON i.customer_id = c.customer_id
@@ -34,7 +37,9 @@ export async function GET(request: NextRequest) {
     const customerMap: Record<number, {
       customer_id: number;
       customer_name: string;
-      customer_type: string;
+      is_line: boolean;
+      is_forwarder: boolean;
+      is_trucking: boolean;
       current: number;
       d30: number;
       d60: number;
@@ -48,7 +53,9 @@ export async function GET(request: NextRequest) {
     invoices.forEach((inv: {
       customer_id: number;
       customer_name: string;
-      customer_type: string;
+      is_line: boolean;
+      is_forwarder: boolean;
+      is_trucking: boolean;
       grand_total: number;
       age_days: number;
     }) => {
@@ -69,7 +76,9 @@ export async function GET(request: NextRequest) {
         customerMap[cid] = {
           customer_id: cid,
           customer_name: inv.customer_name || 'ไม่ระบุ',
-          customer_type: inv.customer_type || 'general',
+          is_line: inv.is_line,
+          is_forwarder: inv.is_forwarder,
+          is_trucking: inv.is_trucking,
           current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0,
           total: 0, invoice_count: 0, oldest_days: 0,
         };

@@ -25,7 +25,8 @@ interface UserData {
 interface CustomerOption {
   customer_id: number;
   customer_name: string;
-  customer_type: string;
+  is_line: boolean;
+  is_trucking: boolean;
 }
 
 interface YardOption {

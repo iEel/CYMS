@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Package, FileText, ClipboardList, ArrowUpRight, ArrowDownLeft, Loader2, RefreshCw, Download } from 'lucide-react';
 
 interface Overview {
-  customer: { customer_name: string; contact_email: string; customer_type: string };
+  customer: { customer_name: string; contact_email: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean };
   containers: { total: number; in_yard: number; released: number };
   outstanding: { count: number; total: number };
   activeBookings: number;
@@ -39,7 +39,7 @@ export default function PortalOverview() {
   if (!data) return <p className="text-red-500">ไม่สามารถโหลดข้อมูลได้</p>;
 
   // Safe defaults in case API returns partial data
-  const customer = data.customer || { customer_name: 'ลูกค้า', contact_email: '', customer_type: '' };
+  const customer = data.customer || { customer_name: 'ลูกค้า', contact_email: '', is_line: false, is_trucking: false, is_forwarder: false };
   const containers = data.containers || { total: 0, in_yard: 0, released: 0 };
   const outstanding = data.outstanding || { count: 0, total: 0 };
   const activeBookings = data.activeBookings || 0;

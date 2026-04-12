@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
       const prefixResult = await db.request()
         .input('prefix', sql.NVarChar, prefix)
         .query(`
-          SELECT TOP 1 c.customer_id, c.customer_name, c.customer_type, c.credit_term, c.tax_id, c.address
+          SELECT TOP 1 c.customer_id, c.customer_name, c.credit_term, c.tax_id, c.address,
+                 ISNULL(c.is_line, 0) as is_line, ISNULL(c.is_trucking, 0) as is_trucking
           FROM Customers c
           INNER JOIN PrefixMapping pm ON pm.customer_id = c.customer_id
           WHERE pm.prefix_code = @prefix AND c.is_active = 1
@@ -43,7 +44,8 @@ export async function POST(request: NextRequest) {
       const codeResult = await db.request()
         .input('slCode', sql.NVarChar, shipping_line)
         .query(`
-          SELECT TOP 1 customer_id, customer_name, customer_type, credit_term, tax_id, address
+          SELECT TOP 1 customer_id, customer_name, credit_term, tax_id, address,
+                 ISNULL(is_line, 0) as is_line, ISNULL(is_trucking, 0) as is_trucking
           FROM Customers
           WHERE (shipping_line_code = @slCode OR customer_name = @slCode OR customer_name LIKE '%' + @slCode + '%') AND is_active = 1
           ORDER BY CASE WHEN shipping_line_code = @slCode THEN 0 WHEN customer_name = @slCode THEN 1 ELSE 2 END, customer_id

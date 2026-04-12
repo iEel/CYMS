@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     // Customer info
     const custResult = await db.request()
       .input('cid', sql.Int, cid)
-      .query(`SELECT customer_name, contact_email, customer_type FROM Customers WHERE customer_id = @cid`);
+      .query(`SELECT customer_name, contact_email, ISNULL(is_line,0) as is_line, ISNULL(is_forwarder,0) as is_forwarder, ISNULL(is_trucking,0) as is_trucking FROM Customers WHERE customer_id = @cid`);
     const customer = custResult.recordset[0] || {};
 
     // Containers in yard

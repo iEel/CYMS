@@ -69,10 +69,10 @@ export default function BillingPage() {
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [customers, setCustomers] = useState<Array<{ customer_id: number; customer_name: string; customer_type: string; tax_id?: string; branch_type?: string; branch_number?: string }>>([]);
+  const [customers, setCustomers] = useState<Array<{ customer_id: number; customer_name: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean; tax_id?: string }>>([]);
   const [custSearch, setCustSearch] = useState('');
   const [custOpen, setCustOpen] = useState(false);
-  const [selectedCust, setSelectedCust] = useState<{ customer_id: number; customer_name: string; customer_type: string; tax_id?: string; branch_type?: string; branch_number?: string } | null>(null);
+  const [selectedCust, setSelectedCust] = useState<{ customer_id: number; customer_name: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean; tax_id?: string } | null>(null);
 
   // Auto-calc
   const [autoCalcContainer, setAutoCalcContainer] = useState('');
@@ -353,7 +353,7 @@ export default function BillingPage() {
                     <span className="flex-1 text-sm text-slate-800 dark:text-white truncate">
                       {selectedCust.customer_name}
                       <span className="text-xs text-slate-400 ml-1">
-                        ({selectedCust.customer_type === 'shipping_line' ? 'สายเรือ' : selectedCust.customer_type === 'trucker' ? 'รถบรรทุก' : 'ทั่วไป'})
+                        ({selectedCust.is_line ? 'สายเรือ' : selectedCust.is_trucking ? 'รถบรรทุก' : selectedCust.is_forwarder ? 'Forwarder' : 'ทั่วไป'})
                       </span>
                     </span>
                     <button type="button" onClick={() => { setSelectedCust(null); setCreateForm({ ...createForm, customer_id: '' }); setCustSearch(''); }}
@@ -385,9 +385,8 @@ export default function BillingPage() {
                               className="w-full text-left px-4 py-2.5 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0">
                               <div className="text-sm font-medium text-slate-800 dark:text-white">{c.customer_name}</div>
                               <div className="text-[11px] text-slate-400">
-                                {c.customer_type === 'shipping_line' ? '🚢 สายเรือ' : c.customer_type === 'trucker' ? '🚛 รถบรรทุก' : '🏢 ทั่วไป'}
+                                {c.is_line ? '🚢 สายเรือ' : c.is_trucking ? '🚛 รถบรรทุก' : c.is_forwarder ? '📦 Forwarder' : '🏢 ทั่วไป'}
                                 {c.tax_id && <span> • {c.tax_id}</span>}
-                                {c.branch_type === 'head_office' ? ' • สำนักงานใหญ่' : c.branch_number ? ` • สาขา ${c.branch_number}` : ''}
                               </div>
                             </button>
                           ))}
@@ -1130,7 +1129,9 @@ function BillingReports({ yardId }: { yardId: number }) {
 interface ARCustomer {
   customer_id: number;
   customer_name: string;
-  customer_type: string;
+  is_line: boolean;
+  is_trucking: boolean;
+  is_forwarder: boolean;
   current: number;
   d30: number;
   d60: number;

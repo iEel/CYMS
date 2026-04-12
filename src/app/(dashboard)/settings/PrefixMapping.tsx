@@ -12,7 +12,9 @@ interface PrefixMap {
   prefix_code: string;
   customer_id: number;
   customer_name: string;
-  customer_type: string;
+  is_line: boolean;
+  is_forwarder: boolean;
+  is_trucking: boolean;
   notes: string;
   created_at: string;
 }
@@ -20,7 +22,9 @@ interface PrefixMap {
 interface Customer {
   customer_id: number;
   customer_name: string;
-  customer_type: string;
+  is_line: boolean;
+  is_forwarder: boolean;
+  is_trucking: boolean;
 }
 
 export default function PrefixMapping() {
@@ -103,7 +107,7 @@ export default function PrefixMapping() {
   const grouped = filtered.reduce<Record<number, { customer: Customer; prefixes: PrefixMap[] }>>((acc, m) => {
     if (!acc[m.customer_id]) {
       acc[m.customer_id] = {
-        customer: { customer_id: m.customer_id, customer_name: m.customer_name, customer_type: m.customer_type },
+        customer: { customer_id: m.customer_id, customer_name: m.customer_name, is_line: m.is_line, is_forwarder: m.is_forwarder, is_trucking: m.is_trucking },
         prefixes: [],
       };
     }
@@ -170,7 +174,7 @@ export default function PrefixMapping() {
               <label className="block text-xs text-slate-500 mb-1">ลูกค้า *</label>
               <select value={form.customer_id} onChange={e => setForm({ ...form, customer_id: e.target.value })} className={inputClass}>
                 <option value="">-- เลือกลูกค้า --</option>
-                {customers.filter(c => c.customer_type === 'shipping_line' || c.customer_type === 'general').map(c => (
+                {customers.filter(c => c.is_line).map(c => (
                   <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>
                 ))}
               </select>
@@ -210,7 +214,7 @@ export default function PrefixMapping() {
                     {prefixes.length}
                   </div>
                   <span className="font-medium text-sm text-slate-800 dark:text-white">{customer.customer_name}</span>
-                  <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-600 px-1.5 py-0.5 rounded">{customer.customer_type}</span>
+                  <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-600 px-1.5 py-0.5 rounded">{customer.is_line ? 'สายเรือ' : customer.is_trucking ? 'รถบรรทุก' : 'ทั่วไป'}</span>
                 </div>
                 {/* Prefix Tags */}
                 <div className="px-4 py-3 flex flex-wrap gap-2">

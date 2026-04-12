@@ -95,14 +95,28 @@ export const userCreateSchema = z.object({
 
 export const customerCreateSchema = z.object({
   customer_name: z.string().min(1, 'กรุณากรอกชื่อลูกค้า').max(200),
-  customer_type: z.enum(['shipping_line', 'trucking', 'general']).optional(),
+  customer_code: z.string().max(20).optional(),
+  // Multi-role boolean flags
+  is_line: z.boolean().optional().default(false),
+  is_forwarder: z.boolean().optional().default(false),
+  is_trucking: z.boolean().optional().default(false),
+  is_shipper: z.boolean().optional().default(false),
+  is_consignee: z.boolean().optional().default(false),
+  // Tax & address
   tax_id: z.string().max(20).optional(),
   address: z.string().max(500).optional(),
-  contact_person: z.string().max(100).optional(),
-  phone: z.string().max(20).optional(),
-  email: z.string().email('อีเมลไม่ถูกต้อง').max(100).optional().or(z.literal('')),
+  billing_address: z.string().optional(),
+  contact_name: z.string().max(100).optional(),
+  contact_phone: z.string().max(20).optional(),
+  contact_email: z.string().email('อีเมลไม่ถูกต้อง').max(100).optional().or(z.literal('')),
+  // Payment
+  default_payment_type: z.enum(['CASH', 'CREDIT']).optional().default('CASH'),
   credit_term: z.coerce.number().int().min(0).max(365).optional(),
-});
+  edi_prefix: z.string().max(10).optional(),
+}).refine(
+  (data) => !data.is_line || (data.edi_prefix && data.edi_prefix.length > 0),
+  { message: 'กรุณากรอก EDI Prefix สำหรับสายเรือ', path: ['edi_prefix'] }
+);
 
 export const ediEndpointSchema = z.object({
   name: z.string().min(1).max(100),
