@@ -71,7 +71,21 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [containerOwnerId, setContainerOwnerId] = useState<number | null>(null);
   const [billingCustomerId, setBillingCustomerId] = useState<number | null>(null);
   const [billingDiffFromOwner, setBillingDiffFromOwner] = useState(false);
+  const [billingSearch, setBillingSearch] = useState('');
+  const [billingSearchOpen, setBillingSearchOpen] = useState(false);
+  const billingSearchRef = useRef<HTMLDivElement>(null);
   const [isSoc, setIsSoc] = useState(false);
+
+  // Close billing search dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (billingSearchRef.current && !billingSearchRef.current.contains(e.target as Node)) {
+        setBillingSearchOpen(false);
+      }
+    };
+    if (billingSearchOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [billingSearchOpen]);
 
   // Halt Rule popup (multi-customer prefix conflict)
   const [showHaltPopup, setShowHaltPopup] = useState(false);
@@ -473,13 +487,55 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                       </label>
                     </label>
                     {billingDiffFromOwner ? (
-                      <select value={billingCustomerId || ''} onChange={e => setBillingCustomerId(e.target.value ? parseInt(e.target.value) : null)}
-                        className={`${inputClass} text-sm`}>
-                        <option value="">เลือกลูกค้าผู้จ่ายเงิน...</option>
-                        {customerList.map(c => (
-                          <option key={c.customer_id} value={c.customer_id}>{c.customer_name} {c.is_forwarder ? '(ตัวแทน)' : c.is_trucking ? '(รถบรรทุก)' : ''}</option>
-                        ))}
-                      </select>
+                      <div className="relative" ref={billingSearchRef}>
+                        <input
+                          type="text"
+                          placeholder="พิมพ์ชื่อบริษัทเพื่อค้นหา..."
+                          value={billingSearch || (billingCustomerId ? customerList.find(c => c.customer_id === billingCustomerId)?.customer_name || '' : '')}
+                          onChange={e => {
+                            setBillingSearch(e.target.value);
+                            setBillingSearchOpen(true);
+                            if (!e.target.value) setBillingCustomerId(null);
+                          }}
+                          onFocus={() => setBillingSearchOpen(true)}
+                          className={`${inputClass} text-sm`}
+                        />
+                        {billingCustomerId && !billingSearchOpen && (
+                          <button onClick={() => { setBillingCustomerId(null); setBillingSearch(''); setBillingSearchOpen(true); }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors">
+                            <X size={14} />
+                          </button>
+                        )}
+                        {billingSearchOpen && (
+                          <div className="absolute z-30 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl">
+                            {customerList
+                              .filter(c => {
+                                const q = billingSearch.toLowerCase();
+                                return !q || c.customer_name.toLowerCase().includes(q);
+                              })
+                              .slice(0, 15)
+                              .map(c => (
+                                <button key={c.customer_id}
+                                  onClick={() => {
+                                    setBillingCustomerId(c.customer_id);
+                                    setBillingSearch(c.customer_name);
+                                    setBillingSearchOpen(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center justify-between ${
+                                    billingCustomerId === c.customer_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-slate-700 dark:text-slate-200'
+                                  }`}>
+                                  <span>{c.customer_name}</span>
+                                  <span className="text-[10px] text-slate-400">
+                                    {c.is_line ? 'สายเรือ' : c.is_forwarder ? 'ตัวแทน' : c.is_trucking ? 'รถบรรทุก' : ''}
+                                  </span>
+                                </button>
+                              ))}
+                            {customerList.filter(c => !billingSearch || c.customer_name.toLowerCase().includes(billingSearch.toLowerCase())).length === 0 && (
+                              <div className="px-3 py-2 text-sm text-slate-400">ไม่พบลูกค้า</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
                         เหมือนเจ้าของตู้
