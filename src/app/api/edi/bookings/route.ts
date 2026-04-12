@@ -3,6 +3,19 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 
+function bookingSummarySelect() {
+  return `
+    b.booking_number, b.booking_id, b.vessel_name, b.voyage_number,
+    b.booking_type, b.status, b.customer_id, c.customer_name,
+    b.container_count, b.container_size, b.container_type,
+    ISNULL(b.received_count, 0) as received_count,
+    ISNULL(b.released_count, 0) as released_count,
+    (SELECT COUNT(*) FROM BookingContainers bc2 WHERE bc2.booking_id = b.booking_id) AS linked_containers,
+    (SELECT COUNT(*) FROM BookingContainers bc3 WHERE bc3.booking_id = b.booking_id AND bc3.status = 'received') AS received_containers,
+    (SELECT COUNT(*) FROM BookingContainers bc4 WHERE bc4.booking_id = b.booking_id AND bc4.status = 'released') AS released_containers
+  `;
+}
+
 // GET — ดึง Bookings (with progress counts)
 export async function GET(request: NextRequest) {
   try {
@@ -14,16 +27,32 @@ export async function GET(request: NextRequest) {
       const db = await getDb();
       const containerNumber = searchParams.get('container_number');
       const containerId = searchParams.get('container_id');
+      const bookingNumber = searchParams.get('booking_number');
       const yardId = searchParams.get('yard_id');
 
+      if (bookingNumber) {
+        const req = db.request().input('bkRef', sql.NVarChar, bookingNumber.trim());
+        if (yardId) req.input('yardId', sql.Int, parseInt(yardId));
+        const result = await req.query(`
+          SELECT TOP 1 ${bookingSummarySelect()}
+          FROM Bookings b
+          LEFT JOIN Customers c ON b.customer_id = c.customer_id
+          WHERE b.booking_number = @bkRef
+          ${yardId ? 'AND b.yard_id = @yardId' : ''}
+          ORDER BY b.created_at DESC
+        `);
+        return NextResponse.json({ booking: result.recordset[0] || null });
+      }
+
       if (containerNumber) {
-        // Gate-In: find pending/confirmed booking that expects this container
+        // Find booking that expects or already owns this container number.
         const req = db.request().input('cNum', sql.NVarChar, containerNumber.toUpperCase());
         if (yardId) req.input('yardId', sql.Int, parseInt(yardId));
         const result = await req.query(`
-          SELECT TOP 1 b.booking_number, b.booking_id, b.vessel_name, b.booking_type, b.status
+          SELECT TOP 1 ${bookingSummarySelect()}
           FROM BookingContainers bc
           JOIN Bookings b ON bc.booking_id = b.booking_id
+          LEFT JOIN Customers c ON b.customer_id = c.customer_id
           WHERE bc.container_number = @cNum AND b.status IN ('pending', 'confirmed')
           ${yardId ? 'AND b.yard_id = @yardId' : ''}
           ORDER BY b.created_at DESC
@@ -32,16 +61,33 @@ export async function GET(request: NextRequest) {
       }
 
       if (containerId) {
-        // Gate-Out: find booking linked to this container (received status)
+        // Gate-Out: find booking linked to this container. Try container_id first, then container_number.
         const req = db.request().input('cId', sql.Int, parseInt(containerId));
         if (yardId) req.input('yardId', sql.Int, parseInt(yardId));
         const result = await req.query(`
-          SELECT TOP 1 b.booking_number, b.booking_id, b.vessel_name, b.booking_type, b.status
-          FROM BookingContainers bc
-          JOIN Bookings b ON bc.booking_id = b.booking_id
-          WHERE bc.container_id = @cId AND bc.status = 'received'
-          ${yardId ? 'AND b.yard_id = @yardId' : ''}
-          ORDER BY b.created_at DESC
+          WITH CandidateBookings AS (
+            SELECT b.booking_id, 0 AS match_priority
+            FROM BookingContainers bc
+            JOIN Bookings b ON bc.booking_id = b.booking_id
+            WHERE bc.container_id = @cId AND bc.status = 'received'
+            ${yardId ? 'AND b.yard_id = @yardId' : ''}
+
+            UNION ALL
+
+            SELECT b.booking_id, 1 AS match_priority
+            FROM BookingContainers bc
+            JOIN Bookings b ON bc.booking_id = b.booking_id
+            JOIN Containers ct ON ct.container_id = @cId
+            WHERE bc.container_id IS NULL
+              AND bc.container_number = ct.container_number
+              AND bc.status = 'received'
+            ${yardId ? 'AND b.yard_id = @yardId' : ''}
+          )
+          SELECT TOP 1 ${bookingSummarySelect()}
+          FROM CandidateBookings cb
+          JOIN Bookings b ON cb.booking_id = b.booking_id
+          LEFT JOIN Customers c ON b.customer_id = c.customer_id
+          ORDER BY cb.match_priority, b.created_at DESC
         `);
         return NextResponse.json({ booking: result.recordset[0] || null });
       }

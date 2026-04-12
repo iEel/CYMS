@@ -11,6 +11,65 @@ async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
   `);
 }
 
+async function validateGateOutBooking(
+  db: sql.ConnectionPool,
+  yardId: number,
+  bookingRef: string,
+  containerId: number,
+  containerNumber?: string
+) {
+  const bookingResult = await db.request()
+    .input('bkRef', sql.NVarChar, bookingRef)
+    .input('yardId', sql.Int, yardId)
+    .query(`
+      SELECT TOP 1 b.booking_id, b.booking_number, b.status, b.container_count,
+        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id) AS linked_count
+      FROM Bookings b
+      WHERE b.booking_number = @bkRef AND b.yard_id = @yardId
+    `);
+
+  if (bookingResult.recordset.length === 0) {
+    return { ok: false, error: `ไม่พบ Booking ${bookingRef}` };
+  }
+
+  const booking = bookingResult.recordset[0];
+  if (booking.status === 'cancelled') {
+    return { ok: false, error: `Booking ${bookingRef} ถูกยกเลิกแล้ว` };
+  }
+  if (booking.status === 'completed') {
+    return { ok: false, error: `Booking ${bookingRef} ปิดงานแล้ว` };
+  }
+
+  let finalContainerNumber = containerNumber;
+  if (!finalContainerNumber) {
+    const cResult = await db.request()
+      .input('containerId', sql.Int, containerId)
+      .query('SELECT container_number FROM Containers WHERE container_id = @containerId');
+    finalContainerNumber = cResult.recordset[0]?.container_number;
+  }
+
+  const linkResult = await db.request()
+    .input('bkId', sql.Int, booking.booking_id)
+    .input('containerId', sql.Int, containerId)
+    .input('containerNumber', sql.NVarChar, finalContainerNumber || '')
+    .query(`
+      SELECT TOP 1 id, status
+      FROM BookingContainers
+      WHERE booking_id = @bkId
+        AND (container_id = @containerId OR container_number = @containerNumber)
+    `);
+
+  if (linkResult.recordset[0]?.status === 'released') {
+    return { ok: false, error: `ตู้ ${finalContainerNumber || containerId} ถูกปล่อยออกใน Booking ${bookingRef} แล้ว` };
+  }
+
+  if (linkResult.recordset.length === 0 && booking.linked_count >= booking.container_count) {
+    return { ok: false, error: `Booking ${bookingRef} ครบจำนวนตู้แล้ว` };
+  }
+
+  return { ok: true, bookingId: booking.booking_id, containerNumber: finalContainerNumber };
+}
+
 const gateBodySchema = z.object({
   transaction_type: z.enum(['gate_in', 'gate_out']),
   container_number: z.string().min(4).max(15).optional(),
@@ -232,6 +291,18 @@ export async function POST(request: NextRequest) {
       if (!finalContainerId) {
         return NextResponse.json({ error: 'ต้องระบุ container_id สำหรับ Gate-Out' }, { status: 400 });
       }
+      if (booking_ref) {
+        const bookingValidation = await validateGateOutBooking(
+          db,
+          yard_id,
+          booking_ref,
+          finalContainerId,
+          container_number
+        );
+        if (!bookingValidation.ok) {
+          return NextResponse.json({ error: bookingValidation.error }, { status: 400 });
+        }
+      }
       await db.request()
         .input('containerId', sql.Int, finalContainerId)
         .input('sealNumber', sql.NVarChar, seal_number || null)
@@ -340,21 +411,57 @@ export async function POST(request: NextRequest) {
           const bkResult = await db.request()
             .input('bkRef', sql.NVarChar, booking_ref)
             .input('bkYardId', sql.Int, yard_id)
-            .query(`SELECT booking_id, container_count FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId`);
+            .query(`SELECT booking_id, container_count FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId AND status != 'cancelled'`);
 
           if (bkResult.recordset.length > 0) {
             const bk = bkResult.recordset[0];
+            const cResult = await db.request()
+              .input('cId0', sql.Int, finalContainerId)
+              .query('SELECT container_number FROM Containers WHERE container_id = @cId0');
+            const finalContainerNumber = container_number || cResult.recordset[0]?.container_number || '';
 
-            // Update BookingContainers entry
-            await db.request()
-              .input('bkId', sql.Int, bk.booking_id)
-              .input('cId', sql.Int, finalContainerId)
-              .query(`UPDATE BookingContainers SET status = 'released', gate_out_at = GETDATE() WHERE booking_id = @bkId AND container_id = @cId`);
+            const linkResult = await db.request()
+              .input('bkId0', sql.Int, bk.booking_id)
+              .input('cId0', sql.Int, finalContainerId)
+              .input('cNum0', sql.NVarChar, finalContainerNumber)
+              .query(`
+                SELECT TOP 1 id
+                FROM BookingContainers
+                WHERE booking_id = @bkId0
+                  AND (container_id = @cId0 OR container_number = @cNum0)
+              `);
+
+            if (linkResult.recordset.length > 0) {
+              await db.request()
+                .input('linkId', sql.Int, linkResult.recordset[0].id)
+                .input('cId', sql.Int, finalContainerId)
+                .input('cNum', sql.NVarChar, finalContainerNumber)
+                .query(`
+                  UPDATE BookingContainers
+                  SET container_id = @cId, container_number = @cNum,
+                      status = 'released', gate_out_at = GETDATE()
+                  WHERE id = @linkId
+                `);
+            } else {
+              await db.request()
+                .input('bkId', sql.Int, bk.booking_id)
+                .input('cId', sql.Int, finalContainerId)
+                .input('cNum', sql.NVarChar, finalContainerNumber)
+                .query(`
+                  INSERT INTO BookingContainers (booking_id, container_id, container_number, status, gate_out_at)
+                  VALUES (@bkId, @cId, @cNum, 'released', GETDATE())
+                `);
+            }
 
             // Update released_count
             await db.request()
               .input('bkId2', sql.Int, bk.booking_id)
-              .query(`UPDATE Bookings SET released_count = (SELECT COUNT(*) FROM BookingContainers WHERE booking_id = @bkId2 AND status = 'released') WHERE booking_id = @bkId2`);
+              .query(`
+                UPDATE Bookings SET
+                  released_count = (SELECT COUNT(*) FROM BookingContainers WHERE booking_id = @bkId2 AND status = 'released'),
+                  received_count = (SELECT COUNT(*) FROM BookingContainers WHERE booking_id = @bkId2 AND status IN ('received', 'released'))
+                WHERE booking_id = @bkId2
+              `);
 
             // Auto-complete if all containers released
             const updBk = await db.request()

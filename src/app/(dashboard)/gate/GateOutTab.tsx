@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import CameraOCR from '@/components/gate/CameraOCR';
-import { BillingCharge, BillingData, ContainerResult, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
+import { BillingCharge, BillingData, ContainerResult, GateOutBooking, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 
 interface GateOutTabProps {
   yardId: number;
@@ -52,6 +52,14 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [manualCustomerId, setManualCustomerId] = useState<number | null>(null);
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
 
+  // Booking selection for Gate-Out
+  const [selectedBooking, setSelectedBooking] = useState<GateOutBooking | null>(null);
+  const [bookingSearch, setBookingSearch] = useState('');
+  const [bookingResults, setBookingResults] = useState<GateOutBooking[]>([]);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [showBookingPicker, setShowBookingPicker] = useState(false);
+  const [bookingWarning, setBookingWarning] = useState('');
+
   // Fetch customer list for manual selection
   useEffect(() => {
     fetch('/api/settings/customers')
@@ -75,6 +83,13 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     const q = customerSearch.toLowerCase();
     return customerList.filter(c => c.customer_name.toLowerCase().includes(q)).slice(0, 10);
   }, [customerList, customerSearch]);
+
+  const bookingProgressText = (booking: GateOutBooking) => {
+    const total = booking.container_count || 0;
+    const received = booking.received_containers ?? booking.received_count ?? 0;
+    const released = booking.released_containers ?? booking.released_count ?? 0;
+    return `${received}/${total} received, ${released}/${total} released`;
+  };
 
   // Init selected charges
   const initSelectedCharges = (charges: BillingCharge[]) => {
@@ -136,6 +151,51 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     finally { setBillingLoading(false); }
   };
 
+  const applyGateOutBooking = async (booking: GateOutBooking | null, container = selectedContainer) => {
+    setSelectedBooking(booking);
+    setBookingWarning('');
+    const bookingRef = booking?.booking_number || '';
+    setGateOutForm(prev => ({ ...prev, booking_ref: bookingRef }));
+    setBillingPaid(false);
+    setBillingInvoiceNumber('');
+    setBillingInvoiceId(null);
+    if (booking?.customer_id) setManualCustomerId(booking.customer_id);
+    if (container) await loadGateOutBilling(container, booking?.customer_id || manualCustomerId, bookingRef);
+  };
+
+  const loadBookingByNumber = async (bookingNumber: string, container = selectedContainer) => {
+    const ref = bookingNumber.trim();
+    if (!ref) {
+      await applyGateOutBooking(null, container);
+      return;
+    }
+
+    setBookingLoading(true);
+    try {
+      const res = await fetch(`/api/edi/bookings?lookup=1&booking_number=${encodeURIComponent(ref)}&yard_id=${yardId}`);
+      const data = await res.json();
+      if (data.booking) {
+        await applyGateOutBooking(data.booking, container);
+      } else {
+        setSelectedBooking(null);
+        setBookingWarning(`ไม่พบ Booking ${ref}`);
+      }
+    } catch (err) { console.error('Booking ref lookup error:', err); }
+    finally { setBookingLoading(false); }
+  };
+
+  const searchBookings = async () => {
+    setBookingLoading(true);
+    try {
+      const url = `/api/edi/bookings?yard_id=${yardId}&search=${encodeURIComponent(bookingSearch)}&limit=10`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const rows = Array.isArray(data.bookings) ? data.bookings : [];
+      setBookingResults(rows.filter((b: GateOutBooking) => !['cancelled', 'completed'].includes(b.status)));
+    } catch (err) { console.error('Booking search error:', err); }
+    finally { setBookingLoading(false); }
+  };
+
   const handleBillingCustomerChange = async (customerId: number) => {
     if (!selectedContainer) return;
     setManualCustomerId(customerId);
@@ -168,6 +228,11 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     setManualCustomerId(null);
     setShowCustomerPicker(false);
     setCustomerSearch('');
+    setSelectedBooking(null);
+    setShowBookingPicker(false);
+    setBookingResults([]);
+    setBookingSearch('');
+    setBookingWarning('');
     setBillingPaid(false);
     setBillingInvoiceNumber('');
     setBillingInvoiceId(null);
@@ -178,6 +243,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       const bkData = await bkRes.json();
       if (bkData.booking) {
         bookingRef = bookingRef || bkData.booking.booking_number;
+        setSelectedBooking(bkData.booking);
         setGateOutForm(prev => ({ ...prev, booking_ref: prev.booking_ref || bkData.booking.booking_number }));
       }
     } catch (err) { console.error('Booking lookup error:', err); }
@@ -377,6 +443,77 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                 </div>
                 <button onClick={() => { setSelectedContainer(null); setGateOutPhase('search'); }} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
               </div>
+            </div>
+
+            {/* Booking Summary + Picker */}
+            <div className={`rounded-xl border overflow-hidden ${
+              selectedBooking
+                ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/10'
+                : 'border-amber-200 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-900/10'
+            }`}>
+              <div className="p-4 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className={`text-xs font-semibold mb-1 ${selectedBooking ? 'text-indigo-600' : 'text-amber-600'}`}>Booking</p>
+                  {selectedBooking ? (
+                    <>
+                      <p className="font-mono font-bold text-slate-800 dark:text-white">{selectedBooking.booking_number}</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {selectedBooking.customer_name || '-'} • {selectedBooking.vessel_name || '-'}{selectedBooking.voyage_number ? ` / ${selectedBooking.voyage_number}` : ''}
+                      </p>
+                      <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-300 mt-2">
+                        จำนวนตู้: {bookingProgressText(selectedBooking)}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold text-amber-700 dark:text-amber-300">ยังไม่ได้ผูก Booking</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">เลือก Booking เพื่อคุมการปล่อยตู้และอัปเดตสถานะ received/released</p>
+                    </>
+                  )}
+                  {bookingWarning && <p className="text-xs text-red-500 mt-2">{bookingWarning}</p>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {selectedBooking && (
+                    <button onClick={() => applyGateOutBooking(null)}
+                      className="px-3 h-9 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-medium text-slate-500 hover:text-red-600">
+                      ไม่ใช้ Booking
+                    </button>
+                  )}
+                  <button onClick={() => setShowBookingPicker(v => !v)}
+                    className="px-3 h-9 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700">
+                    {selectedBooking ? 'เปลี่ยน Booking' : 'เลือก Booking'}
+                  </button>
+                </div>
+              </div>
+
+              {showBookingPicker && (
+                <div className="px-4 pb-4 space-y-2">
+                  <div className="flex gap-2">
+                    <input type="text" value={bookingSearch} onChange={e => setBookingSearch(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && searchBookings()}
+                      placeholder="ค้นหา Booking No. หรือ Vessel..."
+                      className="flex-1 h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-indigo-500" />
+                    <button onClick={searchBookings} disabled={bookingLoading}
+                      className="px-3 h-9 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 disabled:opacity-50">
+                      {bookingLoading ? 'กำลังค้นหา...' : 'ค้นหา'}
+                    </button>
+                  </div>
+                  <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 p-1 space-y-1">
+                    {bookingResults.length === 0 ? (
+                      <p className="text-xs text-slate-400 p-2 text-center">ค้นหา Booking เพื่อเลือกผูกกับ Gate Out</p>
+                    ) : bookingResults.map(b => (
+                      <button key={b.booking_id} onClick={() => { applyGateOutBooking(b); setShowBookingPicker(false); setBookingSearch(''); setBookingResults([]); }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-xs hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono font-semibold">{b.booking_number}</span>
+                          <span className="text-[10px] text-indigo-500">{bookingProgressText(b)}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{b.customer_name || '-'} • {b.vessel_name || '-'}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ===== BILLING CARD ===== */}
@@ -720,7 +857,10 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                     </div>
                     <div>
                       <label className={labelClass}>Booking Ref</label>
-                      <input type="text" value={gateOutForm.booking_ref} onChange={e => setGateOutForm({ ...gateOutForm, booking_ref: e.target.value })} className={inputClass} placeholder="BK-123456" />
+                      <input type="text" value={gateOutForm.booking_ref}
+                        onChange={e => setGateOutForm({ ...gateOutForm, booking_ref: e.target.value })}
+                        onBlur={e => loadBookingByNumber(e.target.value)}
+                        className={inputClass} placeholder="BK-123456" />
                     </div>
                     <div>
                       <label className={labelClass}>หมายเหตุ</label>

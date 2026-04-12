@@ -54,6 +54,25 @@ export interface BillingData {
   has_hold: boolean;
 }
 
+export interface GateOutBooking {
+  booking_id: number;
+  booking_number: string;
+  booking_type?: string;
+  vessel_name?: string;
+  voyage_number?: string;
+  status: string;
+  customer_id?: number;
+  customer_name?: string;
+  container_count: number;
+  container_size?: string;
+  container_type?: string;
+  received_count?: number;
+  released_count?: number;
+  linked_containers?: number;
+  received_containers?: number;
+  released_containers?: number;
+}
+
 export interface GateInBillingData {
   customer: { customer_id: number; customer_name: string; credit_term: number; tax_id?: string } | null;
   is_credit: boolean;
