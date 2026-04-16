@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Search, MapPin, Package, Ship, Sparkles, ExternalLink, Calendar, Truck, User, Image as ImageIcon, Clock } from 'lucide-react';
 import { calcDwellDays } from '@/lib/utils';
+import { buildPhotoEvidenceSnapshot, normalizeEvidencePhotos, type EvidencePhoto, type PhotoCompleteness, type PhotoRequirement } from '@/lib/photoEvidence';
 
 interface SearchResult {
   container_id: number;
@@ -47,6 +48,10 @@ interface ContainerDetail {
       points?: Array<{ id: string; side: string; type: string; severity: string; photo?: string }>;
       condition_grade?: string;
       photos?: string[];
+      photo_evidence?: EvidencePhoto[];
+      photo_requirements?: PhotoRequirement[];
+      photo_completeness?: PhotoCompleteness;
+      inspection_template?: string;
     } | null;
   } | null;
   gate_out: {
@@ -110,13 +115,17 @@ export default function ContainerSearch({ yardId, onLocate }: Props) {
     return () => { cancelled = true; };
   }, [selected]);
 
-  // Collect all photos
-  const allPhotos: string[] = [];
-  if (detail?.gate_in?.damage_report?.photos) allPhotos.push(...detail.gate_in.damage_report.photos);
-  if (detail?.gate_in?.damage_report?.points) {
-    detail.gate_in.damage_report.points.forEach(p => { if (p.photo) allPhotos.push(p.photo); });
-  }
-  if (detail?.gate_out?.damage_report?.exit_photos) allPhotos.push(...detail.gate_out.damage_report.exit_photos);
+  const photoSnapshot = detail?.gate_in?.damage_report?.photo_evidence?.length
+    ? { photo_evidence: normalizeEvidencePhotos(detail.gate_in.damage_report.photo_evidence, 'other') }
+    : buildPhotoEvidenceSnapshot({
+        templateKey: detail?.gate_in?.damage_report?.inspection_template,
+        legacyPhotos: detail?.gate_in?.damage_report?.photos || [],
+        damagePoints: detail?.gate_in?.damage_report?.points || [],
+      });
+  const allPhotos = [
+    ...photoSnapshot.photo_evidence.map(photo => photo.url),
+    ...normalizeEvidencePhotos(detail?.gate_out?.damage_report?.exit_photos || [], 'other').map(photo => photo.url),
+  ];
 
   const grade = detail?.gate_in?.damage_report?.condition_grade || 'A';
   const gradeInfo = GRADE_INFO[grade] || GRADE_INFO.A;

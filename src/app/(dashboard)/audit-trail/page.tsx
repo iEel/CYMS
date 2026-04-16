@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import {
   ClipboardList, Search, RefreshCcw, Filter, Clock, User,
-  Package, FileText, Settings, Truck, DoorOpen, Receipt, Shield,
+  Package, Settings, Truck, DoorOpen, Receipt, Shield,
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
+import { formatAuditLog } from '@/lib/auditFormatter';
 
 interface AuditEntry {
   log_id: number;
@@ -113,17 +114,6 @@ export default function AuditTrailPage() {
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const formatDetails = (details: string) => {
-    try {
-      const obj = JSON.parse(details);
-      return Object.entries(obj).map(([k, v]) =>
-        `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`
-      ).join(' • ');
-    } catch {
-      return details;
-    }
-  };
-
   const relativeTime = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
@@ -205,6 +195,7 @@ export default function AuditTrailPage() {
           <div className="divide-y divide-slate-100 dark:divide-slate-700">
             {paged.map(log => {
               const info = actionLabels[log.action] || { label: log.action, color: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400', icon: <ClipboardList size={14} /> };
+              const readable = formatAuditLog(log);
               return (
                 <div key={log.log_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                   <div className="flex items-start gap-3">
@@ -214,7 +205,7 @@ export default function AuditTrailPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${info.color}`}>
-                          {info.label}
+                          {actionLabels[log.action] ? info.label : readable.title}
                         </span>
                         {log.entity_type && (
                           <span className="text-[10px] text-slate-400 font-mono">
@@ -224,8 +215,18 @@ export default function AuditTrailPage() {
                       </div>
                       {log.details && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
-                          {formatDetails(log.details)}
+                          {readable.summary}
                         </p>
+                      )}
+                      {readable.fields.length > 0 && (
+                        <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-1.5">
+                          {readable.fields.slice(0, 8).map(field => (
+                            <div key={`${log.log_id}-${field.label}`} className="rounded bg-slate-50 dark:bg-slate-700/40 px-2 py-1">
+                              <p className="text-[9px] text-slate-400">{field.label}</p>
+                              <p className="text-[10px] font-medium text-slate-700 dark:text-slate-200 truncate">{field.value}</p>
+                            </div>
+                          ))}
+                        </div>
                       )}
                       <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400">
                         <span className="flex items-center gap-1">

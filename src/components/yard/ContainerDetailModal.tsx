@@ -1,8 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, ExternalLink, ArrowRightLeft, Loader2, AlertTriangle, CheckCircle2, FileText, Receipt, Ship, Radio } from 'lucide-react';
+import { X, ExternalLink, ArrowRightLeft, Loader2, AlertTriangle, CheckCircle2, FileText, Receipt, Ship, Radio, Clock, User } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
+import {
+  buildPhotoEvidenceSnapshot,
+  normalizeEvidencePhotos,
+  type EvidencePhoto,
+  type PhotoCompleteness,
+  type PhotoRequirement,
+} from '@/lib/photoEvidence';
 
 interface DamagePoint {
   id: string;
@@ -45,7 +52,16 @@ interface ContainerDetail {
     booking_ref: string;
     notes: string;
     processed_by: string;
-    damage_report: { points?: DamagePoint[]; condition_grade?: string; inspector_notes?: string; photos?: string[] } | null;
+    damage_report: {
+      points?: DamagePoint[];
+      condition_grade?: string;
+      inspector_notes?: string;
+      photos?: string[];
+      photo_evidence?: EvidencePhoto[];
+      photo_requirements?: PhotoRequirement[];
+      photo_completeness?: PhotoCompleteness;
+      inspection_template?: string;
+    } | null;
   } | null;
   gate_out: {
     eir_number: string;
@@ -139,6 +155,19 @@ interface ContainerDetailModalProps {
   onViewEIR?: (eirNumber: string) => void;
 }
 
+interface ReadableAuditLog {
+  log_id: number;
+  action: string;
+  entity_type: string;
+  entity_id: number | null;
+  created_at: string;
+  actor_name: string;
+  title: string;
+  summary: string;
+  tone: 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+  fields: Array<{ label: string; value: string }>;
+}
+
 const SIDES = [
   { key: 'front', label: 'ด้านหน้า', icon: '🚪' },
   { key: 'back', label: 'ด้านหลัง', icon: '🔙' },
@@ -213,6 +242,8 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
   const [newStatus, setNewStatus] = useState('');
   const [gradeChanging, setGradeChanging] = useState(false);
   const [newGrade, setNewGrade] = useState('A');
+  const [auditLogs, setAuditLogs] = useState<ReadableAuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   useEffect(() => {
     async function fetchDetail() {
@@ -226,6 +257,22 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
       finally { setLoading(false); }
     }
     fetchDetail();
+  }, [containerId]);
+
+  useEffect(() => {
+    async function fetchAudit() {
+      setAuditLoading(true);
+      try {
+        const res = await fetch(`/api/audit-trail/readable?container_id=${containerId}&limit=30`);
+        const json = await res.json();
+        setAuditLogs(json.logs || []);
+      } catch {
+        setAuditLogs([]);
+      } finally {
+        setAuditLoading(false);
+      }
+    }
+    fetchAudit();
   }, [containerId]);
 
   if (loading) {
@@ -259,9 +306,24 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
   const hasDamage = damagePoints.length > 0;
   const currentSidePoints = damagePoints.filter(p => p.side === activeSide);
 
-  // All photos
-  const inspectionPhotos = gi?.damage_report?.photos || [];
-  const exitPhotos = go?.damage_report?.exit_photos || [];
+  const evidenceSnapshot = gi?.damage_report?.photo_evidence?.length
+    ? {
+        photo_evidence: normalizeEvidencePhotos(gi.damage_report.photo_evidence, 'other'),
+        photo_requirements: gi.damage_report.photo_requirements || [],
+        photo_completeness: gi.damage_report.photo_completeness,
+      }
+    : buildPhotoEvidenceSnapshot({
+        templateKey: gi?.damage_report?.inspection_template,
+        legacyPhotos: gi?.damage_report?.photos || [],
+        damagePoints,
+      });
+  const exitPhotos = normalizeEvidencePhotos(go?.damage_report?.exit_photos || [], 'other').map((photo, i) => ({
+    ...photo,
+    id: `exit-${photo.id || i}`,
+    label: `ขาออก ${i + 1}`,
+  }));
+  const galleryPhotos = [...evidenceSnapshot.photo_evidence, ...exitPhotos];
+  const photoCompleteness = evidenceSnapshot.photo_completeness;
   const lifecycle = data.lifecycle || {
     gate_in: Boolean(gi),
     inspection: Boolean(gi?.damage_report),
@@ -579,26 +641,35 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
             )}
 
             {/* ===== PHOTOS GALLERY ===== */}
-            {(inspectionPhotos.length > 0 || exitPhotos.length > 0) && (
+            {galleryPhotos.length > 0 && (
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-4 py-2 bg-blue-50 dark:bg-blue-900/10 border-b border-slate-200 dark:border-slate-700">
-                  <h3 className="text-xs font-bold text-blue-700 dark:text-blue-400">
-                    📸 รูปถ่าย ({inspectionPhotos.length + exitPhotos.length} รูป)
-                  </h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold text-blue-700 dark:text-blue-400">
+                      📸 Photo Evidence ({galleryPhotos.length} รูป)
+                    </h3>
+                    {photoCompleteness && (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        photoCompleteness.missing_categories.length === 0
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+                          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+                      }`}>
+                        ครบ {photoCompleteness.completed}/{photoCompleteness.required}
+                      </span>
+                    )}
+                  </div>
+                  {photoCompleteness?.missing_categories.length ? (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                      ยังขาด: {photoCompleteness.missing_categories.join(', ')}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="p-4 grid grid-cols-3 md:grid-cols-4 gap-2">
-                  {inspectionPhotos.map((photo, i) => (
-                    <button key={`in-${i}`} onClick={() => setFullPhoto(photo)} className="text-left group">
-                      <img src={photo} alt={`ภาพรวม ${i + 1}`}
+                  {galleryPhotos.map(photo => (
+                    <button key={photo.id} onClick={() => setFullPhoto(photo.url)} className="text-left group">
+                      <img src={photo.url} alt={photo.label}
                         className="w-full h-20 object-cover rounded-lg border border-slate-200 group-hover:border-blue-400 transition-all" />
-                      <p className="text-[9px] text-slate-400 mt-0.5 truncate">ตรวจสภาพ {i + 1}</p>
-                    </button>
-                  ))}
-                  {exitPhotos.map((photo, i) => (
-                    <button key={`out-${i}`} onClick={() => setFullPhoto(photo)} className="text-left group">
-                      <img src={photo} alt={`ขาออก ${i + 1}`}
-                        className="w-full h-20 object-cover rounded-lg border border-slate-200 group-hover:border-blue-400 transition-all" />
-                      <p className="text-[9px] text-slate-400 mt-0.5 truncate">ขาออก {i + 1}</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5 truncate">{photo.label}</p>
                     </button>
                   ))}
                 </div>
@@ -754,6 +825,65 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            {/* ===== READABLE AUDIT TRAIL ===== */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                  <Clock size={13} /> Audit Trail
+                </h3>
+                <span className="text-[10px] text-slate-400">{auditLogs.length} รายการล่าสุด</span>
+              </div>
+              <div className="p-4">
+                {auditLoading ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    <Loader2 size={16} className="animate-spin mx-auto mb-2" />
+                    กำลังโหลดประวัติ...
+                  </div>
+                ) : auditLogs.length === 0 ? (
+                  <p className="text-xs text-slate-400">ยังไม่มีประวัติการแก้ไขที่ผูกกับตู้นี้</p>
+                ) : (
+                  <div className="space-y-2">
+                    {auditLogs.slice(0, 8).map(log => (
+                      <div key={log.log_id} className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                log.tone === 'success' ? 'bg-emerald-500' :
+                                log.tone === 'warning' ? 'bg-amber-500' :
+                                log.tone === 'danger' ? 'bg-red-500' :
+                                log.tone === 'info' ? 'bg-blue-500' : 'bg-slate-400'
+                              }`} />
+                              <p className="text-xs font-semibold text-slate-800 dark:text-white truncate">{log.title}</p>
+                            </div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{log.summary}</p>
+                            <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400">
+                              <span className="flex items-center gap-1"><User size={10} /> {log.actor_name}</span>
+                              <span>{formatDateTime(log.created_at)}</span>
+                              <span className="font-mono">{log.entity_type}{log.entity_id ? ` #${log.entity_id}` : ''}</span>
+                            </div>
+                          </div>
+                        </div>
+                        {log.fields.length > 0 && (
+                          <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-1.5">
+                            {log.fields.slice(0, 8).map(field => (
+                              <div key={`${log.log_id}-${field.label}`} className="rounded bg-slate-50 dark:bg-slate-700/40 px-2 py-1">
+                                <p className="text-[9px] text-slate-400">{field.label}</p>
+                                <p className="text-[10px] font-medium text-slate-700 dark:text-slate-200 truncate">{field.value}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {auditLogs.length > 8 && (
+                      <p className="text-[10px] text-slate-400 text-center pt-1">แสดง 8 จาก {auditLogs.length} รายการล่าสุด</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

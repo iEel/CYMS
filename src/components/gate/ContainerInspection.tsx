@@ -2,6 +2,16 @@
 
 import { useState, useRef } from 'react';
 import { AlertTriangle, CheckCircle2, X, Camera, ImageIcon } from 'lucide-react';
+import {
+  PHOTO_CATEGORY_LABELS,
+  STANDARD_PHOTO_CATEGORIES,
+  buildPhotoRequirements,
+  summarizePhotoCompleteness,
+  type EvidencePhoto,
+  type PhotoCategory,
+  type PhotoCompleteness,
+  type PhotoRequirement,
+} from '@/lib/photoEvidence';
 
 interface DamagePoint {
   id: string;
@@ -28,6 +38,9 @@ interface ContainerInspectionProps {
     grade_reasons: string[];
     inspector_notes: string;
     photos: string[];
+    photo_evidence: EvidencePhoto[];
+    photo_requirements: PhotoRequirement[];
+    photo_completeness: PhotoCompleteness;
     container_type?: string;
     container_size?: string;
     inspection_template?: string;
@@ -191,7 +204,8 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
   const [selectedSeverity, setSelectedSeverity] = useState<'minor' | 'major' | 'severe'>('minor');
   const [manualGrade, setManualGrade] = useState<ConditionGrade | null>(null);
   const [inspectorNotes, setInspectorNotes] = useState('');
-  const [overviewPhotos, setOverviewPhotos] = useState<string[]>([]);
+  const [evidencePhotos, setEvidencePhotos] = useState<EvidencePhoto[]>([]);
+  const [selectedPhotoCategory, setSelectedPhotoCategory] = useState<PhotoCategory>('front');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const damageFileRef = useRef<HTMLInputElement>(null);
   const [activePhotoPointId, setActivePhotoPointId] = useState<string | null>(null);
@@ -222,9 +236,60 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
   const totalPoints = points.length;
   const conditionEvaluation = evaluateCondition(points, template.kind);
   const finalGrade = manualGrade || conditionEvaluation.grade;
+  const overviewPhotos = evidencePhotos.map(photo => photo.url);
+  const damageEvidencePhotos: EvidencePhoto[] = points
+    .filter(point => point.photo)
+    .map((point, index) => ({
+      id: `damage-${point.id}`,
+      url: point.photo as string,
+      category: 'damage_closeup',
+      label: `${PHOTO_CATEGORY_LABELS.damage_closeup} ${index + 1}`,
+      taken_at: new Date().toISOString(),
+      damage_point_id: point.id,
+      required: point.severity !== 'minor',
+    }));
+  const allEvidencePhotos = [...evidencePhotos, ...damageEvidencePhotos];
+  const photoRequirements = buildPhotoRequirements(template.key, evidencePhotos, points);
+  const photoCompleteness = summarizePhotoCompleteness(photoRequirements, allEvidencePhotos.length);
 
   const gradeColors: Record<string, string> = {
     A: 'bg-emerald-500', B: 'bg-amber-500', C: 'bg-orange-500', D: 'bg-red-600',
+  };
+
+  const handleEvidencePhotoUpload = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setEvidencePhotos(prev => [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random()}`,
+          url: reader.result as string,
+          category: selectedPhotoCategory,
+          label: PHOTO_CATEGORY_LABELS[selectedPhotoCategory],
+          taken_at: new Date().toISOString(),
+          required: photoRequirements.some(item => item.category === selectedPhotoCategory && item.required),
+        },
+      ]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const completeInspection = () => {
+    onComplete({
+      points,
+      condition_grade: finalGrade,
+      suggested_condition_grade: conditionEvaluation.grade,
+      grade_override: manualGrade !== null,
+      grade_reasons: conditionEvaluation.reasons,
+      inspector_notes: inspectorNotes,
+      photos: overviewPhotos,
+      photo_evidence: allEvidencePhotos,
+      photo_requirements: photoRequirements,
+      photo_completeness: photoCompleteness,
+      container_type: containerType.toUpperCase(),
+      container_size: containerSize,
+      inspection_template: template.key,
+    });
   };
 
   return (
@@ -599,24 +664,66 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
         </div>
       )}
 
-      {/* Overview Photos */}
+      {/* Photo Evidence */}
       <div className="space-y-2">
-        <p className="text-xs text-slate-400 font-semibold flex items-center gap-1">
-          <ImageIcon size={12} /> รูปถ่ายภาพรวมสภาพตู้ ({overviewPhotos.length} รูป)
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-slate-400 font-semibold flex items-center gap-1">
+            <ImageIcon size={12} /> Photo Evidence ({allEvidencePhotos.length} รูป)
+          </p>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+            photoCompleteness.missing_categories.length === 0
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+          }`}>
+            ครบ {photoCompleteness.completed}/{photoCompleteness.required}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
+          {photoRequirements.map(item => (
+            <div key={item.category} className={`px-2 py-1.5 rounded-lg border text-[10px] flex items-center justify-between gap-2 ${
+              item.met
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/10 dark:text-emerald-300'
+                : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/10 dark:text-amber-300'
+            }`}>
+              <span className="truncate">{item.label}</span>
+              <span className="font-bold">{item.met ? 'ครบ' : 'รอรูป'}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] text-slate-400 uppercase font-semibold">หมวดรูปถัดไป:</span>
+          {STANDARD_PHOTO_CATEGORIES.map(category => (
+            <button key={category} type="button" onClick={() => setSelectedPhotoCategory(category)}
+              className={`px-2 py-1 rounded-lg text-[10px] border transition-all ${
+                selectedPhotoCategory === category
+                  ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'
+                  : 'border-slate-200 dark:border-slate-600 text-slate-500'
+              }`}>
+              {PHOTO_CATEGORY_LABELS[category]}
+            </button>
+          ))}
+        </div>
         <div className="flex gap-2 flex-wrap">
-          {overviewPhotos.map((photo, i) => (
-            <div key={i} className="relative">
-              <img src={photo} alt={`overview ${i + 1}`} className="w-20 h-16 rounded-lg object-cover border border-slate-200" />
-              <button onClick={() => setOverviewPhotos(prev => prev.filter((_, j) => j !== i))}
+          {evidencePhotos.map(photo => (
+            <div key={photo.id} className="relative group">
+              <img src={photo.url} alt={photo.label} className="w-24 h-16 rounded-lg object-cover border border-slate-200" />
+              <span className="absolute left-1 bottom-1 max-w-[5.5rem] px-1 py-0.5 rounded bg-black/60 text-white text-[8px] truncate">
+                {photo.label}
+              </span>
+              <button onClick={() => setEvidencePhotos(prev => prev.filter(item => item.id !== photo.id))}
                 className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px]">✕</button>
             </div>
           ))}
           <button onClick={() => fileInputRef.current?.click()}
-            className="w-20 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-colors">
+            className="w-24 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-colors">
             <Camera size={16} /> <span className="text-[8px] mt-0.5">เพิ่มรูป</span>
           </button>
         </div>
+        {photoCompleteness.missing_categories.length > 0 && (
+          <p className="text-[10px] text-amber-600 dark:text-amber-400">
+            ยังขาด: {photoCompleteness.missing_categories.join(', ')}
+          </p>
+        )}
       </div>
 
       {/* Hidden file inputs */}
@@ -624,9 +731,7 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
         onChange={e => {
           const file = e.target.files?.[0];
           if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => setOverviewPhotos(prev => [...prev, reader.result as string]);
-          reader.readAsDataURL(file);
+          handleEvidencePhotoUpload(file);
           e.target.value = '';
         }} />
       <input ref={damageFileRef} type="file" accept="image/*" capture="environment" className="hidden"
@@ -713,18 +818,7 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
 
       {/* Actions */}
       <div className="flex gap-2">
-        <button onClick={() => onComplete({
-          points,
-          condition_grade: finalGrade,
-          suggested_condition_grade: conditionEvaluation.grade,
-          grade_override: manualGrade !== null,
-          grade_reasons: conditionEvaluation.reasons,
-          inspector_notes: inspectorNotes,
-          photos: overviewPhotos,
-          container_type: containerType.toUpperCase(),
-          container_size: containerSize,
-          inspection_template: template.key,
-        })}
+        <button onClick={completeInspection}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-all">
           <CheckCircle2 size={16} /> บันทึกผลตรวจ
         </button>

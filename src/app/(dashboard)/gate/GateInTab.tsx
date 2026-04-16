@@ -14,6 +14,7 @@ import PhotoCapture from '@/components/gate/PhotoCapture';
 import SignaturePad from '@/components/gate/SignaturePad';
 import ContainerInspection from '@/components/gate/ContainerInspection';
 import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
+import type { EvidencePhoto, PhotoCompleteness, PhotoRequirement } from '@/lib/photoEvidence';
 
 interface GateInTabProps {
   yardId: number;
@@ -40,6 +41,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     grade_reasons?: string[];
     inspector_notes: string;
     photos: string[];
+    photo_evidence?: EvidencePhoto[];
+    photo_requirements?: PhotoRequirement[];
+    photo_completeness?: PhotoCompleteness;
     container_type?: string;
     container_size?: string;
     inspection_template?: string;
@@ -747,7 +751,10 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                     <div>
                       <p className="text-sm font-semibold text-slate-800 dark:text-white">✅ ตรวจแล้ว — เกรด {inspectionReport.condition_grade}</p>
                       <p className="text-[10px] text-slate-400">
-                        พบ {inspectionReport.points.length} จุดเสียหาย · {inspectionReport.photos.length} รูปถ่าย
+                        พบ {inspectionReport.points.length} จุดเสียหาย · {inspectionReport.photo_evidence?.length || inspectionReport.photos.length} รูปถ่าย
+                        {inspectionReport.photo_completeness
+                          ? ` · หลักฐานครบ ${inspectionReport.photo_completeness.completed}/${inspectionReport.photo_completeness.required}`
+                          : ''}
                         {inspectionReport.grade_override && inspectionReport.suggested_condition_grade
                           ? ` · ปรับจากเกรดแนะนำ ${inspectionReport.suggested_condition_grade}`
                           : ''}

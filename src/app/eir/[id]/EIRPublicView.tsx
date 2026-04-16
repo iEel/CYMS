@@ -2,6 +2,15 @@
 
 import { useState, useEffect, use } from 'react';
 import { formatDateTime } from '@/lib/utils';
+import {
+  PHOTO_CATEGORY_LABELS,
+  buildDamageEvidencePhotos,
+  buildPhotoEvidenceSnapshot,
+  normalizeEvidencePhotos,
+  type EvidencePhoto,
+  type PhotoCompleteness,
+  type PhotoRequirement,
+} from '@/lib/photoEvidence';
 
 interface DamagePoint {
   id: string;
@@ -20,6 +29,16 @@ const DAMAGE_LABELS: Record<string, string> = {
   dent: 'บุ๋ม (Dent)', hole: 'ทะลุ (Hole)', rust: 'สนิม (Rust)',
   scratch: 'ขีดข่วน (Scratch)', crack: 'แตกร้าว (Crack)', missing_part: 'ชิ้นส่วนหาย',
 };
+
+interface DamageReport {
+  points?: DamagePoint[];
+  photos?: string[];
+  exit_photos?: string[];
+  photo_evidence?: EvidencePhoto[];
+  photo_requirements?: PhotoRequirement[];
+  photo_completeness?: PhotoCompleteness;
+  inspection_template?: string;
+}
 
 interface EIRPublicViewProps {
   paramsPromise: Promise<{ id: string }>;
@@ -77,16 +96,43 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
     );
   }
 
-  const damagePoints: DamagePoint[] = data?.damage_report?.points || [];
-  const overviewPhotos: string[] = data?.damage_report?.photos || [];
-  const exitPhotos: string[] = data?.damage_report?.exit_photos || [];
+  const damageReport: DamageReport = data?.damage_report || {};
+  const damagePoints: DamagePoint[] = damageReport.points || [];
+  const legacyOverviewPhotos: string[] = damageReport.photos || [];
+  const exitPhotos = normalizeEvidencePhotos(damageReport.exit_photos, 'other').map((photo, i) => ({
+    ...photo,
+    id: `exit-${photo.id || i}`,
+    label: `ภาพขาออก ${i + 1}`,
+  }));
+  const evidenceSnapshot = damageReport.photo_evidence?.length
+    ? {
+        photo_evidence: normalizeEvidencePhotos(damageReport.photo_evidence, 'other'),
+        photo_requirements: damageReport.photo_requirements || [],
+        photo_completeness: damageReport.photo_completeness,
+      }
+    : buildPhotoEvidenceSnapshot({
+        templateKey: damageReport.inspection_template,
+        legacyPhotos: legacyOverviewPhotos,
+        damagePoints,
+      });
+  const damageEvidencePhotos = damageReport.photo_evidence?.length && !damageReport.photo_evidence.some(photo => photo.category === 'damage_closeup')
+    ? buildDamageEvidencePhotos(damagePoints).map(photo => {
+        const point = damagePoints.find(item => item.id === photo.damage_point_id);
+        return {
+          ...photo,
+          label: point
+            ? `${SIDE_LABELS[point.side] || PHOTO_CATEGORY_LABELS.damage_closeup} — ${DAMAGE_LABELS[point.type] || PHOTO_CATEGORY_LABELS.damage_closeup}`
+            : photo.label,
+        };
+      })
+    : [];
   const allPhotos = [
-    ...overviewPhotos.map((p: string, i: number) => ({ src: p, label: `ภาพรวม ${i + 1}` })),
-    ...exitPhotos.map((p: string, i: number) => ({ src: p, label: `ภาพขาออก ${i + 1}` })),
-    ...damagePoints.filter((dp: DamagePoint) => dp.photo).map((dp: DamagePoint) => ({
-      src: dp.photo!, label: `${SIDE_LABELS[dp.side] || dp.side} — ${DAMAGE_LABELS[dp.type] || dp.type}`,
-    })),
-  ];
+    ...evidenceSnapshot.photo_evidence,
+    ...damageEvidencePhotos,
+    ...exitPhotos,
+  ].map(photo => ({ src: photo.url, label: photo.label, category: photo.category, taken_at: photo.taken_at }));
+  const photoCompleteness = evidenceSnapshot.photo_completeness;
+  const photoRequirements = evidenceSnapshot.photo_requirements || [];
   const hasDamage = data.container_condition === 'damage';
 
   return (
@@ -154,8 +200,32 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
         {allPhotos.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 bg-red-50 border-b border-red-100">
-              <h3 className="text-sm font-bold text-red-700">📸 รูปถ่าย ({allPhotos.length} รูป)</h3>
-              <p className="text-[10px] text-red-400 mt-0.5">กดรูปเพื่อดูขนาดเต็ม</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-red-700">📸 Photo Evidence ({allPhotos.length} รูป)</h3>
+                  <p className="text-[10px] text-red-400 mt-0.5">กดรูปเพื่อดูขนาดเต็ม</p>
+                </div>
+                {photoCompleteness && (
+                  <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${
+                    photoCompleteness.missing_categories.length === 0
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    ครบ {photoCompleteness.completed}/{photoCompleteness.required}
+                  </span>
+                )}
+              </div>
+              {photoRequirements.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {photoRequirements.map(item => (
+                    <span key={item.category} className={`px-2 py-0.5 rounded-full text-[10px] ${
+                      item.met ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {item.label}: {item.met ? 'ครบ' : 'ยังไม่มีรูป'}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="p-4 grid grid-cols-2 gap-3">
               {allPhotos.map((photo, i) => (
@@ -163,6 +233,7 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
                   <img src={photo.src} alt={photo.label}
                     className="w-full h-32 object-cover rounded-xl border border-slate-200 hover:border-blue-400 transition-all" />
                   <p className="text-[10px] text-slate-400 mt-1 truncate">{photo.label}</p>
+                  {photo.taken_at && <p className="text-[9px] text-slate-300 truncate">{formatDateTime(photo.taken_at)}</p>}
                 </button>
               ))}
             </div>

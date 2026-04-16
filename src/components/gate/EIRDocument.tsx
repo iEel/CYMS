@@ -3,6 +3,7 @@
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatDateTime } from '@/lib/utils';
+import type { EvidencePhoto, PhotoCompleteness, PhotoRequirement } from '@/lib/photoEvidence';
 
 interface DamagePoint {
   id: string;
@@ -36,7 +37,15 @@ export interface EIRData {
   row: number;
   tier: number;
   processed_by: string;
-  damage_report: { points?: DamagePoint[]; condition_grade?: string; inspector_notes?: string; photos?: string[] } | null;
+  damage_report: {
+    points?: DamagePoint[];
+    condition_grade?: string;
+    inspector_notes?: string;
+    photos?: string[];
+    photo_evidence?: EvidencePhoto[];
+    photo_requirements?: PhotoRequirement[];
+    photo_completeness?: PhotoCompleteness;
+  } | null;
   notes: string;
   container_condition: 'sound' | 'damage';
   container_grade: string;
