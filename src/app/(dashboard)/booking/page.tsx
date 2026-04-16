@@ -4,11 +4,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import * as XLSX from 'xlsx';
 import {
-  Loader2, Search, FileText, Upload, Plus, Ship, Package,
-  CheckCircle2, XCircle, Clock, AlertTriangle, RotateCcw, Anchor,
-  FileSpreadsheet, Trash2, Filter, ClipboardCheck, BarChart3,
-  ChevronDown, Calendar, Eye, Link2, ChevronLeft, ChevronRight, Download,
+  Loader2, Search, Upload, Plus, Ship, Package,
+  XCircle, RotateCcw, Anchor,
+  FileSpreadsheet, Trash2, ClipboardCheck, BarChart3,
+  Eye, Link2, ChevronLeft, ChevronRight, Download,
 } from 'lucide-react';
+
+type UtilizationStatus = 'in_progress' | 'expired' | 'fully_received' | 'fully_released' | 'over_received';
 
 interface BookingRow {
   booking_id: number; booking_number: string; booking_type: string;
@@ -17,6 +19,8 @@ interface BookingRow {
   valid_from: string; valid_to: string;
   status: string; seal_number: string; notes: string; customer_name: string;
   received_count: number; released_count: number; linked_containers: number;
+  pending_count?: number; receive_percent?: number; release_percent?: number;
+  utilization_status?: UtilizationStatus;
   created_at: string;
 }
 
@@ -67,7 +71,10 @@ export default function BookingPage() {
   const [fileBatchResult, setFileBatchResult] = useState<{ success: number; failed: number } | null>(null);
 
   // === Summary stats ===
-  const [summaryStats, setSummaryStats] = useState({ total: 0, pending: 0, confirmed: 0, completed: 0, cancelled: 0, expired: 0 });
+  const [summaryStats, setSummaryStats] = useState({
+    total: 0, pending: 0, confirmed: 0, completed: 0, cancelled: 0, expired: 0,
+    expected: 0, received: 0, released: 0, over_received: 0,
+  });
 
   // Fetch bookings (paginated)
   const fetchBookings = useCallback(async (page?: number) => {
@@ -90,18 +97,21 @@ export default function BookingPage() {
   // Fetch summary stats (no pagination — count all)
   const fetchSummaryStats = useCallback(async () => {
     try {
-      const url = `/api/edi/bookings?yard_id=${yardId}&limit=9999`;
+      const url = `/api/edi/bookings?yard_id=${yardId}&summary=1`;
       const res = await fetch(url);
       const data = await res.json();
-      const list = data.bookings || [];
-      const now = new Date();
+      const summary = data.summary || {};
       setSummaryStats({
-        total: data.total || list.length,
-        pending: list.filter((b: BookingRow) => b.status === 'pending').length,
-        confirmed: list.filter((b: BookingRow) => b.status === 'confirmed').length,
-        completed: list.filter((b: BookingRow) => b.status === 'completed').length,
-        cancelled: list.filter((b: BookingRow) => b.status === 'cancelled').length,
-        expired: list.filter((b: BookingRow) => b.valid_to && new Date(b.valid_to) < now && b.status !== 'completed' && b.status !== 'cancelled').length,
+        total: Number(summary.total || 0),
+        pending: Number(summary.pending || 0),
+        confirmed: Number(summary.confirmed || 0),
+        completed: Number(summary.completed || 0),
+        cancelled: Number(summary.cancelled || 0),
+        expired: Number(summary.expired || 0),
+        expected: Number(summary.expected || 0),
+        received: Number(summary.received || 0),
+        released: Number(summary.released || 0),
+        over_received: Number(summary.over_received || 0),
       });
     } catch (err) { console.error(err); }
   }, [yardId]);
@@ -278,8 +288,44 @@ export default function BookingPage() {
   };
   const statusLabels: Record<string, string> = { pending: 'รอยืนยัน', confirmed: 'ยืนยันแล้ว', completed: 'เสร็จ', cancelled: 'ยกเลิก' };
   const typeLabels: Record<string, string> = { import: '📥 นำเข้า', export: '📤 ส่งออก', empty_pickup: '📦 รับตู้เปล่า', empty_return: '🔄 คืนตู้เปล่า' };
-  const bookingProgressText = (bk: BookingRow) =>
-    `${bk.received_count || 0}/${bk.container_count || 0} received, ${bk.released_count || 0}/${bk.container_count || 0} released`;
+  const bookingUtilization = (bk: BookingRow) => {
+    const expected = Math.max(Number(bk.container_count || 0), 0);
+    const received = Math.max(Number(bk.received_count || 0), 0);
+    const released = Math.max(Number(bk.released_count || 0), 0);
+    const linked = Math.max(Number(bk.linked_containers || 0), 0);
+    const pending = Math.max(Number(bk.pending_count ?? linked - received), 0);
+    const receivePct = expected > 0 ? Math.min(100, Math.round((received / expected) * 100)) : 0;
+    const releasePct = expected > 0 ? Math.min(100, Math.round((released / expected) * 100)) : 0;
+    const remainingReceive = Math.max(expected - received, 0);
+    const remainingRelease = Math.max(expected - released, 0);
+    const overReceived = Math.max(received - expected, 0);
+    const isExpired = Boolean(bk.valid_to && new Date(bk.valid_to) < new Date() && bk.status !== 'completed' && bk.status !== 'cancelled');
+    const status: UtilizationStatus = overReceived > 0
+      ? 'over_received'
+      : released >= expected && expected > 0
+        ? 'fully_released'
+        : received >= expected && expected > 0
+          ? 'fully_received'
+          : isExpired
+            ? 'expired'
+            : 'in_progress';
+
+    return { expected, received, released, linked, pending, receivePct, releasePct, remainingReceive, remainingRelease, overReceived, status };
+  };
+  const bookingProgressText = (bk: BookingRow) => {
+    const u = bookingUtilization(bk);
+    return `${u.received}/${u.expected} received, ${u.released}/${u.expected} released`;
+  };
+  const utilizationStatusInfo = (status: UtilizationStatus) => {
+    const map: Record<UtilizationStatus, { label: string; color: string }> = {
+      in_progress: { label: 'กำลังใช้งาน', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20' },
+      expired: { label: 'หมดอายุแต่ยังไม่ครบ', color: 'bg-rose-50 text-rose-500 dark:bg-rose-900/20' },
+      fully_received: { label: 'รับครบแล้ว', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20' },
+      fully_released: { label: 'ออกครบแล้ว', color: 'bg-teal-50 text-teal-600 dark:bg-teal-900/20' },
+      over_received: { label: 'รับเกินจำนวน', color: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20' },
+    };
+    return map[status];
+  };
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
 
@@ -340,8 +386,8 @@ export default function BookingPage() {
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-700">
                 {bookings.map(bk => {
-                  const progress = bk.container_count > 0 ? Math.min(100, Math.round((bk.received_count / bk.container_count) * 100)) : 0;
-                  const isExpired = bk.valid_to && new Date(bk.valid_to) < new Date() && bk.status !== 'completed' && bk.status !== 'cancelled';
+                  const utilization = bookingUtilization(bk);
+                  const utilizationStatus = utilizationStatusInfo(utilization.status);
                   return (
                     <div key={bk.booking_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                       <div className="flex items-center justify-between gap-2">
@@ -351,7 +397,7 @@ export default function BookingPage() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-mono font-semibold text-sm text-slate-800 dark:text-white">{bk.booking_number}</span>
                               <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${statusColors[bk.status]}`}>{statusLabels[bk.status]}</span>
-                              {isExpired && <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-rose-50 text-rose-500">หมดอายุ</span>}
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${utilizationStatus.color}`}>{utilizationStatus.label}</span>
                             </div>
                             <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 flex-wrap">
                               <span>{typeLabels[bk.booking_type]}</span>
@@ -360,14 +406,26 @@ export default function BookingPage() {
                               {bk.customer_name && <span>• {bk.customer_name}</span>}
                               {bk.valid_to && <span>• ถึง {fmtDate(bk.valid_to)}</span>}
                             </div>
-                            {/* Progress bar */}
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden max-w-[120px]">
-                                <div className={`h-full rounded-full transition-all ${progress >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }} />
+                            <div className="mt-2 space-y-1.5 max-w-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="w-12 text-[10px] text-slate-400">รับเข้า</span>
+                                <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full transition-all ${utilization.receivePct >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${utilization.receivePct}%` }} />
+                                </div>
+                                <span className="w-20 text-[10px] text-slate-400 text-right">{utilization.received}/{utilization.expected}</span>
                               </div>
-                              <span className="text-[10px] text-slate-400">
+                              <div className="flex items-center gap-2">
+                                <span className="w-12 text-[10px] text-slate-400">ปล่อยออก</span>
+                                <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full transition-all ${utilization.releasePct >= 100 ? 'bg-teal-500' : 'bg-amber-500'}`} style={{ width: `${utilization.releasePct}%` }} />
+                                </div>
+                                <span className="w-20 text-[10px] text-slate-400 text-right">{utilization.released}/{utilization.expected}</span>
+                              </div>
+                              <p className="text-[10px] text-slate-400">
                                 จำนวนตู้: {bookingProgressText(bk)}
-                              </span>
+                                {utilization.remainingReceive > 0 ? ` · รอรับ ${utilization.remainingReceive}` : ''}
+                                {utilization.overReceived > 0 ? ` · เกิน ${utilization.overReceived}` : ''}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -448,6 +506,58 @@ export default function BookingPage() {
                 </div>
 
                 <div className="p-5 space-y-4">
+                  {(() => {
+                    const utilization = bookingUtilization(selectedBooking);
+                    const utilizationStatus = utilizationStatusInfo(utilization.status);
+                    return (
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-semibold text-slate-700 dark:text-white">Booking Utilization</p>
+                            <p className="text-[10px] text-slate-400">จำนวนตู้: {bookingProgressText(selectedBooking)}</p>
+                          </div>
+                          <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${utilizationStatus.color}`}>{utilizationStatus.label}</span>
+                        </div>
+                        <div className="p-4 space-y-4">
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                            {[
+                              { label: 'Expected', value: utilization.expected, color: 'text-slate-700 dark:text-white' },
+                              { label: 'Linked', value: utilization.linked, color: 'text-blue-600' },
+                              { label: 'Received', value: utilization.received, color: 'text-emerald-600' },
+                              { label: 'Released', value: utilization.released, color: 'text-teal-600' },
+                              { label: utilization.overReceived > 0 ? 'Over' : 'Remain', value: utilization.overReceived > 0 ? utilization.overReceived : utilization.remainingRelease, color: utilization.overReceived > 0 ? 'text-orange-600' : 'text-amber-600' },
+                            ].map(item => (
+                              <div key={item.label} className="rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
+                                <p className="text-[10px] text-slate-400">{item.label}</p>
+                                <p className={`text-lg font-bold ${item.color}`}>{item.value}</p>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="space-y-2">
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] font-semibold text-slate-400 uppercase">รับเข้า</span>
+                                <span className="text-[10px] text-slate-400">{utilization.received}/{utilization.expected} ({utilization.receivePct}%)</span>
+                              </div>
+                              <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${utilization.receivePct >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${utilization.receivePct}%` }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] font-semibold text-slate-400 uppercase">ปล่อยออก</span>
+                                <span className="text-[10px] text-slate-400">{utilization.released}/{utilization.expected} ({utilization.releasePct}%)</span>
+                              </div>
+                              <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${utilization.releasePct >= 100 ? 'bg-teal-500' : 'bg-amber-500'}`} style={{ width: `${utilization.releasePct}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Info Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                     <div><span className="text-[10px] text-slate-400 uppercase block">เรือ</span><span className="text-slate-700 dark:text-white">{selectedBooking.vessel_name || '—'} {selectedBooking.voyage_number || ''}</span></div>
@@ -456,18 +566,6 @@ export default function BookingPage() {
                     <div><span className="text-[10px] text-slate-400 uppercase block">ETA</span><span className="text-slate-700 dark:text-white">{fmtDate(selectedBooking.eta)}</span></div>
                     <div><span className="text-[10px] text-slate-400 uppercase block">Valid From</span><span className="text-slate-700 dark:text-white">{fmtDate(selectedBooking.valid_from)}</span></div>
                     <div><span className="text-[10px] text-slate-400 uppercase block">Valid To</span><span className="text-slate-700 dark:text-white">{fmtDate(selectedBooking.valid_to)}</span></div>
-                  </div>
-
-                  {/* Progress */}
-                  <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">ความคืบหน้า</span>
-                      <span className="text-xs text-slate-400">จำนวนตู้: {bookingProgressText(selectedBooking)}</span>
-                    </div>
-                    <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${selectedBooking.received_count >= selectedBooking.container_count ? 'bg-emerald-500' : 'bg-blue-500'}`}
-                        style={{ width: `${Math.min(100, (selectedBooking.received_count / Math.max(1, selectedBooking.container_count)) * 100)}%` }} />
-                    </div>
                   </div>
 
                   {/* Linked Containers */}
@@ -480,16 +578,25 @@ export default function BookingPage() {
                     ) : (
                       <div className="space-y-1">
                         {bookingContainers.map(bc => (
-                          <div key={bc.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700/30">
-                            <div className="flex items-center gap-2">
-                              <Package size={14} className="text-slate-400" />
-                              <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">{bc.container_number}</span>
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
-                                bc.status === 'received' ? 'bg-blue-50 text-blue-600' :
-                                bc.status === 'released' ? 'bg-emerald-50 text-emerald-600' :
-                                'bg-slate-100 text-slate-500'
-                              }`}>{bc.status === 'received' ? 'รับแล้ว' : bc.status === 'released' ? 'ออกแล้ว' : 'รอ'}</span>
-                              {bc.zone_name && <span className="text-[10px] text-slate-400">{bc.zone_name}</span>}
+                          <div key={bc.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700/30">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <Package size={14} className="text-slate-400 mt-0.5" />
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">{bc.container_number}</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                                    bc.status === 'received' ? 'bg-blue-50 text-blue-600' :
+                                    bc.status === 'released' ? 'bg-emerald-50 text-emerald-600' :
+                                    'bg-slate-100 text-slate-500'
+                                  }`}>{bc.status === 'received' ? 'รับแล้ว' : bc.status === 'released' ? 'ออกแล้ว' : 'รอ'}</span>
+                                  {(bc.size || bc.type) && <span className="text-[10px] text-slate-400">{bc.size}&apos;{bc.type}</span>}
+                                  {bc.zone_name && <span className="text-[10px] text-slate-400">{bc.zone_name}</span>}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                  {bc.gate_in_at ? `รับเข้า ${fmtDate(bc.gate_in_at)}` : 'ยังไม่ Gate-In'}
+                                  {bc.gate_out_at ? ` · ออก ${fmtDate(bc.gate_out_at)}` : ''}
+                                </p>
+                              </div>
                             </div>
                             {bc.status === 'pending' && (
                               <button onClick={() => removeContainer(bc.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
@@ -673,6 +780,49 @@ export default function BookingPage() {
             ))}
           </div>
 
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-white flex items-center gap-2">
+                <BarChart3 size={14} /> Booking Utilization รวม
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">นับจาก Booking ที่ไม่ถูกยกเลิก เพื่อดูว่าจำนวนตู้ที่รับเข้าและปล่อยออกใช้ quota ไปเท่าไหร่</p>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'Expected', value: summaryStats.expected, color: 'text-slate-800 dark:text-white' },
+                  { label: 'Received', value: summaryStats.received, color: 'text-emerald-600' },
+                  { label: 'Released', value: summaryStats.released, color: 'text-teal-600' },
+                  { label: 'Over Received', value: summaryStats.over_received, color: summaryStats.over_received > 0 ? 'text-orange-600' : 'text-slate-400' },
+                ].map(item => (
+                  <div key={item.label} className="rounded-xl bg-slate-50 dark:bg-slate-700/30 p-4">
+                    <p className="text-[10px] text-slate-400">{item.label}</p>
+                    <p className={`text-2xl font-bold ${item.color}`}>{item.value.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {[
+                  { label: 'รับเข้า', value: summaryStats.received, color: 'bg-emerald-500' },
+                  { label: 'ปล่อยออก', value: summaryStats.released, color: 'bg-teal-500' },
+                ].map(item => {
+                  const pct = summaryStats.expected > 0 ? Math.min(100, Math.round((item.value / summaryStats.expected) * 100)) : 0;
+                  return (
+                    <div key={item.label}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase">{item.label}</span>
+                        <span className="text-[10px] text-slate-400">{item.value}/{summaryStats.expected} ({pct}%)</span>
+                      </div>
+                      <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${item.color}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* Recent Bookings Summary Table */}
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="p-4 border-b border-slate-100 dark:border-slate-700">
@@ -695,7 +845,8 @@ export default function BookingPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {bookings.filter(b => b.status !== 'cancelled').slice(0, 20).map(bk => {
-                    const pct = bk.container_count > 0 ? Math.round((bk.received_count / bk.container_count) * 100) : 0;
+                    const utilization = bookingUtilization(bk);
+                    const utilizationStatus = utilizationStatusInfo(utilization.status);
                     return (
                       <tr key={bk.booking_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                         <td className="px-3 py-2 font-mono font-semibold text-slate-800 dark:text-white">{bk.booking_number}</td>
@@ -703,14 +854,29 @@ export default function BookingPage() {
                         <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{bk.vessel_name || '—'}</td>
                         <td className="px-3 py-2 text-center">{bk.container_count}x{bk.container_size}&apos;</td>
                         <td className="px-3 py-2 text-center">
-                          <div className="flex items-center gap-1 justify-center">
-                            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                          <div className="space-y-1 min-w-[150px]">
+                            <div className="flex items-center gap-1 justify-center">
+                              <span className="text-[9px] text-slate-400 w-8 text-right">รับ</span>
+                              <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${utilization.receivePct >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${utilization.receivePct}%` }} />
+                              </div>
+                              <span className="text-[10px] text-slate-400 whitespace-nowrap w-12 text-left">{utilization.received}/{utilization.expected}</span>
                             </div>
-                            <span className="text-[10px] text-slate-400 whitespace-nowrap">{bookingProgressText(bk)}</span>
+                            <div className="flex items-center gap-1 justify-center">
+                              <span className="text-[9px] text-slate-400 w-8 text-right">ออก</span>
+                              <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${utilization.releasePct >= 100 ? 'bg-teal-500' : 'bg-amber-500'}`} style={{ width: `${utilization.releasePct}%` }} />
+                              </div>
+                              <span className="text-[10px] text-slate-400 whitespace-nowrap w-12 text-left">{utilization.released}/{utilization.expected}</span>
+                            </div>
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${statusColors[bk.status]}`}>{statusLabels[bk.status]}</span></td>
+                        <td className="px-3 py-2 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${statusColors[bk.status]}`}>{statusLabels[bk.status]}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${utilizationStatus.color}`}>{utilizationStatus.label}</span>
+                          </div>
+                        </td>
                         <td className="px-3 py-2 text-slate-500">{fmtDate(bk.valid_to)}</td>
                       </tr>
                     );

@@ -8,11 +8,16 @@ function bookingSummarySelect() {
     b.booking_number, b.booking_id, b.vessel_name, b.voyage_number,
     b.booking_type, b.status, b.customer_id, c.customer_name,
     b.container_count, b.container_size, b.container_type,
-    ISNULL(b.received_count, 0) as received_count,
-    ISNULL(b.released_count, 0) as released_count,
     (SELECT COUNT(*) FROM BookingContainers bc2 WHERE bc2.booking_id = b.booking_id) AS linked_containers,
-    (SELECT COUNT(*) FROM BookingContainers bc3 WHERE bc3.booking_id = b.booking_id AND bc3.status = 'received') AS received_containers,
-    (SELECT COUNT(*) FROM BookingContainers bc4 WHERE bc4.booking_id = b.booking_id AND bc4.status = 'released') AS released_containers
+    (SELECT COUNT(*) FROM BookingContainers bc3 WHERE bc3.booking_id = b.booking_id AND bc3.status IN ('received', 'released')) AS received_count,
+    (SELECT COUNT(*) FROM BookingContainers bc4 WHERE bc4.booking_id = b.booking_id AND bc4.status = 'released') AS released_count,
+    (SELECT COUNT(*) FROM BookingContainers bc5 WHERE bc5.booking_id = b.booking_id AND bc5.status = 'pending') AS pending_count,
+    CASE WHEN ISNULL(b.container_count, 0) > 0
+      THEN CAST(ROUND(((SELECT COUNT(*) FROM BookingContainers bc6 WHERE bc6.booking_id = b.booking_id AND bc6.status IN ('received', 'released')) * 100.0) / b.container_count, 0) AS INT)
+      ELSE 0 END AS receive_percent,
+    CASE WHEN ISNULL(b.container_count, 0) > 0
+      THEN CAST(ROUND(((SELECT COUNT(*) FROM BookingContainers bc7 WHERE bc7.booking_id = b.booking_id AND bc7.status = 'released') * 100.0) / b.container_count, 0) AS INT)
+      ELSE 0 END AS release_percent
   `;
 }
 
@@ -117,6 +122,7 @@ export async function GET(request: NextRequest) {
     const yardId = searchParams.get('yard_id');
     const status = searchParams.get('status');
     const search = searchParams.get('search');
+    const summary = searchParams.get('summary');
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')));
     const offset = (page - 1) * limit;
@@ -146,6 +152,33 @@ export async function GET(request: NextRequest) {
 
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
 
+    if (summary === '1') {
+      const summaryResult = await reqData.query(`
+        SELECT
+          COUNT(*) AS total,
+          COUNT(CASE WHEN b.status = 'pending' THEN 1 END) AS pending,
+          COUNT(CASE WHEN b.status = 'confirmed' THEN 1 END) AS confirmed,
+          COUNT(CASE WHEN b.status = 'completed' THEN 1 END) AS completed,
+          COUNT(CASE WHEN b.status = 'cancelled' THEN 1 END) AS cancelled,
+          COUNT(CASE WHEN b.valid_to IS NOT NULL AND b.valid_to < GETDATE() AND b.status NOT IN ('completed', 'cancelled') THEN 1 END) AS expired,
+          ISNULL(SUM(CASE WHEN b.status != 'cancelled' THEN ISNULL(b.container_count, 0) ELSE 0 END), 0) AS expected,
+          ISNULL(SUM(CASE WHEN b.status != 'cancelled' THEN util.received_count ELSE 0 END), 0) AS received,
+          ISNULL(SUM(CASE WHEN b.status != 'cancelled' THEN util.released_count ELSE 0 END), 0) AS released,
+          ISNULL(SUM(CASE WHEN b.status != 'cancelled' AND util.received_count > ISNULL(b.container_count, 0) THEN util.received_count - ISNULL(b.container_count, 0) ELSE 0 END), 0) AS over_received
+        FROM Bookings b
+        OUTER APPLY (
+          SELECT
+            COUNT(CASE WHEN bc.status IN ('received', 'released') THEN 1 END) AS received_count,
+            COUNT(CASE WHEN bc.status = 'released' THEN 1 END) AS released_count
+          FROM BookingContainers bc
+          WHERE bc.booking_id = b.booking_id
+        ) util
+        ${where}
+      `);
+
+      return NextResponse.json({ summary: summaryResult.recordset[0] });
+    }
+
     // Count total
     const countResult = await reqCount.query(`SELECT COUNT(*) AS total FROM Bookings b ${where}`);
     const total = countResult.recordset[0].total;
@@ -157,7 +190,23 @@ export async function GET(request: NextRequest) {
 
     const result = await reqData.query(`
       SELECT b.*, c.customer_name,
-        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id) AS linked_containers
+        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id) AS linked_containers,
+        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status IN ('received', 'released')) AS received_count,
+        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status = 'released') AS released_count,
+        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status = 'pending') AS pending_count,
+        CASE WHEN ISNULL(b.container_count, 0) > 0
+          THEN CAST(ROUND(((SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status IN ('received', 'released')) * 100.0) / b.container_count, 0) AS INT)
+          ELSE 0 END AS receive_percent,
+        CASE WHEN ISNULL(b.container_count, 0) > 0
+          THEN CAST(ROUND(((SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status = 'released') * 100.0) / b.container_count, 0) AS INT)
+          ELSE 0 END AS release_percent,
+        CASE
+          WHEN (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status IN ('received', 'released')) > ISNULL(b.container_count, 0) THEN 'over_received'
+          WHEN (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status = 'released') >= ISNULL(b.container_count, 0) AND ISNULL(b.container_count, 0) > 0 THEN 'fully_released'
+          WHEN (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status IN ('received', 'released')) >= ISNULL(b.container_count, 0) AND ISNULL(b.container_count, 0) > 0 THEN 'fully_received'
+          WHEN b.valid_to IS NOT NULL AND b.valid_to < GETDATE() AND b.status NOT IN ('completed', 'cancelled') THEN 'expired'
+          ELSE 'in_progress'
+        END AS utilization_status
       FROM Bookings b
       LEFT JOIN Customers c ON b.customer_id = c.customer_id
       ${where}
