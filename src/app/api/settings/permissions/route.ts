@@ -104,6 +104,35 @@ const ROLE_GRANTS: Record<string, string[]> = {
 
 async function ensureGranularRbac(db: sql.ConnectionPool) {
   await db.request().query(`
+    IF COL_LENGTH('Permissions', 'permission_code') IS NULL
+      ALTER TABLE Permissions ADD permission_code NVARCHAR(100) NULL;
+  `);
+
+  await db.request().query(`
+    UPDATE Permissions
+    SET permission_code = CONCAT(module, '.', action, '.', permission_id)
+    WHERE permission_code IS NULL;
+
+    ALTER TABLE Permissions ALTER COLUMN permission_code NVARCHAR(100) NOT NULL;
+
+    IF EXISTS (
+      SELECT 1
+      FROM sys.columns
+      WHERE object_id = OBJECT_ID('Permissions')
+        AND name = 'action'
+        AND max_length < 100
+    )
+      ALTER TABLE Permissions ALTER COLUMN action NVARCHAR(50) NOT NULL;
+
+    IF EXISTS (
+      SELECT 1
+      FROM sys.columns
+      WHERE object_id = OBJECT_ID('Permissions')
+        AND name = 'description'
+        AND max_length < 510
+    )
+      ALTER TABLE Permissions ALTER COLUMN description NVARCHAR(255) NULL;
+
     IF COL_LENGTH('Permissions', 'requires_approval') IS NULL
       ALTER TABLE Permissions ADD requires_approval BIT NOT NULL CONSTRAINT DF_Permissions_requires_approval DEFAULT 0;
 
