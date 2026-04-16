@@ -5,9 +5,13 @@ import { Shield, Loader2, Check, X, Lock } from 'lucide-react';
 
 interface Permission {
   permission_id: number;
+  permission_code: string;
   module: string;
   action: string;
   description: string;
+  requires_approval?: boolean;
+  approval_permission_code?: string | null;
+  risk_level?: string | null;
 }
 
 interface Role {
@@ -29,6 +33,7 @@ const MODULE_LABELS: Record<string, { label: string; color: string }> = {
   settings:    { label: 'ตั้งค่าระบบ',       color: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
   audit_trail: { label: 'ประวัติการใช้งาน',  color: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
   reports:     { label: 'รายงาน',             color: 'bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
+  survey:      { label: 'ตรวจสภาพตู้',        color: 'bg-lime-50 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400' },
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -36,7 +41,39 @@ const ACTION_LABELS: Record<string, string> = {
   read: 'ดู',
   update: 'แก้ไข',
   delete: 'ลบ',
+  gate_in: 'Gate In',
+  gate_out: 'Gate Out',
+  eir_print: 'ออก EIR',
+  eir_cancel: 'ยกเลิก EIR',
+  inspect: 'ตรวจสภาพ',
+  damage_update: 'แก้ Damage',
+  grade_change: 'เปลี่ยนเกรด',
+  grade_approve: 'อนุมัติเกรด',
+  slot_move: 'ย้าย Slot',
+  location_assign: 'Assign Location',
+  hold_release: 'ปล่อย Hold',
+  invoice_create: 'ออก Invoice',
+  payment_receive: 'รับชำระ',
+  waive_request: 'ขอยกเว้น',
+  waive_approve: 'อนุมัติยกเว้น',
+  credit_note_create: 'ใบลดหนี้',
+  credit_note_approve: 'อนุมัติใบลดหนี้',
+  invoice_cancel: 'ยกเลิก Invoice',
+  receipt_cancel: 'ยกเลิก Receipt',
+  manage: 'จัดการ',
+  send: 'ส่งข้อมูล',
+  integration_logs_view: 'ดู Log',
+  permissions_manage: 'จัดการสิทธิ์',
 };
+
+const ROLE_GUIDES = [
+  { role: 'Gate Clerk', text: 'Gate In/Out และออก EIR' },
+  { role: 'Surveyor', text: 'ตรวจสภาพ เพิ่ม damage และขอเปลี่ยนเกรด' },
+  { role: 'Yard Planner', text: 'ย้าย slot และกำหนด location' },
+  { role: 'Billing', text: 'ออก invoice รับชำระ และสร้างรายการขอลด/ยกเว้น' },
+  { role: 'Supervisor', text: 'อนุมัติงานเสี่ยง ยกเลิกเอกสาร และปล่อย hold' },
+  { role: 'Admin', text: 'ตั้งค่าระบบและจัดการสิทธิ์ทั้งหมด' },
+];
 
 export default function PermissionsMatrix() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -108,9 +145,18 @@ export default function PermissionsMatrix() {
           <Shield size={20} />
         </div>
         <div>
-          <h2 className="font-semibold text-slate-800 dark:text-white">Granular RBAC — สิทธิ์ CRUD ตามฟังก์ชัน</h2>
-          <p className="text-xs text-slate-400">คลิกเพื่อเปิด/ปิดสิทธิ์ — บันทึกอัตโนมัติทันที</p>
+          <h2 className="font-semibold text-slate-800 dark:text-white">Granular RBAC + Approval Gates</h2>
+          <p className="text-xs text-slate-400">คลิกเพื่อเปิด/ปิดสิทธิ์ — สิทธิ์เสี่ยงจะแสดงเงื่อนไขอนุมัติให้เห็นชัดเจน</p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {ROLE_GUIDES.map(item => (
+          <div key={item.role} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3">
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{item.role}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{item.text}</p>
+          </div>
+        ))}
       </div>
 
       {/* Matrix Table */}
@@ -135,21 +181,44 @@ export default function PermissionsMatrix() {
                 const modPerms = permissions.filter(p => p.module === mod);
                 const modInfo = MODULE_LABELS[mod] || { label: mod, color: 'bg-slate-50 text-slate-600' };
                 
-                return modPerms.map((perm, idx) => (
+                return modPerms.map((perm, idx) => {
+                  const approvalPerm = perm.approval_permission_code
+                    ? permissions.find(p => p.permission_code === perm.approval_permission_code)
+                    : null;
+
+                  return (
                   <tr key={perm.permission_id}
                     className={`border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors
                       ${idx === 0 ? 'border-t-2 border-t-slate-200 dark:border-t-slate-600' : ''}`}>
                     <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        {idx === 0 && (
-                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${modInfo.color}`}>
-                            {modInfo.label}
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {idx === 0 && (
+                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${modInfo.color}`}>
+                              {modInfo.label}
+                            </span>
+                          )}
+                          {idx > 0 && <span className="w-[1px] h-4 ml-1" />}
+                          <span className="text-slate-600 dark:text-slate-300 text-xs font-medium">
+                            {ACTION_LABELS[perm.action] || perm.action}
                           </span>
-                        )}
-                        {idx > 0 && <span className="w-[1px] h-4 ml-1" />}
-                        <span className="text-slate-600 dark:text-slate-300 text-xs">
-                          {ACTION_LABELS[perm.action] || perm.action}
-                        </span>
+                          {perm.risk_level === 'high' && (
+                            <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300">
+                              ความเสี่ยงสูง
+                            </span>
+                          )}
+                          {perm.requires_approval && (
+                            <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                              ต้องอนุมัติ
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                          {perm.description}
+                          {approvalPerm && (
+                            <span className="text-amber-600 dark:text-amber-300"> · ผู้อนุมัติใช้สิทธิ์ {ACTION_LABELS[approvalPerm.action] || approvalPerm.action}</span>
+                          )}
+                        </p>
                       </div>
                     </td>
                     {roles.map(role => {
@@ -183,7 +252,8 @@ export default function PermissionsMatrix() {
                       );
                     })}
                   </tr>
-                ));
+                  );
+                });
               })}
             </tbody>
           </table>
@@ -209,6 +279,12 @@ export default function PermissionsMatrix() {
             <Check size={10} className="text-blue-500" />
           </span>
           Admin (ล็อก — มีทุกสิทธิ์)
+        </span>
+        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+          ต้องอนุมัติ
+        </span>
+        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300">
+          ความเสี่ยงสูง
         </span>
       </div>
     </div>

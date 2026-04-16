@@ -16,8 +16,10 @@ export interface User {
 
 export type UserRole =
   | 'yard_manager'
+  | 'supervisor'
   | 'gate_clerk'
   | 'surveyor'
+  | 'yard_planner'
   | 'rs_driver'
   | 'billing_officer'
   | 'customer';

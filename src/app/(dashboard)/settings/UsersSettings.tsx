@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/providers/ToastProvider';
-import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Building, Trash2, Search, ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
+import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Trash2, Search, ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
 import { getPasswordStrength } from '@/lib/passwordStrength';
 import PermissionsMatrix from './PermissionsMatrix';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -37,8 +37,10 @@ interface YardOption {
 
 const ROLES = [
   { code: 'yard_manager', label: 'ผู้จัดการลาน / Admin' },
+  { code: 'supervisor', label: 'Supervisor / ผู้อนุมัติ' },
   { code: 'gate_clerk', label: 'พนักงานหน้าประตู' },
   { code: 'surveyor', label: 'พนักงานสำรวจลาน' },
+  { code: 'yard_planner', label: 'ผู้วางแผนลาน' },
   { code: 'rs_driver', label: 'คนขับรถยก' },
   { code: 'billing_officer', label: 'พนักงานบัญชี' },
   { code: 'customer', label: 'ลูกค้า (สายเรือ/ขนส่ง)' },

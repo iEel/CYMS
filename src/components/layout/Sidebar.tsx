@@ -32,55 +32,55 @@ const menuItems: MenuItem[] = [
     label: 'แดชบอร์ด',
     href: '/dashboard',
     icon: <LayoutDashboard size={20} />,
-    roles: ['yard_manager', 'gate_clerk', 'surveyor', 'rs_driver', 'billing_officer', 'customer'],
+    roles: ['yard_manager', 'supervisor', 'gate_clerk', 'surveyor', 'yard_planner', 'rs_driver', 'billing_officer', 'customer'],
   },
   {
     label: 'จัดการลาน',
     href: '/yard',
     icon: <Container size={20} />,
-    roles: ['yard_manager', 'surveyor'],
+    roles: ['yard_manager', 'supervisor', 'surveyor', 'yard_planner'],
   },
   {
     label: 'ประตู Gate',
     href: '/gate',
     icon: <DoorOpen size={20} />,
-    roles: ['yard_manager', 'gate_clerk', 'surveyor'],
+    roles: ['yard_manager', 'supervisor', 'gate_clerk', 'surveyor'],
   },
   {
     label: 'Booking',
     href: '/booking',
     icon: <ClipboardList size={20} />,
-    roles: ['yard_manager', 'gate_clerk'],
+    roles: ['yard_manager', 'supervisor', 'gate_clerk', 'yard_planner'],
   },
   {
     label: 'ปฏิบัติการ',
     href: '/operations',
     icon: <Truck size={20} />,
-    roles: ['yard_manager', 'rs_driver', 'surveyor'],
+    roles: ['yard_manager', 'supervisor', 'yard_planner', 'rs_driver', 'surveyor'],
   },
   {
     label: 'EDI & ข้อมูลล่วงหน้า',
     href: '/edi',
     icon: <FileText size={20} />,
-    roles: ['yard_manager', 'gate_clerk'],
+    roles: ['yard_manager', 'supervisor', 'gate_clerk', 'billing_officer'],
   },
   {
     label: 'ซ่อมบำรุง M&R',
     href: '/mnr',
     icon: <Wrench size={20} />,
-    roles: ['yard_manager', 'billing_officer', 'surveyor', 'customer'],
+    roles: ['yard_manager', 'supervisor', 'billing_officer', 'surveyor', 'customer'],
   },
   {
     label: 'บัญชี & การเงิน',
     href: '/billing',
     icon: <Receipt size={20} />,
-    roles: ['yard_manager', 'billing_officer'],
+    roles: ['yard_manager', 'supervisor', 'billing_officer'],
   },
   {
     label: 'รายงาน',
     href: '/reports',
     icon: <BarChart3 size={20} />,
-    roles: ['yard_manager', 'billing_officer', 'surveyor'],
+    roles: ['yard_manager', 'supervisor', 'billing_officer', 'surveyor', 'yard_planner'],
   },
   {
     label: 'ตั้งค่าระบบ',
@@ -92,7 +92,7 @@ const menuItems: MenuItem[] = [
     label: 'ประวัติการใช้งาน',
     href: '/audit-trail',
     icon: <ClipboardList size={20} />,
-    roles: ['yard_manager'],
+    roles: ['yard_manager', 'supervisor'],
   },
 ];
 
@@ -166,8 +166,10 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <p className="text-white text-sm font-medium truncate">{session.fullName}</p>
             <p className="text-slate-400 text-xs truncate">
               {session.role === 'yard_manager' ? 'ผู้จัดการลาน' :
+               session.role === 'supervisor' ? 'Supervisor / ผู้อนุมัติ' :
                session.role === 'gate_clerk' ? 'พนักงานประตู' :
                session.role === 'surveyor' ? 'พนักงานสำรวจ' :
+               session.role === 'yard_planner' ? 'ผู้วางแผนลาน' :
                session.role === 'rs_driver' ? 'คนขับรถยก' :
                session.role === 'billing_officer' ? 'พนักงานบัญชี' :
                'ลูกค้า'}
