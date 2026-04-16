@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/providers/ToastProvider';
 import {
-  Loader2, Search, Wrench, FileCheck2, Plus, Package, CheckCircle2,
-  XCircle, Clock, AlertTriangle, RotateCcw, Send, ThumbsUp, Play,
+  Loader2, Search, Wrench, FileCheck2, Plus, CheckCircle2,
+  XCircle, Clock, RotateCcw, Send, ThumbsUp, Play,
   DollarSign, Ban, BookOpen, Camera, ImageIcon, Save,
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -34,10 +34,15 @@ interface CedexCode {
 }
 
 export default function MnRPage() {
-  const { session } = useAuth();
+  const { session, hasPermission, hasAnyPermission } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'cedex'>('list');
   const yardId = session?.activeYardId || 1;
+  const canCreateEor = hasPermission('mnr.eor.create');
+  const canApproveEor = hasPermission('mnr.eor.approve');
+  const canUpdateEor = hasPermission('mnr.eor.update');
+  const canManageCedex = hasPermission('mnr.cedex.manage');
+  const canViewMnr = hasAnyPermission(['mnr.eor.create', 'mnr.eor.approve', 'mnr.eor.update', 'mnr.cedex.manage']);
 
   // List
   const [orders, setOrders] = useState<EORRow[]>([]);
@@ -117,6 +122,7 @@ export default function MnRPage() {
   }, 0);
 
   const handleCreate = async () => {
+    if (!canCreateEor) return;
     if (!selectedContainer || selectedCodes.length === 0) return;
     setCreateLoading(true); setCreateResult(null);
     try {
@@ -142,6 +148,7 @@ export default function MnRPage() {
   };
 
   const handleSaveCedex = async () => {
+    if (!canManageCedex) return;
     setCedexSaving(true);
     try {
       const url = '/api/mnr/cedex';
@@ -167,6 +174,7 @@ export default function MnRPage() {
   };
 
   const handleDeleteCedex = async (id: number) => {
+    if (!canManageCedex) return;
     setConfirmDlg({
       open: true,
       message: 'ยืนยันลบรหัส CEDEX นี้?',
@@ -181,6 +189,7 @@ export default function MnRPage() {
   };
 
   const startEditCedex = (c: CedexCode) => {
+    if (!canManageCedex) return;
     setEditingCedex(c);
     setCedexForm({
       code: c.code, component: c.component, damage: c.damage,
@@ -190,12 +199,18 @@ export default function MnRPage() {
   };
 
   const startCreateCedex = () => {
+    if (!canManageCedex) return;
     setEditingCedex(null);
     setCedexForm({ code: '', component: '', damage: '', repair: '', labor_hours: 0, material_cost: 0 });
     setShowCedexForm(true);
   };
 
   const updateOrder = async (eorId: number, action: string, actualCost?: number) => {
+    const allowed =
+      (action === 'submit' && canCreateEor) ||
+      (['approve', 'reject'].includes(action) && canApproveEor) ||
+      (['start_repair', 'complete'].includes(action) && canUpdateEor);
+    if (!allowed) return;
     await fetch('/api/mnr', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ eor_id: eorId, action, actual_cost: actualCost, user_id: session?.userId || null }),
@@ -209,6 +224,7 @@ export default function MnRPage() {
   };
 
   const confirmComplete = async () => {
+    if (!canUpdateEor) return;
     if (!completeModal) return;
     const cost = parseFloat(actualCostInput) || 0;
     await updateOrder(completeModal.eorId, 'complete', cost);
@@ -227,6 +243,12 @@ export default function MnRPage() {
 
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
+  const tabs = [
+    { id: 'list' as const, label: 'รายการ EOR', icon: <FileCheck2 size={14} />, allowed: canViewMnr },
+    { id: 'create' as const, label: 'สร้าง EOR', icon: <Plus size={14} />, allowed: canCreateEor },
+    { id: 'cedex' as const, label: 'รหัสความเสียหาย', icon: <BookOpen size={14} />, allowed: canManageCedex },
+  ].filter(tab => tab.allowed);
+  const effectiveTab = tabs.some(tab => tab.id === activeTab) ? activeTab : tabs[0]?.id;
 
   return (
     <>
@@ -237,14 +259,10 @@ export default function MnRPage() {
       </div>
 
       <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-        {[
-          { id: 'list' as const, label: 'รายการ EOR', icon: <FileCheck2 size={14} /> },
-          { id: 'create' as const, label: 'สร้าง EOR', icon: <Plus size={14} /> },
-          { id: 'cedex' as const, label: 'รหัสความเสียหาย', icon: <BookOpen size={14} /> },
-        ].map(tab => (
+        {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.id ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              effectiveTab === tab.id ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}>
             {tab.icon} {tab.label}
           </button>
@@ -252,7 +270,7 @@ export default function MnRPage() {
       </div>
 
       {/* =================== EOR LIST TAB =================== */}
-      {activeTab === 'list' && (
+      {effectiveTab === 'list' && canViewMnr && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Wrench size={16} /> EOR ({orders.length})</h3>
@@ -296,25 +314,25 @@ export default function MnRPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {o.status === 'draft' && (
-                        <button onClick={() => updateOrder(o.eor_id, 'submit')}
-                          className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 text-xs font-medium hover:bg-amber-100 flex items-center gap-1"><Send size={10} /> ส่งอนุมัติ</button>
+                      {o.status === 'draft' && canCreateEor && (
+                        <button onClick={() => updateOrder(o.eor_id, 'submit')} disabled={!canCreateEor}
+                          className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 text-xs font-medium hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Send size={10} /> ส่งอนุมัติ</button>
                       )}
-                      {o.status === 'pending_approval' && (
+                      {o.status === 'pending_approval' && canApproveEor && (
                         <>
-                          <button onClick={() => updateOrder(o.eor_id, 'approve')}
-                            className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 flex items-center gap-1"><ThumbsUp size={10} /> อนุมัติ</button>
-                          <button onClick={() => updateOrder(o.eor_id, 'reject')}
-                            className="px-1.5 py-1 rounded-lg text-slate-400 hover:text-red-500 text-xs"><XCircle size={14} /></button>
+                          <button onClick={() => updateOrder(o.eor_id, 'approve')} disabled={!canApproveEor}
+                            className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><ThumbsUp size={10} /> อนุมัติ</button>
+                          <button onClick={() => updateOrder(o.eor_id, 'reject')} disabled={!canApproveEor}
+                            className="px-1.5 py-1 rounded-lg text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed text-xs"><XCircle size={14} /></button>
                         </>
                       )}
-                      {o.status === 'approved' && (
-                        <button onClick={() => updateOrder(o.eor_id, 'start_repair')}
-                          className="px-2 py-1 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium hover:bg-violet-100 flex items-center gap-1"><Play size={10} /> เริ่มซ่อม</button>
+                      {o.status === 'approved' && canUpdateEor && (
+                        <button onClick={() => updateOrder(o.eor_id, 'start_repair')} disabled={!canUpdateEor}
+                          className="px-2 py-1 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium hover:bg-violet-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Play size={10} /> เริ่มซ่อม</button>
                       )}
-                      {o.status === 'in_repair' && (
-                        <button onClick={() => handleComplete(o.eor_id, o.estimated_cost)}
-                          className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 flex items-center gap-1"><CheckCircle2 size={10} /> เสร็จ</button>
+                      {o.status === 'in_repair' && canUpdateEor && (
+                        <button onClick={() => handleComplete(o.eor_id, o.estimated_cost)} disabled={!canUpdateEor}
+                          className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><CheckCircle2 size={10} /> เสร็จ</button>
                       )}
                     </div>
                   </div>
@@ -326,7 +344,7 @@ export default function MnRPage() {
       )}
 
       {/* =================== CREATE EOR TAB =================== */}
-      {activeTab === 'create' && (
+      {effectiveTab === 'create' && canCreateEor && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="p-5 border-b border-slate-100 dark:border-slate-700">
             <div className="flex items-center gap-3">
@@ -430,7 +448,7 @@ export default function MnRPage() {
                 className={inputClass} placeholder="เช่น ผู้ใช้แจ้ง, ตรวจพบตอน Gate-In" />
             </div>
 
-            <button onClick={handleCreate} disabled={createLoading || !selectedContainer || selectedCodes.length === 0}
+            <button onClick={handleCreate} disabled={createLoading || !canCreateEor || !selectedContainer || selectedCodes.length === 0}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-all">
               {createLoading ? <Loader2 size={16} className="animate-spin" /> : <FileCheck2 size={16} />} สร้าง EOR
             </button>
@@ -445,11 +463,11 @@ export default function MnRPage() {
       )}
 
       {/* =================== CEDEX TAB =================== */}
-      {activeTab === 'cedex' && (
+      {effectiveTab === 'cedex' && canManageCedex && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><BookOpen size={16} /> รหัสความเสียหาย (CEDEX)</h3>
-            <button onClick={startCreateCedex}
+            <button onClick={startCreateCedex} disabled={!canManageCedex}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs rounded-lg hover:bg-violet-700 transition-colors">
               <Plus size={14} /> เพิ่มรหัส
             </button>
@@ -501,7 +519,7 @@ export default function MnRPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-3">
-                <button onClick={handleSaveCedex} disabled={cedexSaving || !cedexForm.code || !cedexForm.component}
+                <button onClick={handleSaveCedex} disabled={cedexSaving || !canManageCedex || !cedexForm.code || !cedexForm.component}
                   className="px-4 py-2 bg-violet-600 text-white text-xs rounded-lg hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
                   {cedexSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                   {editingCedex ? 'บันทึก' : 'เพิ่ม'}
@@ -546,11 +564,11 @@ export default function MnRPage() {
                       <td className="px-4 py-2.5 text-right font-semibold text-slate-800 dark:text-white">฿{(c.labor_hours * laborRate + c.material_cost).toLocaleString()}</td>
                       <td className="px-4 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => startEditCedex(c)}
+                          <button onClick={() => startEditCedex(c)} disabled={!canManageCedex}
                             className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded">
                             <Wrench size={12} />
                           </button>
-                          <button onClick={() => handleDeleteCedex(c.cedex_id)}
+                          <button onClick={() => handleDeleteCedex(c.cedex_id)} disabled={!canManageCedex}
                             className="p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded">
                             <Ban size={12} />
                           </button>
@@ -559,7 +577,7 @@ export default function MnRPage() {
                     </tr>
                   ))}
                   {cedexCodes.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">ยังไม่มีรหัส CEDEX — กดปุ่ม "เพิ่มรหัส" หรือรัน migration</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">ยังไม่มีรหัส CEDEX — กดปุ่ม &quot;เพิ่มรหัส&quot; หรือรัน migration</td></tr>
                   )}
                 </tbody>
               </table>
@@ -568,6 +586,11 @@ export default function MnRPage() {
           <div className="p-3 border-t border-slate-100 dark:border-slate-700 text-[10px] text-slate-400">
             ทั้งหมด {cedexCodes.length} รายการ | อัตราแรงงาน {laborRate.toLocaleString()} ฿/ชม. (ตั้งค่าได้ที่หน้าตั้งค่าระบบ)
           </div>
+        </div>
+      )}
+      {tabs.length === 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+          คุณไม่มีสิทธิ์ใช้งาน M&R ใน Granular RBAC
         </div>
       )}
     </div>

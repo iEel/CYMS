@@ -6,7 +6,6 @@ import {
   Users,
   MapPin,
   Globe,
-  Wrench,
   Receipt,
   Lock,
   TrendingUp,
@@ -14,7 +13,7 @@ import {
   Link,
   Shield,
   Mail,
-  Image,
+  Image as ImageIcon,
 } from 'lucide-react';
 import CompanySettings from './CompanySettings';
 import YardsSettings from './YardsSettings';
@@ -28,24 +27,28 @@ import RateLimitSettings from './RateLimitSettings';
 import EmailSettingsTab from './EmailSettings';
 import PhotoRetentionSettings from './PhotoRetentionSettings';
 import SecuritySettings from './SecuritySettings';
+import { useAuth } from '@/components/providers/AuthProvider';
 
 const tabs = [
-  { id: 'company', label: 'องค์กร', icon: <Building2 size={18} />, color: '#3B82F6' },
-  { id: 'yards', label: 'ลาน/โซน', icon: <MapPin size={18} />, color: '#10B981' },
-  { id: 'users', label: 'ผู้ใช้/สิทธิ์', icon: <Users size={18} />, color: '#8B5CF6' },
-  { id: 'customers', label: 'ลูกค้า', icon: <Receipt size={18} />, color: '#EC4899' },
-  { id: 'edi', label: 'EDI', icon: <Globe size={18} />, color: '#0EA5E9' },
-  { id: 'storage', label: 'ค่าฝาก', icon: <TrendingUp size={18} />, color: '#06B6D4' },
-  { id: 'allocation', label: 'จัดตู้', icon: <Layers size={18} />, color: '#10B981' },
-  { id: 'prefix', label: 'Prefix', icon: <Link size={18} />, color: '#06B6D4' },
-  { id: 'ratelimit', label: 'Rate Limit', icon: <Shield size={18} />, color: '#F59E0B' },
-  { id: 'security', label: 'ความปลอดภัย', icon: <Lock size={18} />, color: '#EF4444' },
-  { id: 'email', label: 'Email', icon: <Mail size={18} />, color: '#3B82F6' },
-  { id: 'photos', label: 'รูปภาพ', icon: <Image size={18} />, color: '#6366F1' },
+  { id: 'company', label: 'องค์กร', icon: <Building2 size={18} />, color: '#3B82F6', permission: 'settings.manage' },
+  { id: 'yards', label: 'ลาน/โซน', icon: <MapPin size={18} />, color: '#10B981', permission: 'settings.manage' },
+  { id: 'users', label: 'ผู้ใช้/สิทธิ์', icon: <Users size={18} />, color: '#8B5CF6', permission: 'permissions.manage' },
+  { id: 'customers', label: 'ลูกค้า', icon: <Receipt size={18} />, color: '#EC4899', permission: 'settings.manage' },
+  { id: 'edi', label: 'EDI', icon: <Globe size={18} />, color: '#0EA5E9', permission: 'settings.manage' },
+  { id: 'storage', label: 'ค่าฝาก', icon: <TrendingUp size={18} />, color: '#06B6D4', permission: 'settings.manage' },
+  { id: 'allocation', label: 'จัดตู้', icon: <Layers size={18} />, color: '#10B981', permission: 'settings.manage' },
+  { id: 'prefix', label: 'Prefix', icon: <Link size={18} />, color: '#06B6D4', permission: 'settings.manage' },
+  { id: 'ratelimit', label: 'Rate Limit', icon: <Shield size={18} />, color: '#F59E0B', permission: 'settings.manage' },
+  { id: 'security', label: 'ความปลอดภัย', icon: <Lock size={18} />, color: '#EF4444', permission: 'settings.manage' },
+  { id: 'email', label: 'Email', icon: <Mail size={18} />, color: '#3B82F6', permission: 'settings.manage' },
+  { id: 'photos', label: 'รูปภาพ', icon: <ImageIcon size={18} />, color: '#6366F1', permission: 'settings.manage' },
 ];
 
 export default function SettingsPage() {
+  const { hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState('company');
+  const visibleTabs = tabs.filter(tab => hasPermission(tab.permission));
+  const effectiveTab = visibleTabs.some(tab => tab.id === activeTab) ? activeTab : visibleTabs[0]?.id || '';
 
   return (
     <div className="space-y-6">
@@ -59,18 +62,18 @@ export default function SettingsPage() {
 
       {/* Tab Navigation */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-1.5 flex gap-1 overflow-x-auto">
-        {tabs.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200
-              ${activeTab === tab.id
+              ${effectiveTab === tab.id
                 ? 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
               }
             `}
           >
-            <span style={{ color: activeTab === tab.id ? tab.color : undefined }}>
+            <span style={{ color: effectiveTab === tab.id ? tab.color : undefined }}>
               {tab.icon}
             </span>
             {tab.label}
@@ -79,21 +82,26 @@ export default function SettingsPage() {
       </div>
 
       {/* Tab Content */}
+      {visibleTabs.length === 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+          คุณไม่มีสิทธิ์ตั้งค่าระบบใน Granular RBAC
+        </div>
+      ) : (
       <div className="page-enter">
-        {activeTab === 'company' && <CompanySettings />}
-        {activeTab === 'yards' && <YardsSettings />}
-        {activeTab === 'users' && <UsersSettings />}
-        {activeTab === 'customers' && <CustomerMaster />}
-        {activeTab === 'edi' && <EDIConfiguration />}
-        {activeTab === 'storage' && <TieredStorageRate />}
-        {activeTab === 'allocation' && <AutoAllocationRules />}
-        {activeTab === 'prefix' && <PrefixMapping />}
-        {activeTab === 'ratelimit' && <RateLimitSettings />}
-        {activeTab === 'security' && <SecuritySettings />}
-        {activeTab === 'email' && <EmailSettingsTab />}
-        {activeTab === 'photos' && <PhotoRetentionSettings />}
+        {effectiveTab === 'company' && <CompanySettings />}
+        {effectiveTab === 'yards' && <YardsSettings />}
+        {effectiveTab === 'users' && <UsersSettings />}
+        {effectiveTab === 'customers' && <CustomerMaster />}
+        {effectiveTab === 'edi' && <EDIConfiguration />}
+        {effectiveTab === 'storage' && <TieredStorageRate />}
+        {effectiveTab === 'allocation' && <AutoAllocationRules />}
+        {effectiveTab === 'prefix' && <PrefixMapping />}
+        {effectiveTab === 'ratelimit' && <RateLimitSettings />}
+        {effectiveTab === 'security' && <SecuritySettings />}
+        {effectiveTab === 'email' && <EmailSettingsTab />}
+        {effectiveTab === 'photos' && <PhotoRetentionSettings />}
       </div>
+      )}
     </div>
   );
 }
-

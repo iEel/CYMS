@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, ExternalLink, ArrowRightLeft, Loader2, AlertTriangle, CheckCircle2, FileText, Receipt, Ship, Radio, Clock, User, ShieldCheck } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
+import { useAuth } from '@/components/providers/AuthProvider';
 import {
   buildPhotoEvidenceSnapshot,
   normalizeEvidencePhotos,
@@ -265,6 +266,7 @@ const REVIEW_ACTION_LABELS: Record<string, string> = {
 };
 
 export default function ContainerDetailModal({ containerId, onClose, onRefresh, onViewEIR }: ContainerDetailModalProps) {
+  const { hasPermission, hasAnyPermission } = useAuth();
   const [data, setData] = useState<ContainerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSide, setActiveSide] = useState('front');
@@ -375,8 +377,11 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
   const lifecycleDone = Object.values(lifecycle).filter(Boolean).length;
   const lifecycleTotal = Object.keys(lifecycle).length;
   const billingOutstanding = data.billing?.totals?.outstanding || 0;
+  const canChangeGrade = hasPermission('survey.grade.change');
+  const canChangeStatus = hasAnyPermission(['yard.slot.move', 'yard.location.assign', 'yard.hold.release']);
 
   const handleStatusChange = async () => {
+    if (!canChangeStatus) return;
     if (!newStatus || newStatus === c.status) return;
     setStatusChanging(true);
     try {
@@ -392,6 +397,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
   };
 
   const handleGradeChange = async () => {
+    if (!canChangeGrade) return;
     if (!newGrade || newGrade === (c.container_grade || 'A')) return;
     setGradeChanging(true);
     try {
@@ -1003,8 +1009,8 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
                     <option value="hold">ค้างจ่าย</option>
                     <option value="repair">ซ่อม</option>
                   </select>
-                  <button onClick={handleStatusChange}
-                    disabled={statusChanging || newStatus === c.status}
+                <button onClick={handleStatusChange}
+                    disabled={statusChanging || !canChangeStatus || newStatus === c.status}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 text-xs font-medium hover:bg-amber-100 disabled:opacity-30 transition-colors">
                     {statusChanging ? <Loader2 size={12} className="animate-spin" /> : <ArrowRightLeft size={12} />}
                     เปลี่ยนสถานะ
@@ -1020,7 +1026,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
                   ))}
                 </select>
                 <button onClick={handleGradeChange}
-                  disabled={gradeChanging || newGrade === (c.container_grade || 'A')}
+                  disabled={gradeChanging || !canChangeGrade || newGrade === (c.container_grade || 'A')}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-xs font-medium hover:bg-blue-100 disabled:opacity-30 transition-colors">
                   {gradeChanging ? <Loader2 size={12} className="animate-spin" /> : null}
                   บันทึกเกรด

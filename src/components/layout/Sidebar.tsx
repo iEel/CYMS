@@ -26,6 +26,7 @@ interface MenuItem {
   href: string;
   icon: React.ReactNode;
   roles: UserRole[];
+  permissions?: string[];
 }
 
 const menuItems: MenuItem[] = [
@@ -40,48 +41,56 @@ const menuItems: MenuItem[] = [
     href: '/yard',
     icon: <Container size={20} />,
     roles: ['yard_manager', 'supervisor', 'surveyor', 'yard_planner'],
+    permissions: ['yard.location.assign', 'yard.slot.move', 'survey.inspect'],
   },
   {
     label: 'ประตู Gate',
     href: '/gate',
     icon: <DoorOpen size={20} />,
     roles: ['yard_manager', 'supervisor', 'gate_clerk', 'surveyor'],
+    permissions: ['gate.in', 'gate.out', 'gate.eir.print'],
   },
   {
     label: 'Booking',
     href: '/booking',
     icon: <ClipboardList size={20} />,
     roles: ['yard_manager', 'supervisor', 'gate_clerk', 'yard_planner'],
+    permissions: ['booking.manage'],
   },
   {
     label: 'ปฏิบัติการ',
     href: '/operations',
     icon: <Truck size={20} />,
     roles: ['yard_manager', 'supervisor', 'yard_planner', 'rs_driver', 'surveyor'],
+    permissions: ['yard.slot.move', 'yard.location.assign'],
   },
   {
     label: 'EDI & ข้อมูลล่วงหน้า',
     href: '/edi',
     icon: <FileText size={20} />,
     roles: ['yard_manager', 'supervisor', 'gate_clerk', 'billing_officer'],
+    permissions: ['integration.send', 'integration.logs.view'],
   },
   {
     label: 'ซ่อมบำรุง M&R',
     href: '/mnr',
     icon: <Wrench size={20} />,
     roles: ['yard_manager', 'supervisor', 'billing_officer', 'surveyor', 'customer'],
+    permissions: ['mnr.eor.create', 'mnr.eor.approve', 'mnr.eor.update', 'mnr.cedex.manage'],
   },
   {
     label: 'บัญชี & การเงิน',
     href: '/billing',
     icon: <Receipt size={20} />,
     roles: ['yard_manager', 'supervisor', 'billing_officer'],
+    permissions: ['billing.invoice.create', 'billing.payment.receive', 'billing.credit_note.create', 'billing.waive.request'],
   },
   {
     label: 'รายงาน',
     href: '/reports',
     icon: <BarChart3 size={20} />,
     roles: ['yard_manager', 'supervisor', 'billing_officer', 'surveyor', 'yard_planner'],
+    permissions: ['reports.view', 'integration.logs.view', 'audit_trail.read', 'billing.invoice.create'],
   },
   {
     label: 'Supervisor Review',
@@ -94,12 +103,14 @@ const menuItems: MenuItem[] = [
     href: '/settings',
     icon: <Settings size={20} />,
     roles: ['yard_manager'],
+    permissions: ['settings.manage', 'permissions.manage'],
   },
   {
     label: 'ประวัติการใช้งาน',
     href: '/audit-trail',
     icon: <ClipboardList size={20} />,
     roles: ['yard_manager', 'supervisor'],
+    permissions: ['audit_trail.read'],
   },
 ];
 
@@ -110,11 +121,11 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
-  const { session, logout } = useAuth();
+  const { session, logout, hasAnyPermission, permissionsLoading } = useAuth();
   const userRole = session?.role;
 
   const filteredMenu = menuItems.filter(
-    (item) => userRole && item.roles.includes(userRole)
+    (item) => userRole && item.roles.includes(userRole) && (permissionsLoading || !item.permissions || hasAnyPermission(item.permissions))
   );
 
   return (

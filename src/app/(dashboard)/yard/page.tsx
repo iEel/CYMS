@@ -97,7 +97,7 @@ const GRADE_INFO: Record<string, { desc: string; color: string; bg: string }> = 
 };
 
 export default function YardPage() {
-  const { session } = useAuth();
+  const { session, hasAnyPermission } = useAuth();
   const [zones, setZones] = useState<ZoneData[]>([]);
   const [containers, setContainers] = useState<ContainerData[]>([]);
   const [summary, setSummary] = useState<Record<string, number>>({});
@@ -131,6 +131,8 @@ export default function YardPage() {
   const perPage = 25;
 
   const yardId = session?.activeYardId || 1;
+  const canAssignLocation = hasAnyPermission(['yard.location.assign', 'yard.slot.move']);
+  const effectiveTab = activeTab === 'allocate' && !canAssignLocation ? 'overview' : activeTab;
 
   const fetchData = useCallback(async () => {
     try {
@@ -285,12 +287,12 @@ export default function YardPage() {
         {[
           { id: 'overview' as const, label: 'ภาพรวม', icon: <LayoutGrid size={14} /> },
           { id: 'search' as const, label: 'ค้นหาตู้', icon: <Search size={14} /> },
-          { id: 'allocate' as const, label: 'จัดวางตู้', icon: <Wand2 size={14} /> },
+          { id: 'allocate' as const, label: 'จัดวางตู้', icon: <Wand2 size={14} />, guard: canAssignLocation },
           { id: 'audit' as const, label: 'ตรวจนับ', icon: <ClipboardCheck size={14} /> },
-        ].map(tab => (
+        ].filter(tab => tab.guard !== false).map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.id ? 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-white' : 'text-slate-400 hover:text-slate-600'
+              effectiveTab === tab.id ? 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-white' : 'text-slate-400 hover:text-slate-600'
             }`}>
             {tab.icon} {tab.label}
           </button>
@@ -325,7 +327,7 @@ export default function YardPage() {
       })()}
 
       {/* Tab Content */}
-      {activeTab === 'overview' && (
+      {effectiveTab === 'overview' && (
         <>
           {/* View Mode */}
           {viewMode === '3d' ? (
@@ -761,7 +763,7 @@ export default function YardPage() {
         </>
       )}
 
-      {activeTab === 'search' && (
+      {effectiveTab === 'search' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Left: Search Panel */}
           <ContainerSearch yardId={yardId} onLocate={(c) => {
@@ -781,7 +783,7 @@ export default function YardPage() {
         </div>
       )}
 
-      {activeTab === 'allocate' && (
+      {effectiveTab === 'allocate' && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           {/* Header */}
           <div className="p-5 border-b border-slate-100 dark:border-slate-700">
@@ -834,6 +836,7 @@ export default function YardPage() {
               <div className="flex items-end">
                 <button
                   onClick={async () => {
+                    if (!canAssignLocation) return;
                     setAllocLoading(true);
                     setAllocResult(null);
                     setAllocSelected(null);
@@ -848,7 +851,7 @@ export default function YardPage() {
                     } catch (err) { console.error(err); }
                     finally { setAllocLoading(false); }
                   }}
-                  disabled={allocLoading}
+                  disabled={allocLoading || !canAssignLocation}
                   className="w-full h-10 flex items-center justify-center gap-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-all"
                 >
                   {allocLoading ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
@@ -907,6 +910,7 @@ export default function YardPage() {
                 <div className="mt-4 flex items-center gap-3">
                   <button
                     onClick={async () => {
+                      if (!canAssignLocation) return;
                       if (allocSelected === null || !allocForm.container_number) return;
                       const s = allocSuggestions[allocSelected];
                       setAllocSaving(true);
@@ -944,7 +948,7 @@ export default function YardPage() {
                       }
                       finally { setAllocSaving(false); }
                     }}
-                    disabled={allocSaving || !allocForm.container_number}
+                    disabled={allocSaving || !canAssignLocation || !allocForm.container_number}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all"
                   >
                     {allocSaving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
@@ -977,7 +981,7 @@ export default function YardPage() {
         </div>
       )}
 
-      {activeTab === 'audit' && (
+      {effectiveTab === 'audit' && (
         <YardAudit yardId={yardId} zones={zones.map(z => ({
           zone_id: z.zone_id,
           zone_name: z.zone_name,

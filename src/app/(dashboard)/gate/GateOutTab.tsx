@@ -9,6 +9,7 @@ import {
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import CameraOCR from '@/components/gate/CameraOCR';
 import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
+import { useAuth } from '@/components/providers/AuthProvider';
 
 interface GateOutTabProps {
   yardId: number;
@@ -17,6 +18,12 @@ interface GateOutTabProps {
 }
 
 export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProps) {
+  const { hasPermission, hasAnyPermission } = useAuth();
+  const canGateOut = hasPermission('gate.out');
+  const canReceivePayment = hasPermission('billing.payment.receive');
+  const canCreateInvoice = hasPermission('billing.invoice.create');
+  const canWaive = hasPermission('billing.waive.request');
+  const canRequestMove = hasAnyPermission(['yard.slot.move', 'yard.location.assign']);
   // Search
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ContainerResult[]>([]);
@@ -350,6 +357,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
 
   // Phase 1: Request release
   const handleRequestRelease = async () => {
+    if (!canRequestMove) return;
     if (!selectedContainer) return;
     setReleaseLoading(true);
     try {
@@ -384,6 +392,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
 
   // Phase 3: Confirm release
   const handleGateOut = async () => {
+    if (!canGateOut) return;
     if (!selectedContainer) return;
     setGateOutLoading(true);
     setGateOutResult(null);
@@ -801,7 +810,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                           <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">🏢 ลูกค้าเครดิต — วางบิลอัตโนมัติ</p>
                           <p className="text-[10px] text-blue-500">สร้างใบแจ้งหนี้ (pending) → ปล่อยตู้ได้เลย</p>
                         </div>
-                        <button onClick={async () => {
+                        <button disabled={!canCreateInvoice} onClick={async () => {
                           if (!selectedContainer || !resolvedCustomer) return;
                           try {
                             const creditTerm = resolvedCustomer.credit_term || 0;
@@ -834,13 +843,13 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                             }
                           } catch (err) { console.error(err); }
                         }}
-                          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 whitespace-nowrap"
+                          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                         >📄 วางบิล</button>
                       </div>
                     ) : (
                       <>
                         {selectedGrand <= 0 && (
-                          <button disabled={!resolvedCustomer} onClick={async () => {
+                          <button disabled={!resolvedCustomer || !canWaive} onClick={async () => {
                             try {
                               const isWaived = originalSelectedTotal > 0;
                               const reason = isWaived
@@ -866,7 +875,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                             </button>
                           ))}
                         </div>
-                        <button disabled={!resolvedCustomer} onClick={async () => {
+                        <button disabled={!resolvedCustomer || !canReceivePayment} onClick={async () => {
                           if (!selectedContainer || !billingData || !resolvedCustomer) return;
                           try {
                             const custId = resolvedCustomer.customer_id;
@@ -937,7 +946,8 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                 <span className="flex items-center gap-2"><CheckCircle2 size={14} /> ไม่มีค่าบริการ (อยู่ในช่วง Free Days หรือไม่มี Tariff)</span>
                 {!billingCleared && (
                   <button onClick={() => createGateOutClearance('no_charge', null, 'ไม่มีค่าบริการ Gate-Out')}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">
+                    disabled={!canWaive}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     ยืนยัน No Charge
                   </button>
                 )}
@@ -991,7 +1001,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                 </div>
 
                 <button onClick={handleRequestRelease}
-                  disabled={releaseLoading || !!(billingData && !billingCleared)}
+                  disabled={releaseLoading || !canRequestMove || !!(billingData && !billingCleared)}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-50 transition-all w-full justify-center">
                   {releaseLoading ? <Loader2 size={16} className="animate-spin" /> : <Truck size={16} />}
                   ขอดึงตู้ → สร้างคำสั่งรถยก
@@ -1054,7 +1064,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                   )}
                 </div>
 
-                <button onClick={handleGateOut} disabled={gateOutLoading}
+                <button onClick={handleGateOut} disabled={gateOutLoading || !canGateOut}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all w-full justify-center">
                   {gateOutLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowUpFromLine size={16} />}
                   ✅ ยืนยันปล่อยตู้ออก + ออก EIR

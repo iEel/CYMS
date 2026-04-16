@@ -6,6 +6,10 @@ import type { AuthSession } from '@/types';
 interface AuthContextType {
   session: AuthSession | null;
   isLoading: boolean;
+  permissions: string[];
+  permissionsLoading: boolean;
+  hasPermission: (permissionCode: string) => boolean;
+  hasAnyPermission: (permissionCodes: string[]) => boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string; locked?: boolean; remaining_minutes?: number; remaining_attempts?: number }>;
   logout: () => void;
   switchYard: (yardId: number) => void;
@@ -32,6 +36,8 @@ function isTokenExpired(token: string): boolean {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
 
   useEffect(() => {
     async function initSession() {
@@ -71,6 +77,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initSession();
   }, []);
+
+  useEffect(() => {
+    async function loadPermissions() {
+      if (!session?.role) {
+        setPermissions([]);
+        setPermissionsLoading(false);
+        return;
+      }
+      setPermissions([]);
+      if (session.role === 'yard_manager') {
+        setPermissions(['*']);
+        setPermissionsLoading(false);
+        return;
+      }
+
+      setPermissionsLoading(true);
+      try {
+        const res = await fetch('/api/settings/permissions');
+        const data = await res.json();
+        const role = (data.roles || []).find((r: { role_id: number; role_code: string }) => r.role_code === session.role);
+        const rolePermIds: number[] = role ? (data.matrix?.[role.role_id] || []) : [];
+        const codes = (data.permissions || [])
+          .filter((p: { permission_id: number }) => rolePermIds.includes(p.permission_id))
+          .map((p: { permission_code?: string }) => p.permission_code)
+          .filter(Boolean);
+        setPermissions(codes);
+      } catch {
+        setPermissions([]);
+      } finally {
+        setPermissionsLoading(false);
+      }
+    }
+
+    loadPermissions();
+  }, [session?.role]);
+
+  const hasPermission = useCallback((permissionCode: string) => {
+    if (session?.role === 'yard_manager' || permissions.includes('*')) return true;
+    return permissions.includes(permissionCode);
+  }, [permissions, session?.role]);
+
+  const hasAnyPermission = useCallback((permissionCodes: string[]) => {
+    if (permissionCodes.length === 0) return true;
+    return permissionCodes.some(hasPermission);
+  }, [hasPermission]);
 
 
   const login = useCallback(async (username: string, password: string): Promise<{ success: boolean; error?: string; locked?: boolean; remaining_minutes?: number; remaining_attempts?: number }> => {
@@ -122,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, isLoading, login, logout, switchYard }}>
+    <AuthContext.Provider value={{ session, isLoading, permissions, permissionsLoading, hasPermission, hasAnyPermission, login, logout, switchYard }}>
       {children}
     </AuthContext.Provider>
   );

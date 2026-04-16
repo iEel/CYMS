@@ -33,9 +33,10 @@ interface BookingContainerRow {
 }
 
 export default function BookingPage() {
-  const { session } = useAuth();
+  const { session, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<'bookings' | 'create' | 'summary'>('bookings');
   const yardId = session?.activeYardId || 1;
+  const canManageBookings = hasPermission('booking.manage');
 
   // === Bookings List ===
   const [bookings, setBookings] = useState<BookingRow[]>([]);
@@ -139,6 +140,7 @@ export default function BookingPage() {
   };
 
   const addContainer = async () => {
+    if (!canManageBookings) return;
     if (!selectedBooking || !addContainerNumber.trim()) return;
     await fetch('/api/bookings/containers', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -149,11 +151,13 @@ export default function BookingPage() {
   };
 
   const removeContainer = async (id: number) => {
+    if (!canManageBookings) return;
     await fetch(`/api/bookings/containers?id=${id}`, { method: 'DELETE' });
     if (selectedBooking) fetchBookingContainers(selectedBooking.booking_id);
   };
 
   const updateBooking = async (id: number, updates: Record<string, unknown>) => {
+    if (!canManageBookings) return;
     await fetch('/api/edi/bookings', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ booking_id: id, ...updates }),
@@ -164,6 +168,7 @@ export default function BookingPage() {
 
   // Create booking
   const handleCreate = async () => {
+    if (!canManageBookings) return;
     if (!createForm.booking_number) return;
     setCreateLoading(true); setCreateResult(null);
     try {
@@ -256,6 +261,7 @@ export default function BookingPage() {
   };
 
   const handleBatchImport = async () => {
+    if (!canManageBookings) return;
     setFileBatchLoading(true); setFileBatchResult(null);
     let success = 0, failed = 0;
     for (const row of fileRows) {
@@ -330,6 +336,20 @@ export default function BookingPage() {
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
 
   const fmtDate = (d: string) => { if (!d) return '—'; const dt = new Date(d); return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`; };
+
+  if (!canManageBookings) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Booking</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">จัดการ Booking, ติดตามตู้, นำเข้าข้อมูลล่วงหน้า</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+          คุณไม่มีสิทธิ์จัดการ Booking ใน Granular RBAC
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -435,15 +455,15 @@ export default function BookingPage() {
                             <Eye size={12} /> ดู
                           </button>
                           {bk.status === 'pending' && (
-                            <button onClick={() => updateBooking(bk.booking_id, { status: 'confirmed' })}
+                            <button onClick={() => updateBooking(bk.booking_id, { status: 'confirmed' })} disabled={!canManageBookings}
                               className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-xs font-medium hover:bg-blue-100">ยืนยัน</button>
                           )}
                           {bk.status === 'confirmed' && (
-                            <button onClick={() => updateBooking(bk.booking_id, { status: 'completed' })}
+                            <button onClick={() => updateBooking(bk.booking_id, { status: 'completed' })} disabled={!canManageBookings}
                               className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 text-xs font-medium hover:bg-emerald-100">เสร็จ</button>
                           )}
                           {['pending', 'confirmed'].includes(bk.status) && (
-                            <button onClick={() => updateBooking(bk.booking_id, { status: 'cancelled' })}
+                            <button onClick={() => updateBooking(bk.booking_id, { status: 'cancelled' })} disabled={!canManageBookings}
                               className="px-1.5 py-1 rounded-lg text-slate-400 hover:text-red-500 text-xs"><XCircle size={14} /></button>
                           )}
                         </div>
@@ -599,7 +619,7 @@ export default function BookingPage() {
                               </div>
                             </div>
                             {bc.status === 'pending' && (
-                              <button onClick={() => removeContainer(bc.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
+                              <button onClick={() => removeContainer(bc.id)} disabled={!canManageBookings} className="text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed"><Trash2 size={12} /></button>
                             )}
                           </div>
                         ))}
@@ -613,7 +633,7 @@ export default function BookingPage() {
                           onChange={e => setAddContainerNumber(e.target.value.toUpperCase())}
                           className={`${inputClass} font-mono flex-1`}
                           onKeyDown={e => { if (e.key === 'Enter') addContainer(); }} />
-                        <button onClick={addContainer} className="px-3 h-10 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 flex items-center gap-1">
+                        <button onClick={addContainer} disabled={!canManageBookings} className="px-3 h-10 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
                           <Plus size={14} /> เพิ่มตู้
                         </button>
                       </div>
@@ -689,7 +709,7 @@ export default function BookingPage() {
                     </table>
                     {fileRows.length > 10 && <div className="p-2 text-center text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-700/30">แสดง 10 จาก {fileRows.length} รายการ</div>}
                   </div>
-                  <button onClick={handleBatchImport} disabled={fileBatchLoading}
+                  <button onClick={handleBatchImport} disabled={fileBatchLoading || !canManageBookings}
                     className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
                     {fileBatchLoading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                     นำเข้าทั้งหมด ({fileRows.length} รายการ)
@@ -745,7 +765,7 @@ export default function BookingPage() {
               </div>
               <div><label className={labelClass}>หมายเหตุ</label><input type="text" value={createForm.notes} onChange={e => setCreateForm({ ...createForm, notes: e.target.value })} className={inputClass} placeholder="หมายเหตุ..." /></div>
 
-              <button onClick={handleCreate} disabled={createLoading || !createForm.booking_number}
+              <button onClick={handleCreate} disabled={createLoading || !canManageBookings || !createForm.booking_number}
                 className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all">
                 {createLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} สร้าง Booking
               </button>

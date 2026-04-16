@@ -14,9 +14,18 @@ interface ValidationResult {
 }
 
 export default function EDIPage() {
-  const { session } = useAuth();
+  const { session, hasPermission, hasAnyPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<'validate' | 'codeco' | 'logs'>('validate');
   const yardId = session?.activeYardId || 1;
+  const canSendIntegration = hasPermission('integration.send');
+  const canViewIntegrationLogs = hasPermission('integration.logs.view');
+  const canUseEdi = hasAnyPermission(['integration.send', 'integration.logs.view']);
+  const ediTabs = [
+    { id: 'validate' as const, label: 'ตรวจเลขซีล', icon: <ShieldCheck size={14} />, allowed: canUseEdi },
+    { id: 'codeco' as const, label: 'CODECO', icon: <Send size={14} />, allowed: canSendIntegration },
+    { id: 'logs' as const, label: 'Integration Log', icon: <Activity size={14} />, allowed: canViewIntegrationLogs },
+  ].filter(tab => tab.allowed);
+  const effectiveTab = ediTabs.some(tab => tab.id === activeTab) ? activeTab : ediTabs[0]?.id;
 
   // Validate
   const [valForm, setValForm] = useState({ container_number: '', seal_number: '' });
@@ -25,6 +34,7 @@ export default function EDIPage() {
   const [valOverall, setValOverall] = useState('');
 
   const handleValidate = async () => {
+    if (!canUseEdi) return;
     if (!valForm.container_number) return;
     setValLoading(true); setValidations([]); setValOverall('');
     try {
@@ -50,14 +60,10 @@ export default function EDIPage() {
       </div>
 
       <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-        {[
-          { id: 'validate' as const, label: 'ตรวจเลขซีล', icon: <ShieldCheck size={14} /> },
-          { id: 'codeco' as const, label: 'CODECO', icon: <Send size={14} /> },
-          { id: 'logs' as const, label: 'Integration Log', icon: <Activity size={14} /> },
-        ].map(tab => (
+        {ediTabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.id ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              effectiveTab === tab.id ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}>
             {tab.icon} {tab.label}
           </button>
@@ -65,7 +71,7 @@ export default function EDIPage() {
       </div>
 
       {/* =================== VALIDATE TAB =================== */}
-      {activeTab === 'validate' && (
+      {effectiveTab === 'validate' && canUseEdi && (
         <div className="space-y-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
             <div className="flex items-center gap-3">
@@ -79,7 +85,7 @@ export default function EDIPage() {
               <div><label className={labelClass}>เลขตู้ *</label><input type="text" value={valForm.container_number} onChange={e => setValForm({ ...valForm, container_number: e.target.value })} className={`${inputClass} font-mono`} placeholder="ABCU1234567" /></div>
               <div><label className={labelClass}>เลขซีล</label><input type="text" value={valForm.seal_number} onChange={e => setValForm({ ...valForm, seal_number: e.target.value })} className={`${inputClass} font-mono`} placeholder="SEAL123456" /></div>
             </div>
-            <button onClick={handleValidate} disabled={valLoading || !valForm.container_number}
+            <button onClick={handleValidate} disabled={valLoading || !canUseEdi || !valForm.container_number}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
               {valLoading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} ตรวจสอบ
             </button>
@@ -113,10 +119,16 @@ export default function EDIPage() {
       )}
 
       {/* =================== CODECO TAB =================== */}
-      {activeTab === 'codeco' && <CodecoOutbound yardId={yardId} />}
+      {effectiveTab === 'codeco' && canSendIntegration && <CodecoOutbound yardId={yardId} canSend={canSendIntegration} />}
 
       {/* =================== INTEGRATION LOG TAB =================== */}
-      {activeTab === 'logs' && <IntegrationLogs yardId={yardId} />}
+      {effectiveTab === 'logs' && canViewIntegrationLogs && <IntegrationLogs yardId={yardId} />}
+
+      {ediTabs.length === 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+          คุณไม่มีสิทธิ์ใช้งาน EDI / Integration ใน Granular RBAC
+        </div>
+      )}
     </div>
   );
 }
@@ -306,7 +318,7 @@ interface CodecoTx {
   truck_plate: string; driver_name: string; booking_ref: string; yard_code: string;
 }
 
-function CodecoOutbound({ yardId }: { yardId: number }) {
+function CodecoOutbound({ yardId, canSend }: { yardId: number; canSend: boolean }) {
   const { toast } = useToast();
   const today = new Date().toISOString().slice(0, 10);
   const [dateFrom, setDateFrom] = useState(today);
@@ -368,6 +380,7 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
   useEffect(() => { fetchData(); fetchEndpoints(); }, [fetchData, fetchEndpoints]);
 
   const handleSftpSend = async () => {
+    if (!canSend) return;
     if (!selectedEp || summary.total === 0) return;
     setSending(true); setSendResult(null);
     try {
@@ -498,7 +511,7 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
                 </span>
               ) : null;
             })()}
-            <button onClick={handleSftpSend} disabled={sending || summary.total === 0}
+            <button onClick={handleSftpSend} disabled={sending || !canSend || summary.total === 0}
               className="h-9 px-5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 transition-all">
               {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               {sending ? 'กำลังส่ง...' : `ส่ง ${summary.total} รายการ`}
@@ -529,7 +542,8 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
           { format: 'csv', label: 'CSV', ext: 'csv', mime: 'text/csv' },
           { format: 'json', label: 'JSON', ext: 'json', mime: 'application/json' },
         ] as const).map(dl => (
-          <button key={dl.format} onClick={async () => {
+          <button key={dl.format} disabled={!canSend} onClick={async () => {
+            if (!canSend) return;
             try {
               const res = await fetch(buildUrl(dl.format));
               if (!res.ok) { const err = await res.json(); toast('error', err.error || 'Error'); return; }
@@ -548,7 +562,7 @@ function CodecoOutbound({ yardId }: { yardId: number }) {
               URL.revokeObjectURL(url);
             } catch { toast('error', 'ไม่สามารถดาวน์โหลดได้'); }
           }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 transition-all">
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
             <FileDown size={14} /> {dl.label}
           </button>
         ))}

@@ -5,9 +5,9 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/providers/ToastProvider';
 import { formatDate } from '@/lib/utils';
 import {
-  Loader2, BarChart3, Wrench, Package, Download,
-  FileSpreadsheet, FileText, TrendingDown, TrendingUp,
-  AlertTriangle, CheckCircle2, XCircle, Clock, RefreshCw,
+  Loader2, BarChart3, Wrench, Package,
+  FileSpreadsheet, TrendingDown, TrendingUp,
+  AlertTriangle, CheckCircle2, Clock, RefreshCw,
 } from 'lucide-react';
 
 // ── Types ──
@@ -506,14 +506,34 @@ function MnRReportTab({ yardId }: { yardId: number }) {
 // ════════════════════════════════════════════════════════════════
 
 export default function ReportsPage() {
-  const { session } = useAuth();
+  const { session, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<'dwell' | 'mnr'>('dwell');
   const yardId = session?.activeYardId || 1;
+  const canViewReports = hasPermission('reports.view');
 
   const TABS = [
     { id: 'dwell' as const, label: '📦 Container Dwell', icon: <Package size={15} /> },
     { id: 'mnr' as const, label: '🔧 M&R Report', icon: <Wrench size={15} /> },
   ];
+
+  if (!canViewReports) {
+    return (
+      <div className="p-4 md:p-6 space-y-4 max-w-7xl mx-auto">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600">
+            <BarChart3 size={20} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800 dark:text-white">รายงาน (Reports)</h1>
+            <p className="text-xs text-slate-400">Container Dwell Report · M&R Report · Export Excel</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+          คุณไม่มีสิทธิ์ดูรายงานใน Granular RBAC
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-7xl mx-auto">

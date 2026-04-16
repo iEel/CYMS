@@ -72,8 +72,9 @@ const entityTypeFilters = [
 ];
 
 export default function AuditTrailPage() {
-  const { session } = useAuth();
+  const { session, hasPermission } = useAuth();
   const yardId = session?.activeYardId || 1;
+  const canReadAuditTrail = hasPermission('audit_trail.read');
   const [logs, setLogs] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [entityFilter, setEntityFilter] = useState('');
@@ -83,6 +84,7 @@ export default function AuditTrailPage() {
   const pageSize = 20;
 
   const fetchLogs = useCallback(async () => {
+    if (!canReadAuditTrail) return;
     setLoading(true);
     try {
       const params = new URLSearchParams({ yard_id: String(yardId), limit: String(limit) });
@@ -96,7 +98,7 @@ export default function AuditTrailPage() {
     } finally {
       setLoading(false);
     }
-  }, [yardId, entityFilter, limit]);
+  }, [yardId, entityFilter, limit, canReadAuditTrail]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -133,6 +135,13 @@ export default function AuditTrailPage() {
         </h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">ใคร ทำอะไร ที่ไหน อย่างไร — บันทึกทุกกิจกรรมในระบบ</p>
       </div>
+
+      {!canReadAuditTrail ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+          คุณไม่มีสิทธิ์ดู Audit Trail ใน Granular RBAC
+        </div>
+      ) : (
+      <>
 
       {/* Filters */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
@@ -281,6 +290,8 @@ export default function AuditTrailPage() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -56,8 +56,13 @@ const PERMISSION_SEEDS = [
   { code: 'billing.invoice.cancel', module: 'billing', action: 'invoice_cancel', description: 'ยกเลิกใบแจ้งหนี้', risk: 'high' },
   { code: 'billing.receipt.cancel', module: 'billing', action: 'receipt_cancel', description: 'ยกเลิกใบเสร็จรับเงิน', risk: 'high' },
   { code: 'booking.manage', module: 'bookings', action: 'manage', description: 'จัดการ Booking และยอดรับ/ปล่อยตู้' },
+  { code: 'mnr.eor.create', module: 'mnr', action: 'eor_create', description: 'สร้างใบประเมินซ่อม EOR' },
+  { code: 'mnr.eor.approve', module: 'mnr', action: 'eor_approve', description: 'อนุมัติหรือปฏิเสธใบ EOR', risk: 'high' },
+  { code: 'mnr.eor.update', module: 'mnr', action: 'eor_update', description: 'อัปเดตสถานะงานซ่อมและราคาจริง' },
+  { code: 'mnr.cedex.manage', module: 'mnr', action: 'cedex_manage', description: 'จัดการรหัสความเสียหาย CEDEX', risk: 'high' },
   { code: 'integration.send', module: 'edi', action: 'send', description: 'ส่ง EDI หรือข้อมูล integration ออกนอกระบบ' },
   { code: 'integration.logs.view', module: 'edi', action: 'integration_logs_view', description: 'ดู integration log และผลการส่งข้อมูล' },
+  { code: 'reports.view', module: 'reports', action: 'view', description: 'ดูรายงานและส่งออก Excel' },
   { code: 'audit_trail.read', module: 'audit_trail', action: 'read', description: 'ดูประวัติการใช้งานและ audit trail' },
   { code: 'settings.manage', module: 'settings', action: 'manage', description: 'ตั้งค่าระบบ' },
   { code: 'permissions.manage', module: 'settings', action: 'permissions_manage', description: 'จัดการสิทธิ์และ role ของผู้ใช้งาน', risk: 'high' },
@@ -65,8 +70,8 @@ const PERMISSION_SEEDS = [
 
 const ROLE_GRANTS: Record<string, string[]> = {
   gate_clerk: ['gate.in', 'gate.out', 'gate.eir.print', 'booking.manage', 'integration.logs.view'],
-  surveyor: ['survey.inspect', 'survey.damage.update', 'survey.grade.change', 'yard.location.assign'],
-  yard_planner: ['yard.slot.move', 'yard.location.assign', 'booking.manage'],
+  surveyor: ['survey.inspect', 'survey.damage.update', 'survey.grade.change', 'yard.location.assign', 'mnr.eor.create', 'reports.view'],
+  yard_planner: ['yard.slot.move', 'yard.location.assign', 'booking.manage', 'reports.view'],
   rs_driver: ['yard.slot.move', 'yard.location.assign'],
   billing_officer: [
     'billing.invoice.create',
@@ -74,6 +79,7 @@ const ROLE_GRANTS: Record<string, string[]> = {
     'billing.waive.request',
     'billing.credit_note.create',
     'integration.logs.view',
+    'reports.view',
   ],
   supervisor: [
     'gate.in',
@@ -96,8 +102,13 @@ const ROLE_GRANTS: Record<string, string[]> = {
     'billing.invoice.cancel',
     'billing.receipt.cancel',
     'booking.manage',
+    'mnr.eor.create',
+    'mnr.eor.approve',
+    'mnr.eor.update',
+    'mnr.cedex.manage',
     'integration.send',
     'integration.logs.view',
+    'reports.view',
     'audit_trail.read',
   ],
 };

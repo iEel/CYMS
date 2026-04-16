@@ -74,7 +74,7 @@ const UNIT_LABELS: Record<string, string> = {
 };
 
 export default function BillingPage() {
-  const { session } = useAuth();
+  const { session, hasPermission } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'invoices' | 'clearance' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging'>('invoices');
 
@@ -89,6 +89,12 @@ export default function BillingPage() {
   const [cnRevisedQuantity, setCnRevisedQuantity] = useState(1);
   const [cnRevisedUnitPrice, setCnRevisedUnitPrice] = useState(0);
   const yardId = session?.activeYardId || 1;
+  const canCreateInvoice = hasPermission('billing.invoice.create');
+  const canReceivePayment = hasPermission('billing.payment.receive');
+  const canCreateCreditNote = hasPermission('billing.credit_note.create');
+  const canCancelInvoice = hasPermission('billing.invoice.cancel');
+  const canReleaseHold = hasPermission('yard.hold.release');
+  const canManageSettings = hasPermission('settings.manage');
 
   // Invoices
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
@@ -173,6 +179,16 @@ export default function BillingPage() {
   }, [activeTab, fetchInvoices, fetchTariffs, fetchClearances, customers.length]);
 
   const updateInvoice = async (id: number, action: string) => {
+    const allowed =
+      (action === 'issue' && canCreateInvoice) ||
+      (action === 'pay' && canReceivePayment) ||
+      (action === 'cancel' && canCancelInvoice) ||
+      (action === 'hold' && canCreateInvoice) ||
+      (action === 'release' && canReleaseHold);
+    if (!allowed) {
+      toast('error', 'คุณไม่มีสิทธิ์ทำรายการนี้');
+      return;
+    }
     const res = await fetch('/api/billing/invoices', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ invoice_id: id, action }),
@@ -183,6 +199,10 @@ export default function BillingPage() {
   };
 
   const handleCreateInvoice = async () => {
+    if (!canCreateInvoice) {
+      setCreateResult({ success: false, message: '❌ คุณไม่มีสิทธิ์ออกใบแจ้งหนี้' });
+      return;
+    }
     if (!createForm.customer_id || !createForm.unit_price) return;
     setCreateLoading(true); setCreateResult(null);
     try {
@@ -217,6 +237,7 @@ export default function BillingPage() {
   };
 
   const handleCreateTariff = async () => {
+    if (!canManageSettings) return;
     if (!tariffForm.rate) return;
     await fetch('/api/billing/tariffs', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -227,6 +248,7 @@ export default function BillingPage() {
   };
 
   const deleteTariff = async (id: number) => {
+    if (!canManageSettings) return;
     await fetch('/api/billing/tariffs', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tariff_id: id, action: 'delete' }),
@@ -383,11 +405,13 @@ export default function BillingPage() {
                       <div className="flex gap-1">
                         {inv.status === 'draft' && (
                           <button onClick={() => updateInvoice(inv.invoice_id, 'issue')}
-                            className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100">แจ้งหนี้</button>
+                            disabled={!canCreateInvoice}
+                            className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed">แจ้งหนี้</button>
                         )}
                         {inv.status === 'issued' && (
                           <button onClick={() => updateInvoice(inv.invoice_id, 'pay')}
-                            className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 flex items-center gap-1"><CreditCard size={10} /> ชำระ</button>
+                            disabled={!canReceivePayment}
+                            className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><CreditCard size={10} /> ชำระ</button>
                         )}
                         {/* Print: invoice for unpaid, receipt for paid */}
                         <button onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=${inv.status === 'paid' ? 'receipt' : 'invoice'}`, '_blank')}
@@ -398,10 +422,11 @@ export default function BillingPage() {
                         )}
                         {['issued', 'paid'].includes(inv.status) && Math.max(inv.balance_amount ?? inv.grand_total, 0) > 0 && (
                           <button onClick={() => openCreditNoteModal(inv)}
-                            className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 text-xs font-medium hover:bg-amber-100 flex items-center gap-1"><ArrowDownToLine size={10} /> ใบลดหนี้</button>
+                            disabled={!canCreateCreditNote}
+                            className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 text-xs font-medium hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><ArrowDownToLine size={10} /> ใบลดหนี้</button>
                         )}
                         {['draft', 'issued'].includes(inv.status) && (
-                          <button onClick={() => updateInvoice(inv.invoice_id, 'cancel')} className="px-1 py-1 text-slate-400 hover:text-red-500"><XCircle size={14} /></button>
+                          <button onClick={() => updateInvoice(inv.invoice_id, 'cancel')} disabled={!canCancelInvoice} className="px-1 py-1 text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed"><XCircle size={14} /></button>
                         )}
                       </div>
                     </div>
@@ -534,7 +559,7 @@ export default function BillingPage() {
               </div>
             )}
 
-            <button onClick={handleCreateInvoice} disabled={createLoading || !createForm.customer_id || !createForm.unit_price}
+            <button onClick={handleCreateInvoice} disabled={createLoading || !canCreateInvoice || !createForm.customer_id || !createForm.unit_price}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all">
               {createLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} สร้างใบแจ้งหนี้
             </button>
@@ -596,7 +621,7 @@ export default function BillingPage() {
                     <label className={labelClass}>Free Days</label>
                     <input type="number" min={0} value={tariffForm.free_days || ''} onFocus={e => e.target.select()} onChange={e => setTariffForm({ ...tariffForm, free_days: parseInt(e.target.value) || 0 })} className={inputClass} placeholder="0" />
                   </div>
-                  <button onClick={handleCreateTariff} className="h-10 px-4 rounded-lg bg-blue-600 text-white text-xs font-medium whitespace-nowrap hover:bg-blue-700"><Plus size={12} /></button>
+                  <button onClick={handleCreateTariff} disabled={!canManageSettings} className="h-10 px-4 rounded-lg bg-blue-600 text-white text-xs font-medium whitespace-nowrap hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"><Plus size={12} /></button>
                 </div>
               </div>
             </div>
@@ -627,7 +652,7 @@ export default function BillingPage() {
                         <td className="px-4 py-2.5 text-slate-500">{UNIT_LABELS[t.unit]}</td>
                         <td className="px-4 py-2.5 text-right text-slate-500">{t.free_days}</td>
                         <td className="px-4 py-2.5 text-center">
-                          <button onClick={() => deleteTariff(t.tariff_id)} className="text-slate-400 hover:text-red-500"><XCircle size={14} /></button>
+                          <button onClick={() => deleteTariff(t.tariff_id)} disabled={!canManageSettings} className="text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed"><XCircle size={14} /></button>
                         </td>
                       </tr>
                     ))}
@@ -668,11 +693,14 @@ export default function BillingPage() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button onClick={() => updateInvoice(inv.invoice_id, 'hold')}
-                        className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 text-xs font-medium hover:bg-rose-100 flex items-center gap-1"><Lock size={10} /> Hold</button>
+                        disabled={!canCreateInvoice}
+                        className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 text-xs font-medium hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Lock size={10} /> Hold</button>
                       <button onClick={() => updateInvoice(inv.invoice_id, 'release')}
-                        className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-medium hover:bg-emerald-100 flex items-center gap-1"><Unlock size={10} /> Release</button>
+                        disabled={!canReleaseHold}
+                        className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-medium hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Unlock size={10} /> Release</button>
                       <button onClick={() => updateInvoice(inv.invoice_id, 'pay')}
-                        className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 flex items-center gap-1"><CreditCard size={10} /> ชำระ</button>
+                        disabled={!canReceivePayment}
+                        className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><CreditCard size={10} /> ชำระ</button>
                     </div>
                   </div>
                 </div>
@@ -918,8 +946,12 @@ export default function BillingPage() {
             <div className="p-5 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2">
               <button onClick={() => setCnModal({ open: false, invoice: null })} className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200">ยกเลิก</button>
               <button
-                disabled={cnLoading || !cnReason || cnAmount <= 0 || (cnCreateRevised && (!cnRevisedDescription || cnRevisedQuantity <= 0 || cnRevisedUnitPrice <= 0))}
+                disabled={cnLoading || !canCreateCreditNote || !cnReason || cnAmount <= 0 || (cnCreateRevised && (!cnRevisedDescription || cnRevisedQuantity <= 0 || cnRevisedUnitPrice <= 0))}
                 onClick={async () => {
+                  if (!canCreateCreditNote) {
+                    setCnResult({ success: false, message: 'คุณไม่มีสิทธิ์ออกใบลดหนี้' });
+                    return;
+                  }
                   setCnLoading(true); setCnResult(null);
                   try {
                     const res = await fetch('/api/billing/invoices', {

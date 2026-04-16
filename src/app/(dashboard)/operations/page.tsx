@@ -71,7 +71,7 @@ interface ShiftResult {
 }
 
 export default function OperationsPage() {
-  const { session } = useAuth();
+  const { session, hasAnyPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<'queue' | 'create' | 'shifting'>('queue');
 
   // Job Queue
@@ -104,6 +104,13 @@ export default function OperationsPage() {
   const [editPos, setEditPos] = useState({ zone_id: 0, bay: 0, row: 0, tier: 0 });
 
   const yardId = session?.activeYardId || 1;
+  const canMoveYard = hasAnyPermission(['yard.slot.move', 'yard.location.assign']);
+  const operationTabs = [
+    { id: 'queue' as const, label: 'Job Queue', icon: <ListOrdered size={14} />, allowed: canMoveYard },
+    { id: 'create' as const, label: 'สร้างงาน', icon: <Plus size={14} />, allowed: canMoveYard },
+    { id: 'shifting' as const, label: 'Smart Shifting', icon: <Shuffle size={14} />, allowed: canMoveYard },
+  ].filter(tab => tab.allowed);
+  const effectiveTab = operationTabs.some(tab => tab.id === activeTab) ? activeTab : operationTabs[0]?.id;
   const [sseConnected, setSseConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -123,7 +130,7 @@ export default function OperationsPage() {
 
   // SSE real-time connection
   useEffect(() => {
-    if (activeTab !== 'queue') {
+    if (effectiveTab !== 'queue' || !canMoveYard) {
       // Close SSE when not on queue tab
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -162,7 +169,7 @@ export default function OperationsPage() {
         es.close();
         // Reconnect after 3 seconds
         setTimeout(() => {
-          if (activeTab === 'queue') connectSSE();
+          if (effectiveTab === 'queue' && canMoveYard) connectSSE();
         }, 3000);
       };
     };
@@ -177,10 +184,11 @@ export default function OperationsPage() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, yardId, statusFilter]);
+  }, [effectiveTab, yardId, statusFilter, canMoveYard]);
 
   // Fetch containers for create form
   const searchContainersForCreate = async () => {
+    if (!canMoveYard) return;
     try {
       const res = await fetch(`/api/containers?yard_id=${yardId}&status=in_yard&search=${searchContainer}`);
       const data = await res.json();
@@ -196,6 +204,7 @@ export default function OperationsPage() {
 
   // Update work order status
   const updateOrder = async (orderId: number, action: string, posOverride?: { to_zone_id: number; to_bay: number; to_row: number; to_tier: number }) => {
+    if (!canMoveYard) return;
     try {
       await fetch('/api/operations', {
         method: 'PUT',
@@ -209,6 +218,7 @@ export default function OperationsPage() {
 
   // Create work order
   const handleCreate = async () => {
+    if (!canMoveYard) return;
     if (!createForm.container_id) return;
     setCreateLoading(true);
     setCreateResult(null);
@@ -231,6 +241,7 @@ export default function OperationsPage() {
 
   // Smart Shifting search
   const searchForShift = async () => {
+    if (!canMoveYard) return;
     try {
       const res = await fetch(`/api/containers?yard_id=${yardId}&status=in_yard&search=${shiftSearch}`);
       const data = await res.json();
@@ -239,6 +250,7 @@ export default function OperationsPage() {
   };
 
   const analyzeShift = async (containerId: number) => {
+    if (!canMoveYard) return;
     setShiftLoading(true);
     setShiftResult(null);
     try {
@@ -285,14 +297,10 @@ export default function OperationsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-        {[
-          { id: 'queue' as const, label: 'Job Queue', icon: <ListOrdered size={14} /> },
-          { id: 'create' as const, label: 'สร้างงาน', icon: <Plus size={14} /> },
-          { id: 'shifting' as const, label: 'Smart Shifting', icon: <Shuffle size={14} /> },
-        ].map(tab => (
+        {operationTabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 py-3.5 md:py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.id
+              effectiveTab === tab.id
                 ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
             }`}>
@@ -302,7 +310,7 @@ export default function OperationsPage() {
       </div>
 
       {/* =================== JOB QUEUE TAB =================== */}
-      {activeTab === 'queue' && (
+      {effectiveTab === 'queue' && canMoveYard && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
@@ -558,7 +566,7 @@ export default function OperationsPage() {
       )}
 
       {/* =================== CREATE TAB =================== */}
-      {activeTab === 'create' && (
+      {effectiveTab === 'create' && canMoveYard && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="p-5 border-b border-slate-100 dark:border-slate-700">
             <div className="flex items-center gap-3">
@@ -680,7 +688,7 @@ export default function OperationsPage() {
               </div>
             </div>
 
-            <button onClick={handleCreate} disabled={createLoading || !createForm.container_id}
+            <button onClick={handleCreate} disabled={createLoading || !canMoveYard || !createForm.container_id}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all">
               {createLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
               สร้างคำสั่งงาน
@@ -696,7 +704,7 @@ export default function OperationsPage() {
       )}
 
       {/* =================== SMART SHIFTING TAB =================== */}
-      {activeTab === 'shifting' && (
+      {effectiveTab === 'shifting' && canMoveYard && (
         <div className="space-y-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="p-5 border-b border-slate-100 dark:border-slate-700">
@@ -820,6 +828,11 @@ export default function OperationsPage() {
 
       {/* Container Timeline Modal */}
       {timelineCN && <ContainerTimeline containerNumber={timelineCN} onClose={() => setTimelineCN(null)} />}
+      {operationTabs.length === 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+          คุณไม่มีสิทธิ์ใช้งานหน้าปฏิบัติการใน Granular RBAC
+        </div>
+      )}
     </div>
   );
 }

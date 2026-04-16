@@ -110,7 +110,7 @@ function formatValue(value: unknown) {
 }
 
 export default function SupervisorReviewPage() {
-  const { session } = useAuth();
+  const { session, hasAnyPermission } = useAuth();
   const yardId = session?.activeYardId || 1;
   const [reviews, setReviews] = useState<ApprovalReview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,6 +121,15 @@ export default function SupervisorReviewPage() {
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [noteById, setNoteById] = useState<Record<number, string>>({});
   const pageSize = 12;
+  const canReview = hasAnyPermission([
+    'billing.waive.approve',
+    'billing.credit_note.approve',
+    'survey.grade.approve',
+    'gate.eir.cancel',
+    'billing.invoice.cancel',
+    'billing.receipt.cancel',
+    'yard.hold.release',
+  ]);
 
   const fetchReviews = useCallback(async () => {
     setLoading(true);
@@ -171,6 +180,7 @@ export default function SupervisorReviewPage() {
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const updateReview = async (reviewId: number, nextStatus: 'approved' | 'rejected') => {
+    if (!canReview) return;
     setReviewingId(reviewId);
     try {
       const res = await fetch('/api/approval-reviews', {
@@ -334,7 +344,7 @@ export default function SupervisorReviewPage() {
                       )}
                     </div>
 
-                    {isPending && (
+                    {isPending && canReview && (
                       <div className="xl:w-80 space-y-2">
                         <textarea
                           value={noteById[item.review_id] || ''}
@@ -367,6 +377,12 @@ export default function SupervisorReviewPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {!canReview && !loading && (
+          <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-700 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/10">
+            คุณสามารถดูรายการได้ แต่ไม่มีสิทธิ์ approve/reject ใน Granular RBAC
           </div>
         )}
 

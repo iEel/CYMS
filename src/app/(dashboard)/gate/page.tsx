@@ -8,6 +8,7 @@ import {
   History, ArrowRightLeft, BarChart3,
 } from 'lucide-react';
 import EIRDocument from '@/components/gate/EIRDocument';
+import type { EIRData } from '@/components/gate/EIRDocument';
 import dynamic from 'next/dynamic';
 
 // Lazy-load tab components for better code-splitting
@@ -20,15 +21,28 @@ import GateReportTab from './GateReportTab';
 const ContainerTimeline = dynamic(() => import('@/components/containers/ContainerTimeline'), { ssr: false });
 
 export default function GatePage() {
-  const { session } = useAuth();
+  const { session, hasPermission, hasAnyPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<'gate_in' | 'gate_out' | 'history' | 'transfer' | 'report'>('gate_in');
 
   // EIR Preview (shared across tabs)
   const [showEIR, setShowEIR] = useState<string | null>(null);
-  const [eirData, setEirData] = useState<Record<string, string | number | boolean | null> | null>(null);
+  const [eirData, setEirData] = useState<EIRData | null>(null);
 
   const yardId = session?.activeYardId || 1;
   const [timelineId, setTimelineId] = useState<number | null>(null);
+  const canGateIn = hasPermission('gate.in');
+  const canGateOut = hasPermission('gate.out');
+  const canViewEir = hasPermission('gate.eir.print');
+  const canMoveYard = hasAnyPermission(['yard.slot.move', 'yard.location.assign']);
+
+  const gateTabs = [
+    { id: 'gate_in' as const, label: 'Gate-In (รับเข้า)', icon: <ArrowDownToLine size={14} />, allowed: canGateIn },
+    { id: 'gate_out' as const, label: 'Gate-Out (ปล่อยออก)', icon: <ArrowUpFromLine size={14} />, allowed: canGateOut },
+    { id: 'history' as const, label: 'ประวัติ Gate', icon: <History size={14} />, allowed: canViewEir || canGateIn || canGateOut },
+    { id: 'transfer' as const, label: 'ย้ายข้ามลาน', icon: <ArrowRightLeft size={14} />, allowed: canMoveYard },
+    { id: 'report' as const, label: 'รายงาน', icon: <BarChart3 size={14} />, allowed: canViewEir || canGateIn || canGateOut },
+  ].filter(tab => tab.allowed);
+  const effectiveTab = gateTabs.some(tab => tab.id === activeTab) ? activeTab : gateTabs[0]?.id;
 
   // View EIR — shared callback for all tabs
   const viewEIR = useCallback(async (eirNumber: string) => {
@@ -50,16 +64,10 @@ export default function GatePage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-        {[
-          { id: 'gate_in' as const, label: 'Gate-In (รับเข้า)', icon: <ArrowDownToLine size={14} />, color: 'emerald' },
-          { id: 'gate_out' as const, label: 'Gate-Out (ปล่อยออก)', icon: <ArrowUpFromLine size={14} />, color: 'blue' },
-          { id: 'history' as const, label: 'ประวัติ Gate', icon: <History size={14} />, color: 'slate' },
-          { id: 'transfer' as const, label: 'ย้ายข้ามลาน', icon: <ArrowRightLeft size={14} />, color: 'purple' },
-          { id: 'report' as const, label: 'รายงาน', icon: <BarChart3 size={14} />, color: 'rose' },
-        ].map(tab => (
+        {gateTabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.id
+              effectiveTab === tab.id
                 ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
             }`}>
@@ -69,7 +77,7 @@ export default function GatePage() {
       </div>
 
       {/* =================== TAB CONTENT =================== */}
-      {activeTab === 'gate_in' && (
+      {effectiveTab === 'gate_in' && canGateIn && (
         <GateInTab
           yardId={yardId}
           userId={session?.userId}
@@ -77,7 +85,7 @@ export default function GatePage() {
         />
       )}
 
-      {activeTab === 'gate_out' && (
+      {effectiveTab === 'gate_out' && canGateOut && (
         <GateOutTab
           yardId={yardId}
           userId={session?.userId}
@@ -85,31 +93,37 @@ export default function GatePage() {
         />
       )}
 
-      {activeTab === 'history' && (
+      {effectiveTab === 'history' && (canViewEir || canGateIn || canGateOut) && (
         <HistoryTab
           yardId={yardId}
           onViewEIR={viewEIR}
         />
       )}
 
-      {activeTab === 'transfer' && (
+      {effectiveTab === 'transfer' && canMoveYard && (
         <TransferTab
           yardId={yardId}
           userId={session?.userId}
         />
       )}
 
-      {activeTab === 'report' && (
+      {effectiveTab === 'report' && (canViewEir || canGateIn || canGateOut) && (
         <GateReportTab
           yardId={yardId}
           onViewEIR={viewEIR}
         />
       )}
 
+      {!canGateIn && !canGateOut && !canViewEir && !canMoveYard && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+          คุณไม่มีสิทธิ์ใช้งานเมนู Gate ในตอนนี้ กรุณาตรวจสอบสิทธิ์ใน Granular RBAC
+        </div>
+      )}
+
       {/* =================== EIR MODAL (shared) =================== */}
       {showEIR && eirData && (
         <EIRDocument
-          data={eirData as any}
+          data={eirData}
           onClose={() => { setShowEIR(null); setEirData(null); }}
         />
       )}

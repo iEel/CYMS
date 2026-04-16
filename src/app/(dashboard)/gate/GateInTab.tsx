@@ -15,6 +15,7 @@ import SignaturePad from '@/components/gate/SignaturePad';
 import ContainerInspection from '@/components/gate/ContainerInspection';
 import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 import type { EvidencePhoto, PhotoCompleteness, PhotoRequirement } from '@/lib/photoEvidence';
+import { useAuth } from '@/components/providers/AuthProvider';
 
 interface GateInTabProps {
   yardId: number;
@@ -23,6 +24,11 @@ interface GateInTabProps {
 }
 
 export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps) {
+  const { hasPermission } = useAuth();
+  const canGateIn = hasPermission('gate.in');
+  const canReceivePayment = hasPermission('billing.payment.receive');
+  const canCreateInvoice = hasPermission('billing.invoice.create');
+  const canWaive = hasPermission('billing.waive.request');
   // Gate-In form
   const [gateInForm, setGateInForm] = useState({
     container_number: '', size: '20', type: 'GP', shipping_line: '',
@@ -350,6 +356,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
 
   // Gate-In submit
   const handleGateIn = async () => {
+    if (!canGateIn) return;
     if (!gateInForm.container_number) return;
     if (containerValid === false) return;
     setGateInLoading(true);
@@ -931,7 +938,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                         <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">🏢 ลูกค้าเครดิต — วางบิลอัตโนมัติ</p>
                         <p className="text-[10px] text-blue-500">สร้างใบแจ้งหนี้ (pending) → รับตู้ได้เลย</p>
                       </div>
-                      <button disabled={gateInPayLoading} onClick={async () => {
+                      <button disabled={gateInPayLoading || !canCreateInvoice} onClick={async () => {
                         if (!resolvedCustomer) return;
                         setGateInPayLoading(true);
                         try {
@@ -969,7 +976,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                   ) : (
                     <>
                       {gateInSelectedGrand <= 0 && (
-                        <button disabled={gateInPayLoading || !resolvedCustomer} onClick={async () => {
+                        <button disabled={gateInPayLoading || !resolvedCustomer || !canWaive} onClick={async () => {
                           setGateInPayLoading(true);
                           try {
                             const isWaived = gateInOriginalSelectedTotal > 0;
@@ -997,7 +1004,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                           </button>
                         ))}
                       </div>
-                      <button disabled={gateInPayLoading || gateInSelectedGrand <= 0 || !resolvedCustomer} onClick={async () => {
+                      <button disabled={gateInPayLoading || gateInSelectedGrand <= 0 || !resolvedCustomer || !canReceivePayment} onClick={async () => {
                         if (!resolvedCustomer) return;
                         setGateInPayLoading(true);
                         try {
@@ -1070,7 +1077,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
               <span className="flex items-center gap-2"><CheckCircle2 size={14} /> ไม่มีค่าบริการ Gate-In</span>
               {!gateInBillingCleared && (
                 <button onClick={() => createGateInClearance('no_charge', null, 'ไม่มีค่าบริการ Gate-In')}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">
+                  disabled={!canWaive}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   ยืนยัน No Charge
                 </button>
               )}
@@ -1080,7 +1088,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           {/* Submit — Gate-In + EIR */}
           <div className="flex items-center gap-3 pt-2">
             <button onClick={handleGateIn}
-              disabled={gateInLoading || !gateInForm.container_number || containerValid === false || (gateInRequiresBillingClearance && !gateInBillingCleared)}
+              disabled={gateInLoading || !canGateIn || !gateInForm.container_number || containerValid === false || (gateInRequiresBillingClearance && !gateInBillingCleared)}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
               {gateInLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowDownToLine size={16} />}
               รับตู้เข้าลาน + ออก EIR
