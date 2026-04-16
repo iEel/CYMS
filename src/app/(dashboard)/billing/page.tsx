@@ -983,6 +983,73 @@ function clearanceLabel(type: string) {
   return map[type] || { label: type, color: 'bg-slate-100 text-slate-500' };
 }
 
+interface BillingControlRow {
+  row_type: 'clearance' | 'missing_clearance' | 'outstanding_invoice' | 'credit_note';
+  severity: 'ok' | 'watch' | 'review' | 'danger';
+  event_at: string;
+  transaction_type?: 'gate_in' | 'gate_out' | null;
+  container_number?: string | null;
+  customer_name?: string | null;
+  eir_number?: string | null;
+  booking_ref?: string | null;
+  invoice_id?: number | null;
+  invoice_number?: string | null;
+  invoice_status?: string | null;
+  control_type: string;
+  original_amount: number;
+  final_amount: number;
+  impact_amount: number;
+  reason?: string | null;
+  actor_name?: string | null;
+  title: string;
+}
+
+interface BillingControlReport {
+  type: 'control';
+  period_type: string;
+  date_from: string;
+  date_to: string;
+  summary: {
+    paid_count: number;
+    credit_count: number;
+    no_charge_count: number;
+    waived_count: number;
+    paid_amount: number;
+    credit_amount: number;
+    waived_amount: number;
+    no_charge_amount: number;
+    missing_clearance_count: number;
+    outstanding_invoice_count: number;
+    outstanding_amount: number;
+    credit_note_count: number;
+    credit_note_amount: number;
+  };
+  rows: BillingControlRow[];
+}
+
+function controlSeverityBadge(severity: BillingControlRow['severity']) {
+  const map: Record<BillingControlRow['severity'], { label: string; color: string }> = {
+    ok: { label: 'OK', color: 'bg-emerald-50 text-emerald-600' },
+    watch: { label: 'Watch', color: 'bg-blue-50 text-blue-600' },
+    review: { label: 'Review', color: 'bg-amber-50 text-amber-600' },
+    danger: { label: 'Action', color: 'bg-rose-50 text-rose-600' },
+  };
+  return map[severity] || map.review;
+}
+
+function controlTypeLabel(type: string) {
+  const map: Record<string, string> = {
+    paid: 'Paid',
+    credit: 'Credit',
+    no_charge: 'No Charge',
+    waived: 'Waived',
+    missing_clearance: 'Missing Clearance',
+    outstanding: 'Outstanding',
+    credit_note: 'Credit Note',
+  };
+  return map[type] || type;
+}
+
 function BillingClearanceTab({
   clearances,
   stats,
@@ -1154,6 +1221,7 @@ function BillingReports({ yardId }: { yardId: number }) {
   const [excelLoading, setExcelLoading] = useState(false);
   const [controlRows, setControlRows] = useState<ClearanceRow[]>([]);
   const [controlStats, setControlStats] = useState<ClearanceStats | null>(null);
+  const [controlReport, setControlReport] = useState<BillingControlReport | null>(null);
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -1170,6 +1238,9 @@ function BillingReports({ yardId }: { yardId: number }) {
       const cJson = await cRes.json();
       setControlRows(cJson.clearances || []);
       setControlStats(cJson.stats || null);
+      const controlRes = await fetch(`/api/billing/reports?yard_id=${yardId}&type=control&period=${reportType}&date=${dateParam}`);
+      const controlJson = await controlRes.json();
+      setControlReport(controlJson.error ? null : controlJson);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [yardId, reportType, selectedDate, selectedMonth]);
@@ -1323,6 +1394,101 @@ function BillingReports({ yardId }: { yardId: number }) {
               </div>
             ))}
           </div>
+
+          {controlReport && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                    <BarChart3 size={16} /> Billing Control Report
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    ตรวจความครบถ้วนของ Gate, Clearance, บิลค้างชำระ, No Charge, Waived, Credit และใบลดหนี้
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400">ช่วงรายงาน</p>
+                  <p className="text-xs font-mono text-slate-600 dark:text-slate-300">{controlReport.date_from} ถึง {controlReport.date_to}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 border-b border-slate-100 dark:border-slate-700">
+                {[
+                  { label: 'Missing Clearance', value: controlReport.summary.missing_clearance_count, amount: 0, color: 'text-rose-600' },
+                  { label: 'Outstanding', value: controlReport.summary.outstanding_invoice_count, amount: controlReport.summary.outstanding_amount, color: 'text-amber-600' },
+                  { label: 'Credit Customer', value: controlReport.summary.credit_count, amount: controlReport.summary.credit_amount, color: 'text-blue-600' },
+                  { label: 'No Charge/Waived', value: controlReport.summary.no_charge_count + controlReport.summary.waived_count, amount: controlReport.summary.no_charge_amount + controlReport.summary.waived_amount, color: 'text-slate-700 dark:text-slate-200' },
+                  { label: 'Credit Note', value: controlReport.summary.credit_note_count, amount: controlReport.summary.credit_note_amount, color: 'text-amber-600' },
+                ].map(item => (
+                  <div key={item.label} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                    <p className="text-[10px] text-slate-400">{item.label}</p>
+                    <p className={`text-lg font-bold ${item.color}`}>{item.value.toLocaleString()} รายการ</p>
+                    {item.amount > 0 && <p className="text-[10px] text-slate-400">฿{item.amount.toLocaleString()}</p>}
+                  </div>
+                ))}
+              </div>
+
+              {controlReport.rows.length === 0 ? (
+                <div className="p-8 text-center text-sm text-slate-400">ไม่พบรายการที่ต้องควบคุมในช่วงนี้</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500">
+                      <tr>
+                        <th className="text-left px-4 py-2.5">สถานะ</th>
+                        <th className="text-left px-4 py-2.5">เวลา</th>
+                        <th className="text-left px-4 py-2.5">รายการควบคุม</th>
+                        <th className="text-left px-4 py-2.5">ตู้/ลูกค้า</th>
+                        <th className="text-left px-4 py-2.5">เอกสาร</th>
+                        <th className="text-right px-4 py-2.5">ยอดควบคุม</th>
+                        <th className="text-left px-4 py-2.5">หมายเหตุ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                      {controlReport.rows.slice(0, 60).map((row, index) => {
+                        const severity = controlSeverityBadge(row.severity);
+                        return (
+                          <tr key={`${row.row_type}-${row.invoice_id || row.eir_number || index}`} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                            <td className="px-4 py-2">
+                              <span className={`px-2 py-1 rounded-lg font-semibold ${severity.color}`}>{severity.label}</span>
+                            </td>
+                            <td className="px-4 py-2 text-slate-500">{row.event_at ? formatDateTime(row.event_at) : '-'}</td>
+                            <td className="px-4 py-2">
+                              <p className="font-semibold text-slate-800 dark:text-white">{row.title}</p>
+                              <p className="text-[10px] text-slate-400">{controlTypeLabel(row.control_type)}{row.transaction_type ? ` · ${row.transaction_type === 'gate_in' ? 'Gate-In' : 'Gate-Out'}` : ''}</p>
+                            </td>
+                            <td className="px-4 py-2">
+                              <p className="font-mono font-semibold text-slate-800 dark:text-white">{row.container_number || '-'}</p>
+                              <p className="text-slate-400">{row.customer_name || '-'}</p>
+                            </td>
+                            <td className="px-4 py-2">
+                              {row.eir_number && <button onClick={() => window.open(`/eir/${row.eir_number}`, '_blank')} className="font-mono text-blue-500 hover:text-blue-700 block">{row.eir_number}</button>}
+                              {row.invoice_id && <button onClick={() => window.open(`/billing/print?id=${row.invoice_id}&type=${row.control_type === 'paid' ? 'receipt' : 'invoice'}`, '_blank')} className="font-mono text-blue-500 hover:text-blue-700 block">{row.invoice_number || `#${row.invoice_id}`}</button>}
+                              {row.booking_ref && <p className="font-mono text-[10px] text-slate-400">BK: {row.booking_ref}</p>}
+                              {!row.eir_number && !row.invoice_id && !row.booking_ref && <span className="text-slate-400">-</span>}
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <p className="font-mono font-bold text-slate-800 dark:text-white">฿{(row.impact_amount || row.final_amount || 0).toLocaleString()}</p>
+                              {row.original_amount !== row.final_amount && <p className="text-[10px] text-slate-400">จาก ฿{(row.original_amount || 0).toLocaleString()}</p>}
+                            </td>
+                            <td className="px-4 py-2 max-w-[260px]">
+                              <p className="truncate text-slate-600 dark:text-slate-300">{row.reason || '-'}</p>
+                              {row.actor_name && <p className="text-[10px] text-slate-400">โดย {row.actor_name}</p>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {controlReport.rows.length > 60 && (
+                    <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400">
+                      แสดง 60 รายการแรกจาก {controlReport.rows.length} รายการ
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Gate Activity */}
           {data.gateActivity && (
