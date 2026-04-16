@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { writeIntegrationLog } from '@/lib/integrationLog';
 
 // FR6.5 — ERP Integration: Export invoices as debit/credit entries
 export async function GET(req: NextRequest) {
@@ -76,6 +77,28 @@ export async function GET(req: NextRequest) {
       status: inv.status,
     }));
 
+    await writeIntegrationLog({
+      yardId: parseInt(yardId),
+      system: 'ERP',
+      direction: 'outbound',
+      messageType: 'INVOICE_EXPORT',
+      destination: `download:${format}`,
+      endpointName: 'ERP Export',
+      referenceType: 'invoice_batch',
+      referenceNumber: `${status || 'all'}:${dateFrom || '*'}:${dateTo || '*'}`,
+      payloadSummary: {
+        status,
+        date_from: dateFrom || null,
+        date_to: dateTo || null,
+        format,
+        total_debit: entries.filter((e: Record<string, unknown>) => e.entry_type === 'debit').reduce((s: number, e: Record<string, unknown>) => s + ((e.grand_total as number) || 0), 0),
+        total_credit: entries.filter((e: Record<string, unknown>) => e.entry_type === 'credit').reduce((s: number, e: Record<string, unknown>) => s + ((e.grand_total as number) || 0), 0),
+      },
+      status: 'success',
+      recordCount: entries.length,
+      filename: `erp_export_${new Date().toISOString().split('T')[0]}.${format === 'csv' ? 'csv' : 'json'}`,
+    });
+
     if (format === 'csv') {
       const headers = 'entry_type,invoice_number,date,due_date,customer_name,tax_id,branch,credit_term,address,container_number,charge_type,description,quantity,unit_price,amount_before_vat,vat_amount,grand_total,status';
       const rows = entries.map((e: Record<string, unknown>) =>
@@ -100,6 +123,21 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: unknown) {
     console.error(err);
+    try {
+      await writeIntegrationLog({
+        yardId: parseInt(yardId),
+        system: 'ERP',
+        direction: 'outbound',
+        messageType: 'INVOICE_EXPORT',
+        destination: `download:${format}`,
+        endpointName: 'ERP Export',
+        referenceType: 'invoice_batch',
+        referenceNumber: `${status || 'all'}:${dateFrom || '*'}:${dateTo || '*'}`,
+        payloadSummary: { status, date_from: dateFrom || null, date_to: dateTo || null, format },
+        status: 'failed',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    } catch { /* ignore log failure */ }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

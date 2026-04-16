@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { writeIntegrationLog } from '@/lib/integrationLog';
 
 // GET — Customer Portal Overview
 export async function GET(request: NextRequest) {
@@ -60,6 +61,24 @@ export async function GET(request: NextRequest) {
         ORDER BY g.created_at DESC
       `);
 
+    await writeIntegrationLog({
+      system: 'PORTAL',
+      direction: 'inbound',
+      messageType: 'CUSTOMER_OVERVIEW',
+      destination: 'customer_portal',
+      endpointName: 'Portal Overview',
+      referenceType: 'customer',
+      referenceId: cid,
+      referenceNumber: customer.customer_name || String(cid),
+      payloadSummary: {
+        containers: containers.total || 0,
+        outstanding_count: outstanding.count || 0,
+        active_bookings: activeBookings || 0,
+      },
+      status: 'success',
+      recordCount: 1,
+    });
+
     return NextResponse.json({
       customer,
       containers,
@@ -69,6 +88,17 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('❌ Portal overview error:', error);
+    try {
+      await writeIntegrationLog({
+        system: 'PORTAL',
+        direction: 'inbound',
+        messageType: 'CUSTOMER_OVERVIEW',
+        destination: 'customer_portal',
+        endpointName: 'Portal Overview',
+        status: 'failed',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    } catch { /* ignore */ }
     return NextResponse.json({ error: 'ไม่สามารถโหลดข้อมูลได้' }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import SftpClient from 'ssh2-sftp-client';
 import { logAudit } from '@/lib/audit';
+import { writeIntegrationLog } from '@/lib/integrationLog';
 import {
   formatCODECO,
   legacyFormatToTemplate,
@@ -253,6 +254,30 @@ export async function POST(request: NextRequest) {
         INSERT INTO EDISendLog (endpoint_id, message_type, filename, record_count, status, error_message)
         VALUES (@epId2, 'CODECO', @filename, @recordCount, @status, @error)
       `);
+
+    await writeIntegrationLog({
+      yardId: yard_id || 1,
+      system: 'EDI',
+      direction: 'outbound',
+      messageType: 'CODECO',
+      destination: ep.type === 'email' ? ep.host : ep.type === 'api' ? ep.host : `${ep.host}:${ep.remote_path || ''}`,
+      endpointName: ep.name,
+      referenceType: 'edi_endpoint',
+      referenceId: endpoint_id,
+      referenceNumber: effectiveShippingLine || 'ALL',
+      payloadSummary: {
+        delivery_type: ep.type,
+        format: template?.template_name || ep.format,
+        date_from: date_from || null,
+        date_to: date_to || null,
+        transaction_type: type || 'all',
+      },
+      status: sendStatus === 'sent' ? 'success' : 'failed',
+      errorMessage: errorMsg || null,
+      retryCount: 0,
+      recordCount: transactions.length,
+      filename,
+    });
 
     // Update last_sent info on endpoint
     await db.request()

@@ -6,7 +6,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 import {
   Loader2, Search, FileText, ShieldCheck,
   CheckCircle2, XCircle, AlertTriangle,
-  Send, FileDown, Filter,
+  Send, FileDown, Filter, Activity, RotateCcw,
 } from 'lucide-react';
 
 interface ValidationResult {
@@ -15,7 +15,7 @@ interface ValidationResult {
 
 export default function EDIPage() {
   const { session } = useAuth();
-  const [activeTab, setActiveTab] = useState<'validate' | 'codeco'>('validate');
+  const [activeTab, setActiveTab] = useState<'validate' | 'codeco' | 'logs'>('validate');
   const yardId = session?.activeYardId || 1;
 
   // Validate
@@ -53,6 +53,7 @@ export default function EDIPage() {
         {[
           { id: 'validate' as const, label: 'ตรวจเลขซีล', icon: <ShieldCheck size={14} /> },
           { id: 'codeco' as const, label: 'CODECO', icon: <Send size={14} /> },
+          { id: 'logs' as const, label: 'Integration Log', icon: <Activity size={14} /> },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -113,6 +114,186 @@ export default function EDIPage() {
 
       {/* =================== CODECO TAB =================== */}
       {activeTab === 'codeco' && <CodecoOutbound yardId={yardId} />}
+
+      {/* =================== INTEGRATION LOG TAB =================== */}
+      {activeTab === 'logs' && <IntegrationLogs yardId={yardId} />}
+    </div>
+  );
+}
+
+interface IntegrationLogRow {
+  integration_log_id: number;
+  system: 'EDI' | 'ERP' | 'PORTAL' | 'API';
+  direction: 'outbound' | 'inbound';
+  message_type: string;
+  destination: string | null;
+  endpoint_name: string | null;
+  reference_type: string | null;
+  reference_id: string | null;
+  reference_number: string | null;
+  status: 'pending' | 'success' | 'failed' | 'retrying';
+  error_message: string | null;
+  retry_count: number;
+  record_count: number;
+  filename: string | null;
+  created_at: string;
+}
+
+function IntegrationLogs({ yardId }: { yardId: number }) {
+  const [logs, setLogs] = useState<IntegrationLogRow[]>([]);
+  const [stats, setStats] = useState({ total: 0, success_count: 0, failed_count: 0, retrying_count: 0, total_records: 0 });
+  const [system, setSystem] = useState('');
+  const [status, setStatus] = useState('');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      let url = `/api/integrations/logs?yard_id=${yardId}&limit=150`;
+      if (system) url += `&system=${system}`;
+      if (status) url += `&status=${status}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data.error) {
+        setLogs(data.logs || []);
+        setStats(data.stats || { total: 0, success_count: 0, failed_count: 0, retrying_count: 0, total_records: 0 });
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  }, [yardId, system, status, search]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  const statusBadge = (value: string) => {
+    const map: Record<string, { label: string; color: string }> = {
+      success: { label: 'Success', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20' },
+      failed: { label: 'Failed', color: 'bg-rose-50 text-rose-600 dark:bg-rose-900/20' },
+      retrying: { label: 'Retrying', color: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20' },
+      pending: { label: 'Pending', color: 'bg-slate-100 text-slate-500 dark:bg-slate-700' },
+    };
+    return map[value] || map.pending;
+  };
+
+  const systemBadge = (value: string) => {
+    const map: Record<string, string> = {
+      EDI: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20',
+      ERP: 'bg-violet-50 text-violet-600 dark:bg-violet-900/20',
+      PORTAL: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20',
+      API: 'bg-slate-100 text-slate-600 dark:bg-slate-700',
+    };
+    return map[value] || map.API;
+  };
+
+  const fmtDate = (d: string) => {
+    if (!d) return '-';
+    const dt = new Date(d);
+    return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const inputClass = "h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-700 dark:text-white";
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: 'ทั้งหมด', value: stats.total, color: 'text-slate-800 dark:text-white' },
+          { label: 'สำเร็จ', value: stats.success_count, color: 'text-emerald-600' },
+          { label: 'ล้มเหลว', value: stats.failed_count, color: 'text-rose-600' },
+          { label: 'Retrying', value: stats.retrying_count, color: 'text-amber-600' },
+          { label: 'Records', value: stats.total_records, color: 'text-blue-600' },
+        ].map(item => (
+          <div key={item.label} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-xs text-slate-400">{item.label}</p>
+            <p className={`text-xl font-bold ${item.color}`}>{Number(item.value || 0).toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Activity size={16} /> Integration Log กลาง</h3>
+            <p className="text-xs text-slate-400 mt-1">บันทึกว่า EDI/ERP/Portal ส่งหรือเรียกข้อมูลอะไร ไปที่ไหน สำเร็จไหม error อะไร และ retry กี่ครั้ง</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหา endpoint/file/error"
+              className={`${inputClass} w-48`} />
+            <select value={system} onChange={e => setSystem(e.target.value)} className={inputClass}>
+              <option value="">ทุกระบบ</option>
+              <option value="EDI">EDI</option>
+              <option value="ERP">ERP</option>
+              <option value="PORTAL">Portal</option>
+              <option value="API">API</option>
+            </select>
+            <select value={status} onChange={e => setStatus(e.target.value)} className={inputClass}>
+              <option value="">ทุกสถานะ</option>
+              <option value="success">Success</option>
+              <option value="failed">Failed</option>
+              <option value="retrying">Retrying</option>
+              <option value="pending">Pending</option>
+            </select>
+            <button onClick={fetchLogs} className="h-9 px-3 rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 text-xs font-medium flex items-center gap-1">
+              <RotateCcw size={12} /> รีเฟรช
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
+        ) : logs.length === 0 ? (
+          <div className="p-10 text-center text-sm text-slate-400">ยังไม่มี Integration Log</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500">
+                <tr>
+                  <th className="text-left px-4 py-2.5">เวลา</th>
+                  <th className="text-left px-4 py-2.5">ระบบ</th>
+                  <th className="text-left px-4 py-2.5">รายการ</th>
+                  <th className="text-left px-4 py-2.5">ปลายทาง</th>
+                  <th className="text-center px-4 py-2.5">สถานะ</th>
+                  <th className="text-right px-4 py-2.5">Records</th>
+                  <th className="text-center px-4 py-2.5">Retry</th>
+                  <th className="text-left px-4 py-2.5">Error</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {logs.map(log => {
+                  const badge = statusBadge(log.status);
+                  return (
+                    <tr key={log.integration_log_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                      <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{fmtDate(log.created_at)}</td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-1 rounded-lg font-semibold ${systemBadge(log.system)}`}>{log.system}</span>
+                        <p className="text-[10px] text-slate-400 mt-1">{log.direction}</p>
+                      </td>
+                      <td className="px-4 py-2">
+                        <p className="font-semibold text-slate-800 dark:text-white">{log.message_type}</p>
+                        <p className="font-mono text-[10px] text-slate-400">{log.reference_number || log.filename || '-'}</p>
+                      </td>
+                      <td className="px-4 py-2 max-w-[260px]">
+                        <p className="truncate text-slate-700 dark:text-slate-200">{log.endpoint_name || '-'}</p>
+                        <p className="truncate text-[10px] text-slate-400">{log.destination || '-'}</p>
+                      </td>
+                      <td className="px-4 py-2 text-center"><span className={`px-2 py-1 rounded-lg font-semibold ${badge.color}`}>{badge.label}</span></td>
+                      <td className="px-4 py-2 text-right font-mono">{Number(log.record_count || 0).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center font-mono">{log.retry_count || 0}</td>
+                      <td className="px-4 py-2 max-w-[300px]">
+                        <p className="truncate text-rose-600">{log.error_message || '-'}</p>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
