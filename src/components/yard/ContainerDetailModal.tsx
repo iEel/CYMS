@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, ExternalLink, ArrowRightLeft, Loader2 } from 'lucide-react';
+import { X, ExternalLink, ArrowRightLeft, Loader2, AlertTriangle, CheckCircle2, FileText, Receipt, Ship, Radio } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
 
 interface DamagePoint {
@@ -55,6 +55,81 @@ interface ContainerDetail {
     processed_by: string;
     damage_report: { exit_photos?: string[] } | null;
   } | null;
+  lifecycle?: Record<'gate_in' | 'inspection' | 'location' | 'booking' | 'billing' | 'edi' | 'gate_out', boolean>;
+  exceptions?: Array<{
+    code: string;
+    severity: 'info' | 'warning' | 'danger';
+    title: string;
+    message: string;
+  }>;
+  documents?: {
+    eir_gate_in: string | null;
+    eir_gate_out: string | null;
+    invoices: Array<{
+      invoice_id: number;
+      invoice_number: string;
+      charge_type: string;
+      description: string;
+      grand_total: number;
+      status: string;
+      paid_at?: string;
+      created_at: string;
+      due_date?: string;
+    }>;
+  };
+  billing?: {
+    clearances: Array<{
+      clearance_id: number;
+      transaction_type: 'gate_in' | 'gate_out';
+      clearance_type: 'paid' | 'credit' | 'no_charge' | 'waived';
+      original_amount: number;
+      final_amount: number;
+      reason?: string;
+      invoice_id?: number;
+      invoice_number?: string;
+      invoice_status?: string;
+      approved_by_name?: string;
+      created_at: string;
+    }>;
+    totals: {
+      paid: number;
+      outstanding: number;
+      credit_notes: number;
+    };
+  };
+  booking?: {
+    booking_id: number;
+    booking_number: string;
+    booking_type: string;
+    status: string;
+    vessel_name?: string;
+    voyage_number?: string;
+    container_count: number;
+    container_size?: string;
+    container_type?: string;
+    received_count: number;
+    released_count: number;
+    valid_from?: string;
+    valid_to?: string;
+    eta?: string;
+    customer_name?: string;
+    container_booking_status?: string;
+    gate_in_at?: string;
+    gate_out_at?: string;
+  } | null;
+  edi?: {
+    endpoints: Array<{
+      endpoint_id: number;
+      name: string;
+      shipping_line?: string;
+      type?: string;
+      format?: string;
+      last_sent_at?: string;
+      last_status?: string;
+      last_log_status?: string;
+      last_error_message?: string;
+    }>;
+  };
 }
 
 interface ContainerDetailModalProps {
@@ -100,6 +175,32 @@ const GRADE_OPTIONS = [
 
 const STATUS_LABELS: Record<string, string> = {
   in_yard: 'ในลาน', hold: 'ค้างจ่าย', repair: 'ซ่อม', gated_out: 'ปล่อยแล้ว', available: 'ว่าง',
+};
+
+const LIFECYCLE_LABELS: Record<string, string> = {
+  gate_in: 'Gate-In',
+  inspection: 'ตรวจสภาพ',
+  location: 'พิกัด',
+  booking: 'Booking',
+  billing: 'Billing',
+  edi: 'EDI',
+  gate_out: 'Gate-Out',
+};
+
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  draft: 'ร่าง',
+  issued: 'แจ้งหนี้',
+  paid: 'ชำระแล้ว',
+  overdue: 'เกินกำหนด',
+  cancelled: 'ยกเลิก',
+  credit_note: 'ใบลดหนี้',
+};
+
+const CLEARANCE_LABELS: Record<string, string> = {
+  paid: 'Paid',
+  credit: 'Credit',
+  no_charge: 'No Charge',
+  waived: 'Waived',
 };
 
 export default function ContainerDetailModal({ containerId, onClose, onRefresh, onViewEIR }: ContainerDetailModalProps) {
@@ -161,6 +262,20 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
   // All photos
   const inspectionPhotos = gi?.damage_report?.photos || [];
   const exitPhotos = go?.damage_report?.exit_photos || [];
+  const lifecycle = data.lifecycle || {
+    gate_in: Boolean(gi),
+    inspection: Boolean(gi?.damage_report),
+    location: Boolean(c.zone_name && c.bay && c.row && c.tier),
+    booking: Boolean(c.booking_ref),
+    billing: Boolean(data.documents?.invoices?.length || data.billing?.clearances?.length),
+    edi: Boolean(data.edi?.endpoints?.length),
+    gate_out: Boolean(go),
+  };
+  const exceptions = data.exceptions || [];
+  const invoices = data.documents?.invoices || [];
+  const clearances = data.billing?.clearances || [];
+  const booking = data.booking;
+  const ediEndpoints = data.edi?.endpoints || [];
 
   const handleStatusChange = async () => {
     if (!newStatus || newStatus === c.status) return;
@@ -195,7 +310,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto"
           onClick={e => e.stopPropagation()}>
 
           {/* ===== HEADER ===== */}
@@ -233,6 +348,59 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
               <InfoField label="พิกัด" value={c.bay && c.row && c.tier ? `B${c.bay}-R${c.row}-T${c.tier}` : '—'} mono />
               <InfoField label="อยู่ลานแล้ว" value={`${c.dwell_days} วัน`} highlight />
             </div>
+
+            {/* ===== LIFECYCLE OVERVIEW ===== */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                  <CheckCircle2 size={13} /> Lifecycle Status
+                </h3>
+                <span className="text-[10px] text-slate-400">
+                  {Object.values(lifecycle).filter(Boolean).length}/{Object.keys(lifecycle).length} ขั้นตอน
+                </span>
+              </div>
+              <div className="p-4 grid grid-cols-2 md:grid-cols-7 gap-2">
+                {Object.entries(LIFECYCLE_LABELS).map(([key, label]) => {
+                  const done = lifecycle[key as keyof typeof lifecycle];
+                  return (
+                    <div key={key} className={`rounded-lg border px-2.5 py-2 ${
+                      done
+                        ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-900/10'
+                        : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                    }`}>
+                      <div className={`text-[10px] font-bold ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
+                        {done ? 'ครบแล้ว' : 'รอข้อมูล'}
+                      </div>
+                      <div className="text-xs font-medium text-slate-700 dark:text-slate-200 mt-0.5">{label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ===== EXCEPTIONS ===== */}
+            {exceptions.length > 0 && (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 overflow-hidden">
+                <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/10 border-b border-amber-200 dark:border-amber-900/40">
+                  <h3 className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                    <AlertTriangle size={13} /> สิ่งที่ควรตรวจสอบ ({exceptions.length})
+                  </h3>
+                </div>
+                <div className="divide-y divide-amber-100 dark:divide-amber-900/30">
+                  {exceptions.map(ex => (
+                    <div key={ex.code} className="px-4 py-2.5 flex items-start gap-2">
+                      <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${
+                        ex.severity === 'danger' ? 'bg-red-500' : ex.severity === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
+                      }`} />
+                      <div>
+                        <p className="text-xs font-semibold text-slate-800 dark:text-white">{ex.title}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{ex.message}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ===== GATE-IN INFO ===== */}
             {gi && (
@@ -456,6 +624,139 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
               </div>
             )}
 
+            {/* ===== DOCUMENTS / BILLING / BOOKING / EDI ===== */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700">
+                  <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                    <FileText size={13} /> เอกสารที่เกี่ยวข้อง
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2">
+                  {gi?.eir_number && (
+                    <DocumentRow label="EIR Gate-In" number={gi.eir_number} onClick={() => onViewEIR ? onViewEIR(gi.eir_number) : window.open(`/eir/${gi.eir_number}`, '_blank')} />
+                  )}
+                  {go?.eir_number && (
+                    <DocumentRow label="EIR Gate-Out" number={go.eir_number} onClick={() => onViewEIR ? onViewEIR(go.eir_number) : window.open(`/eir/${go.eir_number}`, '_blank')} />
+                  )}
+                  {invoices.length === 0 && !gi?.eir_number && !go?.eir_number && (
+                    <p className="text-xs text-slate-400">ยังไม่มีเอกสารที่ผูกกับตู้นี้</p>
+                  )}
+                  {invoices.map(inv => (
+                    <button key={inv.invoice_id} onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=${inv.status === 'paid' ? 'receipt' : 'invoice'}`, '_blank')}
+                      className="w-full flex items-center justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-left hover:border-blue-300 dark:hover:border-blue-600 transition-colors">
+                      <div className="min-w-0">
+                        <p className="font-mono text-xs font-semibold text-slate-800 dark:text-white truncate">{inv.invoice_number}</p>
+                        <p className="text-[10px] text-slate-400 truncate">{inv.description || inv.charge_type}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">฿{(inv.grand_total || 0).toLocaleString()}</p>
+                        <p className="text-[10px] text-slate-400">{INVOICE_STATUS_LABELS[inv.status] || inv.status}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700">
+                  <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                    <Receipt size={13} /> Billing Clearance
+                  </h3>
+                </div>
+                <div className="p-4 space-y-3">
+                  {data.billing?.totals && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <MiniMetric label="ชำระแล้ว" value={`฿${data.billing.totals.paid.toLocaleString()}`} color="text-emerald-600" />
+                      <MiniMetric label="ค้าง" value={`฿${data.billing.totals.outstanding.toLocaleString()}`} color="text-red-600" />
+                      <MiniMetric label="CN" value={`฿${data.billing.totals.credit_notes.toLocaleString()}`} color="text-amber-600" />
+                    </div>
+                  )}
+                  {clearances.length === 0 ? (
+                    <p className="text-xs text-slate-400">ยังไม่มี Billing Clearance</p>
+                  ) : clearances.map(cl => (
+                    <div key={cl.clearance_id} className="rounded-lg bg-slate-50 dark:bg-slate-700/30 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-slate-700 dark:text-white">
+                          {cl.transaction_type === 'gate_in' ? 'Gate-In' : 'Gate-Out'} · {CLEARANCE_LABELS[cl.clearance_type] || cl.clearance_type}
+                        </p>
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">฿{(cl.final_amount || 0).toLocaleString()}</p>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {cl.invoice_number || 'ไม่มีใบแจ้งหนี้'}{cl.reason ? ` · ${cl.reason}` : ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700">
+                  <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                    <Ship size={13} /> Booking
+                  </h3>
+                </div>
+                <div className="p-4">
+                  {!booking ? (
+                    <p className="text-xs text-slate-400">{c.booking_ref ? `ยังไม่พบ Booking ${c.booking_ref}` : 'ไม่มี Booking ที่ผูกกับตู้'}</p>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-mono text-sm font-bold text-slate-800 dark:text-white">{booking.booking_number}</p>
+                          <p className="text-xs text-slate-400">{booking.customer_name || 'ไม่ระบุลูกค้า'} · {booking.vessel_name || 'ไม่ระบุเรือ'} {booking.voyage_number || ''}</p>
+                        </div>
+                        <span className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-[10px] font-bold">
+                          {booking.status}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <MiniMetric label="จำนวน" value={`${booking.container_count || 0}`} />
+                        <MiniMetric label="รับแล้ว" value={`${booking.received_count || 0}`} color="text-blue-600" />
+                        <MiniMetric label="ออกแล้ว" value={`${booking.released_count || 0}`} color="text-emerald-600" />
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, ((booking.received_count || 0) / Math.max(1, booking.container_count || 1)) * 100)}%` }} />
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        ตู้นี้: {booking.container_booking_status || 'ยังไม่ระบุสถานะ'}{booking.gate_in_at ? ` · รับเข้า ${formatDateTime(booking.gate_in_at)}` : ''}{booking.gate_out_at ? ` · ออก ${formatDateTime(booking.gate_out_at)}` : ''}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700">
+                  <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                    <Radio size={13} /> EDI
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2">
+                  {ediEndpoints.length === 0 ? (
+                    <p className="text-xs text-slate-400">{c.shipping_line ? 'ยังไม่พบ endpoint EDI สำหรับสายเรือนี้' : 'ไม่มีสายเรือสำหรับตรวจ EDI endpoint'}</p>
+                  ) : ediEndpoints.map(ep => (
+                    <div key={ep.endpoint_id} className="rounded-lg bg-slate-50 dark:bg-slate-700/30 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-slate-700 dark:text-white truncate">{ep.name}</p>
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                          (ep.last_log_status || ep.last_status) === 'sent' ? 'bg-emerald-50 text-emerald-600' :
+                          (ep.last_log_status || ep.last_status) === 'failed' ? 'bg-red-50 text-red-600' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                          {ep.last_log_status || ep.last_status || 'pending'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {ep.type || 'endpoint'} · {ep.format || 'EDIFACT'}{ep.last_sent_at ? ` · ส่งล่าสุด ${formatDateTime(ep.last_sent_at)}` : ''}
+                      </p>
+                      {ep.last_error_message && <p className="text-[10px] text-red-500 mt-0.5 truncate">{ep.last_error_message}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* ===== ACTIONS ===== */}
             <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
               {/* View EIR */}
@@ -521,6 +822,28 @@ function InfoField({ label, value, mono, highlight }: { label: string; value: st
       <p className={`text-sm font-medium ${mono ? 'font-mono' : ''} ${highlight ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-200'}`}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function DocumentRow({ label, number, onClick }: { label: string; number: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="w-full flex items-center justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-left hover:border-blue-300 dark:hover:border-blue-600 transition-colors">
+      <div>
+        <p className="text-[10px] text-slate-400">{label}</p>
+        <p className="font-mono text-xs font-semibold text-slate-800 dark:text-white">{number}</p>
+      </div>
+      <ExternalLink size={12} className="text-slate-400" />
+    </button>
+  );
+}
+
+function MiniMetric({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-2">
+      <p className="text-[10px] text-slate-400">{label}</p>
+      <p className={`text-xs font-bold ${color || 'text-slate-700 dark:text-slate-200'}`}>{value}</p>
     </div>
   );
 }
