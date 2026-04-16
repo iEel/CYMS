@@ -16,6 +16,7 @@ const ContainerTimeline = dynamic(() => import('@/components/containers/Containe
 import {
   MapPin, Search, Filter, ChevronDown, Cuboid, ClipboardCheck,
   Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star, Clock,
+  Gauge, PackageCheck,
 } from 'lucide-react';
 
 const YardViewer3D = dynamic(() => import('@/components/yard/YardViewer3D'), {
@@ -39,6 +40,8 @@ interface ZoneData {
   occupancy_pct: number;
 }
 
+type YardQuickFilter = '' | 'ready_release' | 'damaged_hold';
+
 interface ContainerData {
   container_id: number;
   container_number: string;
@@ -55,6 +58,8 @@ interface ContainerData {
   is_laden: boolean;
   gate_in_date: string;
   container_grade?: string;
+  hold_status?: string | null;
+  booking_ref?: string | null;
 }
 
 const ZONE_ICONS: Record<string, React.ReactNode> = {
@@ -80,6 +85,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   hold:       { label: 'ค้างจ่าย', color: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' },
   repair:     { label: 'ซ่อม', color: 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400' },
   gated_out:  { label: 'ปล่อยแล้ว', color: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
+  released:   { label: 'ปล่อยแล้ว', color: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
   available:  { label: 'ว่าง', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
 };
 
@@ -100,6 +106,9 @@ export default function YardPage() {
   const [filterZone, setFilterZone] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterGrade, setFilterGrade] = useState<string>('');
+  const [filterSize, setFilterSize] = useState<string>('');
+  const [filterType, setFilterType] = useState<string>('');
+  const [quickFilter, setQuickFilter] = useState<YardQuickFilter>('');
   const [viewMode, setViewMode] = useState<'2d' | '3d' | 'bay'>('2d');
   const [selectedContainer, setSelectedContainer] = useState<ContainerData | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'search' | 'allocate' | 'audit'>('overview');
@@ -148,15 +157,25 @@ export default function YardPage() {
     if (filterStatus) {
       if (c.status !== filterStatus) return false;
     } else {
-      // By default, hide gated_out containers
-      if (c.status === 'gated_out') return false;
+      // By default, hide released containers
+      if (c.status === 'gated_out' || c.status === 'released') return false;
     }
     if (filterGrade && (c.container_grade || 'A').toUpperCase() !== filterGrade) return false;
+    if (filterSize && c.size !== filterSize) return false;
+    if (filterType && c.type !== filterType) return false;
+    if (quickFilter === 'ready_release') {
+      const grade = (c.container_grade || 'A').toUpperCase();
+      if (c.status !== 'in_yard' || !['A', 'B'].includes(grade) || c.hold_status || c.is_laden) return false;
+    }
+    if (quickFilter === 'damaged_hold') {
+      const grade = (c.container_grade || 'A').toUpperCase();
+      if (!['hold', 'repair'].includes(c.status) && !['C', 'D'].includes(grade) && !c.hold_status) return false;
+    }
     return true;
   });
 
   // Reset page when filters change
-  useEffect(() => { setCurrentPage(1); }, [search, filterZone, filterStatus, filterGrade]);
+  useEffect(() => { setCurrentPage(1); }, [search, filterZone, filterStatus, filterGrade, filterSize, filterType, quickFilter]);
 
   const viewEIR = useCallback(async (eirNumber: string) => {
     setShowEIR(eirNumber);
@@ -188,6 +207,45 @@ export default function YardPage() {
   const totalCapacity = zones.reduce((s, z) => s + z.capacity, 0);
   const totalUsed = zones.reduce((s, z) => s + z.container_count, 0);
   const overallPct = totalCapacity > 0 ? (totalUsed / totalCapacity * 100) : 0;
+  const activeContainers = containers.filter(c => c.status !== 'gated_out' && c.status !== 'released');
+  const gradeStats = ['A', 'B', 'C', 'D'].map(grade => ({
+    grade,
+    count: activeContainers.filter(c => (c.container_grade || 'A').toUpperCase() === grade).length,
+  }));
+  const sizeTypeStats = Array.from(
+    activeContainers.reduce((map, c) => {
+      const key = `${c.size || '-'}'${c.type || '-'}`;
+      map.set(key, (map.get(key) || 0) + 1);
+      return map;
+    }, new Map<string, number>())
+  ).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const readyReleaseCount = activeContainers.filter(c => {
+    const grade = (c.container_grade || 'A').toUpperCase();
+    return c.status === 'in_yard' && ['A', 'B'].includes(grade) && !c.hold_status && !c.is_laden;
+  }).length;
+  const damagedHoldCount = activeContainers.filter(c => {
+    const grade = (c.container_grade || 'A').toUpperCase();
+    return ['hold', 'repair'].includes(c.status) || ['C', 'D'].includes(grade) || Boolean(c.hold_status);
+  }).length;
+  const uniqueSizes = Array.from(new Set(containers.map(c => c.size).filter(Boolean))).sort();
+  const uniqueTypes = Array.from(new Set(containers.map(c => c.type).filter(Boolean))).sort();
+
+  const nextEmptySlots = zones.flatMap(zone => {
+    const occupied = new Set(
+      containers
+        .filter(c => c.status !== 'gated_out' && c.status !== 'released' && c.zone_name === zone.zone_name && c.bay && c.row && c.tier)
+        .map(c => `${c.bay}-${c.row}-${c.tier}`)
+    );
+    const slots: Array<{ zone_name: string; zone_type: string; bay: number; row: number; tier: number }> = [];
+    for (let bay = 1; bay <= zone.max_bay && slots.length < 3; bay++) {
+      for (let row = 1; row <= zone.max_row && slots.length < 3; row++) {
+        for (let tier = 1; tier <= zone.max_tier && slots.length < 3; tier++) {
+          if (!occupied.has(`${bay}-${row}-${tier}`)) slots.push({ zone_name: zone.zone_name, zone_type: zone.zone_type, bay, row, tier });
+        }
+      }
+    }
+    return slots;
+  }).slice(0, 12);
 
   return (
     <div className="space-y-6">
@@ -323,53 +381,162 @@ export default function YardPage() {
             />
           ) : (
             /* 2D Zone Map — Visual Cards */
-            <div>
-              <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3 flex items-center gap-2">
-                <MapPin size={16} /> แผนผังโซน
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {zones.map((zone) => {
-                  const zc = ZONE_COLORS[zone.zone_type] || ZONE_COLORS.dry;
-                  const pct = zone.occupancy_pct || 0;
-                  return (
-                    <button
-                      key={zone.zone_id}
-                      onClick={() => setFilterZone(filterZone === zone.zone_name ? '' : zone.zone_name)}
-                      className={`relative rounded-xl border p-4 text-left transition-all duration-200 hover:shadow-md
-                        ${filterZone === zone.zone_name
-                          ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-500/20 bg-white dark:bg-slate-800'
-                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
-                        }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`${zc.text}`}>{ZONE_ICONS[zone.zone_type]}</span>
-                          <span className="font-bold text-slate-800 dark:text-white text-lg">{zone.zone_name}</span>
-                        </div>
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${zc.bg} ${zc.text}`}>
-                          {zone.zone_type.toUpperCase()}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mb-2">
-                        {zone.container_count}/{zone.capacity} ตู้ • {zone.max_bay}×{zone.max_row}×{zone.max_tier}
-                      </p>
-                      {/* Occupancy Bar */}
-                      <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            pct > 85 ? 'bg-rose-500' : pct > 60 ? 'bg-amber-500' : zc.bar
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3 flex items-center gap-2">
+                  <MapPin size={16} /> แผนผังโซน
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {zones.map((zone) => {
+                    const zc = ZONE_COLORS[zone.zone_type] || ZONE_COLORS.dry;
+                    const pct = zone.occupancy_pct || 0;
+                    const freeSlots = Math.max((zone.capacity || 0) - (zone.container_count || 0), 0);
+                    return (
+                      <button
+                        key={zone.zone_id}
+                        onClick={() => setFilterZone(filterZone === zone.zone_name ? '' : zone.zone_name)}
+                        className={`relative rounded-xl border p-4 text-left transition-all duration-200 hover:shadow-md
+                          ${filterZone === zone.zone_name
+                            ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-500/20 bg-white dark:bg-slate-800'
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
                           }`}
-                          style={{ width: `${Math.min(pct, 100)}%` }}
-                        />
-                      </div>
-                      <p className={`text-right text-[10px] mt-1 font-semibold ${
-                        pct > 85 ? 'text-rose-500' : pct > 60 ? 'text-amber-500' : 'text-slate-400'
-                      }`}>
-                        {pct.toFixed(0)}%
-                      </p>
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`${zc.text}`}>{ZONE_ICONS[zone.zone_type]}</span>
+                            <span className="font-bold text-slate-800 dark:text-white text-lg">{zone.zone_name}</span>
+                          </div>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${zc.bg} ${zc.text}`}>
+                            {zone.zone_type.toUpperCase()}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mb-1">
+                          ใช้แล้ว {zone.container_count}/{zone.capacity} • ว่าง {freeSlots}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mb-2">
+                          {zone.max_bay} Bay × {zone.max_row} Row × {zone.max_tier} Tier
+                        </p>
+                        <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              pct > 85 ? 'bg-rose-500' : pct > 60 ? 'bg-amber-500' : zc.bar
+                            }`}
+                            style={{ width: `${Math.min(pct, 100)}%` }}
+                          />
+                        </div>
+                        <p className={`text-right text-[10px] mt-1 font-semibold ${
+                          pct > 85 ? 'text-rose-500' : pct > 60 ? 'text-amber-500' : 'text-slate-400'
+                        }`}>
+                          {pct.toFixed(0)}%
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                      <Gauge size={16} /> Yard Optimization
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">ช่วย planner เห็น slot, grade, size/type และตู้ที่ควรหยิบออกหรือแยกจัดการ</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setQuickFilter(quickFilter === 'ready_release' ? '' : 'ready_release')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 ${quickFilter === 'ready_release' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20'}`}>
+                      <PackageCheck size={12} /> พร้อมปล่อย {readyReleaseCount}
                     </button>
-                  );
-                })}
+                    <button onClick={() => setQuickFilter(quickFilter === 'damaged_hold' ? '' : 'damaged_hold')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 ${quickFilter === 'damaged_hold' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20'}`}>
+                      <AlertTriangle size={12} /> Damaged/Hold {damagedHoldCount}
+                    </button>
+                  </div>
+                </div>
+                <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-700/30 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Slot ว่าง/ไม่ว่าง</p>
+                      <span className="text-[10px] text-slate-400">{totalUsed}/{totalCapacity}</span>
+                    </div>
+                    <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden mb-3">
+                      <div className={`h-full rounded-full ${overallPct > 85 ? 'bg-rose-500' : overallPct > 60 ? 'bg-amber-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(overallPct, 100)}%` }} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
+                        <p className="text-[10px] text-slate-400">ใช้แล้ว</p>
+                        <p className="text-lg font-bold text-slate-800 dark:text-white">{totalUsed.toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
+                        <p className="text-[10px] text-slate-400">ว่าง</p>
+                        <p className="text-lg font-bold text-emerald-600">{Math.max(totalCapacity - totalUsed, 0).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    {nextEmptySlots.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">ตัวอย่าง slot ว่าง</p>
+                        <div className="flex flex-wrap gap-1">
+                          {nextEmptySlots.slice(0, 6).map(slot => (
+                            <span key={`${slot.zone_name}-${slot.bay}-${slot.row}-${slot.tier}`} className="px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-slate-500">
+                              {slot.zone_name} B{slot.bay}-R{slot.row}-T{slot.tier}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-700/30 p-4">
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-3">ตู้ตาม Grade</p>
+                    <div className="space-y-2">
+                      {gradeStats.map(item => {
+                        const gradeInfo = GRADE_INFO[item.grade] || GRADE_INFO.A;
+                        const pct = activeContainers.length > 0 ? (item.count / activeContainers.length) * 100 : 0;
+                        return (
+                          <button key={item.grade} onClick={() => setFilterGrade(filterGrade === item.grade ? '' : item.grade)}
+                            className={`w-full text-left rounded-lg border p-2 transition-all ${filterGrade === item.grade ? 'border-blue-400 bg-white dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/60'}`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${gradeInfo.bg} ${gradeInfo.color}`}>Grade {item.grade}</span>
+                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{item.count}</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min(pct, 100)}%` }} />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-700/30 p-4">
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-3">ตู้ตาม Size / Type</p>
+                    <div className="space-y-2">
+                      {sizeTypeStats.length === 0 ? (
+                        <p className="text-xs text-slate-400">ยังไม่มีข้อมูลในลาน</p>
+                      ) : sizeTypeStats.map(([key, count]) => {
+                        const [size, type] = key.replace("'", '').split(/(?=[A-Z-])/);
+                        const pct = activeContainers.length > 0 ? (count / activeContainers.length) * 100 : 0;
+                        return (
+                          <button key={key} onClick={() => {
+                            const normalizedSize = key.split("'")[0];
+                            const normalizedType = key.split("'")[1];
+                            setFilterSize(filterSize === normalizedSize && filterType === normalizedType ? '' : normalizedSize);
+                            setFilterType(filterSize === normalizedSize && filterType === normalizedType ? '' : normalizedType);
+                          }} className="w-full rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 text-left">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-200">{size}&apos;{type}</span>
+                              <span className="text-xs text-slate-500">{count}</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-cyan-500" style={{ width: `${Math.min(pct, 100)}%` }} />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -398,7 +565,8 @@ export default function YardPage() {
                   <option value="in_yard">ในลาน</option>
                   <option value="hold">ค้างจ่าย</option>
                   <option value="repair">ซ่อม</option>
-                  <option value="gated_out">ปล่อยแล้ว</option>
+                  <option value="released">ปล่อยแล้ว</option>
+                  <option value="gated_out">ปล่อยแล้ว (เดิม)</option>
                 </select>
                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
@@ -415,10 +583,40 @@ export default function YardPage() {
                 </select>
                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
+              <div className="relative">
+                <Box size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <select value={filterSize} onChange={(e) => setFilterSize(e.target.value)}
+                  className="h-10 pl-8 pr-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
+                    text-sm text-slate-800 dark:text-white outline-none appearance-none">
+                  <option value="">ทุกขนาด</option>
+                  {uniqueSizes.map(size => <option key={size} value={size}>{size} ฟุต</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <Cuboid size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+                  className="h-10 pl-8 pr-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700
+                    text-sm text-slate-800 dark:text-white outline-none appearance-none">
+                  <option value="">ทุกประเภท</option>
+                  {uniqueTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+              {(quickFilter || filterZone || filterGrade || filterSize || filterType || filterStatus || search) && (
+                <button onClick={() => { setSearch(''); setFilterZone(''); setFilterStatus(''); setFilterGrade(''); setFilterSize(''); setFilterType(''); setQuickFilter(''); }}
+                  className="h-10 px-3 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-medium text-slate-500 hover:text-slate-700">
+                  ล้าง Filter
+                </button>
+              )}
               <span className="text-xs text-slate-400">
                 แสดง {filtered.length} / {containers.length} ตู้
                 {filterZone && <span className="ml-1 text-blue-500 font-medium">• Zone {filterZone}</span>}
                 {filterGrade && <span className="ml-1 text-amber-500 font-medium">• Grade {filterGrade}</span>}
+                {filterSize && <span className="ml-1 text-cyan-500 font-medium">• {filterSize} ft</span>}
+                {filterType && <span className="ml-1 text-cyan-500 font-medium">• {filterType}</span>}
+                {quickFilter === 'ready_release' && <span className="ml-1 text-emerald-500 font-medium">• พร้อมปล่อย</span>}
+                {quickFilter === 'damaged_hold' && <span className="ml-1 text-rose-500 font-medium">• Damaged/Hold</span>}
               </span>
             </div>
 
