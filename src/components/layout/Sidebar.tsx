@@ -13,6 +13,7 @@ import {
   Receipt,
   Settings,
   ClipboardList,
+  ShieldCheck,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -81,6 +82,12 @@ const menuItems: MenuItem[] = [
     href: '/reports',
     icon: <BarChart3 size={20} />,
     roles: ['yard_manager', 'supervisor', 'billing_officer', 'surveyor', 'yard_planner'],
+  },
+  {
+    label: 'Supervisor Review',
+    href: '/supervisor-review',
+    icon: <ShieldCheck size={20} />,
+    roles: ['yard_manager', 'supervisor'],
   },
   {
     label: 'ตั้งค่าระบบ',
