@@ -24,6 +24,19 @@ function makeGetRequest(url: string): NextRequest {
   return new NextRequest(url, { method: 'GET' });
 }
 
+function mockGateHistoryQuery(recordset: unknown[]) {
+  mockQuery.mockImplementation((statement?: unknown) => {
+    if (typeof statement === 'string' && (
+      statement.includes("COL_LENGTH('Containers'") ||
+      statement.includes("OBJECT_ID('BillingClearances'") ||
+      statement.includes("COL_LENGTH('GateTransactions'")
+    )) {
+      return Promise.resolve({ recordset: [] });
+    }
+    return Promise.resolve({ recordset });
+  });
+}
+
 // ── GET tests ──────────────────────────────────────────────────────
 describe('GET /api/gate (history)', () => {
   const { GET } = jest.requireActual('../gate/route') as typeof import('../gate/route');
@@ -58,7 +71,7 @@ describe('GET /api/gate (history)', () => {
   ];
 
   it('returns transaction list for given yard_id', async () => {
-    mockQuery.mockResolvedValueOnce({ recordset: mockTransactions });
+    mockGateHistoryQuery(mockTransactions);
 
     const req = makeGetRequest('http://localhost/api/gate?yard_id=1');
     const res = await GET(req);
@@ -70,7 +83,7 @@ describe('GET /api/gate (history)', () => {
   });
 
   it('returns empty array when no transactions', async () => {
-    mockQuery.mockResolvedValueOnce({ recordset: [] });
+    mockGateHistoryQuery([]);
 
     const req = makeGetRequest('http://localhost/api/gate?yard_id=99');
     const res = await GET(req);
@@ -80,7 +93,7 @@ describe('GET /api/gate (history)', () => {
   });
 
   it('filters by date param', async () => {
-    mockQuery.mockResolvedValueOnce({ recordset: [] });
+    mockGateHistoryQuery([]);
 
     const req = makeGetRequest('http://localhost/api/gate?yard_id=1&date=2026-03-26');
     await GET(req);
@@ -88,7 +101,7 @@ describe('GET /api/gate (history)', () => {
   });
 
   it('filters by search param (container number / EIR)', async () => {
-    mockQuery.mockResolvedValueOnce({ recordset: [] });
+    mockGateHistoryQuery([]);
 
     const req = makeGetRequest('http://localhost/api/gate?yard_id=1&search=EVRU1234567');
     await GET(req);
@@ -96,7 +109,16 @@ describe('GET /api/gate (history)', () => {
   });
 
   it('returns 500 on DB error', async () => {
-    mockQuery.mockRejectedValueOnce(new Error('Query execution failed'));
+    mockQuery.mockImplementation((statement?: unknown) => {
+      if (typeof statement === 'string' && (
+        statement.includes("COL_LENGTH('Containers'") ||
+        statement.includes("OBJECT_ID('BillingClearances'") ||
+        statement.includes("COL_LENGTH('GateTransactions'")
+      )) {
+        return Promise.resolve({ recordset: [] });
+      }
+      return Promise.reject(new Error('Query execution failed'));
+    });
 
     const req = makeGetRequest('http://localhost/api/gate?yard_id=1');
     const res = await GET(req);

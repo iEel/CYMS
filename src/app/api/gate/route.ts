@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { z } from 'zod';
 import { logAudit } from '@/lib/audit';
+import { logApprovalReview } from '@/lib/approvalReview';
 
 async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
   await db.request().query(`
@@ -269,6 +270,7 @@ export async function POST(request: NextRequest) {
 
     let finalContainerId = container_id;
     let assignedLocation: { zone_name: string; zone_id: number; bay: number; row: number; tier: number; reason: string } | null = null;
+    let gateOutHoldSnapshot: { hold_status?: string | null; status?: string | null; container_number?: string | null } | null = null;
     const clearanceValidation = await validateBillingClearance(db, yard_id, transaction_type, billing_clearance_id || null);
     if (!clearanceValidation.ok) {
       return NextResponse.json({ error: clearanceValidation.error }, { status: 400 });
@@ -387,6 +389,10 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: bookingValidation.error }, { status: 400 });
         }
       }
+      const holdResult = await db.request()
+        .input('containerId', sql.Int, finalContainerId)
+        .query('SELECT container_number, status, hold_status FROM Containers WHERE container_id = @containerId');
+      gateOutHoldSnapshot = holdResult.recordset[0] || null;
       await db.request()
         .input('containerId', sql.Int, finalContainerId)
         .input('sealNumber', sql.NVarChar, seal_number || null)
@@ -602,6 +608,28 @@ export async function POST(request: NextRequest) {
         ...(assignedLocation ? { assigned_location: assignedLocation } : {}),
       },
     });
+
+    if (transaction_type === 'gate_out' && gateOutHoldSnapshot?.hold_status === 'billing_hold') {
+      const approvedBy = typeof body.approved_by === 'number' ? body.approved_by : null;
+      await logApprovalReview({
+        db,
+        yardId: yard_id,
+        permissionCode: 'yard.hold.release',
+        action: 'gate_out_with_billing_hold',
+        entityType: 'container',
+        entityId: finalContainerId,
+        requestedBy: user_id || null,
+        approvedBy,
+        reason: notes || null,
+        details: {
+          eir_number: eirNumber,
+          container_number: gateOutHoldSnapshot.container_number || container_number,
+          previous_status: gateOutHoldSnapshot.status,
+          hold_status: gateOutHoldSnapshot.hold_status,
+          billing_clearance_id,
+        },
+      });
+    }
 
     // === Gate Email Notification with EIR PDF ===
     try {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { logApprovalReview } from '@/lib/approvalReview';
 
 async function ensureBillingClearances(db: sql.ConnectionPool) {
   await db.request().query(`
@@ -211,6 +212,34 @@ export async function POST(request: NextRequest) {
         invoice_id,
       },
     });
+
+    const originalAmount = Number(original_amount || 0);
+    const finalAmount = Number(final_amount || 0);
+    const isWaiveLike = ['waived', 'no_charge'].includes(clearance_type) || finalAmount < originalAmount;
+    if (isWaiveLike) {
+      await logApprovalReview({
+        db,
+        yardId: yard_id,
+        permissionCode: 'billing.waive.request',
+        action: clearance_type === 'no_charge' ? 'billing_no_charge_recorded' : 'billing_waive_recorded',
+        entityType: 'billing_clearance',
+        entityId: clearance.clearance_id,
+        requestedBy: user_id || null,
+        approvedBy: approved_by || null,
+        reason: reason || null,
+        details: {
+          transaction_type,
+          container_id,
+          container_number,
+          customer_id,
+          clearance_type,
+          original_amount: originalAmount,
+          final_amount: finalAmount,
+          waived_amount: Math.max(originalAmount - finalAmount, 0),
+          invoice_id,
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, clearance, clearance_id: clearance.clearance_id });
   } catch (error) {

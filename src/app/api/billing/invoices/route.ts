@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { logApprovalReview } from '@/lib/approvalReview';
 
 type DbPool = Awaited<ReturnType<typeof getDb>>;
 
@@ -178,6 +179,18 @@ export async function PUT(request: NextRequest) {
       case 'cancel':
         await db.request().input('id', sql.Int, invoice_id)
           .query("UPDATE Invoices SET status = 'cancelled' WHERE invoice_id = @id");
+        await logApprovalReview({
+          db,
+          yardId: body.yard_id || null,
+          permissionCode: 'billing.invoice.cancel',
+          action: 'invoice_cancel_after_issue',
+          entityType: 'invoice',
+          entityId: invoice_id,
+          requestedBy: body.user_id || null,
+          approvedBy: body.approved_by || null,
+          reason: body.reason || body.notes || null,
+          details: { invoice_id, action },
+        });
         break;
       case 'credit_note': {
         // Full credit note workflow: create a new CN invoice referencing the original
@@ -339,6 +352,26 @@ export async function PUT(request: NextRequest) {
           details: { cn_number: cnNumber, ref_invoice: orig.invoice_number, credit_amount: creditAmt, remaining_amount: remainingAfterCredit, revised_invoice_number: revisedNumber, reason }
         });
 
+        await logApprovalReview({
+          db,
+          yardId: orig.yard_id,
+          permissionCode: 'billing.credit_note.create',
+          action: 'credit_note_created',
+          entityType: 'invoice',
+          entityId: cnResult.recordset[0].invoice_id,
+          requestedBy: body.user_id || null,
+          approvedBy: body.approved_by || null,
+          reason: reason || null,
+          details: {
+            cn_number: cnNumber,
+            ref_invoice_id: refId,
+            ref_invoice_number: orig.invoice_number,
+            credit_amount: creditAmt,
+            remaining_amount: remainingAfterCredit,
+            revised_invoice_number: revisedNumber,
+          },
+        });
+
         return NextResponse.json({
           success: true,
           credit_note: cnResult.recordset[0],
@@ -368,6 +401,18 @@ export async function PUT(request: NextRequest) {
         if (inv3.recordset[0]?.container_id) {
           await db.request().input('cid3', sql.Int, inv3.recordset[0].container_id)
             .query("UPDATE Containers SET hold_status = NULL, updated_at = GETDATE() WHERE container_id = @cid3");
+          await logApprovalReview({
+            db,
+            yardId: body.yard_id || null,
+            permissionCode: 'yard.hold.release',
+            action: 'billing_hold_released',
+            entityType: 'container',
+            entityId: inv3.recordset[0].container_id,
+            requestedBy: body.user_id || null,
+            approvedBy: body.approved_by || null,
+            reason: body.reason || body.notes || null,
+            details: { invoice_id },
+          });
         }
         break;
     }

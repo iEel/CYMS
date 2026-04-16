@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { logApprovalReview } from '@/lib/approvalReview';
 
 async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
   await db.request().query(`
@@ -135,6 +136,11 @@ export async function PUT(request: NextRequest) {
     const db = await getDb();
     await ensureContainerGradeColumn(db);
 
+    const currentResult = await db.request()
+      .input('containerId', sql.Int, body.container_id)
+      .query('SELECT container_grade, hold_status, status FROM Containers WHERE container_id = @containerId');
+    const currentContainer = currentResult.recordset[0] || null;
+
     // Build dynamic SET clauses — only update fields that are provided
     const setClauses: string[] = ['updated_at = GETDATE()'];
     const req = db.request().input('containerId', sql.Int, body.container_id);
@@ -182,6 +188,44 @@ export async function PUT(request: NextRequest) {
     await req.query(`UPDATE Containers SET ${setClauses.join(', ')} WHERE container_id = @containerId`);
 
     await logAudit({ action: 'container_update', entityType: 'container', entityId: body.container_id, details: { status: body.status, container_grade: body.container_grade, zone_id: body.zone_id, bay: body.bay, row: body.row, tier: body.tier } });
+
+    if (body.container_grade !== undefined && currentContainer && currentContainer.container_grade !== String(body.container_grade).toUpperCase()) {
+      await logApprovalReview({
+        db,
+        yardId: body.yard_id || null,
+        permissionCode: 'survey.grade.change',
+        action: 'container_grade_change_after_save',
+        entityType: 'container',
+        entityId: body.container_id,
+        requestedBy: body.user_id || null,
+        approvedBy: body.approved_by || null,
+        reason: body.reason || body.notes || null,
+        details: {
+          previous_grade: currentContainer.container_grade,
+          new_grade: String(body.container_grade).toUpperCase(),
+          status: body.status,
+        },
+      });
+    }
+
+    if (currentContainer?.hold_status === 'billing_hold' && body.status && !['hold', 'in_yard'].includes(body.status)) {
+      await logApprovalReview({
+        db,
+        yardId: body.yard_id || null,
+        permissionCode: 'yard.hold.release',
+        action: 'container_billing_hold_override',
+        entityType: 'container',
+        entityId: body.container_id,
+        requestedBy: body.user_id || null,
+        approvedBy: body.approved_by || null,
+        reason: body.reason || body.notes || null,
+        details: {
+          previous_status: currentContainer.status,
+          new_status: body.status,
+          hold_status: currentContainer.hold_status,
+        },
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

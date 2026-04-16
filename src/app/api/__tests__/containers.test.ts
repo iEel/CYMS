@@ -13,7 +13,10 @@ let queryQueue: Array<{ recordset: unknown[] } | Error> = [];
 
 function makeChain() {
   const input = jest.fn().mockReturnThis();
-  const query = jest.fn().mockImplementation(() => {
+  const query = jest.fn().mockImplementation((statement?: unknown) => {
+    if (typeof statement === 'string' && statement.includes("COL_LENGTH('Containers'")) {
+      return Promise.resolve({ recordset: [] });
+    }
     const nxt = queryQueue.shift();
     if (!nxt) return Promise.resolve({ recordset: [] });
     if (nxt instanceof Error) return Promise.reject(nxt);
