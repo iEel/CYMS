@@ -33,6 +33,7 @@ function buildExceptions({
   clearances,
   booking,
   ediEndpoints,
+  approvalReviews,
 }: {
   container: Record<string, unknown>;
   gateIn: Record<string, unknown> | null;
@@ -42,12 +43,14 @@ function buildExceptions({
   clearances: Array<Record<string, unknown>>;
   booking: Record<string, unknown> | null;
   ediEndpoints: Array<Record<string, unknown>>;
+  approvalReviews: Array<Record<string, unknown>>;
 }) {
   const exceptions: LifecycleException[] = [];
   const pendingInvoices = invoices.filter(inv => ['draft', 'issued', 'overdue'].includes(String(inv.status || '')));
   const gateInClearance = clearances.find(c => c.transaction_type === 'gate_in');
   const gateOutClearance = clearances.find(c => c.transaction_type === 'gate_out');
   const damagePoints = damageReport?.points || [];
+  const pendingReviews = approvalReviews.filter(review => review.status === 'pending_review');
 
   if (!gateIn) {
     exceptions.push({
@@ -87,6 +90,14 @@ function buildExceptions({
       severity: 'danger',
       title: 'มีใบแจ้งหนี้ค้าง',
       message: `พบเอกสารค้างชำระ ${pendingInvoices.length} รายการ ก่อนปล่อยตู้ควรเคลียร์ Billing`,
+    });
+  }
+  if (pendingReviews.length > 0) {
+    exceptions.push({
+      code: 'pending_supervisor_review',
+      severity: 'warning',
+      title: 'มีรายการรอ Supervisor Review',
+      message: `พบรายการ soft approval รอตรวจ ${pendingReviews.length} รายการ`,
     });
   }
   if (gateIn && !gateInClearance) {
@@ -323,6 +334,48 @@ export async function GET(request: NextRequest) {
     const clearances = clearancesResult.recordset;
     const booking = bookingResult.recordset[0] || null;
     const ediEndpoints = ediResult.recordset;
+    const approvalReviewsResult = await db.request()
+      .input('cid8', sql.Int, parseInt(containerId))
+      .input('cnum3', sql.NVarChar, `%${container.container_number}%`)
+      .query(`
+        IF OBJECT_ID('ApprovalReviews', 'U') IS NOT NULL
+        BEGIN
+          SELECT TOP 20
+            ar.review_id, ar.permission_code, ar.action, ar.entity_type, ar.entity_id,
+            ar.status, ar.requested_by, ar.approved_by, ar.reason, ar.details,
+            ar.created_at, ar.reviewed_at,
+            requester.full_name AS requested_by_name,
+            approver.full_name AS approved_by_name
+          FROM ApprovalReviews ar
+          LEFT JOIN Users requester ON ar.requested_by = requester.user_id
+          LEFT JOIN Users approver ON ar.approved_by = approver.user_id
+          WHERE (ar.entity_type = 'container' AND ar.entity_id = @cid8)
+             OR (ar.entity_type = 'invoice' AND EXISTS (
+                  SELECT 1 FROM Invoices i WHERE i.container_id = @cid8 AND i.invoice_id = ar.entity_id
+                ))
+             OR ar.details LIKE @cnum3
+          ORDER BY ar.created_at DESC
+        END
+        ELSE
+        BEGIN
+          SELECT TOP 0
+            CAST(NULL AS INT) AS review_id,
+            CAST(NULL AS NVARCHAR(100)) AS permission_code,
+            CAST(NULL AS NVARCHAR(100)) AS action,
+            CAST(NULL AS NVARCHAR(50)) AS entity_type,
+            CAST(NULL AS INT) AS entity_id,
+            CAST(NULL AS NVARCHAR(20)) AS status,
+            CAST(NULL AS INT) AS requested_by,
+            CAST(NULL AS INT) AS approved_by,
+            CAST(NULL AS NVARCHAR(500)) AS reason,
+            CAST(NULL AS NVARCHAR(MAX)) AS details,
+            CAST(NULL AS DATETIME2) AS created_at,
+            CAST(NULL AS DATETIME2) AS reviewed_at,
+            CAST(NULL AS NVARCHAR(100)) AS requested_by_name,
+            CAST(NULL AS NVARCHAR(100)) AS approved_by_name
+        END
+      `);
+    const approvalReviews = approvalReviewsResult.recordset;
     const invoiceTotals = invoices.reduce((acc, inv) => {
       const amount = toNumber(inv.grand_total);
       if (inv.status === 'paid') acc.paid += amount;
@@ -349,6 +402,7 @@ export async function GET(request: NextRequest) {
       clearances,
       booking,
       ediEndpoints,
+      approvalReviews,
     });
 
     return NextResponse.json({
@@ -369,6 +423,7 @@ export async function GET(request: NextRequest) {
         booking_ref: container.booking_ref,
         seal_number: container.seal_number,
         container_grade: container.container_grade || 'A',
+        hold_status: container.hold_status || null,
         dwell_days: dwellDays,
       },
       gate_in: gateIn ? {
@@ -406,6 +461,7 @@ export async function GET(request: NextRequest) {
       edi: {
         endpoints: ediEndpoints,
       },
+      approval_reviews: approvalReviews,
     });
   } catch (error) {
     console.error('❌ GET container detail error:', error);

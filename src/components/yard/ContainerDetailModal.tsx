@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, ExternalLink, ArrowRightLeft, Loader2, AlertTriangle, CheckCircle2, FileText, Receipt, Ship, Radio, Clock, User } from 'lucide-react';
+import { X, ExternalLink, ArrowRightLeft, Loader2, AlertTriangle, CheckCircle2, FileText, Receipt, Ship, Radio, Clock, User, ShieldCheck } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
 import {
   buildPhotoEvidenceSnapshot,
@@ -40,6 +40,7 @@ interface ContainerDetail {
     booking_ref: string;
     seal_number: string;
     container_grade: string;
+    hold_status?: string | null;
     dwell_days: number;
   };
   gate_in: {
@@ -146,6 +147,20 @@ interface ContainerDetail {
       last_error_message?: string;
     }>;
   };
+  approval_reviews?: Array<{
+    review_id: number;
+    permission_code: string;
+    action: string;
+    entity_type: string;
+    entity_id?: number;
+    status: 'pending_review' | 'approved' | 'rejected';
+    requested_by_name?: string;
+    approved_by_name?: string;
+    reason?: string;
+    details?: string;
+    created_at: string;
+    reviewed_at?: string;
+  }>;
 }
 
 interface ContainerDetailModalProps {
@@ -230,6 +245,23 @@ const CLEARANCE_LABELS: Record<string, string> = {
   credit: 'Credit',
   no_charge: 'No Charge',
   waived: 'Waived',
+};
+
+const REVIEW_STATUS_INFO: Record<string, { label: string; color: string }> = {
+  pending_review: { label: 'รอตรวจ', color: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  approved: { label: 'อนุมัติแล้ว', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
+  rejected: { label: 'ไม่เห็นชอบ', color: 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' },
+};
+
+const REVIEW_ACTION_LABELS: Record<string, string> = {
+  container_grade_change_after_save: 'เปลี่ยนเกรดตู้',
+  container_billing_hold_override: 'เปลี่ยนสถานะตู้ที่ติด Billing Hold',
+  gate_out_with_billing_hold: 'Gate Out ทั้งที่ติด Billing Hold',
+  billing_no_charge_recorded: 'No Charge',
+  billing_waive_recorded: 'Waived / ลดค่าบริการ',
+  credit_note_created: 'ออกใบลดหนี้',
+  invoice_cancel_after_issue: 'ยกเลิก Invoice',
+  billing_hold_released: 'ปลด Billing Hold',
 };
 
 export default function ContainerDetailModal({ containerId, onClose, onRefresh, onViewEIR }: ContainerDetailModalProps) {
@@ -338,6 +370,11 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
   const clearances = data.billing?.clearances || [];
   const booking = data.booking;
   const ediEndpoints = data.edi?.endpoints || [];
+  const approvalReviews = data.approval_reviews || [];
+  const pendingReviews = approvalReviews.filter(review => review.status === 'pending_review');
+  const lifecycleDone = Object.values(lifecycle).filter(Boolean).length;
+  const lifecycleTotal = Object.keys(lifecycle).length;
+  const billingOutstanding = data.billing?.totals?.outstanding || 0;
 
   const handleStatusChange = async () => {
     if (!newStatus || newStatus === c.status) return;
@@ -378,6 +415,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
           {/* ===== HEADER ===== */}
           <div className="sticky top-0 z-10 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between rounded-t-2xl">
             <div className="flex items-center gap-3">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">Container 360</span>
               <span className="text-xl font-mono font-bold text-slate-800 dark:text-white">{c.container_number}</span>
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                 c.status === 'in_yard' ? 'bg-emerald-100 text-emerald-600' :
@@ -405,10 +443,27 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
               <InfoField label="สินค้า" value={c.is_laden ? '📦 มีสินค้า' : '📭 ตู้เปล่า'} />
               <InfoField label="Booking" value={c.booking_ref || '—'} />
               <InfoField label="เกรด" value={`Grade ${c.container_grade || 'A'} · ${(GRADE_INFO[c.container_grade || 'A'] || GRADE_INFO.A).desc}`} highlight />
+              <InfoField label="Hold" value={c.hold_status || '—'} highlight={Boolean(c.hold_status)} />
               <InfoField label="ลาน" value={c.yard_name || '—'} />
               <InfoField label="โซน" value={c.zone_name || '—'} />
               <InfoField label="พิกัด" value={c.bay && c.row && c.tier ? `B${c.bay}-R${c.row}-T${c.tier}` : '—'} mono />
               <InfoField label="อยู่ลานแล้ว" value={`${c.dwell_days} วัน`} highlight />
+            </div>
+
+            {/* ===== 360 SNAPSHOT ===== */}
+            <div className="rounded-xl border border-blue-200 dark:border-blue-900/40 overflow-hidden">
+              <div className="px-4 py-2 bg-blue-50 dark:bg-blue-900/10 border-b border-blue-200 dark:border-blue-900/40">
+                <h3 className="text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                  <ShieldCheck size={13} /> Container 360 Snapshot
+                </h3>
+              </div>
+              <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-2">
+                <MiniMetric label="Lifecycle" value={`${lifecycleDone}/${lifecycleTotal}`} color={lifecycleDone === lifecycleTotal ? 'text-emerald-600' : 'text-blue-600'} />
+                <MiniMetric label="Exception" value={`${exceptions.length}`} color={exceptions.length ? 'text-amber-600' : 'text-emerald-600'} />
+                <MiniMetric label="Pending Review" value={`${pendingReviews.length}`} color={pendingReviews.length ? 'text-rose-600' : 'text-emerald-600'} />
+                <MiniMetric label="รูปถ่าย" value={`${galleryPhotos.length}`} color={galleryPhotos.length ? 'text-blue-600' : 'text-slate-500'} />
+                <MiniMetric label="ค้างชำระ" value={`฿${billingOutstanding.toLocaleString()}`} color={billingOutstanding > 0 ? 'text-red-600' : 'text-emerald-600'} />
+              </div>
             </div>
 
             {/* ===== LIFECYCLE OVERVIEW ===== */}
@@ -829,6 +884,48 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
             </div>
 
             {/* ===== READABLE AUDIT TRAIL ===== */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                  <ShieldCheck size={13} /> Supervisor Review
+                </h3>
+                <span className={`text-[10px] font-bold ${pendingReviews.length ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {pendingReviews.length ? `${pendingReviews.length} รายการรอตรวจ` : 'ไม่มีรายการรอตรวจ'}
+                </span>
+              </div>
+              <div className="p-4 space-y-2">
+                {approvalReviews.length === 0 ? (
+                  <p className="text-xs text-slate-400">ยังไม่มีรายการ soft approval ที่ผูกกับตู้นี้</p>
+                ) : approvalReviews.slice(0, 6).map(review => {
+                  const info = REVIEW_STATUS_INFO[review.status] || REVIEW_STATUS_INFO.pending_review;
+                  return (
+                    <div key={review.review_id} className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${info.color}`}>{info.label}</span>
+                            <p className="text-xs font-semibold text-slate-800 dark:text-white truncate">
+                              {REVIEW_ACTION_LABELS[review.action] || review.action}
+                            </p>
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            {review.permission_code} · {review.requested_by_name || 'ระบบ'} · {formatDateTime(review.created_at)}
+                          </p>
+                          {review.reason && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">หมายเหตุ: {review.reason}</p>}
+                        </div>
+                        {review.approved_by_name && (
+                          <span className="text-[10px] text-slate-400 flex-shrink-0">โดย {review.approved_by_name}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {approvalReviews.length > 6 && (
+                  <p className="text-[10px] text-slate-400 text-center pt-1">แสดง 6 จาก {approvalReviews.length} รายการล่าสุด</p>
+                )}
+              </div>
+            </div>
+
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
               <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                 <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
