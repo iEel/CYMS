@@ -1,18 +1,26 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Loader2, Filter, Download } from 'lucide-react';
+import { FileText, Loader2, Filter, Download, Receipt, ArrowDownToLine, BarChart3 } from 'lucide-react';
 
 interface Invoice {
   invoice_id: number; invoice_number: string; charge_type: string;
   total_before_vat: number; vat_amount: number; grand_total: number;
   status: string; created_at: string; paid_at: string; container_number: string;
+  document_type?: string; ref_invoice_number?: string;
+}
+
+interface Statement {
+  outstanding: number; paid_total: number; credit_note_total: number;
+  open_count: number; paid_count: number; credit_note_count: number;
+  not_due: number; due_1_30: number; due_31_60: number; due_over_60: number;
 }
 
 const statusLabels: Record<string, { label: string; cls: string }> = {
   issued: { label: 'แจ้งหนี้', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   paid: { label: 'ชำระแล้ว', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
   cancelled: { label: 'ยกเลิก', cls: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
+  credit_note: { label: 'ใบลดหนี้', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
 };
 
 const chargeLabels: Record<string, string> = {
@@ -23,7 +31,8 @@ const chargeLabels: Record<string, string> = {
 
 export default function PortalInvoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [summary, setSummary] = useState({ outstanding: 0, paid_total: 0, issued_count: 0, paid_count: 0 });
+  const [summary, setSummary] = useState({ outstanding: 0, paid_total: 0, credit_note_total: 0, issued_count: 0, paid_count: 0, credit_note_count: 0 });
+  const [statement, setStatement] = useState<Statement | null>(null);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -39,8 +48,10 @@ export default function PortalInvoices() {
       setSummary({
         outstanding: d.summary?.outstanding || 0,
         paid_total: d.summary?.paid_total || 0,
+        credit_note_total: d.summary?.credit_note_total || 0,
         issued_count: d.summary?.issued_count || 0,
         paid_count: d.summary?.paid_count || 0,
+        credit_note_count: d.summary?.credit_note_count || 0,
       });
       setTotal(d.total || 0);
       setPage(d.page || 1);
@@ -54,6 +65,14 @@ export default function PortalInvoices() {
     return () => window.clearTimeout(timeout);
   }, [loadData]);
 
+  useEffect(() => {
+    fetch('/api/portal/statement').then(r => r.json()).then(d => {
+      setStatement(d.summary || null);
+    }).catch(() => setStatement(null));
+  }, []);
+
+  const isCreditNote = (inv: Invoice) => inv.status === 'credit_note' || inv.document_type === 'credit_note' || inv.invoice_number?.startsWith('CN-');
+
   return (
     <div className="space-y-4">
       <div>
@@ -64,7 +83,7 @@ export default function PortalInvoices() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200/50 dark:border-amber-800/30 rounded-xl p-4">
           <p className="text-[10px] text-amber-600 font-medium uppercase">ค้างชำระ ({summary.issued_count})</p>
           <p className="text-xl font-bold text-amber-700 dark:text-amber-400">฿{summary.outstanding.toLocaleString()}</p>
@@ -73,7 +92,25 @@ export default function PortalInvoices() {
           <p className="text-[10px] text-emerald-600 font-medium uppercase">ชำระแล้ว ({summary.paid_count})</p>
           <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">฿{summary.paid_total.toLocaleString()}</p>
         </div>
+        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200/50 dark:border-orange-800/30 rounded-xl p-4">
+          <p className="text-[10px] text-orange-600 font-medium uppercase">ใบลดหนี้ ({summary.credit_note_count})</p>
+          <p className="text-xl font-bold text-orange-700 dark:text-orange-400">฿{summary.credit_note_total.toLocaleString()}</p>
+        </div>
       </div>
+
+      {statement && (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200/60 dark:border-slate-700/50 p-4">
+          <h2 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2 text-sm">
+            <BarChart3 size={16} className="text-blue-600" /> Statement / AR Summary
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            <MiniMetric label="ยังไม่ครบกำหนด" value={statement.not_due} />
+            <MiniMetric label="เกิน 1-30 วัน" value={statement.due_1_30} warn />
+            <MiniMetric label="เกิน 31-60 วัน" value={statement.due_31_60} warn />
+            <MiniMetric label="เกิน 60+ วัน" value={statement.due_over_60} danger />
+          </div>
+        </div>
+      )}
 
       {/* Filter */}
       <div className="flex justify-end">
@@ -83,6 +120,7 @@ export default function PortalInvoices() {
           <option value="issued">แจ้งหนี้</option>
           <option value="paid">ชำระแล้ว</option>
           <option value="cancelled">ยกเลิก</option>
+          <option value="credit_note">ใบลดหนี้</option>
         </select>
       </div>
 
@@ -100,10 +138,14 @@ export default function PortalInvoices() {
             <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
               {invoices.map(inv => (
                 <div key={inv.invoice_id} className="p-4 space-y-2">
+                  {(() => {
+                    const displayStatus = isCreditNote(inv) ? 'credit_note' : inv.status;
+                    return (
+                      <>
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-slate-800 dark:text-white text-sm">{inv.invoice_number}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[inv.status] || statusLabels.issued).cls}`}>
-                      {(statusLabels[inv.status] || statusLabels.issued).label}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[displayStatus] || statusLabels.issued).cls}`}>
+                      {(statusLabels[displayStatus] || statusLabels.issued).label}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs text-slate-500">
@@ -114,10 +156,10 @@ export default function PortalInvoices() {
                     {inv.container_number && `ตู้: ${inv.container_number} | `}
                     {new Date(inv.created_at).toLocaleDateString('th-TH')}
                   </p>
-                  <a href={`/api/portal/invoice-pdf?invoice_id=${inv.invoice_id}`} target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-1 mt-1 text-[10px] text-blue-500 hover:text-blue-700">
-                    <Download size={10} /> ดาวน์โหลด PDF
-                  </a>
+                  <DocumentLinks inv={inv} isCreditNote={isCreditNote(inv)} />
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -136,26 +178,25 @@ export default function PortalInvoices() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                {invoices.map(inv => (
+                {invoices.map(inv => {
+                  const displayStatus = isCreditNote(inv) ? 'credit_note' : inv.status;
+                  return (
                   <tr key={inv.invoice_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
                     <td className="p-3 font-medium text-slate-800 dark:text-white">{inv.invoice_number}</td>
                     <td className="p-3 text-slate-600 dark:text-slate-300">{chargeLabels[inv.charge_type] || inv.charge_type}</td>
                     <td className="p-3 font-mono text-slate-500 text-xs">{inv.container_number || '-'}</td>
                     <td className="p-3 text-right font-semibold text-slate-800 dark:text-white">฿{inv.grand_total.toLocaleString()}</td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[inv.status] || statusLabels.issued).cls}`}>
-                        {(statusLabels[inv.status] || statusLabels.issued).label}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[displayStatus] || statusLabels.issued).cls}`}>
+                        {(statusLabels[displayStatus] || statusLabels.issued).label}
                       </span>
                     </td>
                     <td className="p-3 text-slate-500 text-xs">{new Date(inv.created_at).toLocaleDateString('th-TH')}</td>
                     <td className="p-3 text-right">
-                      <a href={`/api/portal/invoice-pdf?invoice_id=${inv.invoice_id}`} target="_blank" rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 transition-colors">
-                        <Download size={12} /> PDF
-                      </a>
+                      <DocumentLinks inv={inv} isCreditNote={isCreditNote(inv)} alignRight />
                     </td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           </>
@@ -174,6 +215,41 @@ export default function PortalInvoices() {
               }`}>{p}</button>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function MiniMetric({ label, value, warn, danger }: { label: string; value: number; warn?: boolean; danger?: boolean }) {
+  const color = danger ? 'text-red-600' : warn ? 'text-amber-600' : 'text-slate-800 dark:text-white';
+  return (
+    <div className="rounded-lg border border-slate-100 dark:border-slate-700 p-3">
+      <p className="text-[10px] text-slate-400">{label}</p>
+      <p className={`text-sm font-bold ${color}`}>฿{(value || 0).toLocaleString()}</p>
+    </div>
+  );
+}
+
+function DocumentLinks({ inv, isCreditNote, alignRight = false }: { inv: Invoice; isCreditNote: boolean; alignRight?: boolean }) {
+  const baseClass = 'inline-flex items-center gap-1 text-xs hover:underline transition-colors';
+  return (
+    <div className={`flex flex-wrap gap-2 ${alignRight ? 'justify-end' : ''}`}>
+      {isCreditNote ? (
+        <a href={`/api/portal/invoice-pdf?invoice_id=${inv.invoice_id}&type=credit_note`} target="_blank" rel="noreferrer"
+          className={`${baseClass} text-orange-600`}>
+          <ArrowDownToLine size={12} /> Credit Note PDF
+        </a>
+      ) : (
+        <a href={`/api/portal/invoice-pdf?invoice_id=${inv.invoice_id}&type=invoice`} target="_blank" rel="noreferrer"
+          className={`${baseClass} text-blue-500`}>
+          <Download size={12} /> Invoice PDF
+        </a>
+      )}
+      {!isCreditNote && inv.status === 'paid' && (
+        <a href={`/api/portal/invoice-pdf?invoice_id=${inv.invoice_id}&type=receipt`} target="_blank" rel="noreferrer"
+          className={`${baseClass} text-emerald-600`}>
+          <Receipt size={12} /> Receipt PDF
+        </a>
       )}
     </div>
   );

@@ -17,8 +17,12 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const invoiceId = searchParams.get('invoice_id');
+    const type = searchParams.get('type') || 'invoice';
     if (!invoiceId) {
       return NextResponse.json({ error: 'กรุณาระบุ invoice_id' }, { status: 400 });
+    }
+    if (!['invoice', 'receipt', 'credit_note'].includes(type)) {
+      return NextResponse.json({ error: 'ประเภทเอกสารไม่ถูกต้อง' }, { status: 400 });
     }
 
     const db = await getDb();
@@ -29,12 +33,20 @@ export async function GET(request: NextRequest) {
       .input('invoiceId', sql.Int, parseInt(invoiceId))
       .input('cid', sql.Int, cid)
       .query(`
-        SELECT i.*, c.container_number, c.size, c.type, c.shipping_line,
+        SELECT i.*, i.total_amount as total_before_vat,
+          ref.invoice_number as ref_invoice_number,
+          c.container_number, c.size, c.type, c.shipping_line,
           cust.customer_name, cust.contact_email, cust.contact_phone, cust.address
         FROM Invoices i
+        LEFT JOIN Invoices ref ON i.ref_invoice_id = ref.invoice_id
         LEFT JOIN Containers c ON i.container_id = c.container_id
         JOIN Customers cust ON i.customer_id = cust.customer_id
         WHERE i.invoice_id = @invoiceId AND i.customer_id = @cid
+          AND (
+            i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
+            OR i.document_type = 'credit_note'
+            OR i.invoice_number LIKE 'CN-%'
+          )
       `);
 
     if (result.recordset.length === 0) {
@@ -42,6 +54,16 @@ export async function GET(request: NextRequest) {
     }
 
     const inv = result.recordset[0];
+    const isCreditNote = inv.status === 'credit_note' || inv.document_type === 'credit_note' || String(inv.invoice_number || '').startsWith('CN-');
+    const isReceipt = type === 'receipt';
+    if (isReceipt && inv.status !== 'paid') {
+      return NextResponse.json({ error: 'ออก Receipt PDF ได้เฉพาะ Invoice ที่ชำระแล้ว' }, { status: 400 });
+    }
+    if (type === 'credit_note' && !isCreditNote) {
+      return NextResponse.json({ error: 'เอกสารนี้ไม่ใช่ใบลดหนี้' }, { status: 400 });
+    }
+    const documentTitle = isCreditNote ? 'ใบลดหนี้ / Credit Note' : isReceipt ? 'ใบเสร็จรับเงิน / Receipt' : 'ใบแจ้งหนี้ / Invoice';
+    const filePrefix = isCreditNote ? 'CreditNote' : isReceipt ? 'Receipt' : 'Invoice';
 
     // Company info
     let company: Record<string, string> = {};
@@ -71,16 +93,21 @@ export async function GET(request: NextRequest) {
 
     // Title
     doc.setFontSize(14);
-    doc.text('ใบแจ้งหนี้ / Invoice', pw / 2, y, { align: 'center' });
+    doc.text(documentTitle, pw / 2, y, { align: 'center' });
     y += 8;
 
     doc.setFontSize(10);
-    doc.text(`Invoice No: ${inv.invoice_number}`, 14, y);
+    doc.text(`${isCreditNote ? 'Credit Note' : isReceipt ? 'Receipt' : 'Invoice'} No: ${inv.invoice_number}`, 14, y);
     doc.text(`Date: ${new Date(inv.created_at).toLocaleDateString('th-TH')}`, pw - 14, y, { align: 'right' });
     y += 6;
-    doc.text(`Status: ${inv.status === 'paid' ? 'ชำระแล้ว' : inv.status === 'issued' ? 'แจ้งหนี้' : inv.status}`, 14, y);
+    doc.text(`Status: ${isCreditNote ? 'ใบลดหนี้' : inv.status === 'paid' ? 'ชำระแล้ว' : inv.status === 'issued' ? 'แจ้งหนี้' : inv.status}`, 14, y);
     if (inv.paid_at) doc.text(`Paid: ${new Date(inv.paid_at).toLocaleDateString('th-TH')}`, pw - 14, y, { align: 'right' });
     y += 8;
+    if (isCreditNote && inv.ref_invoice_number) {
+      doc.setFontSize(9);
+      doc.text(`อ้างอิงใบแจ้งหนี้: ${inv.ref_invoice_number}`, 14, y);
+      y += 6;
+    }
 
     // Customer info
     autoTable(doc, {
@@ -110,13 +137,13 @@ export async function GET(request: NextRequest) {
 
     autoTable(doc, {
       startY: y,
-      head: [['รายการ', 'ตู้', 'ยอดก่อน VAT', 'VAT', 'ยอดรวม']],
+      head: [['รายการ', 'ตู้', isCreditNote ? 'ยอดลดหนี้ก่อน VAT' : 'ยอดก่อน VAT', 'VAT', isCreditNote ? 'ยอดลดหนี้' : 'ยอดรวม']],
       body: [[
         chargeLabels[inv.charge_type] || inv.charge_type || '-',
         inv.container_number || '-',
-        `฿${(inv.total_before_vat || 0).toLocaleString()}`,
-        `฿${(inv.vat_amount || 0).toLocaleString()}`,
-        `฿${(inv.grand_total || 0).toLocaleString()}`,
+        `฿${Math.abs(inv.total_before_vat || 0).toLocaleString()}`,
+        `฿${Math.abs(inv.vat_amount || 0).toLocaleString()}`,
+        `฿${Math.abs(inv.grand_total || 0).toLocaleString()}`,
       ]],
       theme: 'grid',
       styles: { font: FONT, fontSize: 10, cellPadding: 3 },
@@ -128,12 +155,12 @@ export async function GET(request: NextRequest) {
 
     // Grand total
     doc.setFontSize(14);
-    doc.text(`ยอดรวมสุทธิ: ฿${(inv.grand_total || 0).toLocaleString()}`, pw - 14, y, { align: 'right' });
+    doc.text(`${isCreditNote ? 'ยอดลดหนี้สุทธิ' : 'ยอดรวมสุทธิ'}: ฿${Math.abs(inv.grand_total || 0).toLocaleString()}`, pw - 14, y, { align: 'right' });
 
     // Footer
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text(`CYMS — Invoice ${inv.invoice_number}`, pw / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
+    doc.text(`CYMS — ${filePrefix} ${inv.invoice_number}`, pw / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
 
     const arrayBuffer = doc.output('arraybuffer');
     const buffer = Buffer.from(arrayBuffer);
@@ -141,7 +168,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="Invoice-${inv.invoice_number}.pdf"`,
+        'Content-Disposition': `attachment; filename="${filePrefix}-${inv.invoice_number}.pdf"`,
       },
     });
   } catch (error) {

@@ -18,9 +18,20 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
-    let whereClause = "WHERE i.customer_id = @cid AND i.status IN ('issued', 'paid', 'cancelled')";
-    if (status && ['issued', 'paid', 'cancelled'].includes(status)) {
-      whereClause += ' AND i.status = @status';
+    let whereClause = `
+      WHERE i.customer_id = @cid
+        AND (
+          i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
+          OR i.document_type = 'credit_note'
+          OR i.invoice_number LIKE 'CN-%'
+        )
+    `;
+    if (status && ['issued', 'paid', 'cancelled', 'credit_note'].includes(status)) {
+      if (status === 'credit_note') {
+        whereClause += " AND (i.status = 'credit_note' OR i.document_type = 'credit_note' OR i.invoice_number LIKE 'CN-%')";
+      } else {
+        whereClause += ' AND i.status = @status';
+      }
     }
 
     const req = db.request().input('cid', sql.Int, cid);
@@ -35,9 +46,17 @@ export async function GET(request: NextRequest) {
       SELECT
         ISNULL(SUM(CASE WHEN status = 'issued' THEN grand_total ELSE 0 END), 0) as outstanding,
         ISNULL(SUM(CASE WHEN status = 'paid' THEN grand_total ELSE 0 END), 0) as paid_total,
+        ISNULL(SUM(CASE WHEN status = 'credit_note' OR document_type = 'credit_note' OR invoice_number LIKE 'CN-%' THEN ABS(grand_total) ELSE 0 END), 0) as credit_note_total,
         COUNT(CASE WHEN status = 'issued' THEN 1 END) as issued_count,
-        COUNT(CASE WHEN status = 'paid' THEN 1 END) as paid_count
-      FROM Invoices WHERE customer_id = @cid AND status IN ('issued', 'paid', 'cancelled')
+        COUNT(CASE WHEN status = 'paid' THEN 1 END) as paid_count,
+        COUNT(CASE WHEN status = 'credit_note' OR document_type = 'credit_note' OR invoice_number LIKE 'CN-%' THEN 1 END) as credit_note_count
+      FROM Invoices
+      WHERE customer_id = @cid
+        AND (
+          status IN ('issued', 'paid', 'cancelled', 'credit_note')
+          OR document_type = 'credit_note'
+          OR invoice_number LIKE 'CN-%'
+        )
     `);
 
     const req2 = db.request().input('cid', sql.Int, cid)
@@ -45,10 +64,13 @@ export async function GET(request: NextRequest) {
     if (status && ['issued', 'paid', 'cancelled'].includes(status)) req2.input('status', sql.NVarChar, status);
 
     const result = await req2.query(`
-      SELECT i.invoice_id, i.invoice_number, i.charge_type, i.total_before_vat,
+      SELECT i.invoice_id, i.invoice_number, i.charge_type,
+        i.total_amount as total_before_vat,
         i.vat_amount, i.grand_total, i.status, i.created_at, i.paid_at,
+        i.document_type, i.ref_invoice_id, ref.invoice_number as ref_invoice_number,
         c.container_number
       FROM Invoices i
+      LEFT JOIN Invoices ref ON i.ref_invoice_id = ref.invoice_id
       LEFT JOIN Containers c ON i.container_id = c.container_id
       ${whereClause}
       ORDER BY i.created_at DESC
