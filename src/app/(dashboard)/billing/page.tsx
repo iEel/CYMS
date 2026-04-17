@@ -66,6 +66,21 @@ interface Stats {
   total_outstanding: number; total_paid: number; total_overdue: number; pending_count: number;
 }
 
+interface CreditCustomer {
+  customer_id: number;
+  customer_name: string;
+  default_payment_type: string;
+  credit_term: number;
+  credit_limit: number;
+  credit_hold: boolean;
+  credit_hold_reason?: string;
+  outstanding_amount: number;
+  oldest_overdue_days: number;
+  is_credit: boolean;
+  over_limit: boolean;
+  has_overdue: boolean;
+}
+
 const CHARGE_LABELS: Record<string, string> = {
   storage: '📦 ค่าฝากตู้', lolo: '🏗️ ค่ายก LOLO', mnr: '🔧 ค่าซ่อม M&R',
   washing: '🫧 ค่าล้างตู้', pti: '🔌 ค่า PTI', reefer: '❄️ ค่าปลั๊กเย็น', other: '📋 อื่นๆ',
@@ -77,7 +92,7 @@ const UNIT_LABELS: Record<string, string> = {
 export default function BillingPage() {
   const { session, hasPermission } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'invoices' | 'clearance' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'clearance' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging' | 'credit_control'>('invoices');
 
   // Credit Note Modal
   const [cnModal, setCnModal] = useState<{ open: boolean; invoice: InvoiceRow | null }>({ open: false, invoice: null });
@@ -127,6 +142,8 @@ export default function BillingPage() {
   const [clearances, setClearances] = useState<ClearanceRow[]>([]);
   const [clearanceStats, setClearanceStats] = useState<ClearanceStats | null>(null);
   const [clearanceLoading, setClearanceLoading] = useState(false);
+  const [creditCustomers, setCreditCustomers] = useState<CreditCustomer[]>([]);
+  const [creditLoading, setCreditLoading] = useState(false);
 
   // Tariff create
   const [tariffForm, setTariffForm] = useState({
@@ -167,17 +184,28 @@ export default function BillingPage() {
     finally { setClearanceLoading(false); }
   }, [yardId]);
 
+  const fetchCreditControl = useCallback(async () => {
+    setCreditLoading(true);
+    try {
+      const res = await fetch(`/api/billing/credit-control?yard_id=${yardId}`);
+      const data = await res.json();
+      setCreditCustomers(data.customers || []);
+    } catch (err) { console.error(err); }
+    finally { setCreditLoading(false); }
+  }, [yardId]);
+
   useEffect(() => {
     if (activeTab === 'invoices' || activeTab === 'hold' || activeTab === 'documents' || activeTab === 'reports') fetchInvoices();
     if (activeTab === 'invoices') fetchClearances();
     if (activeTab === 'clearance' || activeTab === 'documents' || activeTab === 'reports') fetchClearances();
+    if (activeTab === 'credit_control') fetchCreditControl();
     if (activeTab === 'tariffs') fetchTariffs();
     if (activeTab === 'create' && customers.length === 0) {
       fetch('/api/settings/customers').then(r => r.json()).then(d => {
         if (Array.isArray(d)) setCustomers(d.filter((c: { is_active: boolean }) => c.is_active));
       }).catch(() => {});
     }
-  }, [activeTab, fetchInvoices, fetchTariffs, fetchClearances, customers.length]);
+  }, [activeTab, fetchInvoices, fetchTariffs, fetchClearances, fetchCreditControl, customers.length]);
 
   const updateInvoice = async (id: number, action: string) => {
     const invoice = invoices.find(inv => inv.invoice_id === id);
@@ -337,6 +365,7 @@ export default function BillingPage() {
           { id: 'tariffs' as const, label: 'Tariff', icon: <Calculator size={14} /> },
           { id: 'hold' as const, label: 'Hold', icon: <Lock size={14} /> },
           { id: 'ar_aging' as const, label: 'AR Aging', icon: <Users size={14} /> },
+          { id: 'credit_control' as const, label: 'Credit Control', icon: <CreditCard size={14} /> },
           { id: 'documents' as const, label: 'เอกสาร', icon: <Printer size={14} /> },
           { id: 'export' as const, label: 'ERP', icon: <FileDown size={14} /> },
           { id: 'reports' as const, label: 'รายงาน', icon: <BarChart3 size={14} /> },
@@ -862,6 +891,15 @@ export default function BillingPage() {
 
       {/* =================== AR AGING TAB =================== */}
       {activeTab === 'ar_aging' && <ARAgingTab yardId={yardId} />}
+
+      {/* =================== CREDIT CONTROL TAB =================== */}
+      {activeTab === 'credit_control' && (
+        <CreditControlTab
+          customers={creditCustomers}
+          loading={creditLoading}
+          onRefresh={fetchCreditControl}
+        />
+      )}
 
       {/* =================== DEMURRAGE TAB =================== */}
       {activeTab === 'demurrage' && (
@@ -1723,6 +1761,167 @@ function BillingReports({ yardId }: { yardId: number }) {
         </>
       )}
 
+    </div>
+  );
+}
+
+/* ===================== CREDIT CONTROL TAB ===================== */
+function CreditControlTab({
+  customers,
+  loading,
+  onRefresh,
+}: {
+  customers: CreditCustomer[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'over_limit' | 'overdue' | 'hold'>('all');
+
+  const filtered = customers.filter(customer => {
+    const q = search.toLowerCase();
+    const matchesSearch = !q || customer.customer_name?.toLowerCase().includes(q);
+    const matchesFilter =
+      filter === 'all' ||
+      (filter === 'over_limit' && customer.over_limit) ||
+      (filter === 'overdue' && customer.has_overdue) ||
+      (filter === 'hold' && customer.credit_hold);
+    return matchesSearch && matchesFilter;
+  });
+
+  const summary = customers.reduce((acc, customer) => {
+    acc.totalOutstanding += Number(customer.outstanding_amount || 0);
+    acc.totalLimit += Number(customer.credit_limit || 0);
+    if (customer.over_limit) acc.overLimit += 1;
+    if (customer.has_overdue) acc.overdue += 1;
+    if (customer.credit_hold) acc.hold += 1;
+    return acc;
+  }, { totalOutstanding: 0, totalLimit: 0, overLimit: 0, overdue: 0, hold: 0 });
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <CreditMetric label="ลูกค้าเครดิต" value={customers.length.toLocaleString()} icon={<Users size={16} />} />
+        <CreditMetric label="ยอดค้างรวม" value={`฿${summary.totalOutstanding.toLocaleString()}`} icon={<Receipt size={16} />} color="text-blue-600" />
+        <CreditMetric label="วงเงินรวม" value={`฿${summary.totalLimit.toLocaleString()}`} icon={<CreditCard size={16} />} color="text-emerald-600" />
+        <CreditMetric label="เกินวงเงิน" value={summary.overLimit.toLocaleString()} icon={<AlertTriangle size={16} />} color="text-rose-600" />
+        <CreditMetric label="Credit Hold" value={summary.hold.toLocaleString()} icon={<Lock size={16} />} color="text-amber-600" />
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+              <CreditCard size={16} /> Customer Credit Control
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">ติดตามวงเงินเครดิต ยอดค้าง Overdue และสถานะ Credit Hold</p>
+          </div>
+          <button onClick={onRefresh} disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all disabled:opacity-50">
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+            รีเฟรช
+          </button>
+        </div>
+
+        <div className="p-4 flex flex-wrap items-center gap-3 border-b border-slate-100 dark:border-slate-700">
+          <div className="relative flex-1 min-w-[240px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="ค้นหาชื่อลูกค้าเครดิต..."
+              className="w-full h-10 pl-9 pr-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500" />
+          </div>
+          <select value={filter} onChange={e => setFilter(e.target.value as typeof filter)}
+            className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500">
+            <option value="all">ทั้งหมด</option>
+            <option value="over_limit">เกินวงเงิน</option>
+            <option value="overdue">มี overdue</option>
+            <option value="hold">ติด Credit Hold</option>
+          </select>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-slate-400">
+            <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+            กำลังโหลดข้อมูลเครดิต...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-10 text-center text-slate-400">
+            <CreditCard size={32} className="mx-auto mb-2 opacity-30" />
+            ไม่พบลูกค้าเครดิตตามเงื่อนไข
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">ลูกค้า</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500">Term</th>
+                  <th className="text-right px-4 py-2 text-xs font-semibold text-slate-500">วงเงิน</th>
+                  <th className="text-right px-4 py-2 text-xs font-semibold text-slate-500">ยอดค้าง</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500">ใช้วงเงิน</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500">Overdue</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">สถานะ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                {filtered.map(customer => {
+                  const creditLimit = Number(customer.credit_limit || 0);
+                  const outstanding = Number(customer.outstanding_amount || 0);
+                  const usage = creditLimit > 0 ? Math.round((outstanding / creditLimit) * 100) : 0;
+                  return (
+                    <tr key={customer.customer_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-slate-800 dark:text-white">{customer.customer_name}</p>
+                        <p className="text-[10px] text-slate-400">{customer.default_payment_type} · customer #{customer.customer_id}</p>
+                      </td>
+                      <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-300">{customer.credit_term || 0} วัน</td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-700 dark:text-slate-200">฿{creditLimit.toLocaleString()}</td>
+                      <td className={`px-4 py-3 text-right font-mono font-semibold ${customer.over_limit ? 'text-rose-600' : 'text-slate-700 dark:text-slate-200'}`}>
+                        ฿{outstanding.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="min-w-[120px]">
+                          <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                            <div className={`h-full ${usage > 100 ? 'bg-rose-500' : usage > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, usage)}%` }} />
+                          </div>
+                          <p className="text-[10px] text-center text-slate-400 mt-1">{creditLimit > 0 ? `${usage}%` : 'ไม่กำหนดวงเงิน'}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {customer.oldest_overdue_days > 0 ? (
+                          <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-300 text-xs font-semibold">
+                            {customer.oldest_overdue_days} วัน
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 text-xs">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {customer.over_limit && <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 dark:bg-rose-900/20 text-xs font-semibold">เกินวงเงิน</span>}
+                          {customer.has_overdue && <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-900/20 text-xs font-semibold">Overdue</span>}
+                          {customer.credit_hold && <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 text-xs font-semibold">Hold</span>}
+                          {!customer.over_limit && !customer.has_overdue && !customer.credit_hold && <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 text-xs font-semibold">ปกติ</span>}
+                        </div>
+                        {customer.credit_hold_reason && <p className="text-[10px] text-slate-400 mt-1 truncate">{customer.credit_hold_reason}</p>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CreditMetric({ label, value, icon, color = 'text-slate-700 dark:text-slate-200' }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+      <div className="flex items-center gap-2 text-slate-400 mb-2">{icon}<span className="text-xs">{label}</span></div>
+      <p className={`text-xl font-bold ${color}`}>{value}</p>
     </div>
   );
 }

@@ -70,6 +70,39 @@ export async function GET(request: NextRequest) {
         UNION ALL
 
         SELECT
+          'document' AS event_type,
+          dl.event_type AS event_name,
+          dl.document_type AS entity_type,
+          dl.document_id AS entity_id,
+          dl.document_number AS entity_number,
+          dl.status,
+          dl.reason AS description,
+          ISNULL(u.full_name, u.username) AS actor_name,
+          dl.created_at,
+          dl.details
+        FROM DocumentLifecycle dl
+        LEFT JOIN Users u ON dl.user_id = u.user_id
+        WHERE @entityType = 'container'
+          AND @entityId IS NOT NULL
+          AND (@yardId IS NULL OR dl.yard_id = @yardId)
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM GateTransactions g
+              WHERE g.container_id = @entityId
+                AND g.eir_number = dl.document_number
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM Invoices i
+              WHERE i.container_id = @entityId
+                AND (i.invoice_id = dl.document_id OR i.invoice_number = dl.document_number)
+            )
+          )
+
+        UNION ALL
+
+        SELECT
           'attachment' AS event_type,
           ea.category AS event_name,
           ea.entity_type,

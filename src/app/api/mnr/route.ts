@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { z } from 'zod';
+import { nextDocumentNumber } from '@/lib/documentNumber';
 
 // === Zod Schemas ===
 const createEORSchema = z.object({
@@ -146,10 +147,12 @@ async function createMnrInvoiceIfNeeded({
   if (!customerId) return null;
 
   await ensureInvoiceDocumentColumns(db);
-  const countResult = await db.request()
-    .input('yardId', sql.Int, Number(order.yard_id))
-    .query('SELECT COUNT(*) as cnt FROM Invoices WHERE yard_id = @yardId AND invoice_number LIKE \'INV-%\'');
-  const invNumber = `INV-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}`;
+  const invNumber = await nextDocumentNumber({
+    db,
+    yardId: Number(order.yard_id),
+    documentType: 'invoice',
+    prefix: 'INV',
+  });
   const totalAmount = actualCost;
   const vatAmount = totalAmount * 0.07;
   const grandTotal = totalAmount + vatAmount;
@@ -256,11 +259,12 @@ export async function POST(request: NextRequest) {
     const db = await getDb();
     await ensureMnrColumns(db);
 
-    // Generate EOR number
-    const countResult = await db.request()
-      .input('yardId', sql.Int, body.yard_id)
-      .query('SELECT COUNT(*) as cnt FROM RepairOrders WHERE yard_id = @yardId');
-    const eorNumber = `EOR-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}`;
+    const eorNumber = await nextDocumentNumber({
+      db,
+      yardId: body.yard_id,
+      documentType: 'eor',
+      prefix: 'EOR',
+    });
     const cedexRateVersion = body.cedex_rate_version || `${eorNumber}-${new Date().toISOString()}`;
     const damageDetails = body.damage_details
       ? normalizeDamageDetails(body.damage_details, cedexRateVersion)

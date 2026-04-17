@@ -39,6 +39,9 @@ interface Customer {
   contact_email: string;
   default_payment_type: string;
   credit_term: number;
+  credit_limit: number;
+  credit_hold: boolean;
+  credit_hold_reason: string;
   edi_prefix: string;
   shipping_line_code: string;
   is_active: boolean;
@@ -70,6 +73,9 @@ type FormFields = {
   contact_email: string;
   default_payment_type: string;
   credit_term: number;
+  credit_limit: number;
+  credit_hold: boolean;
+  credit_hold_reason: string;
   edi_prefix: string;
   shipping_line_code: string;
   branches: Branch[];
@@ -79,7 +85,8 @@ const emptyForm: FormFields = {
   customer_name: '', is_line: false, is_forwarder: false, is_trucking: false,
   is_shipper: false, is_consignee: false, tax_id: '', address: '', billing_address: '',
   contact_name: '', contact_phone: '', contact_email: '', default_payment_type: 'CASH',
-  credit_term: 0, edi_prefix: '', shipping_line_code: '',
+  credit_term: 0, credit_limit: 0, credit_hold: false, credit_hold_reason: '',
+  edi_prefix: '', shipping_line_code: '',
   branches: [{ branch_code: '00000', branch_name: 'สำนักงานใหญ่', billing_address: '', contact_name: '', contact_phone: '', contact_email: '', is_default: true }],
 };
 
@@ -188,7 +195,9 @@ export default function CustomerMaster() {
       tax_id: c.tax_id || '', address: c.address || '', billing_address: c.billing_address || '',
       contact_name: c.contact_name || '', contact_phone: c.contact_phone || '',
       contact_email: c.contact_email || '', default_payment_type: c.default_payment_type || 'CASH',
-      credit_term: c.credit_term || 0, edi_prefix: c.edi_prefix || '',
+      credit_term: c.credit_term || 0, credit_limit: c.credit_limit || 0,
+      credit_hold: !!c.credit_hold, credit_hold_reason: c.credit_hold_reason || '',
+      edi_prefix: c.edi_prefix || '',
       shipping_line_code: c.shipping_line_code || '',
       branches: c.branches?.length > 0 ? c.branches : [{ branch_code: '00000', branch_name: 'สำนักงานใหญ่', billing_address: '', contact_name: '', contact_phone: '', contact_email: '', is_default: true }],
     });
@@ -305,10 +314,35 @@ export default function CustomerMaster() {
           </select>
         </div>
         {form.default_payment_type === 'CREDIT' && (
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">วันเครดิต (Credit Term)</label>
-            <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
-              placeholder="30" className={inputClass} />
+          <>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">วันเครดิต (Credit Term)</label>
+              <input type="number" value={form.credit_term} onChange={e => setForm({ ...form, credit_term: parseInt(e.target.value) || 0 })}
+                placeholder="30" className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">วงเงินเครดิต (Credit Limit)</label>
+              <input type="number" min={0} step="0.01" value={form.credit_limit} onChange={e => setForm({ ...form, credit_limit: parseFloat(e.target.value) || 0 })}
+                placeholder="100000" className={`${inputClass} font-mono`} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Credit Hold</label>
+              <button type="button" onClick={() => setForm({ ...form, credit_hold: !form.credit_hold })}
+                className={`w-full h-10 rounded-lg border text-sm font-medium transition-all ${
+                  form.credit_hold
+                    ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+                    : 'border-slate-200 bg-white text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                }`}>
+                {form.credit_hold ? 'ติด Credit Hold' : 'ไม่ติด Hold'}
+              </button>
+            </div>
+          </>
+        )}
+        {form.default_payment_type === 'CREDIT' && form.credit_hold && (
+          <div className="md:col-span-3">
+            <label className="block text-xs text-slate-500 mb-1">เหตุผล Credit Hold</label>
+            <input type="text" value={form.credit_hold_reason} onChange={e => setForm({ ...form, credit_hold_reason: e.target.value })}
+              placeholder="เช่น เกินวงเงิน / ค้างชำระเกินกำหนด / รออนุมัติวงเงิน" className={inputClass} />
           </div>
         )}
         {form.is_line && (

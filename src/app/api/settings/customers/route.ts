@@ -28,6 +28,12 @@ async function ensureColumns(pool: Awaited<ReturnType<typeof getDb>>) {
         ALTER TABLE Customers ADD default_payment_type VARCHAR(20) DEFAULT 'CASH';
       IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'edi_prefix')
         ALTER TABLE Customers ADD edi_prefix NVARCHAR(10) NULL;
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'credit_limit')
+        ALTER TABLE Customers ADD credit_limit DECIMAL(12,2) NULL;
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'credit_hold')
+        ALTER TABLE Customers ADD credit_hold BIT NOT NULL CONSTRAINT DF_Customers_CreditHold DEFAULT 0;
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'credit_hold_reason')
+        ALTER TABLE Customers ADD credit_hold_reason NVARCHAR(300) NULL;
 
       -- Legacy columns (keep for backward compat)
       IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'branch_type')
@@ -112,7 +118,9 @@ export async function GET(req: NextRequest) {
              c.tax_id, c.address, c.billing_address,
              c.contact_name, c.contact_phone, c.contact_email,
              ISNULL(c.default_payment_type, 'CASH') as default_payment_type,
-             c.credit_term, c.edi_prefix,
+             c.credit_term, ISNULL(c.credit_limit, 0) as credit_limit,
+             ISNULL(c.credit_hold, 0) as credit_hold, c.credit_hold_reason,
+             c.edi_prefix,
              ISNULL(c.shipping_line_code, '') as shipping_line_code,
              c.is_active, c.created_at, c.customer_type
       FROM Customers c
@@ -153,7 +161,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { customer_name, is_line, is_forwarder, is_trucking, is_shipper, is_consignee,
       tax_id, address, billing_address, contact_name, contact_phone, contact_email,
-      default_payment_type, credit_term, edi_prefix, shipping_line_code, branches } = body;
+      default_payment_type, credit_term, credit_limit, credit_hold, credit_hold_reason,
+      edi_prefix, shipping_line_code, branches } = body;
 
     if (!customer_name) {
       return NextResponse.json({ error: 'customer_name required' }, { status: 400 });
@@ -203,18 +212,23 @@ export async function POST(req: NextRequest) {
       .input('contact_email', sql.NVarChar, contact_email || '')
       .input('default_payment_type', sql.VarChar, default_payment_type || 'CASH')
       .input('credit_term', sql.Int, credit_term || 0)
+      .input('credit_limit', sql.Decimal(12, 2), credit_limit || 0)
+      .input('credit_hold', sql.Bit, credit_hold ? 1 : 0)
+      .input('credit_hold_reason', sql.NVarChar, credit_hold_reason || '')
       .input('edi_prefix', sql.NVarChar, edi_prefix || '')
       .input('shipping_line_code', sql.NVarChar, shipping_line_code || '')
       .query(`
         INSERT INTO Customers (customer_code, customer_name, customer_type,
           is_line, is_forwarder, is_trucking, is_shipper, is_consignee,
           tax_id, address, billing_address, contact_name, contact_phone, contact_email,
-          default_payment_type, credit_term, edi_prefix, shipping_line_code)
+          default_payment_type, credit_term, credit_limit, credit_hold, credit_hold_reason,
+          edi_prefix, shipping_line_code)
         OUTPUT INSERTED.*
         VALUES (@customer_code, @customer_name, @customer_type,
           @is_line, @is_forwarder, @is_trucking, @is_shipper, @is_consignee,
           @tax_id, @address, @billing_address, @contact_name, @contact_phone, @contact_email,
-          @default_payment_type, @credit_term, @edi_prefix, @shipping_line_code)
+          @default_payment_type, @credit_term, @credit_limit, @credit_hold, @credit_hold_reason,
+          @edi_prefix, @shipping_line_code)
       `);
 
     const created = result.recordset[0];
@@ -252,13 +266,15 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { customer_id, customer_name, is_line, is_forwarder, is_trucking, is_shipper, is_consignee,
       tax_id, address, billing_address, contact_name, contact_phone, contact_email,
-      default_payment_type, credit_term, edi_prefix, shipping_line_code, is_active, branches } = body;
+      default_payment_type, credit_term, credit_limit, credit_hold, credit_hold_reason,
+      edi_prefix, shipping_line_code, is_active, branches } = body;
 
     if (!customer_id) {
       return NextResponse.json({ error: 'customer_id required' }, { status: 400 });
     }
 
     const pool = await getDb();
+    await ensureColumns(pool);
 
     // Duplicate check: company name (exclude self)
     if (customer_name) {
@@ -302,6 +318,9 @@ export async function PUT(req: NextRequest) {
       .input('contact_email', sql.NVarChar, contact_email || '')
       .input('default_payment_type', sql.VarChar, default_payment_type || 'CASH')
       .input('credit_term', sql.Int, credit_term || 0)
+      .input('credit_limit', sql.Decimal(12, 2), credit_limit || 0)
+      .input('credit_hold', sql.Bit, credit_hold ? 1 : 0)
+      .input('credit_hold_reason', sql.NVarChar, credit_hold_reason || '')
       .input('edi_prefix', sql.NVarChar, edi_prefix || '')
       .input('shipping_line_code', sql.NVarChar, shipping_line_code || '')
       .input('is_active', sql.Bit, is_active !== undefined ? (is_active ? 1 : 0) : 1)
@@ -313,6 +332,7 @@ export async function PUT(req: NextRequest) {
             tax_id = @tax_id, address = @address, billing_address = @billing_address,
             contact_name = @contact_name, contact_phone = @contact_phone, contact_email = @contact_email,
             default_payment_type = @default_payment_type, credit_term = @credit_term,
+            credit_limit = @credit_limit, credit_hold = @credit_hold, credit_hold_reason = @credit_hold_reason,
             edi_prefix = @edi_prefix, shipping_line_code = @shipping_line_code,
             is_active = @is_active, updated_at = GETDATE()
         WHERE customer_id = @customer_id

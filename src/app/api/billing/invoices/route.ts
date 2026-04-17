@@ -4,6 +4,7 @@ import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
+import { nextDocumentNumber } from '@/lib/documentNumber';
 
 type DbPool = Awaited<ReturnType<typeof getDb>>;
 
@@ -128,11 +129,12 @@ export async function POST(request: NextRequest) {
     const db = await getDb();
     await ensureInvoiceDocumentColumns(db);
 
-    // Generate invoice number
-    const countResult = await db.request()
-      .input('yardId', sql.Int, body.yard_id)
-      .query('SELECT COUNT(*) as cnt FROM Invoices WHERE yard_id = @yardId');
-    const invNumber = `INV-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}`;
+    const invNumber = await nextDocumentNumber({
+      db,
+      yardId: body.yard_id,
+      documentType: body.document_type === 'credit_note' ? 'credit_note' : 'invoice',
+      prefix: body.document_type === 'credit_note' ? 'CN' : 'INV',
+    });
 
     const vatRate = 0.07;
     const totalAmount = body.quantity * body.unit_price;
@@ -237,6 +239,14 @@ export async function PUT(request: NextRequest) {
           .query('SELECT container_id, invoice_number, grand_total, yard_id, status FROM Invoices WHERE invoice_id = @id2');
         const paidInvoice = invResult.recordset[0];
         const paidDocumentNumber = paidInvoice?.invoice_number || bodyDocumentNumber;
+        const receiptNumber = paidDocumentNumber
+          ? await nextDocumentNumber({
+            db,
+            yardId: body.yard_id || paidInvoice?.yard_id || 1,
+            documentType: 'receipt',
+            prefix: 'RCPT',
+          })
+          : '';
         if (paidDocumentNumber) {
           queueDocumentLifecycle({
             db,
@@ -247,7 +257,7 @@ export async function PUT(request: NextRequest) {
             eventType: 'paid',
             relatedDocumentType: 'receipt',
             relatedDocumentId: invoice_id,
-            relatedDocumentNumber: `REC-${paidDocumentNumber}`,
+            relatedDocumentNumber: receiptNumber,
             userId: body.user_id || null,
             yardId: body.yard_id || paidInvoice?.yard_id || null,
             details: { previous_status: bodyPreviousStatus || paidInvoice?.status, grand_total: Number(paidInvoice?.grand_total ?? body.grand_total ?? 0) },
@@ -256,7 +266,7 @@ export async function PUT(request: NextRequest) {
             db,
             documentType: 'receipt',
             documentId: invoice_id,
-            documentNumber: `REC-${paidDocumentNumber}`,
+            documentNumber: receiptNumber,
             status: 'issued',
             eventType: 'receipt_issued',
             relatedDocumentType: 'invoice',
@@ -343,11 +353,12 @@ export async function PUT(request: NextRequest) {
           return NextResponse.json({ error: `ยอดลดหนี้เกินยอดคงเหลือของบิลเดิม (คงเหลือ ฿${remainingBeforeCredit.toLocaleString()})` }, { status: 400 });
         }
 
-        // Generate CN number
-        const cnCount = await db.request()
-          .input('yardId', sql.Int, orig.yard_id)
-          .query("SELECT COUNT(*) as cnt FROM Invoices WHERE yard_id = @yardId AND invoice_number LIKE 'CN-%'");
-        const cnNumber = `CN-${new Date().getFullYear()}-${String(cnCount.recordset[0].cnt + 1).padStart(6, '0')}`;
+        const cnNumber = await nextDocumentNumber({
+          db,
+          yardId: orig.yard_id,
+          documentType: 'credit_note',
+          prefix: 'CN',
+        });
 
         // Calculate proportional VAT
         const creditBeforeVat = creditAmt / 1.07;
@@ -458,10 +469,12 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'ยอดใบแจ้งหนี้ใหม่ต้องมากกว่า 0 บาท' }, { status: 400 });
           }
 
-          const invCount = await db.request()
-            .input('yardId', sql.Int, orig.yard_id)
-            .query("SELECT COUNT(*) as cnt FROM Invoices WHERE yard_id = @yardId AND invoice_number LIKE 'INV-%'");
-          revisedNumber = `INV-${new Date().getFullYear()}-${String(invCount.recordset[0].cnt + 1).padStart(6, '0')}`;
+          revisedNumber = await nextDocumentNumber({
+            db,
+            yardId: orig.yard_id,
+            documentType: 'invoice',
+            prefix: 'INV',
+          });
 
           const revisedNotes = JSON.stringify({
             document_type: 'invoice',

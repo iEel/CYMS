@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
 import { ensureDocumentLifecycle, logDocumentLifecycle } from '@/lib/documentLifecycle';
+import { nextDocumentNumber } from '@/lib/documentNumber';
 
 async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
   await db.request().query(`
@@ -262,13 +263,12 @@ export async function POST(request: NextRequest) {
       ? damage_report.condition_grade.toUpperCase()
       : 'A';
 
-    // Generate EIR number with random suffix (prevents URL guessing on public QR pages)
-    const eirPrefix = transaction_type === 'gate_in' ? 'EIR-IN' : 'EIR-OUT';
-    const countResult = await db.request()
-      .input('yardId', sql.Int, yard_id)
-      .query(`SELECT COUNT(*) as cnt FROM GateTransactions WHERE yard_id = @yardId`);
-    const randomHex = crypto.randomUUID().replace(/-/g, '').slice(0, 6);
-    const eirNumber = `${eirPrefix}-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}-${randomHex}`;
+    const eirNumber = await nextDocumentNumber({
+      db,
+      yardId: yard_id,
+      documentType: transaction_type === 'gate_in' ? 'eir_in' : 'eir_out',
+      prefix: transaction_type === 'gate_in' ? 'EIR-IN' : 'EIR-OUT',
+    });
 
     let finalContainerId = container_id;
     let assignedLocation: { zone_name: string; zone_id: number; bay: number; row: number; tier: number; reason: string } | null = null;

@@ -14,6 +14,8 @@ import {
   Shield,
   Mail,
   Image as ImageIcon,
+  FileText,
+  ClipboardList,
 } from 'lucide-react';
 import CompanySettings from './CompanySettings';
 import YardsSettings from './YardsSettings';
@@ -27,6 +29,8 @@ import RateLimitSettings from './RateLimitSettings';
 import EmailSettingsTab from './EmailSettings';
 import PhotoRetentionSettings from './PhotoRetentionSettings';
 import SecuritySettings from './SecuritySettings';
+import DocumentNumberSettings from './DocumentNumberSettings';
+import SystemStandardsOverview from './SystemStandardsOverview';
 import { useAuth } from '@/components/providers/AuthProvider';
 
 const tabs = [
@@ -38,6 +42,8 @@ const tabs = [
   { id: 'storage', label: 'ค่าฝาก', icon: <TrendingUp size={18} />, color: '#06B6D4', permission: 'settings.manage' },
   { id: 'allocation', label: 'จัดตู้', icon: <Layers size={18} />, color: '#10B981', permission: 'settings.manage' },
   { id: 'prefix', label: 'Prefix', icon: <Link size={18} />, color: '#06B6D4', permission: 'settings.manage' },
+  { id: 'documents', label: 'เลขเอกสาร', icon: <FileText size={18} />, color: '#3B82F6', permission: 'settings.manage' },
+  { id: 'standards', label: 'มาตรฐานระบบ', icon: <ClipboardList size={18} />, color: '#10B981', permission: 'settings.manage' },
   { id: 'ratelimit', label: 'Rate Limit', icon: <Shield size={18} />, color: '#F59E0B', permission: 'settings.manage' },
   { id: 'security', label: 'ความปลอดภัย', icon: <Lock size={18} />, color: '#EF4444', permission: 'settings.manage' },
   { id: 'email', label: 'Email', icon: <Mail size={18} />, color: '#3B82F6', permission: 'settings.manage' },
@@ -96,6 +102,8 @@ export default function SettingsPage() {
         {effectiveTab === 'storage' && <TieredStorageRate />}
         {effectiveTab === 'allocation' && <AutoAllocationRules />}
         {effectiveTab === 'prefix' && <PrefixMapping />}
+        {effectiveTab === 'documents' && <DocumentNumberSettings />}
+        {effectiveTab === 'standards' && <SystemStandardsOverview />}
         {effectiveTab === 'ratelimit' && <RateLimitSettings />}
         {effectiveTab === 'security' && <SecuritySettings />}
         {effectiveTab === 'email' && <EmailSettingsTab />}

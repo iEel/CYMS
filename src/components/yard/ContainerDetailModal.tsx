@@ -185,6 +185,19 @@ interface ReadableAuditLog {
   fields: Array<{ label: string; value: string }>;
 }
 
+interface EntityTimelineEvent {
+  event_type: 'audit' | 'document' | 'attachment' | string;
+  event_name: string;
+  entity_type: string;
+  entity_id: number | null;
+  entity_number: string | null;
+  status: string | null;
+  description: string | null;
+  actor_name: string | null;
+  created_at: string;
+  details: string | null;
+}
+
 const SIDES = [
   { key: 'front', label: 'ด้านหน้า', icon: '🚪' },
   { key: 'back', label: 'ด้านหลัง', icon: '🔙' },
@@ -279,6 +292,8 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
   const [newGrade, setNewGrade] = useState('A');
   const [auditLogs, setAuditLogs] = useState<ReadableAuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [timeline, setTimeline] = useState<EntityTimelineEvent[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
 
   useEffect(() => {
     async function fetchDetail() {
@@ -308,6 +323,22 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
       }
     }
     fetchAudit();
+  }, [containerId]);
+
+  useEffect(() => {
+    async function fetchTimeline() {
+      setTimelineLoading(true);
+      try {
+        const res = await fetch(`/api/entity-timeline?entity_type=container&entity_id=${containerId}`);
+        const json = await res.json();
+        setTimeline(json.timeline || []);
+      } catch {
+        setTimeline([]);
+      } finally {
+        setTimelineLoading(false);
+      }
+    }
+    fetchTimeline();
   }, [containerId]);
 
   if (loading) {
@@ -892,6 +923,70 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
             </div>
 
             {/* ===== READABLE AUDIT TRAIL ===== */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                  <Clock size={13} /> Entity Timeline
+                </h3>
+                <span className="text-[10px] text-slate-400">{timeline.length} รายการ</span>
+              </div>
+              <div className="p-4">
+                {timelineLoading ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    <Loader2 size={16} className="animate-spin mx-auto mb-2" />
+                    กำลังโหลด timeline...
+                  </div>
+                ) : timeline.length === 0 ? (
+                  <p className="text-xs text-slate-400">ยังไม่มี timeline กลางที่ผูกกับตู้นี้</p>
+                ) : (
+                  <div className="relative pl-4 space-y-3 before:absolute before:left-1.5 before:top-1 before:bottom-1 before:w-px before:bg-slate-200 dark:before:bg-slate-700">
+                    {timeline.slice(0, 12).map((event, idx) => {
+                      const tone = event.event_type === 'attachment'
+                        ? 'bg-blue-500'
+                        : event.event_type === 'document'
+                        ? 'bg-emerald-500'
+                        : 'bg-slate-500';
+                      let parsed: Record<string, unknown> = {};
+                      try { parsed = event.details ? JSON.parse(event.details) : {}; } catch { parsed = {}; }
+                      const fileUrl = typeof parsed.file_url === 'string' ? parsed.file_url : '';
+                      return (
+                        <div key={`${event.event_type}-${event.entity_id || event.entity_number || idx}-${event.created_at}`} className="relative">
+                          <span className={`absolute -left-[15px] top-1.5 w-3 h-3 rounded-full ring-4 ring-white dark:ring-slate-800 ${tone}`} />
+                          <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-[10px] font-bold text-slate-500 dark:text-slate-300">
+                                    {event.event_type}
+                                  </span>
+                                  <p className="text-xs font-semibold text-slate-800 dark:text-white truncate">{event.event_name}</p>
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                                  {event.description || event.entity_number || event.status || '-'}
+                                </p>
+                                <p className="text-[10px] text-slate-400 mt-1">
+                                  {event.actor_name || 'ระบบ'} · {formatDateTime(event.created_at)}
+                                  {event.entity_number ? ` · ${event.entity_number}` : ''}
+                                </p>
+                              </div>
+                              {fileUrl && (
+                                <button onClick={() => window.open(fileUrl, '_blank')} className="text-[10px] text-blue-600 hover:underline">
+                                  เปิดไฟล์
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {timeline.length > 12 && (
+                      <p className="text-[10px] text-slate-400 text-center pt-1">แสดง 12 จาก {timeline.length} รายการล่าสุด</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
               <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                 <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
