@@ -1,24 +1,39 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/providers/ToastProvider';
 import {
   Loader2, Search, Wrench, FileCheck2, Plus, CheckCircle2,
   XCircle, Clock, RotateCcw, Send, ThumbsUp, Play,
   DollarSign, Ban, BookOpen, Camera, ImageIcon, Save,
+  Printer, Link2,
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface EORRow {
   eor_id: number; eor_number: string; container_number: string;
   size: string; type: string; customer_name: string;
+  billing_customer_name?: string; invoice_number?: string;
   damage_details: string; estimated_cost: number; actual_cost: number;
   status: string; approved_at: string; created_name: string; created_at: string;
 }
 
 interface ContainerOption {
-  container_id: number; container_number: string; size: string; type: string; shipping_line: string;
+  container_id: number; container_number: string; size: string; type: string; shipping_line: string; customer_id?: number;
+}
+
+interface CustomerOption {
+  customer_id: number;
+  customer_code?: string;
+  customer_name: string;
+  is_line?: boolean;
+  is_forwarder?: boolean;
+  is_trucking?: boolean;
+  is_shipper?: boolean;
+  is_consignee?: boolean;
+  is_active?: boolean;
 }
 
 // Standard CEDEX-like damage codes — loaded from DB
@@ -33,7 +48,40 @@ interface CedexCode {
   is_active: boolean;
 }
 
+interface DamagePoint {
+  id?: string;
+  side?: string;
+  type?: string;
+  severity?: string;
+  note?: string;
+  photo?: string;
+}
+
+interface ContainerDetailLite {
+  container?: ContainerOption & { customer_id?: number };
+  gate_in?: {
+    eir_number?: string;
+    damage_report?: {
+      points?: DamagePoint[];
+      photos?: string[];
+      photo_evidence?: Array<{ url?: string }>;
+      condition_grade?: string;
+      inspector_notes?: string;
+    } | null;
+  } | null;
+}
+
+const DAMAGE_TYPE_TO_CEDEX_KEYWORD: Record<string, string[]> = {
+  dent: ['dent', 'บุ๋ม'],
+  hole: ['hole', 'ทะลุ', 'รู'],
+  rust: ['rust', 'สนิม'],
+  scratch: ['scratch', 'ขีด', 'ถลอก'],
+  crack: ['crack', 'แตก', 'ร้าว'],
+  missing_part: ['missing', 'หาย'],
+};
+
 export default function MnRPage() {
+  const searchParams = useSearchParams();
   const { session, hasPermission, hasAnyPermission } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'cedex'>('list');
@@ -55,6 +103,11 @@ export default function MnRPage() {
   const [selectedContainer, setSelectedContainer] = useState<ContainerOption | null>(null);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
   const [repairPhotos, setRepairPhotos] = useState<string[]>([]);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [billingCustomerId, setBillingCustomerId] = useState('');
+  const [sourceEirNumber, setSourceEirNumber] = useState('');
+  const [sourceDamagePoints, setSourceDamagePoints] = useState<DamagePoint[]>([]);
+  const [sourceLoading, setSourceLoading] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -108,6 +161,89 @@ export default function MnRPage() {
 
   useEffect(() => { if (activeTab === 'list') fetchOrders(); }, [activeTab, fetchOrders]);
 
+  useEffect(() => {
+    if (!canCreateEor) return;
+    fetch('/api/settings/customers')
+      .then(r => r.json())
+      .then(data => setCustomers(Array.isArray(data) ? data.filter(c => c.is_active !== false) : []))
+      .catch(() => {});
+  }, [canCreateEor]);
+
+  const customerRoleLabel = (customer: CustomerOption) => {
+    const roles = [
+      customer.is_line ? 'สายเรือ' : '',
+      customer.is_forwarder ? 'Forwarder' : '',
+      customer.is_trucking ? 'ขนส่ง' : '',
+      customer.is_shipper ? 'Shipper' : '',
+      customer.is_consignee ? 'Consignee' : '',
+    ].filter(Boolean);
+    return roles.length > 0 ? roles.join(', ') : 'ลูกค้า';
+  };
+
+  const selectContainerForEor = (container: ContainerOption) => {
+    setSelectedContainer(container);
+    setContainers([]);
+    setBillingCustomerId(container.customer_id ? String(container.customer_id) : '');
+  };
+
+  const applyDamageSource = useCallback((detail: ContainerDetailLite, autoSelectCodes = true) => {
+    const gateIn = detail.gate_in;
+    const damageReport = gateIn?.damage_report;
+    const points = damageReport?.points || [];
+    const evidencePhotos = (damageReport?.photo_evidence || []).map(photo => photo.url).filter(Boolean) as string[];
+    const photos = [
+      ...evidencePhotos,
+      ...(damageReport?.photos || []),
+      ...points.map(point => point.photo).filter(Boolean) as string[],
+    ];
+
+    setSourceEirNumber(gateIn?.eir_number || '');
+    setSourceDamagePoints(points);
+    setRepairPhotos(prev => Array.from(new Set([...prev, ...photos])));
+    if (gateIn?.eir_number && !eorNotes) {
+      setEorNotes(`สร้างจาก EIR ${gateIn.eir_number}`);
+    }
+
+    if (autoSelectCodes && points.length > 0 && cedexCodes.length > 0) {
+      const matched = new Set<string>();
+      for (const point of points) {
+        const keywords = DAMAGE_TYPE_TO_CEDEX_KEYWORD[String(point.type || '')] || [String(point.type || '')];
+        const hit = cedexCodes.find(code => {
+          const haystack = `${code.code} ${code.component} ${code.damage} ${code.repair}`.toLowerCase();
+          return keywords.some(keyword => keyword && haystack.includes(keyword.toLowerCase()));
+        });
+        if (hit) matched.add(hit.code);
+      }
+      if (matched.size > 0) setSelectedCodes(prev => Array.from(new Set([...prev, ...matched])));
+    }
+  }, [cedexCodes, eorNotes]);
+
+  useEffect(() => {
+    const containerId = searchParams.get('container_id');
+    if (!containerId || !canCreateEor) return;
+    let cancelled = false;
+    setActiveTab('create');
+    setSourceLoading(true);
+    fetch(`/api/containers/detail?container_id=${containerId}`)
+      .then(r => r.json())
+      .then((detail: ContainerDetailLite) => {
+        if (cancelled || !detail.container) return;
+        setSelectedContainer({
+          container_id: detail.container.container_id,
+          container_number: detail.container.container_number,
+          size: detail.container.size,
+          type: detail.container.type,
+          shipping_line: detail.container.shipping_line,
+          customer_id: detail.container.customer_id,
+        });
+        setBillingCustomerId(detail.container.customer_id ? String(detail.container.customer_id) : '');
+        applyDamageSource(detail);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSourceLoading(false); });
+    return () => { cancelled = true; };
+  }, [searchParams, canCreateEor, applyDamageSource]);
+
   const searchContainers = async () => {
     try {
       const res = await fetch(`/api/containers?yard_id=${yardId}&status=in_yard&search=${searchText}`);
@@ -124,14 +260,35 @@ export default function MnRPage() {
   const handleCreate = async () => {
     if (!canCreateEor) return;
     if (!selectedContainer || selectedCodes.length === 0) return;
+    if (!billingCustomerId) {
+      toast('error', 'กรุณาเลือกผู้รับผิดชอบค่าซ่อม');
+      return;
+    }
     setCreateLoading(true); setCreateResult(null);
     try {
-      const damages = selectedCodes.map(code => cedexCodes.find(cx => cx.code === code));
+      const cedexItems = selectedCodes.map(code => {
+        const cx = cedexCodes.find(item => item.code === code);
+        return cx ? {
+          ...cx,
+          amount: cx.labor_hours * laborRate + cx.material_cost,
+          labor_rate: laborRate,
+        } : null;
+      }).filter(Boolean);
       const res = await fetch('/api/mnr', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           container_id: selectedContainer.container_id, yard_id: yardId,
-          damage_details: damages, estimated_cost: estimatedCost,
+          customer_id: selectedContainer.customer_id || null,
+          billing_customer_id: billingCustomerId ? parseInt(billingCustomerId) : null,
+          damage_details: {
+            source: sourceEirNumber ? 'eir_damage' : 'manual',
+            source_eir_number: sourceEirNumber || null,
+            cedex_items: cedexItems,
+            damage_points: sourceDamagePoints,
+          },
+          estimated_cost: estimatedCost,
+          repair_photos: repairPhotos,
+          source_eir_number: sourceEirNumber || null,
           notes: eorNotes || null,
           user_id: session?.userId || null,
         }),
@@ -139,12 +296,29 @@ export default function MnRPage() {
       const data = await res.json();
       if (data.success) {
         setCreateResult({ success: true, message: `✅ สร้าง EOR ${data.eor_number} สำเร็จ — ราคาประเมิน ฿${estimatedCost.toLocaleString()} (พร้อมรูปถ่าย ${repairPhotos.length} รูป)` });
-        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]); setEorNotes('');
+        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]); setBillingCustomerId(''); setEorNotes(''); setSourceEirNumber(''); setSourceDamagePoints([]);
       } else {
         setCreateResult({ success: false, message: `❌ ${data.error}` });
       }
     } catch (err) { console.error(err); }
     finally { setCreateLoading(false); }
+  };
+
+  const loadSelectedContainerDamage = async () => {
+    if (!selectedContainer) return;
+    setSourceLoading(true);
+    try {
+      const res = await fetch(`/api/containers/detail?container_id=${selectedContainer.container_id}`);
+      const detail = await res.json();
+      applyDamageSource(detail);
+      if (!detail.gate_in?.damage_report?.points?.length) {
+        toast('info', 'ยังไม่พบ damage point จาก EIR ของตู้นี้');
+      }
+    } catch {
+      toast('error', 'โหลดข้อมูล damage จาก EIR ไม่สำเร็จ');
+    } finally {
+      setSourceLoading(false);
+    }
   };
 
   const handleSaveCedex = async () => {
@@ -310,6 +484,8 @@ export default function MnRPage() {
                           <span>🏷️ {o.container_number} {o.size}&apos;{o.type}</span>
                           <span>• ฿{(o.estimated_cost || 0).toLocaleString()}</span>
                           {o.actual_cost > 0 && <span>• จริง: ฿{o.actual_cost.toLocaleString()}</span>}
+                          {o.billing_customer_name && <span>• Bill to: {o.billing_customer_name}</span>}
+                          {o.invoice_number && <span>• {o.invoice_number}</span>}
                         </div>
                       </div>
                     </div>
@@ -333,6 +509,16 @@ export default function MnRPage() {
                       {o.status === 'in_repair' && canUpdateEor && (
                         <button onClick={() => handleComplete(o.eor_id, o.estimated_cost)} disabled={!canUpdateEor}
                           className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><CheckCircle2 size={10} /> เสร็จ</button>
+                      )}
+                      <button onClick={() => window.open(`/api/mnr/eor-pdf?eor_id=${o.eor_id}`, '_blank')}
+                        className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-100 flex items-center gap-1">
+                        <Printer size={10} /> EOR PDF
+                      </button>
+                      {o.status === 'completed' && (
+                        <button onClick={() => window.open(`/billing?search=${encodeURIComponent(o.eor_number)}`, '_blank')}
+                          className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 flex items-center gap-1">
+                          <Link2 size={10} /> Billing
+                        </button>
                       )}
                     </div>
                   </div>
@@ -371,7 +557,7 @@ export default function MnRPage() {
             {containers.length > 0 && !selectedContainer && (
               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {containers.slice(0, 5).map(c => (
-                  <button key={c.container_id} onClick={() => { setSelectedContainer(c); setContainers([]); }}
+                  <button key={c.container_id} onClick={() => selectContainerForEor(c)}
                     className="w-full text-left p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-violet-300 text-xs">
                     <span className="font-mono font-semibold text-slate-800 dark:text-white">{c.container_number}</span>
                     <span className="text-slate-400 ml-2">{c.size}&apos;{c.type} • {c.shipping_line || '-'}</span>
@@ -381,10 +567,39 @@ export default function MnRPage() {
             )}
 
             {selectedContainer && (
-              <div className="p-3 rounded-lg bg-violet-50 dark:bg-violet-900/10 border border-violet-200 text-xs text-violet-600">
-                ✅ ตู้: <span className="font-mono font-bold">{selectedContainer.container_number}</span> ({selectedContainer.size}&apos;{selectedContainer.type})
+              <div className="p-3 rounded-lg bg-violet-50 dark:bg-violet-900/10 border border-violet-200 text-xs text-violet-600 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p>✅ ตู้: <span className="font-mono font-bold">{selectedContainer.container_number}</span> ({selectedContainer.size}&apos;{selectedContainer.type})</p>
+                  <button onClick={loadSelectedContainerDamage} disabled={sourceLoading}
+                    className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-violet-600 border border-violet-200 text-[10px] font-medium hover:bg-violet-100 disabled:opacity-50 flex items-center gap-1">
+                    {sourceLoading ? <Loader2 size={10} className="animate-spin" /> : <Link2 size={10} />}
+                    ดึง Damage จาก EIR
+                  </button>
+                </div>
+                {(sourceEirNumber || sourceDamagePoints.length > 0) && (
+                  <div className="rounded-lg bg-white/70 dark:bg-slate-800/60 border border-violet-100 dark:border-violet-900/40 px-3 py-2">
+                    <p className="font-semibold">Source: {sourceEirNumber || 'EIR ล่าสุด'}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">พบ damage point {sourceDamagePoints.length} จุด และรูปประกอบ {repairPhotos.length} รูป</p>
+                  </div>
+                )}
               </div>
             )}
+
+            <div>
+              <label className={labelClass}>ผู้รับผิดชอบค่าซ่อม / Billing Customer *</label>
+              <select value={billingCustomerId} onChange={e => setBillingCustomerId(e.target.value)}
+                className={inputClass}>
+                <option value="">เลือกบริษัทที่จะออก Invoice M&R</option>
+                {customers.map(customer => (
+                  <option key={customer.customer_id} value={customer.customer_id}>
+                    {customer.customer_name} {customer.customer_code ? `(${customer.customer_code})` : ''} — {customerRoleLabel(customer)}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-slate-400">
+                ค่าเริ่มต้นจะดึงจากลูกค้าของตู้ แต่สามารถเปลี่ยนเป็นสายเรือ, ลูกค้าเครดิต, ขนส่ง หรือบริษัทที่รับผิดชอบค่าซ่อมจริงได้
+              </p>
+            </div>
 
             {/* CEDEX Codes Selection */}
             <div>
@@ -448,7 +663,7 @@ export default function MnRPage() {
                 className={inputClass} placeholder="เช่น ผู้ใช้แจ้ง, ตรวจพบตอน Gate-In" />
             </div>
 
-            <button onClick={handleCreate} disabled={createLoading || !canCreateEor || !selectedContainer || selectedCodes.length === 0}
+            <button onClick={handleCreate} disabled={createLoading || !canCreateEor || !selectedContainer || !billingCustomerId || selectedCodes.length === 0}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-all">
               {createLoading ? <Loader2 size={16} className="animate-spin" /> : <FileCheck2 size={16} />} สร้าง EOR
             </button>

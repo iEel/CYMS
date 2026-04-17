@@ -408,6 +408,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       container: {
         container_id: container.container_id,
+        customer_id: container.customer_id,
         container_number: container.container_number,
         size: container.size,
         type: container.type,

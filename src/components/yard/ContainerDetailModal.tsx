@@ -26,6 +26,7 @@ interface DamagePoint {
 interface ContainerDetail {
   container: {
     container_id: number;
+    customer_id?: number;
     container_number: string;
     size: string;
     type: string;
@@ -379,6 +380,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
   const billingOutstanding = data.billing?.totals?.outstanding || 0;
   const canChangeGrade = hasPermission('survey.grade.change');
   const canChangeStatus = hasAnyPermission(['yard.slot.move', 'yard.location.assign', 'yard.hold.release']);
+  const canCreateEor = hasPermission('mnr.eor.create');
 
   const handleStatusChange = async () => {
     if (!canChangeStatus) return;
@@ -997,6 +999,13 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
                 <button onClick={() => onViewEIR ? onViewEIR(gi.eir_number) : window.open(`/eir/${gi.eir_number}`, '_blank')}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors">
                   <ExternalLink size={12} /> ดู EIR
+                </button>
+              )}
+
+              {canCreateEor && hasDamage && (
+                <button onClick={() => window.location.href = `/mnr?container_id=${c.container_id}${gi?.eir_number ? `&source_eir=${encodeURIComponent(gi.eir_number)}` : ''}`}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 text-xs font-medium hover:bg-violet-100 transition-colors">
+                  <FileText size={12} /> สร้าง EOR จาก Damage
                 </button>
               )}
 

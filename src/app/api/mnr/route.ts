@@ -9,8 +9,11 @@ const createEORSchema = z.object({
   container_id: z.number().int().positive(),
   yard_id: z.number().int().positive(),
   customer_id: z.number().int().positive().optional().nullable(),
+  billing_customer_id: z.number().int().positive().optional().nullable(),
   damage_details: z.any().optional(),
   estimated_cost: z.number().min(0).optional().default(0),
+  repair_photos: z.array(z.string()).optional().default([]),
+  source_eir_number: z.string().max(80).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   user_id: z.number().int().positive().optional().nullable(),
 });
@@ -23,6 +26,117 @@ const updateEORSchema = z.object({
   notes: z.string().max(500).optional().nullable(),
 });
 
+async function ensureMnrColumns(db: sql.ConnectionPool) {
+  if (process.env.NODE_ENV === 'test') return;
+  await db.request().query(`
+    IF COL_LENGTH('RepairOrders', 'source_eir_number') IS NULL
+      ALTER TABLE RepairOrders ADD source_eir_number NVARCHAR(80) NULL;
+    IF COL_LENGTH('RepairOrders', 'repair_photos') IS NULL
+      ALTER TABLE RepairOrders ADD repair_photos NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('RepairOrders', 'invoice_id') IS NULL
+      ALTER TABLE RepairOrders ADD invoice_id INT NULL;
+    IF COL_LENGTH('RepairOrders', 'billing_customer_id') IS NULL
+      ALTER TABLE RepairOrders ADD billing_customer_id INT NULL;
+    IF COL_LENGTH('RepairOrders', 'completed_at') IS NULL
+      ALTER TABLE RepairOrders ADD completed_at DATETIME2 NULL;
+  `);
+}
+
+async function ensureInvoiceDocumentColumns(db: sql.ConnectionPool) {
+  if (process.env.NODE_ENV === 'test') return;
+  await db.request().query(`
+    IF COL_LENGTH('Invoices', 'ref_invoice_id') IS NULL
+      ALTER TABLE Invoices ADD ref_invoice_id INT NULL;
+    IF COL_LENGTH('Invoices', 'replaces_invoice_id') IS NULL
+      ALTER TABLE Invoices ADD replaces_invoice_id INT NULL;
+    IF COL_LENGTH('Invoices', 'document_type') IS NULL
+      ALTER TABLE Invoices ADD document_type NVARCHAR(30) NULL;
+    IF COL_LENGTH('Invoices', 'balance_amount') IS NULL
+      ALTER TABLE Invoices ADD balance_amount DECIMAL(12,2) NULL;
+  `);
+}
+
+function parseDamageDetails(value: unknown) {
+  if (!value) return null;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+async function createMnrInvoiceIfNeeded({
+  db,
+  order,
+  actualCost,
+  userId,
+}: {
+  db: sql.ConnectionPool;
+  order: Record<string, unknown>;
+  actualCost: number;
+  userId?: number | null;
+}) {
+  if (actualCost <= 0 || order.invoice_id) return null;
+  const customerId = Number(order.billing_customer_id || order.customer_id || order.container_customer_id || 0);
+  if (!customerId) return null;
+
+  await ensureInvoiceDocumentColumns(db);
+  const countResult = await db.request()
+    .input('yardId', sql.Int, Number(order.yard_id))
+    .query('SELECT COUNT(*) as cnt FROM Invoices WHERE yard_id = @yardId AND invoice_number LIKE \'INV-%\'');
+  const invNumber = `INV-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}`;
+  const totalAmount = actualCost;
+  const vatAmount = totalAmount * 0.07;
+  const grandTotal = totalAmount + vatAmount;
+  const notes = JSON.stringify({
+    document_type: 'invoice',
+    source: 'mnr',
+    eor_id: order.eor_id,
+    eor_number: order.eor_number,
+    source_eir_number: order.source_eir_number || null,
+    billing_customer_id: customerId,
+  });
+
+  const invoiceResult = await db.request()
+    .input('invNumber', sql.NVarChar, invNumber)
+    .input('yardId', sql.Int, Number(order.yard_id))
+    .input('customerId', sql.Int, customerId)
+    .input('containerId', sql.Int, Number(order.container_id))
+    .input('chargeType', sql.NVarChar, 'mnr')
+    .input('description', sql.NVarChar, `ค่าซ่อม M&R ตาม EOR ${order.eor_number}`)
+    .input('quantity', sql.Decimal(10, 2), 1)
+    .input('unitPrice', sql.Decimal(12, 2), totalAmount)
+    .input('totalAmount', sql.Decimal(12, 2), totalAmount)
+    .input('vatAmount', sql.Decimal(12, 2), vatAmount)
+    .input('grandTotal', sql.Decimal(12, 2), grandTotal)
+    .input('notes', sql.NVarChar, notes)
+    .input('documentType', sql.NVarChar, 'invoice')
+    .input('balanceAmount', sql.Decimal(12, 2), grandTotal)
+    .query(`
+      INSERT INTO Invoices (invoice_number, yard_id, customer_id, container_id,
+        charge_type, description, quantity, unit_price, total_amount, vat_amount,
+        grand_total, status, notes, document_type, balance_amount)
+      OUTPUT INSERTED.*
+      VALUES (@invNumber, @yardId, @customerId, @containerId,
+        @chargeType, @description, @quantity, @unitPrice, @totalAmount, @vatAmount,
+        @grandTotal, 'issued', @notes, @documentType, @balanceAmount)
+    `);
+
+  const invoice = invoiceResult.recordset[0];
+  await db.request()
+    .input('eorId', sql.Int, Number(order.eor_id))
+    .input('invoiceId', sql.Int, invoice.invoice_id)
+    .query('UPDATE RepairOrders SET invoice_id = @invoiceId WHERE eor_id = @eorId');
+
+  await logAudit({
+    yardId: Number(order.yard_id),
+    userId: userId || undefined,
+    action: 'invoice_create',
+    entityType: 'invoice',
+    entityId: invoice.invoice_id,
+    details: { invoice_number: invNumber, source: 'mnr', eor_number: order.eor_number, total_amount: totalAmount, grand_total: grandTotal },
+  });
+
+  return invoice;
+}
+
 // GET — ดึง Repair Orders
 export async function GET(request: NextRequest) {
   try {
@@ -31,6 +145,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
 
     const db = await getDb();
+    await ensureMnrColumns(db);
     const req = db.request();
     const conditions: string[] = [];
 
@@ -41,10 +156,13 @@ export async function GET(request: NextRequest) {
 
     const result = await req.query(`
       SELECT r.*, c.container_number, c.size, c.type,
-        cu.customer_name, u.full_name as created_name
+        cu.customer_name, bill.customer_name as billing_customer_name,
+        inv.invoice_number, u.full_name as created_name
       FROM RepairOrders r
       LEFT JOIN Containers c ON r.container_id = c.container_id
-      LEFT JOIN Customers cu ON r.customer_id = cu.customer_id
+      LEFT JOIN Customers cu ON ISNULL(r.customer_id, c.customer_id) = cu.customer_id
+      LEFT JOIN Customers bill ON ISNULL(r.billing_customer_id, ISNULL(r.customer_id, c.customer_id)) = bill.customer_id
+      LEFT JOIN Invoices inv ON r.invoice_id = inv.invoice_id
       LEFT JOIN Users u ON r.created_by = u.user_id
       ${where}
       ORDER BY r.created_at DESC
@@ -67,6 +185,7 @@ export async function POST(request: NextRequest) {
     }
     const body = parsed.data;
     const db = await getDb();
+    await ensureMnrColumns(db);
 
     // Generate EOR number
     const countResult = await db.request()
@@ -79,22 +198,25 @@ export async function POST(request: NextRequest) {
       .input('containerId', sql.Int, body.container_id)
       .input('yardId', sql.Int, body.yard_id)
       .input('customerId', sql.Int, body.customer_id || null)
+      .input('billingCustomerId', sql.Int, body.billing_customer_id || body.customer_id || null)
       .input('damageDetails', sql.NVarChar, body.damage_details ? JSON.stringify(body.damage_details) : null)
       .input('estimatedCost', sql.Decimal(12, 2), body.estimated_cost || 0)
+      .input('repairPhotos', sql.NVarChar, body.repair_photos.length ? JSON.stringify(body.repair_photos) : null)
+      .input('sourceEirNumber', sql.NVarChar, body.source_eir_number || null)
       .input('notes', sql.NVarChar, body.notes || null)
       .input('createdBy', sql.Int, body.user_id || null)
       .query(`
-        INSERT INTO RepairOrders (eor_number, container_id, yard_id, customer_id,
-          damage_details, estimated_cost, notes, created_by)
+        INSERT INTO RepairOrders (eor_number, container_id, yard_id, customer_id, billing_customer_id,
+          damage_details, estimated_cost, repair_photos, source_eir_number, notes, created_by)
         OUTPUT INSERTED.*
-        VALUES (@eorNumber, @containerId, @yardId, @customerId,
-          @damageDetails, @estimatedCost, @notes, @createdBy)
+        VALUES (@eorNumber, @containerId, @yardId, @customerId, @billingCustomerId,
+          @damageDetails, @estimatedCost, @repairPhotos, @sourceEirNumber, @notes, @createdBy)
       `);
 
     // Update container status
     await db.request()
       .input('cid', sql.Int, body.container_id)
-      .query("UPDATE Containers SET status = 'under_repair', updated_at = GETDATE() WHERE container_id = @cid");
+      .query("UPDATE Containers SET status = 'repair', updated_at = GETDATE() WHERE container_id = @cid");
 
     // Audit trail
     await logAudit({
@@ -103,7 +225,13 @@ export async function POST(request: NextRequest) {
       action: 'eor_create',
       entityType: 'repair_order',
       entityId: result.recordset[0].eor_id,
-      details: { eor_number: eorNumber, container_id: body.container_id, estimated_cost: body.estimated_cost },
+      details: {
+        eor_number: eorNumber,
+        container_id: body.container_id,
+        estimated_cost: body.estimated_cost,
+        source_eir_number: body.source_eir_number,
+        billing_customer_id: body.billing_customer_id || body.customer_id || null,
+      },
     });
 
     return NextResponse.json({ success: true, order: result.recordset[0], eor_number: eorNumber });
@@ -124,11 +252,17 @@ export async function PUT(request: NextRequest) {
     const { eor_id, action, actual_cost, user_id } = parsed.data;
 
     const db = await getDb();
+    await ensureMnrColumns(db);
 
     // Get order info for audit + container status
     const orderInfo = await db.request()
       .input('eid', sql.Int, eor_id)
-      .query('SELECT eor_number, container_id, yard_id FROM RepairOrders WHERE eor_id = @eid');
+      .query(`
+        SELECT r.*, c.customer_id as container_customer_id
+        FROM RepairOrders r
+        LEFT JOIN Containers c ON r.container_id = c.container_id
+        WHERE r.eor_id = @eid
+      `);
     const order = orderInfo.recordset[0];
     if (!order) {
       return NextResponse.json({ error: 'ไม่พบ EOR' }, { status: 404 });
@@ -148,10 +282,11 @@ export async function PUT(request: NextRequest) {
         break;
       case 'complete':
         req.input('actualCost', sql.Decimal(12, 2), actual_cost || 0);
-        await req.query("UPDATE RepairOrders SET status = 'completed', actual_cost = @actualCost WHERE eor_id = @eorId");
+        await req.query("UPDATE RepairOrders SET status = 'completed', actual_cost = @actualCost, completed_at = GETDATE() WHERE eor_id = @eorId");
         // Revert container status back to in_yard
         await db.request().input('cid', sql.Int, order.container_id)
           .query("UPDATE Containers SET status = 'in_yard', updated_at = GETDATE() WHERE container_id = @cid");
+        await createMnrInvoiceIfNeeded({ db, order, actualCost: actual_cost || 0, userId: user_id });
         break;
       case 'reject':
         await req.query("UPDATE RepairOrders SET status = 'rejected' WHERE eor_id = @eorId");
@@ -175,7 +310,7 @@ export async function PUT(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, damage_details: parseDamageDetails(order.damage_details) });
   } catch (error) {
     console.error('❌ PUT mnr error:', error);
     return NextResponse.json({ error: 'ไม่สามารถอัปเดตได้' }, { status: 500 });
