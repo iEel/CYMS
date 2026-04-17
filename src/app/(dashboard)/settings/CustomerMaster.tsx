@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import { useToast } from '@/components/providers/ToastProvider';
 import {
   Plus, Trash2, Save, Users, Pencil, X, CheckCircle2, Loader2,
   Building, Truck, Ship, Search, Anchor, PackageCheck, ArrowRightLeft, GitBranch,
+  Eye, CreditCard, ReceiptText, CalendarDays, Activity, FileText,
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -112,6 +114,7 @@ export default function CustomerMaster() {
   const [form, setForm] = useState<FormFields>(emptyForm);
   const [search, setSearch] = useState('');
   const [saved, setSaved] = useState(false);
+  const [customer360Id, setCustomer360Id] = useState<number | null>(null);
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchData = useCallback(async () => {
@@ -519,6 +522,10 @@ export default function CustomerMaster() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 ml-3 shrink-0">
+                    <button onClick={() => setCustomer360Id(c.customer_id)}
+                      className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-emerald-50 hover:text-emerald-600 transition-colors" title="Customer 360">
+                      <Eye size={14} />
+                    </button>
                     <button onClick={() => startEdit(c)}
                       className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-blue-50 hover:text-blue-500 transition-colors" title="แก้ไข">
                       <Pencil size={14} />
@@ -536,7 +543,187 @@ export default function CustomerMaster() {
       </div>
     </div>
 
+    {customer360Id && <Customer360Modal customerId={customer360Id} onClose={() => setCustomer360Id(null)} />}
     <ConfirmDialog open={confirmDlg.open} title="ยืนยันการลบ" message={confirmDlg.message} confirmLabel="ลบ" onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
     </>
+  );
+}
+
+function formatMoney(value: unknown) {
+  const amount = Number(value || 0);
+  return `฿${amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatShortDate(value: unknown) {
+  if (!value) return '-';
+  return new Date(String(value)).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+type Customer360Row = Record<string, unknown>;
+
+interface Customer360Data {
+  error?: string;
+  customer?: Customer360Row;
+  credit?: Customer360Row;
+  containers_by_status?: Customer360Row[];
+  invoices?: { summary?: Customer360Row; recent?: Customer360Row[] };
+  bookings?: Customer360Row[];
+  gate_transactions?: Customer360Row[];
+  repair_orders?: Customer360Row[];
+  prefixes?: Customer360Row[];
+  branches?: Customer360Row[];
+}
+
+function Customer360Modal({ customerId, onClose }: { customerId: number; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<Customer360Data | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch(`/api/customers/360?customer_id=${customerId}`)
+      .then(res => res.json())
+      .then((json: Customer360Data) => { if (mounted) setData(json); })
+      .catch(() => { if (mounted) setData({ error: 'โหลด Customer 360 ไม่สำเร็จ' }); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, [customerId]);
+
+  const customer = data?.customer;
+  const credit = data?.credit;
+  const invoiceSummary = data?.invoices?.summary || {};
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-slate-800 dark:text-white">Customer 360</h3>
+            <p className="text-xs text-slate-400">{String(customer?.customer_name || 'กำลังโหลดข้อมูลลูกค้า')}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center hover:text-slate-800 dark:hover:text-white">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5 overflow-y-auto max-h-[calc(90vh-73px)]">
+          {loading ? (
+            <div className="flex items-center gap-2 text-slate-400 text-sm"><Loader2 size={16} className="animate-spin" /> กำลังโหลด Customer 360...</div>
+          ) : data?.error ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{data.error}</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                  <p className="text-xs text-slate-400">ประเภทชำระเงิน</p>
+                  <p className="font-semibold text-slate-800 dark:text-white">{String(customer?.default_payment_type || 'CASH')}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                  <p className="text-xs text-slate-400">วงเงินเครดิต</p>
+                  <p className="font-semibold text-slate-800 dark:text-white">{formatMoney(credit?.credit_limit)}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                  <p className="text-xs text-slate-400">ยอดค้างชำระ</p>
+                  <p className={`font-semibold ${credit?.over_limit ? 'text-rose-600' : 'text-slate-800 dark:text-white'}`}>{formatMoney(credit?.outstanding_amount)}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                  <p className="text-xs text-slate-400">Credit Hold</p>
+                  <p className={`font-semibold ${credit?.credit_hold ? 'text-rose-600' : 'text-emerald-600'}`}>{credit?.credit_hold ? 'ติด Hold' : 'ปกติ'}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <section className="rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                    <CreditCard size={15} className="text-blue-500" />
+                    <h4 className="font-semibold text-sm text-slate-700 dark:text-white">AR Snapshot</h4>
+                  </div>
+                  <div className="p-4 grid grid-cols-2 gap-3 text-sm">
+                    <div><span className="text-slate-400">Paid</span><p className="font-medium">{formatMoney(invoiceSummary.paid_amount)}</p></div>
+                    <div><span className="text-slate-400">Draft</span><p className="font-medium">{formatMoney(invoiceSummary.draft_amount)}</p></div>
+                    <div><span className="text-slate-400">Overdue days</span><p className="font-medium">{String(credit?.oldest_overdue_days || 0)} วัน</p></div>
+                    <div><span className="text-slate-400">Invoices</span><p className="font-medium">{String(invoiceSummary.invoice_count || 0)} ใบ</p></div>
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                    <PackageCheck size={15} className="text-emerald-500" />
+                    <h4 className="font-semibold text-sm text-slate-700 dark:text-white">Container Status</h4>
+                  </div>
+                  <div className="p-4 flex flex-wrap gap-2">
+                    {(data?.containers_by_status || []).length === 0 && <p className="text-sm text-slate-400">ยังไม่มีตู้ของลูกค้ารายนี้ในลาน</p>}
+                    {(data?.containers_by_status || []).map(item => (
+                      <span key={String(item.status || 'unknown')} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm text-slate-600 dark:text-slate-300">
+                        {String(item.status || 'unknown')}: <b>{String(item.count || 0)}</b>
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <RecentList title="Invoice ล่าสุด" icon={<ReceiptText size={15} className="text-violet-500" />}
+                  rows={data?.invoices?.recent || []}
+                  render={row => `${row.invoice_number || '-'} · ${row.status || '-'} · ${formatMoney(row.grand_total)}`} />
+                <RecentList title="Booking ล่าสุด" icon={<CalendarDays size={15} className="text-amber-500" />}
+                  rows={data?.bookings || []}
+                  render={row => `${row.booking_number || '-'} · ${row.received_count || 0}/${row.total_containers || 0} received · ${row.released_count || 0}/${row.total_containers || 0} released`} />
+                <RecentList title="Gate / EOR ล่าสุด" icon={<Activity size={15} className="text-emerald-500" />}
+                  rows={[...(data?.gate_transactions || []), ...(data?.repair_orders || [])].slice(0, 10)}
+                  render={row => `${row.eir_number || row.eor_number || row.container_number || '-'} · ${row.transaction_type || row.status || '-'} · ${formatShortDate(row.created_at)}`} />
+              </div>
+
+              <section className="rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                  <FileText size={15} className="text-slate-500" />
+                  <h4 className="font-semibold text-sm text-slate-700 dark:text-white">Prefix / Branch</h4>
+                </div>
+                <div className="p-4 flex flex-wrap gap-2">
+                  {(data?.prefixes || []).map(p => (
+                    <span key={String(p.prefix_code || '')} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm text-slate-600 dark:text-slate-300">
+                      {String(p.prefix_code || '-')}{p.is_primary ? ' · primary' : ''}
+                    </span>
+                  ))}
+                  {(data?.branches || []).map(b => (
+                    <span key={String(b.branch_id || b.branch_code || '')} className="px-3 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-sm text-violet-700 dark:text-violet-300">
+                      {String(b.branch_code || '-')} · {String(b.branch_name || 'สาขา')}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecentList({
+  title,
+  icon,
+  rows,
+  render,
+}: {
+  title: string;
+  icon: ReactNode;
+  rows: Customer360Row[];
+  render: (row: Customer360Row) => string;
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 dark:border-slate-700">
+      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+        {icon}
+        <h4 className="font-semibold text-sm text-slate-700 dark:text-white">{title}</h4>
+      </div>
+      <div className="p-4 space-y-2">
+        {rows.length === 0 && <p className="text-sm text-slate-400">ยังไม่มีข้อมูล</p>}
+        {rows.slice(0, 5).map((row, index) => (
+          <div key={index} className="text-sm text-slate-600 dark:text-slate-300 rounded-lg bg-slate-50 dark:bg-slate-800 px-3 py-2">
+            {render(row)}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

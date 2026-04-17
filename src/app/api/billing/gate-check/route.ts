@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { getBillingGuard } from '@/lib/billingGuard';
 
 type StorageRateTier = {
   tier_name: string;
@@ -181,9 +182,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine credit status from BILLING customer (not owner)
+    const billingGuard = await getBillingGuard(db, billingCustomer?.customer_id, yard_id);
+
     if (billingCustomer) {
-      creditTerm = billingCustomer.credit_term || 0;
-      isCredit = creditTerm > 0;
+      creditTerm = billingGuard.credit_term || billingCustomer.credit_term || 0;
+      isCredit = billingGuard.is_credit || creditTerm > 0;
     }
 
     // 3. Calculate storage charges — CUSTOMER-SPECIFIC tiered rates with cargo_status
@@ -370,6 +373,7 @@ export async function POST(request: NextRequest) {
       billing_customer: billingCustomer,
       is_credit: isCredit,
       credit_term: creditTerm,
+      billing_guard: billingGuard,
       // Customer-specific rate info
       has_customer_rate: selectedRate.hasCustomerRate,
       storage_rate_source: selectedRate.rateSource,

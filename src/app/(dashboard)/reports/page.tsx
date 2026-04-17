@@ -8,6 +8,7 @@ import {
   Loader2, BarChart3, Wrench, Package,
   FileSpreadsheet, TrendingDown, TrendingUp,
   AlertTriangle, CheckCircle2, Clock, RefreshCw,
+  FileCheck2,
 } from 'lucide-react';
 
 // ── Types ──
@@ -63,6 +64,24 @@ interface ReconciliationData {
   generated_at: string;
   summary: { total_open: number; critical: number; warning: number; info: number; unavailable_checks: number };
   issues: ReconciliationIssue[];
+}
+
+interface DocumentConsistencyCheck {
+  code: string;
+  title: string;
+  severity: 'info' | 'warning' | 'critical';
+  expected: string;
+  recommended_action: string;
+  count: number;
+  rows: Array<Record<string, unknown>>;
+  unavailable?: boolean;
+  error?: string;
+}
+
+interface DocumentConsistencyData {
+  generated_at: string;
+  summary: { total_open: number; critical: number; warning: number; info: number; unavailable_checks: number };
+  checks: DocumentConsistencyCheck[];
 }
 
 // ── Constants ──
@@ -638,12 +657,124 @@ function ReconciliationReportTab({ yardId }: { yardId: number }) {
 }
 
 // ════════════════════════════════════════════════════════════════
+// DOCUMENT CONSISTENCY TAB
+// ════════════════════════════════════════════════════════════════
+
+function DocumentConsistencyTab({ yardId }: { yardId: number }) {
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<DocumentConsistencyData | null>(null);
+  const { toast } = useToast();
+
+  const fetchReport = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/documents/consistency?yard_id=${yardId}`);
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      setData(d);
+    } catch {
+      toast('error', 'โหลด Document Consistency ล้มเหลว');
+    } finally {
+      setLoading(false);
+    }
+  }, [yardId, toast]);
+
+  useEffect(() => { fetchReport(); }, [fetchReport]);
+
+  const severityClass: Record<string, string> = {
+    critical: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-800',
+    warning: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800',
+    info: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800',
+  };
+  const openChecks = data?.checks?.filter(check => check.count > 0 || check.unavailable) || [];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end gap-3">
+        <button onClick={fetchReport} disabled={loading}
+          className="h-10 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-all">
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          ตรวจเอกสารซ้ำ
+        </button>
+        {data?.generated_at && <p className="text-xs text-slate-400">อัปเดตล่าสุด {formatDate(data.generated_at)}</p>}
+      </div>
+
+      {data?.summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KPICard label="เอกสารต้องตรวจ" value={data.summary.total_open} icon={<FileCheck2 size={20} />} color={data.summary.total_open > 0 ? 'amber' : 'emerald'} />
+          <KPICard label="Critical" value={data.summary.critical} icon={<AlertTriangle size={20} />} color="rose" />
+          <KPICard label="Warning" value={data.summary.warning} icon={<Clock size={20} />} color="amber" />
+          <KPICard label="Check ใช้งานไม่ได้" value={data.summary.unavailable_checks} icon={<RefreshCw size={20} />} color="slate" />
+        </div>
+      )}
+
+      {!loading && data && openChecks.length === 0 && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 p-6 text-center">
+          <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-600" />
+          <p className="font-semibold text-emerald-700 dark:text-emerald-300">Document preview และ lifecycle ตรงกันในรายการตรวจหลัก</p>
+          <p className="text-xs text-emerald-600/80 dark:text-emerald-300/80 mt-1">Draft, paid/receipt, credit note, EIR และ lifecycle ผ่านเงื่อนไขรอบนี้</p>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {openChecks.map(check => (
+          <div key={check.code} className={`rounded-xl border p-4 ${severityClass[check.severity] || severityClass.info}`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono uppercase opacity-70">{check.code}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-white/70 dark:bg-slate-900/40 text-[11px] font-semibold">{check.severity}</span>
+                </div>
+                <h3 className="font-semibold mt-1">{check.title}</h3>
+                <p className="text-xs mt-1 opacity-80">ควรเป็น: {check.expected}</p>
+                <p className="text-xs mt-1 opacity-80">แนะนำ: {check.recommended_action}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold">{check.unavailable ? '-' : check.count}</p>
+                <p className="text-xs opacity-70">{check.unavailable ? 'ตรวจไม่ได้' : 'รายการ'}</p>
+              </div>
+            </div>
+
+            {check.unavailable && <p className="text-xs mt-3 opacity-80">ระบบยังตรวจรายการนี้ไม่ได้: {check.error || 'schema ยังไม่พร้อม'}</p>}
+
+            {!check.unavailable && check.rows.length > 0 && (
+              <div className="mt-3 overflow-x-auto rounded-lg bg-white/70 dark:bg-slate-900/30">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200/60 dark:border-slate-700/60">
+                      {Object.keys(check.rows[0]).slice(0, 6).map(key => (
+                        <th key={key} className="px-3 py-2 text-left font-semibold">{key}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200/50 dark:divide-slate-700/50">
+                    {check.rows.slice(0, 8).map((row, idx) => (
+                      <tr key={idx}>
+                        {Object.keys(check.rows[0]).slice(0, 6).map(key => (
+                          <td key={key} className="px-3 py-2 whitespace-nowrap">
+                            {row[key] === null || row[key] === undefined ? '-' : String(row[key])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════
 
 export default function ReportsPage() {
   const { session, hasPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState<'dwell' | 'mnr' | 'reconciliation'>('dwell');
+  const [activeTab, setActiveTab] = useState<'dwell' | 'mnr' | 'reconciliation' | 'documents'>('dwell');
   const yardId = session?.activeYardId || 1;
   const canViewReports = hasPermission('reports.view');
 
@@ -651,6 +782,7 @@ export default function ReportsPage() {
     { id: 'dwell' as const, label: '📦 Container Dwell', icon: <Package size={15} /> },
     { id: 'mnr' as const, label: '🔧 M&R Report', icon: <Wrench size={15} /> },
     { id: 'reconciliation' as const, label: '⚠️ Reconciliation', icon: <AlertTriangle size={15} /> },
+    { id: 'documents' as const, label: 'Document Check', icon: <FileCheck2 size={15} /> },
   ];
 
   if (!canViewReports) {
@@ -662,7 +794,7 @@ export default function ReportsPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-white">รายงาน (Reports)</h1>
-            <p className="text-xs text-slate-400">Container Dwell Report · M&R Report · Reconciliation · Export Excel</p>
+            <p className="text-xs text-slate-400">Container Dwell Report · M&R Report · Reconciliation · Document Check</p>
           </div>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
@@ -681,7 +813,7 @@ export default function ReportsPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-800 dark:text-white">รายงาน (Reports)</h1>
-          <p className="text-xs text-slate-400">Container Dwell Report · M&R Report · Reconciliation · Export Excel</p>
+          <p className="text-xs text-slate-400">Container Dwell Report · M&R Report · Reconciliation · Document Check</p>
         </div>
       </div>
 
@@ -704,6 +836,7 @@ export default function ReportsPage() {
       {activeTab === 'dwell' && <DwellReportTab yardId={yardId} />}
       {activeTab === 'mnr' && <MnRReportTab yardId={yardId} />}
       {activeTab === 'reconciliation' && <ReconciliationReportTab yardId={yardId} />}
+      {activeTab === 'documents' && <DocumentConsistencyTab yardId={yardId} />}
     </div>
   );
 }

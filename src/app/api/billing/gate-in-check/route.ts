@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { getBillingGuard } from '@/lib/billingGuard';
 
 /**
  * POST /api/billing/gate-in-check
@@ -117,9 +118,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const billingGuard = await getBillingGuard(db, billingCustomer?.customer_id, yard_id);
+
     if (billingCustomer) {
-      creditTerm = billingCustomer.credit_term || 0;
-      isCredit = creditTerm > 0;
+      creditTerm = billingGuard.credit_term || billingCustomer.credit_term || 0;
+      isCredit = billingGuard.is_credit || creditTerm > 0;
     }
 
     // 2. Get per-container charges from Tariffs (LOLO, gate, washing, PTI, reefer, etc.)
@@ -182,6 +185,7 @@ export async function POST(request: NextRequest) {
       customer: billingCustomer, // Legacy compat
       is_credit: isCredit,
       credit_term: creditTerm,
+      billing_guard: billingGuard,
       container_size: containerSize,
       // Halt rule
       needs_customer_selection: needsCustomerSelection,
