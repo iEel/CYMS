@@ -10,6 +10,7 @@ interface DocumentSequence {
   yard_id: number;
   document_type: string;
   sequence_year: number;
+  sequence_month: number;
   prefix: string;
   next_number: number;
   padding: number;
@@ -31,13 +32,16 @@ export default function DocumentNumberSettings() {
   const { session } = useAuth();
   const { toast } = useToast();
   const yardId = session?.activeYardId || 1;
-  const currentYear = new Date().getFullYear();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sequences, setSequences] = useState<DocumentSequence[]>([]);
   const [form, setForm] = useState({
     document_type: 'eir_in',
     sequence_year: currentYear,
+    sequence_month: currentMonth,
     prefix: 'EIR-IN',
     next_number: 1,
     padding: 6,
@@ -60,28 +64,30 @@ export default function DocumentNumberSettings() {
 
   const sequenceMap = useMemo(() => {
     const map = new Map<string, DocumentSequence>();
-    sequences.forEach(seq => map.set(`${seq.document_type}:${seq.sequence_year}`, seq));
+    sequences.forEach(seq => map.set(`${seq.document_type}:${seq.sequence_year}:${seq.sequence_month || 0}`, seq));
     return map;
   }, [sequences]);
 
   const rows = DOCUMENT_TYPES.map(doc => {
-    const sequence = sequenceMap.get(`${doc.id}:${currentYear}`);
+    const sequence = sequenceMap.get(`${doc.id}:${currentYear}:${currentMonth}`);
+    const yearMonth = `${currentYear}${String(currentMonth).padStart(2, '0')}`;
     return {
       ...doc,
       sequence,
       prefix: sequence?.prefix || doc.defaultPrefix,
       next_number: sequence?.next_number || 1,
       padding: sequence?.padding || 6,
-      sample: `${sequence?.prefix || doc.defaultPrefix}-${currentYear}-${String(sequence?.next_number || 1).padStart(sequence?.padding || 6, '0')}`,
+      sample: `${sequence?.prefix || doc.defaultPrefix}-${yearMonth}-${String(sequence?.next_number || 1).padStart(sequence?.padding || 6, '0')}`,
     };
   });
 
   const selectForEdit = (documentType: string) => {
     const doc = DOCUMENT_TYPES.find(item => item.id === documentType) || DOCUMENT_TYPES[0];
-    const sequence = sequenceMap.get(`${doc.id}:${currentYear}`);
+    const sequence = sequenceMap.get(`${doc.id}:${currentYear}:${currentMonth}`);
     setForm({
       document_type: doc.id,
       sequence_year: currentYear,
+      sequence_month: currentMonth,
       prefix: sequence?.prefix || doc.defaultPrefix,
       next_number: sequence?.next_number || 1,
       padding: sequence?.padding || 6,
@@ -90,13 +96,26 @@ export default function DocumentNumberSettings() {
 
   const handleDocumentTypeChange = (documentType: string) => {
     const doc = DOCUMENT_TYPES.find(item => item.id === documentType) || DOCUMENT_TYPES[0];
-    const sequence = sequenceMap.get(`${doc.id}:${form.sequence_year}`);
+    const sequence = sequenceMap.get(`${doc.id}:${form.sequence_year}:${form.sequence_month}`);
     setForm(prev => ({
       ...prev,
       document_type: doc.id,
       prefix: sequence?.prefix || doc.defaultPrefix,
       next_number: sequence?.next_number || 1,
       padding: sequence?.padding || 6,
+    }));
+  };
+
+  const handlePeriodChange = (year: number, month: number) => {
+    const sequence = sequenceMap.get(`${form.document_type}:${year}:${month}`);
+    const doc = DOCUMENT_TYPES.find(item => item.id === form.document_type) || DOCUMENT_TYPES[0];
+    setForm(prev => ({
+      ...prev,
+      sequence_year: year,
+      sequence_month: month,
+      prefix: sequence?.prefix || doc.defaultPrefix,
+      next_number: sequence?.next_number || 1,
+      padding: sequence?.padding || prev.padding,
     }));
   };
 
@@ -138,7 +157,7 @@ export default function DocumentNumberSettings() {
             </div>
             <div>
               <h3 className="font-semibold text-slate-800 dark:text-white">Document Number Control</h3>
-              <p className="text-xs text-slate-400">ตั้ง prefix และเลขถัดไปแยกตามลาน/ปี สำหรับ EIR, Invoice, Receipt, Credit Note และ EOR</p>
+              <p className="text-xs text-slate-400">ตั้ง prefix และเลขถัดไปแยกตามลาน/เดือน สำหรับ EIR, Invoice, Receipt, Credit Note และ EOR</p>
             </div>
           </div>
           <button onClick={fetchSequences}
@@ -154,6 +173,7 @@ export default function DocumentNumberSettings() {
                 <tr className="border-b border-slate-100 dark:border-slate-700">
                   <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500">เอกสาร</th>
                   <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500">Prefix</th>
+                  <th className="text-center px-3 py-2 text-xs font-semibold text-slate-500">รอบเดือน</th>
                   <th className="text-center px-3 py-2 text-xs font-semibold text-slate-500">เลขถัดไป</th>
                   <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500">ตัวอย่าง</th>
                   <th className="text-center px-3 py-2 text-xs font-semibold text-slate-500">สถานะ</th>
@@ -165,6 +185,7 @@ export default function DocumentNumberSettings() {
                     className="hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer transition-colors">
                     <td className="px-3 py-3 font-medium text-slate-800 dark:text-white">{row.label}</td>
                     <td className="px-3 py-3 font-mono text-slate-600 dark:text-slate-300">{row.prefix}</td>
+                    <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">{currentYear}{String(currentMonth).padStart(2, '0')}</td>
                     <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">{row.next_number}</td>
                     <td className="px-3 py-3 font-mono text-xs text-blue-600 dark:text-blue-300">{row.sample}</td>
                     <td className="px-3 py-3 text-center">
@@ -192,10 +213,18 @@ export default function DocumentNumberSettings() {
                   {DOCUMENT_TYPES.map(doc => <option key={doc.id} value={doc.id}>{doc.label}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">ปี</label>
-                  <input type="number" value={form.sequence_year} onChange={e => setForm({ ...form, sequence_year: Number(e.target.value) || currentYear })} className={inputClass} />
+                  <input type="number" value={form.sequence_year} onChange={e => handlePeriodChange(Number(e.target.value) || currentYear, form.sequence_month)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">เดือน</label>
+                  <select value={form.sequence_month} onChange={e => handlePeriodChange(form.sequence_year, Number(e.target.value) || currentMonth)} className={inputClass}>
+                    {Array.from({ length: 12 }, (_, index) => index + 1).map(month => (
+                      <option key={month} value={month}>{String(month).padStart(2, '0')}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">Padding</label>
@@ -213,7 +242,7 @@ export default function DocumentNumberSettings() {
               <div className="rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 p-3">
                 <p className="text-xs text-slate-400 mb-1">ตัวอย่างเลขถัดไป</p>
                 <p className="font-mono font-semibold text-blue-600 dark:text-blue-300">
-                  {form.prefix}-{form.sequence_year}-{String(form.next_number).padStart(form.padding, '0')}
+                  {form.prefix}-{form.sequence_year}{String(form.sequence_month).padStart(2, '0')}-{String(form.next_number).padStart(form.padding, '0')}
                 </p>
               </div>
               <button onClick={handleSave} disabled={saving || !form.prefix}
@@ -231,7 +260,7 @@ export default function DocumentNumberSettings() {
         <div>
           <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">ควรแก้เลขถัดไปอย่างระมัดระวัง</p>
           <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-1">
-            ถ้าตั้งเลขย้อนหลัง อาจชนกับเอกสารเดิมได้ ระบบจะใช้เลขนี้กับเอกสารใหม่หลังจากบันทึกเท่านั้น
+            เลขเอกสารใหม่จะรันแยกตามเดือนในรูปแบบ PREFIX-YYYYMM-RUNNING ถ้าตั้งเลขย้อนหลังในเดือนเดียวกัน อาจชนกับเอกสารเดิมได้
           </p>
         </div>
       </div>
