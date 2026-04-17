@@ -38,6 +38,8 @@ const updateEORSchema = z.object({
 async function ensureMnrColumns(db: sql.ConnectionPool) {
   if (process.env.NODE_ENV === 'test') return;
   await db.request().query(`
+    IF COL_LENGTH('RepairOrders', 'customer_id') IS NULL
+      ALTER TABLE RepairOrders ADD customer_id INT NULL;
     IF COL_LENGTH('RepairOrders', 'source_eir_number') IS NULL
       ALTER TABLE RepairOrders ADD source_eir_number NVARCHAR(80) NULL;
     IF COL_LENGTH('RepairOrders', 'repair_photos') IS NULL
@@ -66,6 +68,8 @@ async function ensureMnrColumns(db: sql.ConnectionPool) {
       ALTER TABLE RepairOrders ADD repair_inspected_by NVARCHAR(200) NULL;
     IF COL_LENGTH('RepairOrders', 'repair_inspected_at') IS NULL
       ALTER TABLE RepairOrders ADD repair_inspected_at DATETIME2 NULL;
+    IF COL_LENGTH('Containers', 'customer_id') IS NULL
+      ALTER TABLE Containers ADD customer_id INT NULL;
   `);
 }
 

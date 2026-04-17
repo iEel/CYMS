@@ -24,7 +24,7 @@ interface EORRow {
 }
 
 interface ContainerOption {
-  container_id: number; container_number: string; size: string; type: string; shipping_line: string; customer_id?: number;
+  container_id: number; container_number: string; size: string; type: string; shipping_line: string; customer_id?: number; status?: string;
 }
 
 interface CustomerOption {
@@ -85,6 +85,12 @@ const REPAIR_PHOTO_CATEGORIES = [
   { key: 'repair_material', label: 'Repair material/part', required: 0 },
 ] as const;
 
+function repairPhotoRequirementText(count: number, required: number) {
+  return required > 0
+    ? `${count} รูป / แนะนำ ${required} รูป`
+    : `${count} รูป / ไม่บังคับ`;
+}
+
 const DAMAGE_TYPE_TO_CEDEX_KEYWORD: Record<string, string[]> = {
   dent: ['dent', 'บุ๋ม'],
   hole: ['hole', 'ทะลุ', 'รู'],
@@ -114,10 +120,13 @@ export default function MnRPage() {
   // Create
   const [searchText, setSearchText] = useState('');
   const [containers, setContainers] = useState<ContainerOption[]>([]);
+  const [containerSearchLoading, setContainerSearchLoading] = useState(false);
+  const [containerSearchMessage, setContainerSearchMessage] = useState('');
   const [selectedContainer, setSelectedContainer] = useState<ContainerOption | null>(null);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
   const [repairPhotos, setRepairPhotos] = useState<string[]>([]);
   const [repairPhotoEvidence, setRepairPhotoEvidence] = useState<RepairPhotoEvidence>({});
+  const [repairEvidenceEnabled, setRepairEvidenceEnabled] = useState(false);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [billingCustomerId, setBillingCustomerId] = useState('');
   const [sourceEirNumber, setSourceEirNumber] = useState('');
@@ -208,6 +217,7 @@ export default function MnRPage() {
     setSelectedContainer(container);
     setContainers([]);
     setBillingCustomerId(container.customer_id ? String(container.customer_id) : '');
+    setRepairEvidenceEnabled(true);
   };
 
   const addEvidencePhotos = useCallback((category: string, photos: string[]) => {
@@ -232,7 +242,7 @@ export default function MnRPage() {
 
   const evidenceSummary = REPAIR_PHOTO_CATEGORIES
     .filter(category => category.required > 0 || (repairPhotoEvidence[category.key] || []).length > 0)
-    .map(category => `${category.label} ${(repairPhotoEvidence[category.key] || []).length}/${category.required || '-'}`)
+    .map(category => repairPhotoRequirementText((repairPhotoEvidence[category.key] || []).length, category.required))
     .join(', ');
 
   const applyDamageSource = useCallback((detail: ContainerDetailLite, autoSelectCodes = true) => {
@@ -286,6 +296,7 @@ export default function MnRPage() {
           shipping_line: detail.container.shipping_line,
           customer_id: detail.container.customer_id,
         });
+        setRepairEvidenceEnabled(true);
         setBillingCustomerId(detail.container.customer_id ? String(detail.container.customer_id) : '');
         applyDamageSource(detail);
       })
@@ -295,11 +306,38 @@ export default function MnRPage() {
   }, [searchParams, canCreateEor, applyDamageSource]);
 
   const searchContainers = async () => {
+    const term = searchText.trim();
+    if (!term) {
+      setContainerSearchMessage('กรุณาพิมพ์เลขตู้ก่อนค้นหา');
+      return;
+    }
+    setContainerSearchLoading(true);
+    setContainerSearchMessage('');
+    setSelectedContainer(null);
+    setRepairEvidenceEnabled(false);
+    setSourceEirNumber('');
+    setSourceDamagePoints([]);
+    setRepairPhotos([]);
+    setRepairPhotoEvidence({});
     try {
-      const res = await fetch(`/api/containers?yard_id=${yardId}&status=in_yard&search=${searchText}`);
+      const res = await fetch(`/api/containers?yard_id=${yardId}&search=${encodeURIComponent(term)}`);
       const data = await res.json();
-      setContainers(Array.isArray(data) ? data : []);
-    } catch (err) { console.error(err); }
+      const rows = Array.isArray(data)
+        ? data.filter((container: ContainerOption) => ['in_yard', 'repair'].includes(container.status || ''))
+        : [];
+      setContainers(rows);
+      if (!res.ok || !Array.isArray(data)) {
+        setContainerSearchMessage(data?.error || 'ค้นหาตู้ไม่สำเร็จ');
+      } else if (rows.length === 0) {
+        setContainerSearchMessage('ไม่พบตู้สถานะในลานหรือซ่อมตามเลขที่ค้นหา');
+      }
+    } catch (err) {
+      console.error(err);
+      setContainerSearchMessage('ค้นหาตู้ไม่สำเร็จ');
+      setContainers([]);
+    } finally {
+      setContainerSearchLoading(false);
+    }
   };
 
   const estimatedCost = selectedCodes.reduce((sum, code) => {
@@ -347,7 +385,7 @@ export default function MnRPage() {
       const data = await res.json();
       if (data.success) {
         setCreateResult({ success: true, message: `✅ สร้าง EOR ${data.eor_number} สำเร็จ — ราคาประเมิน ฿${estimatedCost.toLocaleString()} (พร้อมรูปถ่าย ${allRepairPhotos.length} รูป)` });
-        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]); setRepairPhotoEvidence({}); setBillingCustomerId(''); setEorNotes(''); setSourceEirNumber(''); setSourceDamagePoints([]);
+        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]); setRepairPhotoEvidence({}); setRepairEvidenceEnabled(false); setBillingCustomerId(''); setEorNotes(''); setSourceEirNumber(''); setSourceDamagePoints([]);
       } else {
         setCreateResult({ success: false, message: `❌ ${data.error}` });
       }
@@ -648,18 +686,27 @@ export default function MnRPage() {
                 <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && searchContainers()}
                   className={`${inputClass} flex-1 font-mono`} placeholder="พิมพ์เลขตู้..." />
-                <button onClick={searchContainers} className="h-10 px-4 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 flex items-center gap-1.5">
-                  <Search size={14} /> ค้นหา</button>
+                <button onClick={searchContainers} disabled={containerSearchLoading}
+                  className="h-10 px-4 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
+                  {containerSearchLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} ค้นหา</button>
               </div>
+              {containerSearchMessage && (
+                <p className="mt-1 text-[10px] text-amber-600">{containerSearchMessage}</p>
+              )}
             </div>
 
-            {containers.length > 0 && !selectedContainer && (
+            {containers.length > 0 && (
               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {containers.slice(0, 5).map(c => (
                   <button key={c.container_id} onClick={() => selectContainerForEor(c)}
                     className="w-full text-left p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-violet-300 text-xs">
                     <span className="font-mono font-semibold text-slate-800 dark:text-white">{c.container_number}</span>
                     <span className="text-slate-400 ml-2">{c.size}&apos;{c.type} • {c.shipping_line || '-'}</span>
+                    <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                      c.status === 'repair' ? 'bg-violet-50 text-violet-600' : 'bg-emerald-50 text-emerald-600'
+                    }`}>
+                      {c.status === 'repair' ? 'ซ่อม' : 'ในลาน'}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -727,55 +774,61 @@ export default function MnRPage() {
             )}
 
             {/* Repair Photos */}
-            <div className="space-y-2">
-              <label className={labelClass}>Repair Photo Evidence</label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px]">
-                {REPAIR_PHOTO_CATEGORIES.map(category => {
-                  const count = (repairPhotoEvidence[category.key] || []).length;
-                  const complete = category.required === 0 || count >= category.required;
-                  return (
-                    <div key={category.key} className={`rounded-lg border px-2 py-1.5 ${complete ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
-                      <span className="font-semibold">{category.label}</span>
-                      <span className="ml-1">{count}/{category.required || '-'}</span>
+            {repairEvidenceEnabled ? (
+              <div className="space-y-2">
+                <label className={labelClass}>Repair Photo Evidence</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px]">
+                  {REPAIR_PHOTO_CATEGORIES.map(category => {
+                    const count = (repairPhotoEvidence[category.key] || []).length;
+                    const complete = category.required === 0 || count >= category.required;
+                    return (
+                      <div key={category.key} className={`rounded-lg border px-2 py-1.5 ${complete ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                        <span className="font-semibold">{category.label}</span>
+                        <span className="ml-1">{repairPhotoRequirementText(count, category.required)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="space-y-3">
+                  {REPAIR_PHOTO_CATEGORIES.map(category => (
+                    <div key={category.key} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{category.label}</p>
+                        <span className="text-[10px] text-slate-400">{repairPhotoRequirementText((repairPhotoEvidence[category.key] || []).length, category.required)}</span>
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        {(repairPhotoEvidence[category.key] || []).map((photo, i) => (
+                          <div key={`${category.key}-${i}`} className="relative">
+                            <img src={photo} alt={`${category.label} ${i + 1}`} className="w-20 h-16 rounded-lg object-cover border border-slate-200" />
+                            <button onClick={() => removeEvidencePhoto(category.key, i)}
+                              className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px]">✕</button>
+                          </div>
+                        ))}
+                        <label className="w-20 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:border-violet-400 hover:text-violet-500 cursor-pointer transition-colors">
+                          <Camera size={16} /> <span className="text-[8px] mt-0.5">เพิ่มรูป</span>
+                          <input type="file" accept="image/*" capture="environment" className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = () => addEvidencePhotos(category.key, [reader.result as string]);
+                              reader.readAsDataURL(file);
+                              e.target.value = '';
+                            }} />
+                        </label>
+                      </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+                {allRepairPhotos.length > 0 && (
+                  <p className="text-[10px] text-slate-400 flex items-center gap-1"><ImageIcon size={10} /> {allRepairPhotos.length} รูปแนบ · {evidenceSummary}</p>
+                )}
               </div>
-              <div className="space-y-3">
-                {REPAIR_PHOTO_CATEGORIES.map(category => (
-                  <div key={category.key} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{category.label}</p>
-                      <span className="text-[10px] text-slate-400">{(repairPhotoEvidence[category.key] || []).length}/{category.required || '-'} รูป</span>
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      {(repairPhotoEvidence[category.key] || []).map((photo, i) => (
-                        <div key={`${category.key}-${i}`} className="relative">
-                          <img src={photo} alt={`${category.label} ${i + 1}`} className="w-20 h-16 rounded-lg object-cover border border-slate-200" />
-                          <button onClick={() => removeEvidencePhoto(category.key, i)}
-                            className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px]">✕</button>
-                        </div>
-                      ))}
-                      <label className="w-20 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:border-violet-400 hover:text-violet-500 cursor-pointer transition-colors">
-                        <Camera size={16} /> <span className="text-[8px] mt-0.5">เพิ่มรูป</span>
-                        <input type="file" accept="image/*" capture="environment" className="hidden"
-                          onChange={e => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = () => addEvidencePhotos(category.key, [reader.result as string]);
-                            reader.readAsDataURL(file);
-                            e.target.value = '';
-                          }} />
-                      </label>
-                    </div>
-                  </div>
-                ))}
+            ) : (
+              <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-700 p-4 text-xs text-slate-400">
+                เลือกตู้ก่อน ระบบจะแสดงหมวด Repair Photo Evidence สำหรับแนบรูปซ่อม
               </div>
-              {allRepairPhotos.length > 0 && (
-                <p className="text-[10px] text-slate-400 flex items-center gap-1"><ImageIcon size={10} /> {allRepairPhotos.length} รูปแนบ · {evidenceSummary}</p>
-              )}
-            </div>
+            )}
 
             {/* Notes */}
             <div>
