@@ -92,6 +92,30 @@ function repairPhotoRequirementText(count: number, required: number) {
     : `${count} รูป / ไม่บังคับ`;
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error || new Error('อ่านไฟล์รูปไม่สำเร็จ'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadMnrPhoto(file: File, category: string): Promise<string> {
+  const dataUrl = await readFileAsDataUrl(file);
+  try {
+    const res = await fetch('/api/uploads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: dataUrl, folder: 'mnr', filename_prefix: category }),
+    });
+    const json = await res.json();
+    return json.success && json.url ? json.url : dataUrl;
+  } catch {
+    return dataUrl;
+  }
+}
+
 const DAMAGE_TYPE_TO_CEDEX_KEYWORD: Record<string, string[]> = {
   dent: ['dent', 'บุ๋ม'],
   hole: ['hole', 'ทะลุ', 'รู'],
@@ -843,12 +867,11 @@ export default function MnRPage() {
                         <label className="w-20 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:border-violet-400 hover:text-violet-500 cursor-pointer transition-colors">
                           <Camera size={16} /> <span className="text-[8px] mt-0.5">เพิ่มรูป</span>
                           <input type="file" accept="image/*" capture="environment" className="hidden"
-                            onChange={e => {
+                            onChange={async e => {
                               const file = e.target.files?.[0];
                               if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = () => addEvidencePhotos(category.key, [reader.result as string]);
-                              reader.readAsDataURL(file);
+                              const url = await uploadMnrPhoto(file, category.key);
+                              addEvidencePhotos(category.key, [url]);
                               e.target.value = '';
                             }} />
                         </label>

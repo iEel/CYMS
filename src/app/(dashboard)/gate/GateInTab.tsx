@@ -720,7 +720,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           {/* Seal Photo */}
           {gateInForm.is_laden && (
             <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
-              <PhotoCapture label="ถ่ายรูปซีล (บังคับสำหรับตู้ Laden)" required onCapture={setSealPhoto} value={sealPhoto} />
+              <PhotoCapture label="ถ่ายรูปซีล (บังคับสำหรับตู้ Laden)" required onCapture={setSealPhoto} value={sealPhoto} folder="seal" />
             </div>
           )}
 

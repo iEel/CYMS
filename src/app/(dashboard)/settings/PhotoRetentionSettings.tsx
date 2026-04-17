@@ -11,6 +11,8 @@ interface RetentionConfig {
   damage_photos_days: number;
   seal_photos_days: number;
   eir_pdf_days: number;
+  mnr_photos_days: number;
+  document_files_days: number;
   auto_cleanup_enabled: boolean;
   auto_cleanup_time: string;
   last_cleanup_at: string | null;
@@ -30,6 +32,8 @@ const DEFAULT_CONFIG: RetentionConfig = {
   damage_photos_days: 365,
   seal_photos_days: 180,
   eir_pdf_days: 730, // 2 years
+  mnr_photos_days: 730, // 2 years
+  document_files_days: 730, // 2 years
   auto_cleanup_enabled: false,
   auto_cleanup_time: '03:00',
   last_cleanup_at: null,
@@ -109,6 +113,8 @@ export default function PhotoRetentionSettings() {
     { key: 'damage_photos_days' as const, label: '⚠️ รูป Damage Report', desc: 'รูปความเสียหาย — ใช้เป็นหลักฐาน claim สายเรือ', default: 365, color: 'red' },
     { key: 'seal_photos_days' as const, label: '🔒 รูปซีล', desc: 'รูปถ่ายซีลตู้ — ตรวจสอบ security / ศุลกากร', default: 180, color: 'amber' },
     { key: 'eir_pdf_days' as const, label: '📄 EIR PDF ฉบับสมบูรณ์', desc: 'เอกสาร EIR แบบ PDF — เอกสารทางบัญชี+กฎหมาย', default: 730, color: 'purple' },
+    { key: 'mnr_photos_days' as const, label: '🔧 รูปซ่อม M&R', desc: 'Before / During / After repair และหลักฐานงานซ่อม', default: 730, color: 'violet' },
+    { key: 'document_files_days' as const, label: '🗂️ เอกสารแนบทั่วไป', desc: 'ไฟล์แนบใน Attachment Center / เอกสารประกอบอื่น ๆ', default: 730, color: 'slate' },
   ];
 
   const inputClass = "h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-right font-mono text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors w-24";

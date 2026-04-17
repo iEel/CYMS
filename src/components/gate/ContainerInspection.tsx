@@ -120,6 +120,30 @@ function isFlatRackFrameArea(point: DamagePoint) {
   return point.side === 'front' || point.side === 'back' || point.x <= 18 || point.x >= 82 || point.y >= 72;
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error || new Error('อ่านไฟล์รูปไม่สำเร็จ'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadInspectionPhoto(file: File): Promise<string> {
+  const dataUrl = await readFileAsDataUrl(file);
+  try {
+    const res = await fetch('/api/uploads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: dataUrl, folder: 'damage', filename_prefix: 'inspection' }),
+    });
+    const json = await res.json();
+    return json.success && json.url ? json.url : dataUrl;
+  } catch {
+    return dataUrl;
+  }
+}
+
 function evaluateCondition(points: DamagePoint[], templateKind: TemplateKind): { grade: ConditionGrade; reasons: string[] } {
   let grade: ConditionGrade = 'A';
   const reasons: string[] = [];
@@ -256,22 +280,19 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
     A: 'bg-emerald-500', B: 'bg-amber-500', C: 'bg-orange-500', D: 'bg-red-600',
   };
 
-  const handleEvidencePhotoUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      setEvidencePhotos(prev => [
-        ...prev,
-        {
-          id: `${Date.now()}-${Math.random()}`,
-          url: reader.result as string,
-          category: selectedPhotoCategory,
-          label: PHOTO_CATEGORY_LABELS[selectedPhotoCategory],
-          taken_at: new Date().toISOString(),
-          required: photoRequirements.some(item => item.category === selectedPhotoCategory && item.required),
-        },
-      ]);
-    };
-    reader.readAsDataURL(file);
+  const handleEvidencePhotoUpload = async (file: File) => {
+    const url = await uploadInspectionPhoto(file);
+    setEvidencePhotos(prev => [
+      ...prev,
+      {
+        id: `${Date.now()}-${Math.random()}`,
+        url,
+        category: selectedPhotoCategory,
+        label: PHOTO_CATEGORY_LABELS[selectedPhotoCategory],
+        taken_at: new Date().toISOString(),
+        required: photoRequirements.some(item => item.category === selectedPhotoCategory && item.required),
+      },
+    ]);
   };
 
   const completeInspection = () => {
@@ -728,22 +749,19 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
 
       {/* Hidden file inputs */}
       <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden"
-        onChange={e => {
+        onChange={async e => {
           const file = e.target.files?.[0];
           if (!file) return;
-          handleEvidencePhotoUpload(file);
+          await handleEvidencePhotoUpload(file);
           e.target.value = '';
         }} />
       <input ref={damageFileRef} type="file" accept="image/*" capture="environment" className="hidden"
-        onChange={e => {
+        onChange={async e => {
           const file = e.target.files?.[0];
           if (!file || !activePhotoPointId) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            setPoints(pts => pts.map(pt => pt.id === activePhotoPointId ? { ...pt, photo: reader.result as string } : pt));
-            setActivePhotoPointId(null);
-          };
-          reader.readAsDataURL(file);
+          const url = await uploadInspectionPhoto(file);
+          setPoints(pts => pts.map(pt => pt.id === activePhotoPointId ? { ...pt, photo: url } : pt));
+          setActivePhotoPointId(null);
           e.target.value = '';
         }} />
 

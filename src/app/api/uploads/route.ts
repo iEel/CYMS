@@ -6,7 +6,7 @@ import { logAudit } from '@/lib/audit';
 import { verifyToken } from '@/lib/auth';
 
 // [Security] whitelist ของ folder ที่อนุญาต — ป้องกัน path traversal
-const ALLOWED_FOLDERS = new Set(['photos', 'damage', 'eir', 'mnr', 'documents']);
+const ALLOWED_FOLDERS = new Set(['photos', 'gate', 'seal', 'damage', 'eir', 'mnr', 'documents', 'logos']);
 
 /**
  * ดึง upload size limit จาก environment variable

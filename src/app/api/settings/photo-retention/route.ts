@@ -7,10 +7,13 @@ const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
 
 // Folder → retention config key mapping
 const FOLDER_RETENTION: Record<string, string> = {
+  'photos': 'gate_photos_days',
   'gate': 'gate_photos_days',
   'damage': 'damage_photos_days',
   'seal': 'seal_photos_days',
   'eir': 'eir_pdf_days',
+  'mnr': 'mnr_photos_days',
+  'documents': 'document_files_days',
 };
 
 // Folders that should never be cleaned up
@@ -27,6 +30,8 @@ async function getRetentionConfig() {
       damage_photos_days: 365,
       seal_photos_days: 180,
       eir_pdf_days: 730,
+      mnr_photos_days: 730,
+      document_files_days: 730,
       auto_cleanup_enabled: false,
       auto_cleanup_time: '03:00',
       last_cleanup_at: null,
@@ -49,6 +54,8 @@ async function getRetentionConfig() {
       damage_photos_days: 365,
       seal_photos_days: 180,
       eir_pdf_days: 730,
+      mnr_photos_days: 730,
+      document_files_days: 730,
       auto_cleanup_enabled: false,
       last_cleanup_at: null,
       last_cleanup_deleted: 0,
@@ -156,7 +163,16 @@ export async function PUT(request: Request) {
       )
     `);
 
-    const keys = ['gate_photos_days', 'damage_photos_days', 'seal_photos_days', 'eir_pdf_days', 'auto_cleanup_enabled', 'auto_cleanup_time'];
+    const keys = [
+      'gate_photos_days',
+      'damage_photos_days',
+      'seal_photos_days',
+      'eir_pdf_days',
+      'mnr_photos_days',
+      'document_files_days',
+      'auto_cleanup_enabled',
+      'auto_cleanup_time',
+    ];
     for (const key of keys) {
       if (body[key] !== undefined) {
         const value = String(body[key]);

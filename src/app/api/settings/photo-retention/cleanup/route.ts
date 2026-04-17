@@ -7,10 +7,13 @@ import path from 'path';
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
 
 const FOLDER_RETENTION: Record<string, string> = {
+  'photos': 'gate_photos_days',
   'gate': 'gate_photos_days',
   'damage': 'damage_photos_days',
   'seal': 'seal_photos_days',
   'eir': 'eir_pdf_days',
+  'mnr': 'mnr_photos_days',
+  'documents': 'document_files_days',
 };
 
 // Folders that should never be cleaned up
@@ -26,6 +29,8 @@ export async function POST() {
       damage_photos_days: 365,
       seal_photos_days: 180,
       eir_pdf_days: 730,
+      mnr_photos_days: 730,
+      document_files_days: 730,
     };
 
     try {

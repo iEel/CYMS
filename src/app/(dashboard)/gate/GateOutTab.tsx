@@ -1060,6 +1060,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                     <PhotoCapture
                       onCapture={(photo: string) => setGateOutPhotos([...gateOutPhotos, photo])}
                       label={`ถ่ายรูปตู้ขาออก (${gateOutPhotos.length}/4)`}
+                      folder="gate"
                     />
                   )}
                 </div>
