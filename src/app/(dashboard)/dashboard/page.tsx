@@ -21,7 +21,6 @@ import {
   DoorOpen,
   Receipt,
   Shield,
-  Settings,
   User,
   ClipboardList,
   FileDown,
@@ -109,6 +108,19 @@ interface DashboardData {
   };
 }
 
+interface ExceptionData {
+  summary: { total_open: number; critical: number; warning: number; unavailable_checks: number };
+  issues: Array<{
+    code: string;
+    title: string;
+    severity: 'info' | 'warning' | 'critical';
+    count: number;
+    owner_role: string;
+    recommended_action: string;
+    unavailable?: boolean;
+  }>;
+}
+
 type RangeKey = '7d' | '30d' | '90d';
 
 export default function DashboardPage() {
@@ -117,14 +129,20 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [chartRange, setChartRange] = useState<RangeKey>('7d');
   const [chartsLoading, setChartsLoading] = useState(false);
+  const [exceptions, setExceptions] = useState<ExceptionData | null>(null);
 
   const fetchDashboard = useCallback(async (range?: RangeKey) => {
     try {
       const yardId = session?.activeYardId || 1;
       const r = range || chartRange;
-      const res = await fetch(`/api/dashboard?yard_id=${yardId}&range=${r}`);
+      const [res, exceptionRes] = await Promise.all([
+        fetch(`/api/dashboard?yard_id=${yardId}&range=${r}`),
+        fetch(`/api/reports/reconciliation?yard_id=${yardId}&limit=5`),
+      ]);
       const json = await res.json();
+      const exceptionJson = await exceptionRes.json();
       if (!json.error) setData(json);
+      if (!exceptionJson.error) setExceptions(exceptionJson);
     } catch (e) {
       console.error('Dashboard fetch failed:', e);
     } finally {
@@ -137,9 +155,14 @@ export default function DashboardPage() {
     setChartsLoading(true);
     try {
       const yardId = session?.activeYardId || 1;
-      const res = await fetch(`/api/dashboard?yard_id=${yardId}&range=${range}`);
+      const [res, exceptionRes] = await Promise.all([
+        fetch(`/api/dashboard?yard_id=${yardId}&range=${range}`),
+        fetch(`/api/reports/reconciliation?yard_id=${yardId}&limit=5`),
+      ]);
       const json = await res.json();
+      const exceptionJson = await exceptionRes.json();
       if (!json.error) setData(json);
+      if (!exceptionJson.error) setExceptions(exceptionJson);
     } catch (e) {
       console.error('Dashboard fetch failed:', e);
     } finally {
@@ -231,6 +254,8 @@ export default function DashboardPage() {
     { label: 'ออกวันนี้', count: summary.gated_out_today, color: '#64748B' },
   ] : [];
 
+  const visibleExceptions = exceptions?.issues?.filter(issue => issue.count > 0 || issue.unavailable).slice(0, 5) || [];
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -304,6 +329,60 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Exception Dashboard */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-800 dark:text-white">Exception Dashboard</h2>
+                <p className="text-xs text-slate-400 mt-1">งานตกหล่นจาก Gate, Billing, Booking, M&R, EDI และเครดิตลูกค้า</p>
+              </div>
+              <Link href="/reports" className="text-xs text-[#3B82F6] hover:underline flex items-center gap-1">
+                เปิดรายงาน <ArrowRight size={12} />
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3">
+                <p className="text-2xl font-bold text-slate-800 dark:text-white">{exceptions?.summary?.total_open || 0}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">เปิดอยู่</p>
+              </div>
+              <div className="rounded-xl bg-rose-50 dark:bg-rose-900/20 p-3">
+                <p className="text-2xl font-bold text-rose-600">{exceptions?.summary?.critical || 0}</p>
+                <p className="text-xs text-rose-500">Critical</p>
+              </div>
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 p-3">
+                <p className="text-2xl font-bold text-amber-600">{exceptions?.summary?.warning || 0}</p>
+                <p className="text-xs text-amber-500">Warning</p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3">
+                <p className="text-2xl font-bold text-blue-600">{exceptions?.summary?.unavailable_checks || 0}</p>
+                <p className="text-xs text-blue-500">Check ไม่พร้อม</p>
+              </div>
+            </div>
+            {visibleExceptions.length > 0 ? (
+              <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                {visibleExceptions.map(issue => (
+                  <div key={issue.code} className="py-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{issue.title}</p>
+                      <p className="text-xs text-slate-400 truncate">{issue.owner_role} · {issue.recommended_action}</p>
+                    </div>
+                    <span className={`shrink-0 px-2 py-1 rounded-lg text-xs font-bold ${
+                      issue.severity === 'critical'
+                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                    }`}>
+                      {issue.unavailable ? '-' : issue.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-4 text-sm text-emerald-700 dark:text-emerald-300">
+                ไม่พบ exception สำคัญในรอบตรวจล่าสุด
+              </div>
+            )}
           </div>
 
           {/* Charts Section */}
