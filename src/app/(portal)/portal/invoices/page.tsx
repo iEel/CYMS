@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { FileText, Loader2, Filter, Download } from 'lucide-react';
 
 interface Invoice {
@@ -13,7 +13,6 @@ const statusLabels: Record<string, { label: string; cls: string }> = {
   issued: { label: 'แจ้งหนี้', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   paid: { label: 'ชำระแล้ว', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
   cancelled: { label: 'ยกเลิก', cls: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
-  draft: { label: 'ร่าง', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700/30 dark:text-slate-400' },
 };
 
 const chargeLabels: Record<string, string> = {
@@ -31,7 +30,7 @@ export default function PortalInvoices() {
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
 
-  const loadData = (p = 1, status = statusFilter) => {
+  const loadData = useCallback((p = 1, status = statusFilter) => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(p), limit: '20' });
     if (status) params.set('status', status);
@@ -48,9 +47,12 @@ export default function PortalInvoices() {
       setTotalPages(d.totalPages || 1);
       setLoading(false);
     }).catch(() => setLoading(false));
-  };
+  }, [statusFilter]);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => loadData(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [loadData]);
 
   return (
     <div className="space-y-4">
@@ -100,8 +102,8 @@ export default function PortalInvoices() {
                 <div key={inv.invoice_id} className="p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-slate-800 dark:text-white text-sm">{inv.invoice_number}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[inv.status] || statusLabels.draft).cls}`}>
-                      {(statusLabels[inv.status] || statusLabels.draft).label}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[inv.status] || statusLabels.issued).cls}`}>
+                      {(statusLabels[inv.status] || statusLabels.issued).label}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs text-slate-500">
@@ -141,8 +143,8 @@ export default function PortalInvoices() {
                     <td className="p-3 font-mono text-slate-500 text-xs">{inv.container_number || '-'}</td>
                     <td className="p-3 text-right font-semibold text-slate-800 dark:text-white">฿{inv.grand_total.toLocaleString()}</td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[inv.status] || statusLabels.draft).cls}`}>
-                        {(statusLabels[inv.status] || statusLabels.draft).label}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[inv.status] || statusLabels.issued).cls}`}>
+                        {(statusLabels[inv.status] || statusLabels.issued).label}
                       </span>
                     </td>
                     <td className="p-3 text-slate-500 text-xs">{new Date(inv.created_at).toLocaleDateString('th-TH')}</td>

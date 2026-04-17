@@ -18,11 +18,13 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
-    let whereClause = 'WHERE i.customer_id = @cid';
-    if (status) whereClause += ' AND i.status = @status';
+    let whereClause = "WHERE i.customer_id = @cid AND i.status IN ('issued', 'paid', 'cancelled')";
+    if (status && ['issued', 'paid', 'cancelled'].includes(status)) {
+      whereClause += ' AND i.status = @status';
+    }
 
     const req = db.request().input('cid', sql.Int, cid);
-    if (status) req.input('status', sql.NVarChar, status);
+    if (status && ['issued', 'paid', 'cancelled'].includes(status)) req.input('status', sql.NVarChar, status);
 
     const countResult = await req.query(`SELECT COUNT(*) as total FROM Invoices i ${whereClause}`);
     const total = countResult.recordset[0].total;
@@ -35,12 +37,12 @@ export async function GET(request: NextRequest) {
         ISNULL(SUM(CASE WHEN status = 'paid' THEN grand_total ELSE 0 END), 0) as paid_total,
         COUNT(CASE WHEN status = 'issued' THEN 1 END) as issued_count,
         COUNT(CASE WHEN status = 'paid' THEN 1 END) as paid_count
-      FROM Invoices WHERE customer_id = @cid
+      FROM Invoices WHERE customer_id = @cid AND status IN ('issued', 'paid', 'cancelled')
     `);
 
     const req2 = db.request().input('cid', sql.Int, cid)
       .input('offset', sql.Int, offset).input('limit', sql.Int, limit);
-    if (status) req2.input('status', sql.NVarChar, status);
+    if (status && ['issued', 'paid', 'cancelled'].includes(status)) req2.input('status', sql.NVarChar, status);
 
     const result = await req2.query(`
       SELECT i.invoice_id, i.invoice_number, i.charge_type, i.total_before_vat,
