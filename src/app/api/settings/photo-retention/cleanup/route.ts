@@ -21,7 +21,7 @@ export async function POST() {
   try {
     // Load config
     const db = await getDb();
-    let config: Record<string, number> = {
+    const config: Record<string, number> = {
       gate_photos_days: 90,
       damage_photos_days: 365,
       seal_photos_days: 180,

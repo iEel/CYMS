@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import SftpClient from 'ssh2-sftp-client';
 import { logAudit } from '@/lib/audit';
 import { writeIntegrationLog } from '@/lib/integrationLog';
 import {
@@ -12,6 +11,9 @@ import {
   type EDITemplate,
 } from '@/lib/ediFormatter';
 import { uploadFTP } from '@/lib/ftpClient';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // POST — Send CODECO file via Email/SFTP/FTP/API to a specific endpoint
 export async function POST(request: NextRequest) {
@@ -179,6 +181,7 @@ export async function POST(request: NextRequest) {
 
     } else if (ep.type === 'sftp') {
       // ===== SFTP DELIVERY =====
+      const { default: SftpClient } = await import('ssh2-sftp-client');
       const sftp = new SftpClient();
       try {
         await sftp.connect({

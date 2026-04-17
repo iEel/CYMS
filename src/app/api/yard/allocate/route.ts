@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
           // คำนวณคะแนน
           let score = 100;
-          let reasons: string[] = [];
+          const reasons: string[] = [];
 
           // Bonus: สายเรือเดียวกัน
           if (shipping_line && sameLineBays.has(bay)) {

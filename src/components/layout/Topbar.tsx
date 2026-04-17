@@ -38,9 +38,10 @@ export default function Topbar() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [lastReadTime, setLastReadTime] = useState<string>('');
+  const [now, setNow] = useState<number>(0);
 
   const getRelativeTime = (iso: string) => {
-    const diff = Date.now() - new Date(iso).getTime();
+    const diff = (now || new Date(iso).getTime()) - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'just now';
     if (mins < 60) return `${mins} min`;
@@ -85,6 +86,13 @@ export default function Topbar() {
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
+
+  useEffect(() => {
+    const updateNow = () => setNow(Date.now());
+    updateNow();
+    const interval = setInterval(updateNow, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const toggleDarkMode = () => {
     const newVal = !isDark;

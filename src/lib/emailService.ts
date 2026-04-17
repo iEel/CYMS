@@ -134,7 +134,7 @@ export async function getEmailConfig(): Promise<EmailConfig> {
   }
 
   // Read non-sensitive settings from DB
-  let dbSettings: Record<string, string> = {};
+  const dbSettings: Record<string, string> = {};
   try {
     const { getDb } = await import('@/lib/db');
     const db = await getDb();
@@ -406,4 +406,3 @@ function emailWrapper(content: string): string {
     </div>
   `;
 }
-

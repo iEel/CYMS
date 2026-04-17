@@ -244,16 +244,24 @@ node scripts/update-cedex-thai.js
 
 ## 8. Build + รัน Production
 
-### 8.1 Build
+### 8.1 Pre-deploy Checks + Build
 
 ```bash
 cd /var/www/container-yard-system
+
+# ตรวจคุณภาพโค้ดก่อน build
+npm run lint
+npx tsc --noEmit --pretty false
 
 # Build production bundle
 npm run build
 # → สร้าง .next/ directory
 # ⏱ ใช้เวลาประมาณ 1-3 นาที
 ```
+
+> ✅ `npm run lint` ต้องไม่มี error ก่อน deploy ได้ แต่ warning บางรายการ เช่น `<img>` optimization หรือ unused variable ใน migration script อาจยังแสดงได้โดยไม่ทำให้คำสั่ง fail
+>
+> ℹ️ ระบบ EDI SFTP ใช้ `ssh2-sftp-client` และถูกตั้งค่าเป็น server external package ใน `next.config.ts` แล้ว ไม่ต้องติดตั้งแยก ให้ใช้ `npm install` จาก `package.json` ตามปกติ
 
 ### 8.2 ทดสอบรัน
 
@@ -646,7 +654,9 @@ npm install
 # 3. รัน migration scripts ใหม่ (ถ้ามี)
 # node scripts/migrate-xxx.js
 
-# 4. Build ใหม่
+# 4. ตรวจและ Build ใหม่
+npm run lint
+npx tsc --noEmit --pretty false
 npm run build
 
 # 5. Restart
@@ -670,6 +680,8 @@ echo "🚀 Deploying CYMS..."
 cd /var/www/container-yard-system
 git pull origin master
 npm install
+npm run lint
+npx tsc --noEmit --pretty false
 npm run build
 pm2 restart cyms
 
@@ -822,6 +834,42 @@ sudo journalctl -u cloudflared --since "10 minutes ago"
 # ทดสอบ manual
 cloudflared tunnel run cyms
 ```
+
+### Build ไม่ผ่าน / `.next` ถูกล็อกไฟล์
+
+ถ้า `npm run build` เจอ error ประเภท `EPERM`, `permission denied`, `unlink .next/...` หรือสงสัยว่าไฟล์ build ถูก process เดิมล็อกอยู่ ให้หยุด PM2 แล้วล้าง `.next` ก่อน build ใหม่:
+
+```bash
+cd /var/www/container-yard-system
+pm2 stop cyms
+rm -rf .next
+npm run build
+pm2 restart cyms
+```
+
+ถ้า build fail เกี่ยวกับ SFTP/EDI ให้ตรวจว่า `next.config.ts` ยังมี external package ต่อไปนี้:
+
+```ts
+serverExternalPackages: ['node-cron', 'ssh2', 'ssh2-sftp-client']
+```
+
+### EDI SFTP ส่งไฟล์ไม่สำเร็จ
+
+```bash
+# ทดสอบ port SFTP จาก App Server
+nc -zv <SFTP_HOST> 22
+
+# ดู log ระบบ
+pm2 logs cyms --lines 100
+```
+
+Checklist ที่ควรตรวจ:
+
+- Endpoint type ต้องเป็น `sftp`
+- Host, port, username, password ถูกต้อง
+- Firewall เปิด port SFTP ระหว่าง App Server กับปลายทาง
+- `remote_path` มีอยู่จริง และ user มีสิทธิ์เขียนไฟล์
+- ตรวจประวัติที่หน้า `EDI & ข้อมูลล่วงหน้า` และ `Integration Logs`
 
 ### Out of Memory
 
