@@ -306,31 +306,37 @@ export default function MnRPage() {
     return () => { cancelled = true; };
   }, [searchParams, canCreateEor, applyDamageSource]);
 
-  const searchContainers = async () => {
-    const term = searchText.trim();
+  const searchContainers = useCallback(async (rawTerm = searchText, options: { resetSelection?: boolean; silent?: boolean } = {}) => {
+    const term = rawTerm.trim().toUpperCase().replace(/[\s-]/g, '');
     if (!term) {
-      setContainerSearchMessage('กรุณาพิมพ์เลขตู้ก่อนค้นหา');
+      setContainers([]);
+      if (!options.silent) setContainerSearchMessage('กรุณาพิมพ์เลขตู้ก่อนค้นหา');
       return;
     }
     setContainerSearchLoading(true);
     setContainerSearchMessage('');
-    setSelectedContainer(null);
-    setRepairEvidenceEnabled(false);
-    setSourceEirNumber('');
-    setSourceDamagePoints([]);
-    setRepairPhotos([]);
-    setRepairPhotoEvidence({});
+    if (options.resetSelection !== false) {
+      setSelectedContainer(null);
+      setRepairEvidenceEnabled(false);
+      setSourceEirNumber('');
+      setSourceDamagePoints([]);
+      setRepairPhotos([]);
+      setRepairPhotoEvidence({});
+    }
     try {
       const res = await fetch(`/api/containers?yard_id=${yardId}&search=${encodeURIComponent(term)}`);
       const data = await res.json();
       const rows = Array.isArray(data)
         ? data.filter((container: ContainerOption) => ['in_yard', 'repair'].includes(container.status || ''))
+          .slice(0, 10)
         : [];
       setContainers(rows);
       if (!res.ok || !Array.isArray(data)) {
         setContainerSearchMessage(data?.error || 'ค้นหาตู้ไม่สำเร็จ');
       } else if (rows.length === 0) {
         setContainerSearchMessage('ไม่พบตู้สถานะในลานหรือซ่อมตามเลขที่ค้นหา');
+      } else if (Array.isArray(data) && data.length > rows.length) {
+        setContainerSearchMessage('พบหลายรายการ แสดงเฉพาะตู้สถานะในลาน/ซ่อม 10 รายการแรก');
       }
     } catch (err) {
       console.error(err);
@@ -339,7 +345,22 @@ export default function MnRPage() {
     } finally {
       setContainerSearchLoading(false);
     }
-  };
+  }, [searchText, yardId]);
+
+  useEffect(() => {
+    if (activeTab !== 'create' || !canCreateEor) return;
+    const term = searchText.trim();
+    if (term.length < 3) {
+      setContainers([]);
+      if (term.length > 0) setContainerSearchMessage('พิมพ์อย่างน้อย 3 ตัวอักษรเพื่อค้นหาอัตโนมัติ');
+      else setContainerSearchMessage('');
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      searchContainers(term, { resetSelection: false, silent: true });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, canCreateEor, searchContainers, searchText]);
 
   const estimatedCost = selectedCodes.reduce((sum, code) => {
     const c = cedexCodes.find(cx => cx.code === code);
@@ -700,10 +721,11 @@ export default function MnRPage() {
                 <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && searchContainers()}
                   className={`${inputClass} flex-1 font-mono`} placeholder="พิมพ์เลขตู้..." />
-                <button onClick={searchContainers} disabled={containerSearchLoading}
+                <button onClick={() => searchContainers()} disabled={containerSearchLoading}
                   className="h-10 px-4 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
                   {containerSearchLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} ค้นหา</button>
               </div>
+              <p className="mt-1 text-[10px] text-slate-400">พิมพ์อย่างน้อย 3 ตัว ระบบจะค้นหาบางส่วนให้อัตโนมัติ เช่น TEMU, 123, 4567</p>
               {containerSearchMessage && (
                 <p className="mt-1 text-[10px] text-amber-600">{containerSearchMessage}</p>
               )}
