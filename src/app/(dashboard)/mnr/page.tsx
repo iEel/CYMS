@@ -48,6 +48,7 @@ interface CedexCode {
   repair: string;
   labor_hours: number;
   material_cost: number;
+  rate_version?: number;
   is_active: boolean;
 }
 
@@ -354,12 +355,22 @@ export default function MnRPage() {
     }
     setCreateLoading(true); setCreateResult(null);
     try {
+      const cedexRateVersion = `EOR-${new Date().toISOString()}`;
       const cedexItems = selectedCodes.map(code => {
         const cx = cedexCodes.find(item => item.code === code);
         return cx ? {
-          ...cx,
+          cedex_id: cx.cedex_id,
+          code: cx.code,
+          component: cx.component,
+          damage: cx.damage,
+          repair: cx.repair,
+          labor_hours: Number(cx.labor_hours || 0),
+          material_cost: Number(cx.material_cost || 0),
+          cedex_master_rate_version: cx.rate_version || 1,
+          rate_version: cedexRateVersion,
           amount: cx.labor_hours * laborRate + cx.material_cost,
           labor_rate: laborRate,
+          snapshot_at: new Date().toISOString(),
         } : null;
       }).filter(Boolean);
       const res = await fetch('/api/mnr', {
@@ -371,10 +382,13 @@ export default function MnRPage() {
           damage_details: {
             source: sourceEirNumber ? 'eir_damage' : 'manual',
             source_eir_number: sourceEirNumber || null,
+            cedex_rate_version: cedexRateVersion,
+            pricing_snapshot_at: new Date().toISOString(),
             cedex_items: cedexItems,
             damage_points: sourceDamagePoints,
           },
           estimated_cost: estimatedCost,
+          cedex_rate_version: cedexRateVersion,
           repair_photos: allRepairPhotos,
           repair_photo_evidence: repairPhotoEvidence,
           source_eir_number: sourceEirNumber || null,

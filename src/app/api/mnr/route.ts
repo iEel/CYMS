@@ -15,6 +15,7 @@ const createEORSchema = z.object({
   repair_photos: z.array(z.string()).optional().default([]),
   repair_photo_evidence: z.record(z.string(), z.array(z.string())).optional().default({}),
   source_eir_number: z.string().max(80).optional().nullable(),
+  cedex_rate_version: z.string().max(80).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   user_id: z.number().int().positive().optional().nullable(),
 });
@@ -42,6 +43,8 @@ async function ensureMnrColumns(db: sql.ConnectionPool) {
       ALTER TABLE RepairOrders ADD customer_id INT NULL;
     IF COL_LENGTH('RepairOrders', 'source_eir_number') IS NULL
       ALTER TABLE RepairOrders ADD source_eir_number NVARCHAR(80) NULL;
+    IF COL_LENGTH('RepairOrders', 'cedex_rate_version') IS NULL
+      ALTER TABLE RepairOrders ADD cedex_rate_version NVARCHAR(80) NULL;
     IF COL_LENGTH('RepairOrders', 'repair_photos') IS NULL
       ALTER TABLE RepairOrders ADD repair_photos NVARCHAR(MAX) NULL;
     IF COL_LENGTH('RepairOrders', 'repair_photo_evidence') IS NULL
@@ -91,6 +94,40 @@ function parseDamageDetails(value: unknown) {
   if (!value) return null;
   if (typeof value !== 'string') return value;
   try { return JSON.parse(value); } catch { return value; }
+}
+
+function normalizeDamageDetails(value: unknown, cedexRateVersion: string) {
+  const parsed = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const items = Array.isArray(parsed.cedex_items) ? parsed.cedex_items : [];
+  const snapshotAt = typeof parsed.pricing_snapshot_at === 'string'
+    ? parsed.pricing_snapshot_at
+    : new Date().toISOString();
+
+  return {
+    ...parsed,
+    cedex_rate_version: typeof parsed.cedex_rate_version === 'string' ? parsed.cedex_rate_version : cedexRateVersion,
+    pricing_snapshot_at: snapshotAt,
+    cedex_items: items.map((item) => {
+      const row = item as Record<string, unknown>;
+      const laborHours = Number(row.labor_hours || 0);
+      const materialCost = Number(row.material_cost || 0);
+      const laborRate = Number(row.labor_rate || 0);
+      return {
+        cedex_id: row.cedex_id || null,
+        code: String(row.code || ''),
+        component: String(row.component || ''),
+        damage: String(row.damage || ''),
+        repair: String(row.repair || ''),
+        labor_hours: laborHours,
+        material_cost: materialCost,
+        labor_rate: laborRate,
+        amount: Number(row.amount || laborHours * laborRate + materialCost),
+        cedex_master_rate_version: Number(row.cedex_master_rate_version || 1),
+        rate_version: String(row.rate_version || cedexRateVersion),
+        snapshot_at: String(row.snapshot_at || snapshotAt),
+      };
+    }),
+  };
 }
 
 async function createMnrInvoiceIfNeeded({
@@ -224,6 +261,10 @@ export async function POST(request: NextRequest) {
       .input('yardId', sql.Int, body.yard_id)
       .query('SELECT COUNT(*) as cnt FROM RepairOrders WHERE yard_id = @yardId');
     const eorNumber = `EOR-${new Date().getFullYear()}-${String(countResult.recordset[0].cnt + 1).padStart(6, '0')}`;
+    const cedexRateVersion = body.cedex_rate_version || `${eorNumber}-${new Date().toISOString()}`;
+    const damageDetails = body.damage_details
+      ? normalizeDamageDetails(body.damage_details, cedexRateVersion)
+      : null;
 
     const result = await db.request()
       .input('eorNumber', sql.NVarChar, eorNumber)
@@ -231,19 +272,20 @@ export async function POST(request: NextRequest) {
       .input('yardId', sql.Int, body.yard_id)
       .input('customerId', sql.Int, body.customer_id || null)
       .input('billingCustomerId', sql.Int, body.billing_customer_id || body.customer_id || null)
-      .input('damageDetails', sql.NVarChar, body.damage_details ? JSON.stringify(body.damage_details) : null)
+      .input('damageDetails', sql.NVarChar, damageDetails ? JSON.stringify(damageDetails) : null)
       .input('estimatedCost', sql.Decimal(12, 2), body.estimated_cost || 0)
       .input('repairPhotos', sql.NVarChar, body.repair_photos.length ? JSON.stringify(body.repair_photos) : null)
       .input('repairPhotoEvidence', sql.NVarChar, Object.keys(body.repair_photo_evidence).length ? JSON.stringify(body.repair_photo_evidence) : null)
       .input('sourceEirNumber', sql.NVarChar, body.source_eir_number || null)
+      .input('cedexRateVersion', sql.NVarChar, cedexRateVersion)
       .input('notes', sql.NVarChar, body.notes || null)
       .input('createdBy', sql.Int, body.user_id || null)
       .query(`
         INSERT INTO RepairOrders (eor_number, container_id, yard_id, customer_id, billing_customer_id,
-          damage_details, estimated_cost, repair_photos, repair_photo_evidence, source_eir_number, notes, created_by)
+          damage_details, estimated_cost, repair_photos, repair_photo_evidence, source_eir_number, cedex_rate_version, notes, created_by)
         OUTPUT INSERTED.*
         VALUES (@eorNumber, @containerId, @yardId, @customerId, @billingCustomerId,
-          @damageDetails, @estimatedCost, @repairPhotos, @repairPhotoEvidence, @sourceEirNumber, @notes, @createdBy)
+          @damageDetails, @estimatedCost, @repairPhotos, @repairPhotoEvidence, @sourceEirNumber, @cedexRateVersion, @notes, @createdBy)
       `);
 
     // Update container status
@@ -263,6 +305,7 @@ export async function POST(request: NextRequest) {
         container_id: body.container_id,
         estimated_cost: body.estimated_cost,
         source_eir_number: body.source_eir_number,
+        cedex_rate_version: cedexRateVersion,
         billing_customer_id: body.billing_customer_id || body.customer_id || null,
       },
     });

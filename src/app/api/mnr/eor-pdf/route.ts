@@ -45,6 +45,8 @@ async function ensureMnrColumns(db: sql.ConnectionPool) {
       ALTER TABLE RepairOrders ADD customer_id INT NULL;
     IF COL_LENGTH('RepairOrders', 'source_eir_number') IS NULL
       ALTER TABLE RepairOrders ADD source_eir_number NVARCHAR(80) NULL;
+    IF COL_LENGTH('RepairOrders', 'cedex_rate_version') IS NULL
+      ALTER TABLE RepairOrders ADD cedex_rate_version NVARCHAR(80) NULL;
     IF COL_LENGTH('RepairOrders', 'repair_photos') IS NULL
       ALTER TABLE RepairOrders ADD repair_photos NVARCHAR(MAX) NULL;
     IF COL_LENGTH('RepairOrders', 'repair_photo_evidence') IS NULL
@@ -151,6 +153,7 @@ export async function GET(request: NextRequest) {
         ['สายเรือ', eor.shipping_line || '-'],
         ['ลูกค้า/เจ้าของงาน', eor.customer_name || '-'],
         ['ผู้รับผิดชอบค่าซ่อม', eor.billing_customer_name || eor.customer_name || '-'],
+        ['CEDEX Rate Version', eor.cedex_rate_version || '-'],
         ['ลูกค้าอนุมัติ', eor.customer_approved_by ? `${eor.customer_approved_by} / ${eor.customer_approval_channel || '-'} / ${eor.customer_approved_at ? new Date(eor.customer_approved_at).toLocaleString('th-TH') : '-'}` : '-'],
         ['อ้างอิงอนุมัติ', eor.customer_approval_reference || '-'],
         ['ตรวจรับหลังซ่อม', eor.repair_inspected_by ? `${eor.repair_inspected_by} / ${eor.repair_inspected_at ? new Date(eor.repair_inspected_at).toLocaleString('th-TH') : '-'}` : '-'],
