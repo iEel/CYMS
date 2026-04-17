@@ -23,6 +23,7 @@ interface InvoiceRow {
   quantity: number; unit_price: number; total_amount: number;
   vat_amount: number; grand_total: number; status: string;
   due_date: string; paid_at: string; created_at: string;
+  document_type?: string; yard_id?: number;
   ref_invoice_id?: number; ref_invoice_number?: string;
   replaces_invoice_id?: number; replaces_invoice_number?: string;
   balance_amount?: number | null;
@@ -179,6 +180,7 @@ export default function BillingPage() {
   }, [activeTab, fetchInvoices, fetchTariffs, fetchClearances, customers.length]);
 
   const updateInvoice = async (id: number, action: string) => {
+    const invoice = invoices.find(inv => inv.invoice_id === id);
     const allowed =
       (action === 'issue' && canCreateInvoice) ||
       (action === 'pay' && canReceivePayment) ||
@@ -191,7 +193,16 @@ export default function BillingPage() {
     }
     const res = await fetch('/api/billing/invoices', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ invoice_id: id, action }),
+      body: JSON.stringify({
+        invoice_id: id,
+        action,
+        invoice_number: invoice?.invoice_number,
+        document_type: invoice?.document_type,
+        previous_status: invoice?.status,
+        grand_total: invoice?.grand_total,
+        yard_id: invoice?.yard_id || yardId,
+        user_id: session?.userId,
+      }),
     });
     const data = await res.json();
     if (data.error) { toast('error', data.error); }

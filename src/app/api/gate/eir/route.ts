@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { ensureDocumentLifecycle } from '@/lib/documentLifecycle';
 
 // GET — ดึงข้อมูล EIR สำหรับแสดง/พิมพ์
 export async function GET(request: NextRequest) {
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    await ensureDocumentLifecycle(db);
     const req = db.request();
 
     if (transactionId) {
@@ -102,7 +104,20 @@ export async function GET(request: NextRequest) {
       company,
     };
 
-    return NextResponse.json({ eir: eirData });
+    const lifecycleResult = await db.request()
+      .input('transactionId', sql.Int, row.transaction_id)
+      .input('eirNumber', sql.NVarChar(80), row.eir_number)
+      .query(`
+        SELECT dl.*, u.full_name as user_name, y.yard_name
+        FROM DocumentLifecycle dl
+        LEFT JOIN Users u ON dl.user_id = u.user_id
+        LEFT JOIN Yards y ON dl.yard_id = y.yard_id
+        WHERE dl.document_type = 'eir'
+          AND (dl.document_id = @transactionId OR dl.document_number = @eirNumber)
+        ORDER BY dl.created_at ASC, dl.lifecycle_id ASC
+      `);
+
+    return NextResponse.json({ eir: eirData, lifecycle: lifecycleResult.recordset });
   } catch (error) {
     console.error('❌ GET EIR error:', error);
     return NextResponse.json({ error: 'ไม่สามารถดึงข้อมูล EIR ได้' }, { status: 500 });

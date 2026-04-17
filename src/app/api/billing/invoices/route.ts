@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
+import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 
 type DbPool = Awaited<ReturnType<typeof getDb>>;
 
@@ -22,6 +23,15 @@ async function ensureInvoiceDocumentColumns(db: DbPool) {
 function normalizePositiveAmount(value: unknown, fallback: number) {
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function queueDocumentLifecycle(event: Parameters<typeof logDocumentLifecycle>[0]) {
+  if (process.env.NODE_ENV === 'test') return;
+  setTimeout(() => {
+    void logDocumentLifecycle(event).catch((error) => {
+      console.error('⚠️ Document lifecycle log failed:', error);
+    });
+  }, 0);
 }
 
 // GET — ดึง Invoices
@@ -66,6 +76,28 @@ export async function GET(request: NextRequest) {
       ORDER BY i.created_at DESC
     `);
 
+    let lifecycle: unknown[] = [];
+    if (invoiceId && result.recordset[0]) {
+      try {
+        const lifecycleResult = await db.request()
+          .input('invoiceId', sql.Int, parseInt(invoiceId))
+          .input('invoiceNumber', sql.NVarChar(80), result.recordset[0].invoice_number)
+          .input('documentType', sql.NVarChar(30), result.recordset[0].document_type === 'credit_note' ? 'credit_note' : 'invoice')
+          .query(`
+            SELECT dl.*, u.full_name as user_name, y.yard_name
+            FROM DocumentLifecycle dl
+            LEFT JOIN Users u ON dl.user_id = u.user_id
+            LEFT JOIN Yards y ON dl.yard_id = y.yard_id
+            WHERE dl.document_type = @documentType
+              AND (dl.document_id = @invoiceId OR dl.document_number = @invoiceNumber)
+            ORDER BY dl.created_at ASC, dl.lifecycle_id ASC
+          `);
+        lifecycle = lifecycleResult.recordset;
+      } catch (error) {
+        console.error('⚠️ GET invoice lifecycle skipped:', error);
+      }
+    }
+
     // Summary stats
     const statsResult = await db.request()
       .input('yardId2', sql.Int, parseInt(yardId || '1'))
@@ -81,6 +113,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       invoices: result.recordset,
       stats: statsResult.recordset[0],
+      lifecycle,
     });
   } catch (error) {
     console.error('❌ GET invoices error:', error);
@@ -144,6 +177,21 @@ export async function POST(request: NextRequest) {
       details: { invoice_number: invNumber, customer_id: body.customer_id, charge_type: body.charge_type, grand_total: grandTotal, container_id: body.container_id }
     });
 
+    queueDocumentLifecycle({
+      db,
+      documentType: body.document_type === 'credit_note' ? 'credit_note' : 'invoice',
+      documentId: inv.invoice_id,
+      documentNumber: invNumber,
+      status: inv.status || 'draft',
+      eventType: 'created',
+      relatedDocumentType: body.ref_invoice_id ? 'invoice' : null,
+      relatedDocumentId: body.ref_invoice_id || body.replaces_invoice_id || null,
+      reason: body.notes || null,
+      userId: body.user_id || null,
+      yardId: body.yard_id,
+      details: { customer_id: body.customer_id, charge_type: body.charge_type, grand_total: grandTotal, container_id: body.container_id || null },
+    });
+
     return NextResponse.json({ success: true, invoice: inv, invoice_number: invNumber });
   } catch (error) {
     console.error('❌ POST invoice error:', error);
@@ -158,11 +206,27 @@ export async function PUT(request: NextRequest) {
     const { invoice_id, action } = body;
     const db = await getDb();
     await ensureInvoiceDocumentColumns(db);
+    const bodyDocumentNumber = typeof body.invoice_number === 'string' ? body.invoice_number : '';
+    const bodyDocumentType = body.document_type === 'credit_note' ? 'credit_note' : 'invoice';
+    const bodyPreviousStatus = typeof body.previous_status === 'string' ? body.previous_status : undefined;
 
     switch (action) {
       case 'issue':
         await db.request().input('id', sql.Int, invoice_id)
           .query("UPDATE Invoices SET status = 'issued' WHERE invoice_id = @id");
+        if (bodyDocumentNumber) {
+          queueDocumentLifecycle({
+            db,
+            documentType: bodyDocumentType,
+            documentId: invoice_id,
+            documentNumber: bodyDocumentNumber,
+            status: 'issued',
+            eventType: 'issued',
+            userId: body.user_id || null,
+            yardId: body.yard_id || null,
+            details: { previous_status: bodyPreviousStatus },
+          });
+        }
         break;
       case 'pay':
         await db.request().input('id', sql.Int, invoice_id)
@@ -170,15 +234,61 @@ export async function PUT(request: NextRequest) {
 
         // Auto-release hold if container has one
         const invResult = await db.request().input('id2', sql.Int, invoice_id)
-          .query('SELECT container_id FROM Invoices WHERE invoice_id = @id2');
-        if (invResult.recordset[0]?.container_id) {
-          await db.request().input('cid', sql.Int, invResult.recordset[0].container_id)
+          .query('SELECT container_id, invoice_number, grand_total, yard_id, status FROM Invoices WHERE invoice_id = @id2');
+        const paidInvoice = invResult.recordset[0];
+        const paidDocumentNumber = paidInvoice?.invoice_number || bodyDocumentNumber;
+        if (paidDocumentNumber) {
+          queueDocumentLifecycle({
+            db,
+            documentType: 'invoice',
+            documentId: invoice_id,
+            documentNumber: paidDocumentNumber,
+            status: 'paid',
+            eventType: 'paid',
+            relatedDocumentType: 'receipt',
+            relatedDocumentId: invoice_id,
+            relatedDocumentNumber: `REC-${paidDocumentNumber}`,
+            userId: body.user_id || null,
+            yardId: body.yard_id || paidInvoice?.yard_id || null,
+            details: { previous_status: bodyPreviousStatus || paidInvoice?.status, grand_total: Number(paidInvoice?.grand_total ?? body.grand_total ?? 0) },
+          });
+          queueDocumentLifecycle({
+            db,
+            documentType: 'receipt',
+            documentId: invoice_id,
+            documentNumber: `REC-${paidDocumentNumber}`,
+            status: 'issued',
+            eventType: 'receipt_issued',
+            relatedDocumentType: 'invoice',
+            relatedDocumentId: invoice_id,
+            relatedDocumentNumber: paidDocumentNumber,
+            userId: body.user_id || null,
+            yardId: body.yard_id || paidInvoice?.yard_id || null,
+            details: { invoice_number: paidDocumentNumber, grand_total: Number(paidInvoice?.grand_total ?? body.grand_total ?? 0) },
+          });
+        }
+        if (paidInvoice?.container_id) {
+          await db.request().input('cid', sql.Int, paidInvoice.container_id)
             .query("UPDATE Containers SET hold_status = NULL, updated_at = GETDATE() WHERE container_id = @cid AND hold_status = 'billing_hold'");
         }
         break;
       case 'cancel':
         await db.request().input('id', sql.Int, invoice_id)
           .query("UPDATE Invoices SET status = 'cancelled' WHERE invoice_id = @id");
+        if (bodyDocumentNumber) {
+          queueDocumentLifecycle({
+            db,
+            documentType: bodyDocumentType,
+            documentId: invoice_id,
+            documentNumber: bodyDocumentNumber,
+            status: 'cancelled',
+            eventType: 'cancelled',
+            reason: body.reason || body.notes || null,
+            userId: body.user_id || null,
+            yardId: body.yard_id || null,
+            details: { previous_status: bodyPreviousStatus },
+          });
+        }
         await logApprovalReview({
           db,
           yardId: body.yard_id || null,
@@ -272,6 +382,23 @@ export async function PUT(request: NextRequest) {
           `);
 
         const remainingAfterCredit = Math.max(remainingBeforeCredit - creditAmt, 0);
+        const creditNote = cnResult.recordset[0];
+
+        queueDocumentLifecycle({
+          db,
+          documentType: 'credit_note',
+          documentId: creditNote.invoice_id,
+          documentNumber: cnNumber,
+          status: 'issued',
+          eventType: 'credit_note_created',
+          relatedDocumentType: 'invoice',
+          relatedDocumentId: refId,
+          relatedDocumentNumber: orig.invoice_number,
+          reason: reason || null,
+          userId: body.user_id || null,
+          yardId: orig.yard_id,
+          details: { credit_amount: creditAmt, remaining_amount: remainingAfterCredit },
+        });
 
         // If full credit, cancel original invoice
         if (remainingAfterCredit < 0.01) {
@@ -279,11 +406,41 @@ export async function PUT(request: NextRequest) {
             .input('origId', sql.Int, refId)
             .input('cnNumber', sql.NVarChar, cnNumber)
             .query("UPDATE Invoices SET status = 'cancelled', balance_amount = 0, notes = ISNULL(notes, '') + ' [ยกเลิกโดยใบลดหนี้ ' + @cnNumber + ']' WHERE invoice_id = @origId");
+          queueDocumentLifecycle({
+            db,
+            documentType: 'invoice',
+            documentId: refId,
+            documentNumber: orig.invoice_number,
+            status: 'cancelled',
+            eventType: 'cancelled_by_credit_note',
+            relatedDocumentType: 'credit_note',
+            relatedDocumentId: creditNote.invoice_id,
+            relatedDocumentNumber: cnNumber,
+            reason: reason || null,
+            userId: body.user_id || null,
+            yardId: orig.yard_id,
+            details: { credit_amount: creditAmt },
+          });
         } else {
           await db.request()
             .input('origId', sql.Int, refId)
             .input('balanceAmount', sql.Decimal(12, 2), remainingAfterCredit)
             .query('UPDATE Invoices SET balance_amount = @balanceAmount WHERE invoice_id = @origId');
+          queueDocumentLifecycle({
+            db,
+            documentType: 'invoice',
+            documentId: refId,
+            documentNumber: orig.invoice_number,
+            status: orig.status,
+            eventType: 'partially_credited',
+            relatedDocumentType: 'credit_note',
+            relatedDocumentId: creditNote.invoice_id,
+            relatedDocumentNumber: cnNumber,
+            reason: reason || null,
+            userId: body.user_id || null,
+            yardId: orig.yard_id,
+            details: { credit_amount: creditAmt, remaining_amount: remainingAfterCredit },
+          });
         }
 
         let revisedInvoice = null;
@@ -343,6 +500,21 @@ export async function PUT(request: NextRequest) {
             `);
 
           revisedInvoice = revisedResult.recordset[0];
+          queueDocumentLifecycle({
+            db,
+            documentType: 'invoice',
+            documentId: revisedInvoice.invoice_id,
+            documentNumber: revisedNumber,
+            status: 'issued',
+            eventType: 'revised_invoice_created',
+            relatedDocumentType: 'invoice',
+            relatedDocumentId: refId,
+            relatedDocumentNumber: orig.invoice_number,
+            reason: reason || null,
+            userId: body.user_id || null,
+            yardId: orig.yard_id,
+            details: { credit_note_number: cnNumber, replaces_invoice_id: refId, ref_credit_note_id: creditNote.invoice_id },
+          });
         }
 
         // Audit log

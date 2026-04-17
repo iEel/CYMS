@@ -4,6 +4,7 @@ import sql from 'mssql';
 import { z } from 'zod';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
+import { ensureDocumentLifecycle, logDocumentLifecycle } from '@/lib/documentLifecycle';
 
 async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
   await db.request().query(`
@@ -186,6 +187,7 @@ export async function GET(request: NextRequest) {
 
     const db = await getDb();
     await ensureContainerGradeColumn(db);
+    await ensureDocumentLifecycle(db);
     const req = db.request();
     const conditions: string[] = [];
 
@@ -606,6 +608,24 @@ export async function POST(request: NextRequest) {
         eir_number: eirNumber, container_number, transaction_type,
         driver_name, truck_plate,
         ...(assignedLocation ? { assigned_location: assignedLocation } : {}),
+      },
+    });
+
+    await logDocumentLifecycle({
+      db,
+      documentType: 'eir',
+      documentId: txResult.recordset[0].transaction_id,
+      documentNumber: eirNumber,
+      status: 'issued',
+      eventType: 'eir_issued',
+      userId: user_id || null,
+      yardId: yard_id,
+      details: {
+        transaction_type,
+        container_id: finalContainerId,
+        container_number,
+        billing_clearance_id: billing_clearance_id || null,
+        booking_ref: booking_ref || null,
       },
     });
 

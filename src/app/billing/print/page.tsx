@@ -31,6 +31,15 @@ interface InvoiceNotes {
   reason?: string | null;
 }
 
+interface DocumentLifecycleRow {
+  event_type: string;
+  status: string;
+  reason?: string | null;
+  related_document_number?: string | null;
+  user_name?: string | null;
+  created_at: string;
+}
+
 interface CompanyData {
   company_name: string; tax_id: string; address: string;
   phone: string; email: string; logo_url: string;
@@ -83,6 +92,7 @@ export default function PrintInvoicePage() {
 
   const [chargeLines, setChargeLines] = useState<{ description: string; quantity: number; unit_price: number; subtotal: number }[]>([]);
   const [invoiceNotes, setInvoiceNotes] = useState<InvoiceNotes | null>(null);
+  const [lifecycle, setLifecycle] = useState<DocumentLifecycleRow[]>([]);
 
   useEffect(() => {
     if (!invoiceId) return;
@@ -104,6 +114,7 @@ export default function PrintInvoicePage() {
         const inv = invData.invoices?.[0];
         if (inv) {
           setInvoice(inv);
+          setLifecycle(invData.lifecycle || []);
 
           // Try to parse charges from notes
           let parsed = false;
@@ -186,6 +197,18 @@ export default function PrintInvoicePage() {
         ? 'เครดิต'
         : '';
   const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-';
+  const formatDateTimeText = (d: string) => d ? new Date(d).toLocaleString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+  const lifecycleLabel = (eventType: string) => ({
+    created: 'สร้างเอกสาร',
+    issued: 'ออกเอกสาร',
+    paid: 'รับชำระเงิน',
+    receipt_issued: 'ออกใบเสร็จ',
+    cancelled: 'ยกเลิกเอกสาร',
+    credit_note_created: 'ออกใบลดหนี้',
+    cancelled_by_credit_note: 'ยกเลิกด้วยใบลดหนี้',
+    partially_credited: 'ลดหนี้บางส่วน',
+    revised_invoice_created: 'ออกเอกสารใหม่',
+  }[eventType] || eventType);
 
   return (
     <>
@@ -353,6 +376,38 @@ export default function PrintInvoicePage() {
         {docType === 'receipt' && !isReceipt && !isCreditNote && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-6 text-xs text-amber-700">
             ระบบแสดงเป็นใบแจ้งหนี้ เพราะรายการนี้ยังไม่มีสถานะชำระเงิน
+          </div>
+        )}
+
+        {lifecycle.length > 0 && (
+          <div className="mb-6 border border-slate-200 rounded-lg overflow-hidden">
+            <div className="bg-slate-50 px-3 py-2 border-b border-slate-200">
+              <p className="text-xs font-semibold text-slate-700">Document Lifecycle</p>
+              <p className="text-[10px] text-slate-400">ลำดับสถานะเอกสารที่เกิดขึ้นในระบบ</p>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {lifecycle.map((item, idx) => (
+                <div key={`${item.event_type}-${idx}`} className="px-3 py-2 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">
+                      {idx + 1}. {lifecycleLabel(item.event_type)}
+                      <span className="ml-2 text-[10px] font-normal text-slate-400">สถานะ: {item.status}</span>
+                    </p>
+                    {(item.related_document_number || item.reason) && (
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {item.related_document_number ? `อ้างอิง ${item.related_document_number}` : ''}
+                        {item.related_document_number && item.reason ? ' | ' : ''}
+                        {item.reason ? `เหตุผล: ${item.reason}` : ''}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right text-[10px] text-slate-400 whitespace-nowrap">
+                    <p>{formatDateTimeText(item.created_at)}</p>
+                    {item.user_name && <p>{item.user_name}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
