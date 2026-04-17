@@ -16,6 +16,9 @@ interface EORRow {
   eor_id: number; eor_number: string; container_number: string;
   size: string; type: string; customer_name: string;
   billing_customer_name?: string; invoice_number?: string;
+  container_grade?: string; hold_status?: string;
+  customer_approved_by?: string; customer_approved_at?: string;
+  customer_approval_channel?: string; customer_approval_reference?: string;
   damage_details: string; estimated_cost: number; actual_cost: number;
   status: string; approved_at: string; created_name: string; created_at: string;
 }
@@ -71,6 +74,17 @@ interface ContainerDetailLite {
   } | null;
 }
 
+type RepairPhotoEvidence = Record<string, string[]>;
+
+const REPAIR_PHOTO_CATEGORIES = [
+  { key: 'before_repair', label: 'Before repair', required: 3 },
+  { key: 'during_repair', label: 'During repair', required: 0 },
+  { key: 'after_repair', label: 'After repair', required: 2 },
+  { key: 'damage_closeup', label: 'Damage close-up', required: 1 },
+  { key: 'full_container', label: 'Full container view', required: 1 },
+  { key: 'repair_material', label: 'Repair material/part', required: 0 },
+] as const;
+
 const DAMAGE_TYPE_TO_CEDEX_KEYWORD: Record<string, string[]> = {
   dent: ['dent', 'บุ๋ม'],
   hole: ['hole', 'ทะลุ', 'รู'],
@@ -103,6 +117,7 @@ export default function MnRPage() {
   const [selectedContainer, setSelectedContainer] = useState<ContainerOption | null>(null);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
   const [repairPhotos, setRepairPhotos] = useState<string[]>([]);
+  const [repairPhotoEvidence, setRepairPhotoEvidence] = useState<RepairPhotoEvidence>({});
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [billingCustomerId, setBillingCustomerId] = useState('');
   const [sourceEirNumber, setSourceEirNumber] = useState('');
@@ -124,8 +139,17 @@ export default function MnRPage() {
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   // Complete modal (actual_cost prompt)
-  const [completeModal, setCompleteModal] = useState<{ open: boolean; eorId: number; estimatedCost: number } | null>(null);
+  const [completeModal, setCompleteModal] = useState<{ open: boolean; eorId: number; estimatedCost: number; currentGrade?: string } | null>(null);
   const [actualCostInput, setActualCostInput] = useState('');
+  const [completionGrade, setCompletionGrade] = useState('A');
+  const [completionStatus, setCompletionStatus] = useState('in_yard');
+  const [releaseRepairHold, setReleaseRepairHold] = useState(true);
+  const [repairInspectedBy, setRepairInspectedBy] = useState('');
+  const [customerApprovalModal, setCustomerApprovalModal] = useState<{ open: boolean; eorId: number; eorNumber: string } | null>(null);
+  const [customerApprovedBy, setCustomerApprovedBy] = useState('');
+  const [customerApprovedAt, setCustomerApprovedAt] = useState('');
+  const [customerApprovalChannel, setCustomerApprovalChannel] = useState('email');
+  const [customerApprovalReference, setCustomerApprovalReference] = useState('');
   const [eorNotes, setEorNotes] = useState('');
 
   // Load labor rate from company settings
@@ -186,6 +210,31 @@ export default function MnRPage() {
     setBillingCustomerId(container.customer_id ? String(container.customer_id) : '');
   };
 
+  const addEvidencePhotos = useCallback((category: string, photos: string[]) => {
+    if (photos.length === 0) return;
+    setRepairPhotoEvidence(prev => ({
+      ...prev,
+      [category]: Array.from(new Set([...(prev[category] || []), ...photos])),
+    }));
+  }, []);
+
+  const removeEvidencePhoto = (category: string, index: number) => {
+    setRepairPhotoEvidence(prev => ({
+      ...prev,
+      [category]: (prev[category] || []).filter((_, photoIndex) => photoIndex !== index),
+    }));
+  };
+
+  const allRepairPhotos = Array.from(new Set([
+    ...repairPhotos,
+    ...Object.values(repairPhotoEvidence).flat(),
+  ]));
+
+  const evidenceSummary = REPAIR_PHOTO_CATEGORIES
+    .filter(category => category.required > 0 || (repairPhotoEvidence[category.key] || []).length > 0)
+    .map(category => `${category.label} ${(repairPhotoEvidence[category.key] || []).length}/${category.required || '-'}`)
+    .join(', ');
+
   const applyDamageSource = useCallback((detail: ContainerDetailLite, autoSelectCodes = true) => {
     const gateIn = detail.gate_in;
     const damageReport = gateIn?.damage_report;
@@ -200,6 +249,7 @@ export default function MnRPage() {
     setSourceEirNumber(gateIn?.eir_number || '');
     setSourceDamagePoints(points);
     setRepairPhotos(prev => Array.from(new Set([...prev, ...photos])));
+    addEvidencePhotos('damage_closeup', photos);
     if (gateIn?.eir_number && !eorNotes) {
       setEorNotes(`สร้างจาก EIR ${gateIn.eir_number}`);
     }
@@ -216,7 +266,7 @@ export default function MnRPage() {
       }
       if (matched.size > 0) setSelectedCodes(prev => Array.from(new Set([...prev, ...matched])));
     }
-  }, [cedexCodes, eorNotes]);
+  }, [addEvidencePhotos, cedexCodes, eorNotes]);
 
   useEffect(() => {
     const containerId = searchParams.get('container_id');
@@ -287,7 +337,8 @@ export default function MnRPage() {
             damage_points: sourceDamagePoints,
           },
           estimated_cost: estimatedCost,
-          repair_photos: repairPhotos,
+          repair_photos: allRepairPhotos,
+          repair_photo_evidence: repairPhotoEvidence,
           source_eir_number: sourceEirNumber || null,
           notes: eorNotes || null,
           user_id: session?.userId || null,
@@ -295,8 +346,8 @@ export default function MnRPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setCreateResult({ success: true, message: `✅ สร้าง EOR ${data.eor_number} สำเร็จ — ราคาประเมิน ฿${estimatedCost.toLocaleString()} (พร้อมรูปถ่าย ${repairPhotos.length} รูป)` });
-        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]); setBillingCustomerId(''); setEorNotes(''); setSourceEirNumber(''); setSourceDamagePoints([]);
+        setCreateResult({ success: true, message: `✅ สร้าง EOR ${data.eor_number} สำเร็จ — ราคาประเมิน ฿${estimatedCost.toLocaleString()} (พร้อมรูปถ่าย ${allRepairPhotos.length} รูป)` });
+        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]); setRepairPhotoEvidence({}); setBillingCustomerId(''); setEorNotes(''); setSourceEirNumber(''); setSourceDamagePoints([]);
       } else {
         setCreateResult({ success: false, message: `❌ ${data.error}` });
       }
@@ -379,31 +430,69 @@ export default function MnRPage() {
     setShowCedexForm(true);
   };
 
-  const updateOrder = async (eorId: number, action: string, actualCost?: number) => {
+  const updateOrder = async (eorId: number, action: string, payload: Record<string, unknown> = {}) => {
     const allowed =
       (action === 'submit' && canCreateEor) ||
-      (['approve', 'reject'].includes(action) && canApproveEor) ||
+      (['approve', 'reject', 'customer_approve'].includes(action) && canApproveEor) ||
       (['start_repair', 'complete'].includes(action) && canUpdateEor);
     if (!allowed) return;
     await fetch('/api/mnr', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eor_id: eorId, action, actual_cost: actualCost, user_id: session?.userId || null }),
+      body: JSON.stringify({ eor_id: eorId, action, user_id: session?.userId || null, ...payload }),
     });
     fetchOrders();
   };
 
-  const handleComplete = (eorId: number, estimatedCost: number) => {
-    setCompleteModal({ open: true, eorId, estimatedCost });
-    setActualCostInput(String(estimatedCost || 0));
+  const handleComplete = (order: EORRow) => {
+    setCompleteModal({ open: true, eorId: order.eor_id, estimatedCost: order.estimated_cost, currentGrade: order.container_grade });
+    setActualCostInput(String(order.estimated_cost || 0));
+    setCompletionGrade(order.container_grade || 'A');
+    setCompletionStatus('in_yard');
+    setReleaseRepairHold(true);
+    setRepairInspectedBy(session?.fullName || '');
+  };
+
+  const handleCustomerApproval = (order: EORRow) => {
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    setCustomerApprovalModal({ open: true, eorId: order.eor_id, eorNumber: order.eor_number });
+    setCustomerApprovedBy(order.customer_approved_by || '');
+    setCustomerApprovedAt(order.customer_approved_at ? order.customer_approved_at.slice(0, 16) : local);
+    setCustomerApprovalChannel(order.customer_approval_channel || 'email');
+    setCustomerApprovalReference(order.customer_approval_reference || '');
   };
 
   const confirmComplete = async () => {
     if (!canUpdateEor) return;
     if (!completeModal) return;
     const cost = parseFloat(actualCostInput) || 0;
-    await updateOrder(completeModal.eorId, 'complete', cost);
+    await updateOrder(completeModal.eorId, 'complete', {
+      actual_cost: cost,
+      completion_grade: completionGrade,
+      completion_status: completionStatus,
+      release_repair_hold: releaseRepairHold,
+      repair_inspected_by: repairInspectedBy || session?.fullName || null,
+    });
     setCompleteModal(null);
     setActualCostInput('');
+  };
+
+  const confirmCustomerApproval = async () => {
+    if (!canApproveEor || !customerApprovalModal) return;
+    if (!customerApprovedBy.trim()) {
+      toast('error', 'กรุณาระบุผู้อนุมัติฝั่งลูกค้า');
+      return;
+    }
+    await updateOrder(customerApprovalModal.eorId, 'customer_approve', {
+      customer_approved_by: customerApprovedBy,
+      customer_approved_at: customerApprovedAt || null,
+      customer_approval_channel: customerApprovalChannel,
+      customer_approval_reference: customerApprovalReference || null,
+      notes: eorNotes || null,
+    });
+    setCustomerApprovalModal(null);
+    setCustomerApprovedBy('');
+    setCustomerApprovalReference('');
   };
 
   const statusLabels: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -485,6 +574,8 @@ export default function MnRPage() {
                           <span>• ฿{(o.estimated_cost || 0).toLocaleString()}</span>
                           {o.actual_cost > 0 && <span>• จริง: ฿{o.actual_cost.toLocaleString()}</span>}
                           {o.billing_customer_name && <span>• Bill to: {o.billing_customer_name}</span>}
+                          {o.customer_approved_by && <span>• ลูกค้าอนุมัติ: {o.customer_approved_by}</span>}
+                          {o.container_grade && <span>• Grade {o.container_grade}</span>}
                           {o.invoice_number && <span>• {o.invoice_number}</span>}
                         </div>
                       </div>
@@ -498,16 +589,24 @@ export default function MnRPage() {
                         <>
                           <button onClick={() => updateOrder(o.eor_id, 'approve')} disabled={!canApproveEor}
                             className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><ThumbsUp size={10} /> อนุมัติ</button>
+                          <button onClick={() => handleCustomerApproval(o)} disabled={!canApproveEor}
+                            className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-medium hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><CheckCircle2 size={10} /> ลูกค้าอนุมัติ</button>
                           <button onClick={() => updateOrder(o.eor_id, 'reject')} disabled={!canApproveEor}
                             className="px-1.5 py-1 rounded-lg text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed text-xs"><XCircle size={14} /></button>
                         </>
                       )}
                       {o.status === 'approved' && canUpdateEor && (
-                        <button onClick={() => updateOrder(o.eor_id, 'start_repair')} disabled={!canUpdateEor}
-                          className="px-2 py-1 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium hover:bg-violet-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Play size={10} /> เริ่มซ่อม</button>
+                        <>
+                          {!o.customer_approved_by && canApproveEor && (
+                            <button onClick={() => handleCustomerApproval(o)} disabled={!canApproveEor}
+                              className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-medium hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><CheckCircle2 size={10} /> ลูกค้าอนุมัติ</button>
+                          )}
+                          <button onClick={() => updateOrder(o.eor_id, 'start_repair')} disabled={!canUpdateEor}
+                            className="px-2 py-1 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium hover:bg-violet-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Play size={10} /> เริ่มซ่อม</button>
+                        </>
                       )}
                       {o.status === 'in_repair' && canUpdateEor && (
-                        <button onClick={() => handleComplete(o.eor_id, o.estimated_cost)} disabled={!canUpdateEor}
+                        <button onClick={() => handleComplete(o)} disabled={!canUpdateEor}
                           className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><CheckCircle2 size={10} /> เสร็จ</button>
                       )}
                       <button onClick={() => window.open(`/api/mnr/eor-pdf?eor_id=${o.eor_id}`, '_blank')}
@@ -579,7 +678,7 @@ export default function MnRPage() {
                 {(sourceEirNumber || sourceDamagePoints.length > 0) && (
                   <div className="rounded-lg bg-white/70 dark:bg-slate-800/60 border border-violet-100 dark:border-violet-900/40 px-3 py-2">
                     <p className="font-semibold">Source: {sourceEirNumber || 'EIR ล่าสุด'}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">พบ damage point {sourceDamagePoints.length} จุด และรูปประกอบ {repairPhotos.length} รูป</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">พบ damage point {sourceDamagePoints.length} จุด และรูปประกอบ {allRepairPhotos.length} รูป</p>
                   </div>
                 )}
               </div>
@@ -629,30 +728,52 @@ export default function MnRPage() {
 
             {/* Repair Photos */}
             <div className="space-y-2">
-              <label className={labelClass}>รูปถ่ายความเสียหาย / ประกอบ EOR</label>
-              <div className="flex gap-2 flex-wrap">
-                {repairPhotos.map((photo, i) => (
-                  <div key={i} className="relative">
-                    <img src={photo} alt={`repair ${i + 1}`} className="w-20 h-16 rounded-lg object-cover border border-slate-200" />
-                    <button onClick={() => setRepairPhotos(prev => prev.filter((_, j) => j !== i))}
-                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px]">✕</button>
+              <label className={labelClass}>Repair Photo Evidence</label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px]">
+                {REPAIR_PHOTO_CATEGORIES.map(category => {
+                  const count = (repairPhotoEvidence[category.key] || []).length;
+                  const complete = category.required === 0 || count >= category.required;
+                  return (
+                    <div key={category.key} className={`rounded-lg border px-2 py-1.5 ${complete ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                      <span className="font-semibold">{category.label}</span>
+                      <span className="ml-1">{count}/{category.required || '-'}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="space-y-3">
+                {REPAIR_PHOTO_CATEGORIES.map(category => (
+                  <div key={category.key} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{category.label}</p>
+                      <span className="text-[10px] text-slate-400">{(repairPhotoEvidence[category.key] || []).length}/{category.required || '-'} รูป</span>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {(repairPhotoEvidence[category.key] || []).map((photo, i) => (
+                        <div key={`${category.key}-${i}`} className="relative">
+                          <img src={photo} alt={`${category.label} ${i + 1}`} className="w-20 h-16 rounded-lg object-cover border border-slate-200" />
+                          <button onClick={() => removeEvidencePhoto(category.key, i)}
+                            className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px]">✕</button>
+                        </div>
+                      ))}
+                      <label className="w-20 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:border-violet-400 hover:text-violet-500 cursor-pointer transition-colors">
+                        <Camera size={16} /> <span className="text-[8px] mt-0.5">เพิ่มรูป</span>
+                        <input type="file" accept="image/*" capture="environment" className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => addEvidencePhotos(category.key, [reader.result as string]);
+                            reader.readAsDataURL(file);
+                            e.target.value = '';
+                          }} />
+                      </label>
+                    </div>
                   </div>
                 ))}
-                <label className="w-20 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:border-violet-400 hover:text-violet-500 cursor-pointer transition-colors">
-                  <Camera size={16} /> <span className="text-[8px] mt-0.5">เพิ่มรูป</span>
-                  <input type="file" accept="image/*" capture="environment" className="hidden"
-                    onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = () => setRepairPhotos(prev => [...prev, reader.result as string]);
-                      reader.readAsDataURL(file);
-                      e.target.value = '';
-                    }} />
-                </label>
               </div>
-              {repairPhotos.length > 0 && (
-                <p className="text-[10px] text-slate-400 flex items-center gap-1"><ImageIcon size={10} /> {repairPhotos.length} รูปแนบ</p>
+              {allRepairPhotos.length > 0 && (
+                <p className="text-[10px] text-slate-400 flex items-center gap-1"><ImageIcon size={10} /> {allRepairPhotos.length} รูปแนบ · {evidenceSummary}</p>
               )}
             </div>
 
@@ -812,10 +933,60 @@ export default function MnRPage() {
 
     <ConfirmDialog open={confirmDlg.open} title="ยืนยันการลบ" message={confirmDlg.message} confirmLabel="ลบ" onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
 
+    {/* Customer Approval Modal */}
+    {customerApprovalModal?.open && (
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+            <ThumbsUp size={18} className="text-emerald-500" /> บันทึกลูกค้าอนุมัติ {customerApprovalModal.eorNumber}
+          </h3>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">ลูกค้าอนุมัติแล้วโดยใคร *</label>
+            <input value={customerApprovedBy} onChange={e => setCustomerApprovedBy(e.target.value)}
+              className={inputClass} placeholder="ชื่อผู้อนุมัติฝั่งลูกค้า" autoFocus />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">อนุมัติเมื่อไหร่</label>
+              <input type="datetime-local" value={customerApprovedAt} onChange={e => setCustomerApprovedAt(e.target.value)}
+                className={inputClass} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">ช่องทาง</label>
+              <select value={customerApprovalChannel} onChange={e => setCustomerApprovalChannel(e.target.value)}
+                className={inputClass}>
+                <option value="email">Email</option>
+                <option value="line">LINE</option>
+                <option value="portal">Customer Portal</option>
+                <option value="phone">Phone</option>
+                <option value="paper">เอกสาร/ลายเซ็น</option>
+                <option value="other">อื่น ๆ</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">เลขอ้างอิง / หมายเหตุช่องทาง</label>
+            <input value={customerApprovalReference} onChange={e => setCustomerApprovalReference(e.target.value)}
+              className={inputClass} placeholder="เช่น email subject, LINE ref, PO no." />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button onClick={confirmCustomerApproval}
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 flex items-center justify-center gap-2">
+              <CheckCircle2 size={14} /> บันทึกอนุมัติ
+            </button>
+            <button onClick={() => setCustomerApprovalModal(null)}
+              className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500 text-sm hover:bg-slate-200">
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     {/* Complete Modal — ถามค่าซ่อมจริง */}
     {completeModal?.open && (
       <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
           <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
             <CheckCircle2 size={18} className="text-emerald-500" /> ยืนยันซ่อมเสร็จ
           </h3>
@@ -830,6 +1001,34 @@ export default function MnRPage() {
               className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-lg font-mono text-slate-800 dark:text-white outline-none focus:border-emerald-500"
               autoFocus />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Grade หลังซ่อม</label>
+              <select value={completionGrade} onChange={e => setCompletionGrade(e.target.value)}
+                className={inputClass}>
+                {['A', 'B', 'C', 'D'].map(grade => <option key={grade} value={grade}>Grade {grade}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">สถานะตู้หลังซ่อม</label>
+              <select value={completionStatus} onChange={e => setCompletionStatus(e.target.value)}
+                className={inputClass}>
+                <option value="in_yard">in_yard พร้อมอยู่ในลาน</option>
+                <option value="hold">hold รอตรวจเพิ่ม</option>
+                <option value="repair">repair ยังไม่ปล่อยจากซ่อม</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">ผู้ตรวจรับงานซ่อม</label>
+            <input value={repairInspectedBy} onChange={e => setRepairInspectedBy(e.target.value)}
+              className={inputClass} placeholder="ชื่อผู้ตรวจรับงานซ่อม" />
+          </div>
+          <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={releaseRepairHold} onChange={e => setReleaseRepairHold(e.target.checked)}
+              className="rounded border-slate-300" />
+            ปลด repair hold / M&R hold ถ้ามี
+          </label>
           <div className="flex gap-2 pt-2">
             <button onClick={confirmComplete}
               className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 flex items-center justify-center gap-2">

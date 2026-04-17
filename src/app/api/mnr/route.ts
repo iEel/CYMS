@@ -13,6 +13,7 @@ const createEORSchema = z.object({
   damage_details: z.any().optional(),
   estimated_cost: z.number().min(0).optional().default(0),
   repair_photos: z.array(z.string()).optional().default([]),
+  repair_photo_evidence: z.record(z.string(), z.array(z.string())).optional().default({}),
   source_eir_number: z.string().max(80).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   user_id: z.number().int().positive().optional().nullable(),
@@ -20,10 +21,18 @@ const createEORSchema = z.object({
 
 const updateEORSchema = z.object({
   eor_id: z.number().int().positive(),
-  action: z.enum(['submit', 'approve', 'start_repair', 'complete', 'reject']),
+  action: z.enum(['submit', 'approve', 'customer_approve', 'start_repair', 'complete', 'reject']),
   actual_cost: z.number().min(0).optional(),
   user_id: z.number().int().positive().optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
+  customer_approved_by: z.string().max(200).optional().nullable(),
+  customer_approved_at: z.string().optional().nullable(),
+  customer_approval_channel: z.string().max(50).optional().nullable(),
+  customer_approval_reference: z.string().max(200).optional().nullable(),
+  completion_grade: z.enum(['A', 'B', 'C', 'D']).optional().nullable(),
+  completion_status: z.string().max(30).optional().default('in_yard'),
+  release_repair_hold: z.boolean().optional().default(true),
+  repair_inspected_by: z.string().max(200).optional().nullable(),
 });
 
 async function ensureMnrColumns(db: sql.ConnectionPool) {
@@ -33,12 +42,30 @@ async function ensureMnrColumns(db: sql.ConnectionPool) {
       ALTER TABLE RepairOrders ADD source_eir_number NVARCHAR(80) NULL;
     IF COL_LENGTH('RepairOrders', 'repair_photos') IS NULL
       ALTER TABLE RepairOrders ADD repair_photos NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('RepairOrders', 'repair_photo_evidence') IS NULL
+      ALTER TABLE RepairOrders ADD repair_photo_evidence NVARCHAR(MAX) NULL;
     IF COL_LENGTH('RepairOrders', 'invoice_id') IS NULL
       ALTER TABLE RepairOrders ADD invoice_id INT NULL;
     IF COL_LENGTH('RepairOrders', 'billing_customer_id') IS NULL
       ALTER TABLE RepairOrders ADD billing_customer_id INT NULL;
     IF COL_LENGTH('RepairOrders', 'completed_at') IS NULL
       ALTER TABLE RepairOrders ADD completed_at DATETIME2 NULL;
+    IF COL_LENGTH('RepairOrders', 'customer_approved_by') IS NULL
+      ALTER TABLE RepairOrders ADD customer_approved_by NVARCHAR(200) NULL;
+    IF COL_LENGTH('RepairOrders', 'customer_approved_at') IS NULL
+      ALTER TABLE RepairOrders ADD customer_approved_at DATETIME2 NULL;
+    IF COL_LENGTH('RepairOrders', 'customer_approval_channel') IS NULL
+      ALTER TABLE RepairOrders ADD customer_approval_channel NVARCHAR(50) NULL;
+    IF COL_LENGTH('RepairOrders', 'customer_approval_reference') IS NULL
+      ALTER TABLE RepairOrders ADD customer_approval_reference NVARCHAR(200) NULL;
+    IF COL_LENGTH('RepairOrders', 'completion_grade') IS NULL
+      ALTER TABLE RepairOrders ADD completion_grade NVARCHAR(1) NULL;
+    IF COL_LENGTH('RepairOrders', 'completion_status') IS NULL
+      ALTER TABLE RepairOrders ADD completion_status NVARCHAR(30) NULL;
+    IF COL_LENGTH('RepairOrders', 'repair_inspected_by') IS NULL
+      ALTER TABLE RepairOrders ADD repair_inspected_by NVARCHAR(200) NULL;
+    IF COL_LENGTH('RepairOrders', 'repair_inspected_at') IS NULL
+      ALTER TABLE RepairOrders ADD repair_inspected_at DATETIME2 NULL;
   `);
 }
 
@@ -156,6 +183,7 @@ export async function GET(request: NextRequest) {
 
     const result = await req.query(`
       SELECT r.*, c.container_number, c.size, c.type,
+        c.container_grade, c.hold_status,
         cu.customer_name, bill.customer_name as billing_customer_name,
         inv.invoice_number, u.full_name as created_name
       FROM RepairOrders r
@@ -202,15 +230,16 @@ export async function POST(request: NextRequest) {
       .input('damageDetails', sql.NVarChar, body.damage_details ? JSON.stringify(body.damage_details) : null)
       .input('estimatedCost', sql.Decimal(12, 2), body.estimated_cost || 0)
       .input('repairPhotos', sql.NVarChar, body.repair_photos.length ? JSON.stringify(body.repair_photos) : null)
+      .input('repairPhotoEvidence', sql.NVarChar, Object.keys(body.repair_photo_evidence).length ? JSON.stringify(body.repair_photo_evidence) : null)
       .input('sourceEirNumber', sql.NVarChar, body.source_eir_number || null)
       .input('notes', sql.NVarChar, body.notes || null)
       .input('createdBy', sql.Int, body.user_id || null)
       .query(`
         INSERT INTO RepairOrders (eor_number, container_id, yard_id, customer_id, billing_customer_id,
-          damage_details, estimated_cost, repair_photos, source_eir_number, notes, created_by)
+          damage_details, estimated_cost, repair_photos, repair_photo_evidence, source_eir_number, notes, created_by)
         OUTPUT INSERTED.*
         VALUES (@eorNumber, @containerId, @yardId, @customerId, @billingCustomerId,
-          @damageDetails, @estimatedCost, @repairPhotos, @sourceEirNumber, @notes, @createdBy)
+          @damageDetails, @estimatedCost, @repairPhotos, @repairPhotoEvidence, @sourceEirNumber, @notes, @createdBy)
       `);
 
     // Update container status
@@ -249,7 +278,21 @@ export async function PUT(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'ข้อมูลไม่ถูกต้อง', details: parsed.error.issues }, { status: 400 });
     }
-    const { eor_id, action, actual_cost, user_id } = parsed.data;
+    const {
+      eor_id,
+      action,
+      actual_cost,
+      user_id,
+      customer_approved_by,
+      customer_approved_at,
+      customer_approval_channel,
+      customer_approval_reference,
+      completion_grade,
+      completion_status,
+      release_repair_hold,
+      repair_inspected_by,
+      notes,
+    } = parsed.data;
 
     const db = await getDb();
     await ensureMnrColumns(db);
@@ -277,15 +320,55 @@ export async function PUT(request: NextRequest) {
       case 'approve':
         await req.query("UPDATE RepairOrders SET status = 'approved', approved_at = GETDATE() WHERE eor_id = @eorId");
         break;
+      case 'customer_approve':
+        req.input('customerApprovedBy', sql.NVarChar, customer_approved_by || null)
+          .input('customerApprovedAt', sql.DateTime2, customer_approved_at ? new Date(customer_approved_at) : new Date())
+          .input('customerApprovalChannel', sql.NVarChar, customer_approval_channel || null)
+          .input('customerApprovalReference', sql.NVarChar, customer_approval_reference || null)
+          .input('notes', sql.NVarChar, notes || null);
+        await req.query(`
+          UPDATE RepairOrders SET
+            status = 'approved',
+            approved_at = ISNULL(approved_at, GETDATE()),
+            customer_approved_by = @customerApprovedBy,
+            customer_approved_at = @customerApprovedAt,
+            customer_approval_channel = @customerApprovalChannel,
+            customer_approval_reference = @customerApprovalReference,
+            notes = COALESCE(@notes, notes)
+          WHERE eor_id = @eorId
+        `);
+        break;
       case 'start_repair':
         await req.query("UPDATE RepairOrders SET status = 'in_repair' WHERE eor_id = @eorId");
         break;
       case 'complete':
-        req.input('actualCost', sql.Decimal(12, 2), actual_cost || 0);
-        await req.query("UPDATE RepairOrders SET status = 'completed', actual_cost = @actualCost, completed_at = GETDATE() WHERE eor_id = @eorId");
-        // Revert container status back to in_yard
-        await db.request().input('cid', sql.Int, order.container_id)
-          .query("UPDATE Containers SET status = 'in_yard', updated_at = GETDATE() WHERE container_id = @cid");
+        req.input('actualCost', sql.Decimal(12, 2), actual_cost || 0)
+          .input('completionGrade', sql.NVarChar, completion_grade || null)
+          .input('completionStatus', sql.NVarChar, completion_status || 'in_yard')
+          .input('repairInspectedBy', sql.NVarChar, repair_inspected_by || null);
+        await req.query(`
+          UPDATE RepairOrders SET
+            status = 'completed',
+            actual_cost = @actualCost,
+            completed_at = GETDATE(),
+            completion_grade = @completionGrade,
+            completion_status = @completionStatus,
+            repair_inspected_by = @repairInspectedBy,
+            repair_inspected_at = GETDATE()
+          WHERE eor_id = @eorId
+        `);
+        await db.request()
+          .input('cid', sql.Int, order.container_id)
+          .input('completionStatus', sql.NVarChar, completion_status || 'in_yard')
+          .input('completionGrade', sql.NVarChar, completion_grade || null)
+          .query(`
+            UPDATE Containers SET
+              status = @completionStatus,
+              container_grade = COALESCE(@completionGrade, container_grade),
+              hold_status = CASE WHEN ${release_repair_hold ? '1' : '0'} = 1 AND hold_status IN ('repair_hold', 'mnr_hold') THEN NULL ELSE hold_status END,
+              updated_at = GETDATE()
+            WHERE container_id = @cid
+          `);
         await createMnrInvoiceIfNeeded({ db, order, actualCost: actual_cost || 0, userId: user_id });
         break;
       case 'reject':
@@ -306,7 +389,8 @@ export async function PUT(request: NextRequest) {
       details: {
         eor_number: order.eor_number,
         container_id: order.container_id,
-        ...(action === 'complete' ? { actual_cost } : {}),
+        ...(action === 'customer_approve' ? { customer_approved_by, customer_approval_channel, customer_approval_reference } : {}),
+        ...(action === 'complete' ? { actual_cost, completion_grade, completion_status, release_repair_hold, repair_inspected_by } : {}),
       },
     });
 

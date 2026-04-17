@@ -6,6 +6,14 @@ import autoTable from 'jspdf-autotable';
 import { sarabunBase64 } from '@/lib/sarabunFont';
 
 const FONT = 'Sarabun';
+const PHOTO_CATEGORY_LABELS: Record<string, string> = {
+  before_repair: 'Before repair',
+  during_repair: 'During repair',
+  after_repair: 'After repair',
+  damage_closeup: 'Damage close-up',
+  full_container: 'Full container view',
+  repair_material: 'Repair material/part',
+};
 
 function parseJson(value: unknown) {
   if (!value || typeof value !== 'string') return value;
@@ -37,12 +45,30 @@ async function ensureMnrColumns(db: sql.ConnectionPool) {
       ALTER TABLE RepairOrders ADD source_eir_number NVARCHAR(80) NULL;
     IF COL_LENGTH('RepairOrders', 'repair_photos') IS NULL
       ALTER TABLE RepairOrders ADD repair_photos NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('RepairOrders', 'repair_photo_evidence') IS NULL
+      ALTER TABLE RepairOrders ADD repair_photo_evidence NVARCHAR(MAX) NULL;
     IF COL_LENGTH('RepairOrders', 'invoice_id') IS NULL
       ALTER TABLE RepairOrders ADD invoice_id INT NULL;
     IF COL_LENGTH('RepairOrders', 'billing_customer_id') IS NULL
       ALTER TABLE RepairOrders ADD billing_customer_id INT NULL;
     IF COL_LENGTH('RepairOrders', 'completed_at') IS NULL
       ALTER TABLE RepairOrders ADD completed_at DATETIME2 NULL;
+    IF COL_LENGTH('RepairOrders', 'customer_approved_by') IS NULL
+      ALTER TABLE RepairOrders ADD customer_approved_by NVARCHAR(200) NULL;
+    IF COL_LENGTH('RepairOrders', 'customer_approved_at') IS NULL
+      ALTER TABLE RepairOrders ADD customer_approved_at DATETIME2 NULL;
+    IF COL_LENGTH('RepairOrders', 'customer_approval_channel') IS NULL
+      ALTER TABLE RepairOrders ADD customer_approval_channel NVARCHAR(50) NULL;
+    IF COL_LENGTH('RepairOrders', 'customer_approval_reference') IS NULL
+      ALTER TABLE RepairOrders ADD customer_approval_reference NVARCHAR(200) NULL;
+    IF COL_LENGTH('RepairOrders', 'completion_grade') IS NULL
+      ALTER TABLE RepairOrders ADD completion_grade NVARCHAR(1) NULL;
+    IF COL_LENGTH('RepairOrders', 'completion_status') IS NULL
+      ALTER TABLE RepairOrders ADD completion_status NVARCHAR(30) NULL;
+    IF COL_LENGTH('RepairOrders', 'repair_inspected_by') IS NULL
+      ALTER TABLE RepairOrders ADD repair_inspected_by NVARCHAR(200) NULL;
+    IF COL_LENGTH('RepairOrders', 'repair_inspected_at') IS NULL
+      ALTER TABLE RepairOrders ADD repair_inspected_at DATETIME2 NULL;
   `);
 }
 
@@ -121,6 +147,10 @@ export async function GET(request: NextRequest) {
         ['สายเรือ', eor.shipping_line || '-'],
         ['ลูกค้า/เจ้าของงาน', eor.customer_name || '-'],
         ['ผู้รับผิดชอบค่าซ่อม', eor.billing_customer_name || eor.customer_name || '-'],
+        ['ลูกค้าอนุมัติ', eor.customer_approved_by ? `${eor.customer_approved_by} / ${eor.customer_approval_channel || '-'} / ${eor.customer_approved_at ? new Date(eor.customer_approved_at).toLocaleString('th-TH') : '-'}` : '-'],
+        ['อ้างอิงอนุมัติ', eor.customer_approval_reference || '-'],
+        ['ตรวจรับหลังซ่อม', eor.repair_inspected_by ? `${eor.repair_inspected_by} / ${eor.repair_inspected_at ? new Date(eor.repair_inspected_at).toLocaleString('th-TH') : '-'}` : '-'],
+        ['Grade/Status หลังซ่อม', `${eor.completion_grade || '-'} / ${eor.completion_status || '-'}`],
         ['Invoice M&R', eor.invoice_number || '-'],
       ],
       theme: 'grid',
@@ -158,7 +188,30 @@ export async function GET(request: NextRequest) {
       y += 6;
     }
 
-    const photos = Array.isArray(parseJson(eor.repair_photos)) ? parseJson(eor.repair_photos) as string[] : [];
+    const evidence = parseJson(eor.repair_photo_evidence) as Record<string, string[]> | null;
+    const evidenceRows = evidence && typeof evidence === 'object'
+      ? Object.entries(evidence).map(([key, value]) => [PHOTO_CATEGORY_LABELS[key] || key, `${Array.isArray(value) ? value.length : 0} รูป`])
+      : [];
+    if (evidenceRows.length > 0) {
+      autoTable(doc, {
+        startY: y,
+        head: [['Repair Photo Evidence', 'จำนวน']],
+        body: evidenceRows,
+        theme: 'grid',
+        styles: { font: FONT, fontSize: 9, cellPadding: 2.5 },
+        headStyles: { fillColor: [22, 163, 74], textColor: 255 },
+        margin: { left: 14, right: 14 },
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      y = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    const evidencePhotos = evidence && typeof evidence === 'object'
+      ? Object.values(evidence).flat().filter(Boolean)
+      : [];
+    const photos = evidencePhotos.length > 0
+      ? evidencePhotos
+      : Array.isArray(parseJson(eor.repair_photos)) ? parseJson(eor.repair_photos) as string[] : [];
     if (photos.length > 0) {
       y += 4;
       if (y > 230) {
