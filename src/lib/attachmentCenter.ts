@@ -4,27 +4,7 @@ import { getDb } from '@/lib/db';
 type DbPool = Awaited<ReturnType<typeof getDb>>;
 
 export async function ensureAttachmentCenter(db: DbPool) {
-  await db.request().query(`
-    IF OBJECT_ID('EntityAttachments', 'U') IS NULL
-    BEGIN
-      CREATE TABLE EntityAttachments (
-        attachment_id BIGINT PRIMARY KEY IDENTITY(1,1),
-        entity_type NVARCHAR(40) NOT NULL,
-        entity_id INT NULL,
-        entity_number NVARCHAR(80) NULL,
-        category NVARCHAR(50) NOT NULL,
-        file_url NVARCHAR(MAX) NOT NULL,
-        file_name NVARCHAR(255) NULL,
-        mime_type NVARCHAR(100) NULL,
-        source NVARCHAR(50) NULL,
-        uploaded_by INT NULL,
-        yard_id INT NULL,
-        metadata NVARCHAR(MAX) NULL,
-        created_at DATETIME2 NOT NULL DEFAULT GETDATE()
-      );
-      CREATE INDEX IX_EntityAttachments_Entity ON EntityAttachments (entity_type, entity_id, entity_number, created_at);
-    END
-  `);
+  void db;
 }
 
 export async function logAttachment({

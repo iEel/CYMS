@@ -3,23 +3,10 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 
-// Auto-migrate: add branch columns if missing
-async function ensureBranchColumns(db: Awaited<ReturnType<typeof getDb>>) {
-  try {
-    await db.request().query(`
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Yards') AND name = 'branch_type')
-        ALTER TABLE Yards ADD branch_type NVARCHAR(20) DEFAULT 'head_office';
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Yards') AND name = 'branch_number')
-        ALTER TABLE Yards ADD branch_number NVARCHAR(10) DEFAULT '00000';
-    `);
-  } catch { /* columns may already exist */ }
-}
-
 // GET — ดึงรายชื่อลานทั้งหมด
 export async function GET() {
   try {
     const db = await getDb();
-    await ensureBranchColumns(db);
     const result = await db.request().query(`
       SELECT y.yard_id, y.yard_name, y.yard_code, y.address,
              y.latitude, y.longitude, y.geofence_radius, y.is_active,
@@ -42,7 +29,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
-    await ensureBranchColumns(db);
 
     const result = await db.request()
       .input('yardName', sql.NVarChar, body.yard_name)

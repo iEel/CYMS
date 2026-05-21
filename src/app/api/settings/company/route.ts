@@ -3,24 +3,10 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 
-// Auto-migrate: add branch columns if missing
-async function ensureBranchColumns(db: Awaited<ReturnType<typeof getDb>>) {
-  try {
-    await db.request().query(`
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('CompanyProfile') AND name = 'branch_type')
-        ALTER TABLE CompanyProfile ADD branch_type NVARCHAR(20) DEFAULT 'head_office';
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('CompanyProfile') AND name = 'branch_number')
-        ALTER TABLE CompanyProfile ADD branch_number NVARCHAR(10) DEFAULT '00000';
-      ALTER TABLE CompanyProfile ALTER COLUMN logo_url NVARCHAR(MAX);
-    `);
-  } catch { /* columns may already exist */ }
-}
-
 // GET — ดึงข้อมูลบริษัท
 export async function GET() {
   try {
     const db = await getDb();
-    await ensureBranchColumns(db);
     const result = await db.request().query(`
       SELECT company_id, company_name, tax_id, address, phone, email, logo_url,
              ISNULL(branch_type, 'head_office') as branch_type,
@@ -39,7 +25,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
-    await ensureBranchColumns(db);
 
     // ตรวจว่ามี record อยู่แล้วหรือไม่
     const existing = await db.request().query('SELECT company_id FROM CompanyProfile');

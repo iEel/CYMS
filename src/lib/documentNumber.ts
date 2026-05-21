@@ -4,51 +4,7 @@ import { getDb } from '@/lib/db';
 type DbPool = Awaited<ReturnType<typeof getDb>>;
 
 export async function ensureDocumentSequences(db: DbPool) {
-  await db.request().query(`
-    IF OBJECT_ID('DocumentSequences', 'U') IS NULL
-    BEGIN
-      CREATE TABLE DocumentSequences (
-        sequence_id INT PRIMARY KEY IDENTITY(1,1),
-        yard_id INT NOT NULL,
-        document_type NVARCHAR(30) NOT NULL,
-        sequence_year INT NOT NULL,
-        sequence_month INT NOT NULL,
-        prefix NVARCHAR(20) NOT NULL,
-        next_number INT NOT NULL DEFAULT 1,
-        padding INT NOT NULL DEFAULT 6,
-        updated_at DATETIME2 NOT NULL DEFAULT GETDATE(),
-        CONSTRAINT UQ_DocumentSequences_Month UNIQUE (yard_id, document_type, sequence_year, sequence_month)
-      );
-    END
-    ELSE
-    BEGIN
-      IF COL_LENGTH('DocumentSequences', 'sequence_month') IS NULL
-      BEGIN
-        ALTER TABLE DocumentSequences ADD sequence_month INT NOT NULL CONSTRAINT DF_DocumentSequences_Month DEFAULT 0;
-      END
-
-      IF EXISTS (
-        SELECT 1
-        FROM sys.key_constraints
-        WHERE parent_object_id = OBJECT_ID('DocumentSequences')
-          AND name = 'UQ_DocumentSequences'
-      )
-      BEGIN
-        ALTER TABLE DocumentSequences DROP CONSTRAINT UQ_DocumentSequences;
-      END
-
-      IF NOT EXISTS (
-        SELECT 1
-        FROM sys.key_constraints
-        WHERE parent_object_id = OBJECT_ID('DocumentSequences')
-          AND name = 'UQ_DocumentSequences_Month'
-      )
-      BEGIN
-        ALTER TABLE DocumentSequences
-        ADD CONSTRAINT UQ_DocumentSequences_Month UNIQUE (yard_id, document_type, sequence_year, sequence_month);
-      END
-    END
-  `);
+  void db;
 }
 
 export async function nextDocumentNumber({

@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Core Migration + Billing/M&R Test Drift Cleanup** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup** (~100%)
 
 ---
 
@@ -1044,12 +1044,13 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Parameterized NOT IN** — ใช้ placeholders `@branchId0`, `@branchId1`, ... พร้อม `.input()` แทนการฝังค่า raw ลง SQL
 - [x] **Tests เพิ่มเติม** — `src/lib/__tests__/customerBranches.test.ts` รวม 4 tests ครอบคลุม malicious branch id, duplicate handling และ parameterized delete
 
-### 🧱 Runtime DDL Core Migration (✅ เสร็จ — 21 พ.ค. 2569)
+### 🧱 Runtime DDL Migration (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **ย้าย direct request-time DDL ออกจาก core API routes** — ลบ schema guard ที่ `ALTER TABLE` / `CREATE TABLE` / `COL_LENGTH` จาก `api/gate`, `api/billing/invoices`, `api/mnr`, `api/customers/360`, `api/settings/customers`
 - [x] **Migration script กลาง** — เพิ่ม `scripts/migrate-runtime-core-schema.js` สำหรับเติม columns/tables ที่ core routes เคยสร้างเอง ได้แก่ `Containers.container_grade`, `BillingClearances`, invoice document columns, M&R extended columns, customer role/credit/branch columns, `CustomerBranches`, และ owner/billing columns บน `GateTransactions`
-- [x] **Static regression test** — `src/app/api/__tests__/no-runtime-ddl.test.ts` ตรวจ 5 route สำคัญไม่ให้กลับไปมี DDL/schema probing ใน request path อีก
-- [x] **Deploy note** — production/staging ต้องรัน `node scripts/migrate-runtime-core-schema.js` ก่อน deploy version นี้ หาก DB เก่ายังไม่มี columns เหล่านี้
-- **ยังเหลือ batch ถัดไป**: shared helpers บางตัว (`documentLifecycle`, `documentNumber`, `customerCredit`) ยังมี schema guard แบบ lazy อยู่ และ route อื่น ๆ นอก 5 core files ยังควรไล่ย้ายต่อเป็น runtime DDL batch 2
+- [x] **Batch 2 source-wide cleanup** — ย้าย DDL ที่เหลือออกจาก `src/app/api` และ `src/lib` รวม shared helpers (`documentLifecycle`, `documentNumber`, `customerCredit`, `attachmentCenter`, `approvalReview`, `integrationLog`) และ routes ที่เคย auto-migrate เช่น `containers`, `billing/clearance`, `billing/reports`, `edi/codeco`, `edi/templates`, `mnr/cedex`, `mnr/eor-pdf`, `settings/*`
+- [x] **Migration script ขยายครบ** — `scripts/migrate-runtime-core-schema.js` ตอนนี้ครอบคลุม DocumentSequences, DocumentLifecycle, EntityAttachments, ApprovalReviews, IntegrationLogs, EDITemplates, CEDEXCodes, StorageRateTiers, PrefixMapping, SystemSettings, Company/Yard branch fields และ granular RBAC permission columns
+- [x] **Static regression test** — `src/app/api/__tests__/no-runtime-ddl.test.ts` ตรวจ production source ทั้ง `src/app/api` และ `src/lib` ไม่ให้มี `CREATE TABLE` / `ALTER TABLE` ใน runtime path อีก
+- [x] **Deploy note** — production/staging ต้องรัน `node scripts/migrate-runtime-core-schema.js` ก่อน deploy version นี้ หาก DB เก่ายังไม่มี schema เหล่านี้
 
 ### ✅ Billing/M&R Test Drift Cleanup (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **Document number mock alignment** — `billing.test.ts` และ `mnr.test.ts` mock `@/lib/documentNumber.nextDocumentNumber` โดยตรง หลัง production route เปลี่ยนมาใช้ `DocumentSequences`
@@ -1302,7 +1303,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 219/219; billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 343/343; billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1344,7 +1345,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 219/219 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 343/343 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)

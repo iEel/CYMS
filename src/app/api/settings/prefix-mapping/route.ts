@@ -3,37 +3,10 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 
-// Auto-migrate: ensure table + one-to-many structure
-async function ensureTable(pool: Awaited<ReturnType<typeof getDb>>) {
-  try {
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'PrefixMapping')
-      BEGIN
-        CREATE TABLE PrefixMapping (
-          prefix_id    INT IDENTITY PRIMARY KEY,
-          prefix_code  NVARCHAR(4) NOT NULL,
-          customer_id  INT NOT NULL,
-          is_primary   BIT DEFAULT 0,
-          notes        NVARCHAR(200),
-          created_at   DATETIME2 DEFAULT GETDATE(),
-          CONSTRAINT FK_Prefix_Customer FOREIGN KEY (customer_id) REFERENCES Customers(customer_id),
-          CONSTRAINT UQ_Prefix_Customer UNIQUE (prefix_code, customer_id)
-        );
-      END
-    `);
-    // Ensure is_primary column exists (for migration from old schema)
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'PrefixMapping' AND COLUMN_NAME = 'is_primary')
-      ALTER TABLE PrefixMapping ADD is_primary BIT DEFAULT 0
-    `);
-  } catch { /* table may already exist */ }
-}
-
 // GET — List all prefix mappings (grouped by prefix for multi-owner view)
 export async function GET() {
   try {
     const pool = await getDb();
-    await ensureTable(pool);
     const result = await pool.request().query(`
       SELECT pm.prefix_id, pm.prefix_code, pm.customer_id, pm.is_primary, pm.notes, pm.created_at,
              c.customer_name,
@@ -67,7 +40,6 @@ export async function POST(req: NextRequest) {
     }
 
     const pool = await getDb();
-    await ensureTable(pool);
 
     // Check duplicate (same prefix + same customer)
     const dup = await pool.request()

@@ -3,13 +3,6 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { calcDwellDays } from '@/lib/utils';
 
-async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
-  await db.request().query(`
-    IF COL_LENGTH('Containers', 'container_grade') IS NULL
-      ALTER TABLE Containers ADD container_grade NVARCHAR(1) NOT NULL CONSTRAINT DF_Containers_Grade DEFAULT 'A'
-  `);
-}
-
 type ExceptionSeverity = 'info' | 'warning' | 'danger';
 
 interface LifecycleException {
@@ -155,7 +148,6 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureContainerGradeColumn(db);
 
     // 1. Container info
     const containerResult = await db.request()

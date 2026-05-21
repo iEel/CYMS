@@ -153,16 +153,6 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const db = await getDb();
 
-    // Ensure SystemSettings table exists
-    await db.request().query(`
-      IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SystemSettings')
-      CREATE TABLE SystemSettings (
-        setting_key NVARCHAR(100) PRIMARY KEY,
-        setting_value NVARCHAR(500),
-        updated_at DATETIME2 DEFAULT GETDATE()
-      )
-    `);
-
     const keys = [
       'gate_photos_days',
       'damage_photos_days',

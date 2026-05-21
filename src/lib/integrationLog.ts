@@ -28,40 +28,7 @@ export interface IntegrationLogInput {
 }
 
 export async function ensureIntegrationLogTable(db: DbPool) {
-  await db.request().query(`
-    IF OBJECT_ID('IntegrationLogs', 'U') IS NULL
-    BEGIN
-      CREATE TABLE IntegrationLogs (
-        integration_log_id INT PRIMARY KEY IDENTITY(1,1),
-        yard_id INT NULL,
-        system NVARCHAR(30) NOT NULL,
-        direction NVARCHAR(20) NOT NULL DEFAULT 'outbound',
-        message_type NVARCHAR(80) NOT NULL,
-        destination NVARCHAR(300) NULL,
-        endpoint_name NVARCHAR(150) NULL,
-        reference_type NVARCHAR(80) NULL,
-        reference_id NVARCHAR(80) NULL,
-        reference_number NVARCHAR(150) NULL,
-        payload_summary NVARCHAR(MAX) NULL,
-        status NVARCHAR(30) NOT NULL,
-        error_message NVARCHAR(MAX) NULL,
-        retry_count INT NOT NULL DEFAULT 0,
-        record_count INT NOT NULL DEFAULT 0,
-        filename NVARCHAR(255) NULL,
-        request_id NVARCHAR(100) NULL,
-        actor_id INT NULL,
-        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
-        updated_at DATETIME2 NOT NULL DEFAULT GETDATE()
-      );
-    END
-
-    IF COL_LENGTH('IntegrationLogs', 'retry_count') IS NULL
-      ALTER TABLE IntegrationLogs ADD retry_count INT NOT NULL DEFAULT 0;
-    IF COL_LENGTH('IntegrationLogs', 'record_count') IS NULL
-      ALTER TABLE IntegrationLogs ADD record_count INT NOT NULL DEFAULT 0;
-    IF COL_LENGTH('IntegrationLogs', 'request_id') IS NULL
-      ALTER TABLE IntegrationLogs ADD request_id NVARCHAR(100) NULL;
-  `);
+  void db;
 }
 
 export async function writeIntegrationLog(input: IntegrationLogInput) {
@@ -102,4 +69,3 @@ export async function writeIntegrationLog(input: IntegrationLogInput) {
 
   return result.recordset[0]?.integration_log_id as number | undefined;
 }
-

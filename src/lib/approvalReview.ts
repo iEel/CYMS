@@ -17,26 +17,7 @@ interface ApprovalReviewParams {
 }
 
 export async function ensureApprovalReviews(db: DbPool) {
-  await db.request().query(`
-    IF OBJECT_ID('ApprovalReviews', 'U') IS NULL
-    BEGIN
-      CREATE TABLE ApprovalReviews (
-        review_id INT PRIMARY KEY IDENTITY(1,1),
-        yard_id INT NULL,
-        permission_code NVARCHAR(100) NOT NULL,
-        action NVARCHAR(100) NOT NULL,
-        entity_type NVARCHAR(50) NOT NULL,
-        entity_id INT NULL,
-        status NVARCHAR(20) NOT NULL DEFAULT 'pending_review',
-        requested_by INT NULL,
-        approved_by INT NULL,
-        reason NVARCHAR(500) NULL,
-        details NVARCHAR(MAX) NULL,
-        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
-        reviewed_at DATETIME2 NULL
-      );
-    END
-  `);
+  void db;
 }
 
 /**

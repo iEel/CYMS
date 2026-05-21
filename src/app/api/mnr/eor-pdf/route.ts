@@ -39,45 +39,6 @@ function toDamageRows(details: unknown) {
   });
 }
 
-async function ensureMnrColumns(db: sql.ConnectionPool) {
-  await db.request().query(`
-    IF COL_LENGTH('RepairOrders', 'customer_id') IS NULL
-      ALTER TABLE RepairOrders ADD customer_id INT NULL;
-    IF COL_LENGTH('RepairOrders', 'source_eir_number') IS NULL
-      ALTER TABLE RepairOrders ADD source_eir_number NVARCHAR(80) NULL;
-    IF COL_LENGTH('RepairOrders', 'cedex_rate_version') IS NULL
-      ALTER TABLE RepairOrders ADD cedex_rate_version NVARCHAR(80) NULL;
-    IF COL_LENGTH('RepairOrders', 'repair_photos') IS NULL
-      ALTER TABLE RepairOrders ADD repair_photos NVARCHAR(MAX) NULL;
-    IF COL_LENGTH('RepairOrders', 'repair_photo_evidence') IS NULL
-      ALTER TABLE RepairOrders ADD repair_photo_evidence NVARCHAR(MAX) NULL;
-    IF COL_LENGTH('RepairOrders', 'invoice_id') IS NULL
-      ALTER TABLE RepairOrders ADD invoice_id INT NULL;
-    IF COL_LENGTH('RepairOrders', 'billing_customer_id') IS NULL
-      ALTER TABLE RepairOrders ADD billing_customer_id INT NULL;
-    IF COL_LENGTH('RepairOrders', 'completed_at') IS NULL
-      ALTER TABLE RepairOrders ADD completed_at DATETIME2 NULL;
-    IF COL_LENGTH('RepairOrders', 'customer_approved_by') IS NULL
-      ALTER TABLE RepairOrders ADD customer_approved_by NVARCHAR(200) NULL;
-    IF COL_LENGTH('RepairOrders', 'customer_approved_at') IS NULL
-      ALTER TABLE RepairOrders ADD customer_approved_at DATETIME2 NULL;
-    IF COL_LENGTH('RepairOrders', 'customer_approval_channel') IS NULL
-      ALTER TABLE RepairOrders ADD customer_approval_channel NVARCHAR(50) NULL;
-    IF COL_LENGTH('RepairOrders', 'customer_approval_reference') IS NULL
-      ALTER TABLE RepairOrders ADD customer_approval_reference NVARCHAR(200) NULL;
-    IF COL_LENGTH('RepairOrders', 'completion_grade') IS NULL
-      ALTER TABLE RepairOrders ADD completion_grade NVARCHAR(1) NULL;
-    IF COL_LENGTH('RepairOrders', 'completion_status') IS NULL
-      ALTER TABLE RepairOrders ADD completion_status NVARCHAR(30) NULL;
-    IF COL_LENGTH('RepairOrders', 'repair_inspected_by') IS NULL
-      ALTER TABLE RepairOrders ADD repair_inspected_by NVARCHAR(200) NULL;
-    IF COL_LENGTH('RepairOrders', 'repair_inspected_at') IS NULL
-      ALTER TABLE RepairOrders ADD repair_inspected_at DATETIME2 NULL;
-    IF COL_LENGTH('Containers', 'customer_id') IS NULL
-      ALTER TABLE Containers ADD customer_id INT NULL;
-  `);
-}
-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -87,7 +48,6 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureMnrColumns(db);
     const result = await db.request()
       .input('eorId', sql.Int, parseInt(eorId))
       .query(`

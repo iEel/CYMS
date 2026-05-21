@@ -22,33 +22,7 @@ interface DocumentLifecycleEvent {
 }
 
 export async function ensureDocumentLifecycle(db: DbPool) {
-  await db.request().query(`
-    IF OBJECT_ID('DocumentLifecycle', 'U') IS NULL
-    BEGIN
-      CREATE TABLE DocumentLifecycle (
-        lifecycle_id BIGINT PRIMARY KEY IDENTITY(1,1),
-        document_type NVARCHAR(30) NOT NULL,
-        document_id INT NULL,
-        document_number NVARCHAR(80) NOT NULL,
-        status NVARCHAR(30) NOT NULL,
-        event_type NVARCHAR(50) NOT NULL,
-        related_document_type NVARCHAR(30) NULL,
-        related_document_id INT NULL,
-        related_document_number NVARCHAR(80) NULL,
-        reason NVARCHAR(500) NULL,
-        details NVARCHAR(MAX) NULL,
-        user_id INT NULL,
-        yard_id INT NULL,
-        created_at DATETIME2 NOT NULL DEFAULT GETDATE()
-      );
-
-      CREATE INDEX IX_DocumentLifecycle_Document
-        ON DocumentLifecycle (document_type, document_id, document_number, created_at);
-
-      CREATE INDEX IX_DocumentLifecycle_Related
-        ON DocumentLifecycle (related_document_type, related_document_id, related_document_number, created_at);
-    END
-  `);
+  void db;
 }
 
 export async function logDocumentLifecycle(event: DocumentLifecycleEvent) {

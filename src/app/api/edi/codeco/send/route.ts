@@ -38,16 +38,6 @@ export async function POST(request: NextRequest) {
 
     // 2. Generate CODECO data
     const req = db.request().input('yardId', sql.Int, yard_id || 1);
-    await db.request().query(`
-      IF COL_LENGTH('GateTransactions', 'truck_company') IS NULL
-        ALTER TABLE GateTransactions ADD truck_company NVARCHAR(100) NULL;
-      IF COL_LENGTH('Containers', 'container_grade') IS NULL
-        ALTER TABLE Containers ADD container_grade NVARCHAR(1) NULL;
-      IF COL_LENGTH('EDITemplates', 'required_fields') IS NULL
-        ALTER TABLE EDITemplates ADD required_fields NVARCHAR(MAX) NULL;
-      IF COL_LENGTH('EDITemplates', 'edifact_config') IS NULL
-        ALTER TABLE EDITemplates ADD edifact_config NVARCHAR(MAX) NULL;
-    `);
     let query = `
       SELECT g.transaction_id, g.transaction_type, g.eir_number,
              g.driver_name, g.truck_plate, g.truck_company, g.seal_number, g.booking_ref,

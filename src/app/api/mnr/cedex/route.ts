@@ -2,15 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 
-async function ensureCedexColumns(db: sql.ConnectionPool) {
-  await db.request().query(`
-    IF COL_LENGTH('CEDEXCodes', 'rate_version') IS NULL
-      ALTER TABLE CEDEXCodes ADD rate_version INT NOT NULL CONSTRAINT DF_CEDEXCodes_RateVersion DEFAULT 1;
-    IF COL_LENGTH('CEDEXCodes', 'updated_at') IS NULL
-      ALTER TABLE CEDEXCodes ADD updated_at DATETIME2 NULL;
-  `);
-}
-
 // GET — ดึง CEDEX codes ทั้งหมด
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +9,6 @@ export async function GET(request: NextRequest) {
     const activeOnly = searchParams.get('active') !== 'false'; // default: only active
 
     const db = await getDb();
-    await ensureCedexColumns(db);
     const result = await db.request().query(`
       SELECT * FROM CEDEXCodes
       ${activeOnly ? "WHERE is_active = 1" : ""}
@@ -43,7 +33,6 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureCedexColumns(db);
     const result = await db.request()
       .input('code', sql.NVarChar, code.toUpperCase())
       .input('component', sql.NVarChar, component)
@@ -77,7 +66,6 @@ export async function PUT(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureCedexColumns(db);
     await db.request()
       .input('cedexId', sql.Int, cedex_id)
       .input('code', sql.NVarChar, code?.toUpperCase())
@@ -120,7 +108,6 @@ export async function DELETE(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureCedexColumns(db);
     await db.request()
       .input('cedexId', sql.Int, parseInt(cedexId))
       .query('UPDATE CEDEXCodes SET is_active = 0, updated_at = GETDATE() WHERE cedex_id = @cedexId');

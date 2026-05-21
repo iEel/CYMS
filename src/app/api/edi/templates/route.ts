@@ -3,20 +3,10 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 
-async function ensureTemplateColumns(db: sql.ConnectionPool) {
-  await db.request().query(`
-    IF COL_LENGTH('EDITemplates', 'required_fields') IS NULL
-      ALTER TABLE EDITemplates ADD required_fields NVARCHAR(MAX) NULL;
-    IF COL_LENGTH('EDITemplates', 'edifact_config') IS NULL
-      ALTER TABLE EDITemplates ADD edifact_config NVARCHAR(MAX) NULL;
-  `);
-}
-
 // GET — list all templates
 export async function GET() {
   try {
     const db = await getDb();
-    await ensureTemplateColumns(db);
     const result = await db.request().query(`
       SELECT * FROM EDITemplates WHERE is_active = 1 ORDER BY is_system DESC, template_name
     `);
@@ -41,7 +31,6 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureTemplateColumns(db);
     const result = await db.request()
       .input('name', sql.NVarChar, template_name)
       .input('format', sql.NVarChar, base_format)
@@ -88,7 +77,6 @@ export async function PUT(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureTemplateColumns(db);
 
     // Check if system template
     const check = await db.request().input('id', sql.Int, template_id)
@@ -146,7 +134,6 @@ export async function DELETE(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureTemplateColumns(db);
 
     // Check if system template
     const check = await db.request().input('id', sql.Int, templateId)

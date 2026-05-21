@@ -4,13 +4,6 @@ import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
 
-async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
-  await db.request().query(`
-    IF COL_LENGTH('Containers', 'container_grade') IS NULL
-      ALTER TABLE Containers ADD container_grade NVARCHAR(1) NOT NULL CONSTRAINT DF_Containers_Grade DEFAULT 'A'
-  `);
-}
-
 // GET — ดึง containers ตาม yard_id + filter, หรือ check_position (conflict detection)
 export async function GET(request: NextRequest) {
   try {
@@ -25,7 +18,6 @@ export async function GET(request: NextRequest) {
     const tier = searchParams.get('tier');
 
     const db = await getDb();
-    await ensureContainerGradeColumn(db);
 
     // Position check mode — ตรวจว่ามีตู้ที่ตำแหน่งนี้ไหม
     if (checkPosition === '1' && zoneId && bay && row && tier) {
@@ -91,7 +83,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
-    await ensureContainerGradeColumn(db);
 
     const result = await db.request()
       .input('containerNumber', sql.NVarChar, body.container_number)
@@ -134,7 +125,6 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
-    await ensureContainerGradeColumn(db);
 
     const currentResult = await db.request()
       .input('containerId', sql.Int, body.container_id)

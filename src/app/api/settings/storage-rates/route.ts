@@ -8,20 +8,6 @@ type StorageRateTier = {
   cargo_status: string;
 };
 
-// Auto-migrate: ensure customer_id + cargo_status columns
-async function ensureColumns(pool: Awaited<ReturnType<typeof getDb>>) {
-  try {
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'StorageRateTiers' AND COLUMN_NAME = 'customer_id')
-      ALTER TABLE StorageRateTiers ADD customer_id INT NULL
-    `);
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'StorageRateTiers' AND COLUMN_NAME = 'cargo_status')
-      ALTER TABLE StorageRateTiers ADD cargo_status VARCHAR(10) DEFAULT 'any'
-    `);
-  } catch { /* columns may already exist */ }
-}
-
 function normalizeCargoStatus(value: unknown): 'any' | 'laden' | 'empty' {
   return value === 'laden' || value === 'empty' ? value : 'any';
 }
@@ -75,7 +61,6 @@ export async function GET(request: NextRequest) {
     const cargoStatus = normalizeCargoStatus(searchParams.get('cargo_status')); // any/laden/empty
 
     const db = await getDb();
-    await ensureColumns(db);
 
     let query = `
       SELECT tier_id, yard_id, tier_name, from_day, to_day,
@@ -136,7 +121,6 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureColumns(db);
     const selectedCargoStatus = normalizeCargoStatus(cargo_status);
 
     // Soft-delete only this yard + customer + cargo status combination.

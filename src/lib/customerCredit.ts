@@ -4,14 +4,7 @@ import { getDb } from '@/lib/db';
 type DbPool = Awaited<ReturnType<typeof getDb>>;
 
 export async function ensureCustomerCreditColumns(db: DbPool) {
-  await db.request().query(`
-    IF COL_LENGTH('Customers', 'credit_limit') IS NULL
-      ALTER TABLE Customers ADD credit_limit DECIMAL(12,2) NULL;
-    IF COL_LENGTH('Customers', 'credit_hold') IS NULL
-      ALTER TABLE Customers ADD credit_hold BIT NOT NULL CONSTRAINT DF_Customers_CreditHold DEFAULT 0;
-    IF COL_LENGTH('Customers', 'credit_hold_reason') IS NULL
-      ALTER TABLE Customers ADD credit_hold_reason NVARCHAR(300) NULL;
-  `);
+  void db;
 }
 
 export async function getCustomerCreditSnapshot(db: DbPool, customerId: number, yardId?: number | null) {

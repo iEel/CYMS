@@ -3,29 +3,6 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 
 // ==========================================
-// Auto-migrate: create PrefixMapping table
-// ==========================================
-async function ensureTable(pool: Awaited<ReturnType<typeof getDb>>) {
-  try {
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'PrefixMapping')
-      BEGIN
-        CREATE TABLE PrefixMapping (
-          prefix_id    INT IDENTITY PRIMARY KEY,
-          prefix_code  NVARCHAR(4) NOT NULL,
-          customer_id  INT NOT NULL,
-          is_primary   BIT DEFAULT 0,
-          notes        NVARCHAR(200),
-          created_at   DATETIME2 DEFAULT GETDATE(),
-          CONSTRAINT FK_Prefix_Customer FOREIGN KEY (customer_id) REFERENCES Customers(customer_id),
-          CONSTRAINT UQ_Prefix_Customer UNIQUE (prefix_code, customer_id)
-        );
-      END
-    `);
-  } catch { /* table may already exist */ }
-}
-
-// ==========================================
 // Boxtech Token Cache (in-memory)
 // ==========================================
 let cachedToken: string | null = null;
@@ -136,7 +113,6 @@ export async function GET(request: NextRequest) {
 
     // 1. Look up prefix → customer mapping in our DB (ALL matches, not TOP 1)
     const pool = await getDb();
-    await ensureTable(pool);
 
     const prefixResult = await pool.request()
       .input('prefix', sql.NVarChar, prefix)
