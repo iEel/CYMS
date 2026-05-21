@@ -10,8 +10,9 @@ import PhotoCapture from '@/components/gate/PhotoCapture';
 import CameraOCR from '@/components/gate/CameraOCR';
 import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import GateGuardrailPanel from '@/components/gate/GateGuardrailPanel';
+import GateDecisionBar from '@/components/gate/GateDecisionBar';
 import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
-import { buildGateOutWorkflow } from '@/lib/gateWorkflow';
+import { buildGateDecisionSignals, buildGateOutWorkflow } from '@/lib/gateWorkflow';
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -498,6 +499,18 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     submitted: !!gateOutResult?.success,
     canSubmit: canGateOut,
   });
+  const gateOutDecisionSignals = buildGateDecisionSignals({
+    mode: 'gate_out',
+    workflow: gateOutWorkflow,
+    billingRequired: !!billingData,
+    billingCleared,
+    bookingSelected: !!selectedBooking || !!gateOutForm.booking_ref,
+    bookingWarnings: gateOutBookingWarnings,
+    evidenceComplete: gateOutPhase !== 'confirm_release' || gateOutPhotos.length > 0,
+    photoCompleted: gateOutPhotos.length,
+    photoRequired: gateOutPhase === 'confirm_release' ? 1 : 0,
+    canSubmit: canGateOut,
+  });
   const gateOutGuardrails = useMemo(() => buildGateOperationalGuardrails({
     mode: 'gate_out',
     form: {
@@ -526,6 +539,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       <div className="p-5 space-y-4">
         <GateWorkflowPanel title="Gate-Out guided workflow" workflow={gateOutWorkflow} />
         <GateGuardrailPanel title="Gate-Out operational guardrails" snapshot={gateOutGuardrails} />
+        <GateDecisionBar signals={gateOutDecisionSignals} />
 
         {/* Search */}
         <div>

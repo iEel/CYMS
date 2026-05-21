@@ -1,6 +1,8 @@
 export type ARDunningStage = 'friendly_reminder' | 'second_notice' | 'credit_hold_review' | 'final_notice';
 export type ARDunningSeverity = 'info' | 'warning' | 'danger' | 'critical';
 export type ARDunningAction = 'email_reminder' | 'call_customer' | 'credit_hold_review' | 'final_notice_and_credit_hold_review';
+export type ARDunningContactMethod = 'email' | 'phone' | 'portal' | 'note';
+export type ARDunningContactOutcome = 'sent' | 'reached' | 'no_answer' | 'promise_to_pay' | 'disputed' | 'escalated';
 
 export interface ARDunningCustomer {
   customer_id: number;
@@ -27,6 +29,17 @@ export interface ARDunningItem {
   email_subject: string;
   email_body: string;
   priority: number;
+}
+
+export interface ARDunningContactAuditInput {
+  customer_id: number;
+  customer_name?: string | null;
+  stage?: ARDunningStage | null;
+  contact_method: ARDunningContactMethod;
+  outcome: ARDunningContactOutcome;
+  note?: string | null;
+  promise_to_pay_date?: string | null;
+  promise_to_pay_amount?: number | null;
 }
 
 function money(value: number) {
@@ -130,5 +143,20 @@ export function buildARDunningPlan(customers: ARDunningCustomer[]) {
       credit_hold_review_count: items.filter(item => item.stage === 'credit_hold_review').length,
       final_notice_count: items.filter(item => item.stage === 'final_notice').length,
     },
+  };
+}
+
+export function buildARDunningContactAuditDetails(input: ARDunningContactAuditInput) {
+  return {
+    customer_id: input.customer_id,
+    customer_name: input.customer_name?.trim() || null,
+    stage: input.stage || null,
+    contact_method: input.contact_method,
+    outcome: input.outcome,
+    note: input.note?.trim() || null,
+    promise_to_pay_date: input.promise_to_pay_date || null,
+    promise_to_pay_amount: Number.isFinite(Number(input.promise_to_pay_amount))
+      ? Number(input.promise_to_pay_amount)
+      : null,
   };
 }

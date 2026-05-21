@@ -1,10 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Bell, CheckCircle2, Copy, Mail, Phone, ShieldAlert } from 'lucide-react';
+import { Bell, CheckCircle2, Copy, Loader2, Mail, MessageSquare, Phone, ShieldAlert, X } from 'lucide-react';
 import { buildARDunningPlan, type ARDunningItem } from '@/lib/arDunning';
 import type { ARCustomer } from './billingTypes';
 import type { ReactNode } from 'react';
+import { useAuth } from '@/components/providers/AuthProvider';
+import { useToast } from '@/components/providers/ToastProvider';
 
 const severityClass = {
   info: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
@@ -21,8 +23,17 @@ const actionIcon: Record<ARDunningItem['recommended_action'], ReactNode> = {
 };
 
 export default function ARDunningPanel({ customers }: { customers: ARCustomer[] }) {
+  const { session } = useAuth();
+  const { toast } = useToast();
   const plan = useMemo(() => buildARDunningPlan(customers), [customers]);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [actionTarget, setActionTarget] = useState<ARDunningItem | null>(null);
+  const [contactMethod, setContactMethod] = useState('email');
+  const [outcome, setOutcome] = useState('sent');
+  const [note, setNote] = useState('');
+  const [promiseDate, setPromiseDate] = useState('');
+  const [promiseAmount, setPromiseAmount] = useState('');
+  const [logLoading, setLogLoading] = useState(false);
   const topItems = plan.items.slice(0, 5);
 
   const copyReminder = async (item: ARDunningItem) => {
@@ -30,6 +41,49 @@ export default function ARDunningPanel({ customers }: { customers: ARCustomer[] 
     await navigator.clipboard.writeText(text);
     setCopiedId(item.customer_id);
     setTimeout(() => setCopiedId(null), 1800);
+  };
+
+  const openActionLog = (item: ARDunningItem) => {
+    setActionTarget(item);
+    setContactMethod(item.recommended_action === 'call_customer' ? 'phone' : 'email');
+    setOutcome(item.recommended_action === 'call_customer' ? 'reached' : 'sent');
+    setNote('');
+    setPromiseDate('');
+    setPromiseAmount('');
+  };
+
+  const submitActionLog = async () => {
+    if (!actionTarget || !session?.activeYardId) return;
+    setLogLoading(true);
+    try {
+      const res = await fetch('/api/billing/dunning-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yard_id: session.activeYardId,
+          customer_id: actionTarget.customer_id,
+          customer_name: actionTarget.customer_name,
+          stage: actionTarget.stage,
+          contact_method: contactMethod,
+          outcome,
+          note,
+          promise_to_pay_date: outcome === 'promise_to_pay' ? promiseDate || null : null,
+          promise_to_pay_amount: outcome === 'promise_to_pay' ? Number(promiseAmount || 0) : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast('error', 'บันทึก dunning action ไม่สำเร็จ', data.error || actionTarget.customer_name);
+        return;
+      }
+      toast('success', 'บันทึก dunning action แล้ว', actionTarget.customer_name);
+      setActionTarget(null);
+    } catch (error) {
+      console.error(error);
+      toast('error', 'บันทึก dunning action ไม่สำเร็จ');
+    } finally {
+      setLogLoading(false);
+    }
   };
 
   return (
@@ -81,9 +135,84 @@ export default function ARDunningPanel({ customers }: { customers: ARCustomer[] 
                   {copiedId === item.customer_id ? <CheckCircle2 size={13} /> : <Copy size={13} />}
                   {copiedId === item.customer_id ? 'คัดลอกแล้ว' : 'Copy reminder'}
                 </button>
+                <button
+                  onClick={() => openActionLog(item)}
+                  className="h-9 px-3 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-semibold hover:opacity-90 flex items-center gap-1.5"
+                >
+                  <MessageSquare size={13} /> Log contact
+                </button>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {actionTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm p-4">
+          <div className="mx-auto mt-16 max-w-lg rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                  <MessageSquare size={15} /> Log AR contact
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">{actionTarget.customer_name} · {stageLabel(actionTarget.stage)}</p>
+              </div>
+              <button onClick={() => setActionTarget(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold uppercase text-slate-400">Method</span>
+                  <select value={contactMethod} onChange={e => setContactMethod(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm text-slate-800 dark:text-white">
+                    <option value="email">Email</option>
+                    <option value="phone">Phone</option>
+                    <option value="portal">Portal</option>
+                    <option value="note">Note</option>
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold uppercase text-slate-400">Outcome</span>
+                  <select value={outcome} onChange={e => setOutcome(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm text-slate-800 dark:text-white">
+                    <option value="sent">Sent</option>
+                    <option value="reached">Reached</option>
+                    <option value="no_answer">No answer</option>
+                    <option value="promise_to_pay">Promise to pay</option>
+                    <option value="disputed">Disputed</option>
+                    <option value="escalated">Escalated</option>
+                  </select>
+                </label>
+              </div>
+
+              {outcome === 'promise_to_pay' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="space-y-1">
+                    <span className="text-[10px] font-semibold uppercase text-slate-400">Promise date</span>
+                    <input type="date" value={promiseDate} onChange={e => setPromiseDate(e.target.value)}
+                      className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm text-slate-800 dark:text-white" />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[10px] font-semibold uppercase text-slate-400">Amount</span>
+                    <input type="number" min="0" value={promiseAmount} onChange={e => setPromiseAmount(e.target.value)}
+                      className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm text-slate-800 dark:text-white" />
+                  </label>
+                </div>
+              )}
+
+              <textarea value={note} onChange={e => setNote(e.target.value)} rows={4}
+                placeholder="บันทึกผลการติดต่อ, ผู้รับสาย, หมายเหตุ AP หรือเงื่อนไข promise-to-pay..."
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-white" />
+
+              <button onClick={submitActionLog} disabled={logLoading || !session?.activeYardId}
+                className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                {logLoading ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+                Save contact log
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

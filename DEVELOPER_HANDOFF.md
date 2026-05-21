@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates** (~100%)
 
 ---
 
@@ -255,13 +255,14 @@ container-yard-system/
 │   │       │   ├── erp-export/route.ts     # GET ERP export (CSV/JSON debit-credit) — **fixed: getDb() + date format DD/MM/YYYY HH:mm + customer credit/branch data**
 │   │       │   ├── reports/route.ts         # **GET billing reports** — daily/monthly KPIs, charge breakdowns, top customers
 │   │       │   ├── ar-aging/route.ts        # **GET AR Aging report** — ยอดค้างชำระแยกตามอายุ (current/30/60/90+ วัน) + แยกตามลูกค้า
+│   │       │   ├── dunning-actions/route.ts # POST AR dunning contact/promise-to-pay audit log
 │   │       │   └── demurrage/route.ts      # **GET/POST/PUT demurrage** — overview, single calc, rates CRUD
 │   │       ├── portal/
 │   │       │   ├── overview/route.ts        # Customer KPIs + recent gate activity
-│   │       │   ├── containers/route.ts      # Portal-scoped container list via PortalEntityAccess grants
-│   │       │   ├── invoices/route.ts        # Portal invoices + AR summary via invoice grants
+│   │       │   ├── containers/route.ts      # Portal-scoped container list via PortalEntityAccess grants + visibility_role
+│   │       │   ├── invoices/route.ts        # Portal invoices + AR summary via invoice grants + visibility_role
 │   │       │   ├── statement/route.ts       # Statement/AR aging summary via invoice grants
-│   │       │   ├── bookings/route.ts        # Bookings + progress + ETA/empty-return metadata via booking grants
+│   │       │   ├── bookings/route.ts        # Bookings + progress + ETA/empty-return metadata via booking grants + visibility_role
 │   │       │   ├── bookings/detail/route.ts # Booking detail + container/EIR drilldown via booking grants
 │   │       │   ├── eir-pdf/route.ts         # Portal-scoped EIR PDF via gate/container grants
 │   │       │   ├── invoice-pdf/route.ts     # Portal-scoped invoice/receipt/CN PDF via invoice grants
@@ -322,7 +323,7 @@ container-yard-system/
 │   │   │   ├── ContainerSearch.tsx   # Instant search + detail panel + photos + EIR link + **Dwell Days badge**
 │   │   │   ├── ContainerCardPWA.tsx  # Mobile card view + **Dwell Days badge**
 │   │   │   ├── ContainerDetailModal.tsx  # Container detail modal (SVG inspection, photos, actions)
-│   │   │   ├── YardPlanningPanel.tsx # Slot aging heatmap + move/release/congestion forecast panel
+│   │   │   ├── YardPlanningPanel.tsx # Slot aging heatmap + move/release/congestion forecast panel + create WO action
 │   │   │   └── YardAudit.tsx         # Audit checklist per zone/bay
 │   │   ├── containers/
 │   │   │   └── ContainerTimeline.tsx   # **Container Tracking Timeline** — visual vertical timeline (Gate-In→Move→Hold→Repair→Gate-Out)
@@ -330,6 +331,7 @@ container-yard-system/
 │   │       ├── EIRDocument.tsx         # EIR A5 print (Portal, QR, condition, grade, signatures)
 │   │       ├── ContainerInspection.tsx  # 6-side SVG damage marking + photo + grade
 │   │       ├── GateWorkflowPanel.tsx    # Guided checklist/exception panel for Gate-In and Gate-Out
+│   │       ├── GateDecisionBar.tsx      # Sticky billing/booking/evidence/supervisor decision summary
 │   │       ├── GateGuardrailPanel.tsx   # Gate QR pass + duplicate seal/plate + driver/photo guardrails
 │   │       ├── CameraOCR.tsx            # **📷 Full-screen PWA Camera OCR** — pre-warmed Tesseract worker, crop zone, smart container extraction (`extractContainerNumber` 4-strategy), confidence scoring, torch toggle, scan overlay, `loadedmetadata` race condition fix, `mode` prop (container/plate/seal/generic)
 │   │       ├── PhotoCapture.tsx         # Camera/upload photo → **auto-upload to server** (URL, not base64)
@@ -346,9 +348,9 @@ container-yard-system/
 │       ├── deviceBinding.ts      # Trusted browser device policy + id validation (uses legacy bound_device_mac column)
 │       ├── promptPay.ts          # PromptPay EMV QR payload builder + CRC16 validation
 │       ├── approvalInbox.ts      # Supervisor approval inbox priority/SLA/exposure builder
-│       ├── arDunning.ts          # AR dunning stage/action/reminder draft builder
+│       ├── arDunning.ts          # AR dunning stage/action/reminder draft + contact audit detail builder
 │       ├── billingTariffSimulator.ts # Billing tariff preview math for per-day/per-container/fixed rates
-│       ├── gateWorkflow.ts       # Gate-In/Out workflow step + exception model used by guided UI
+│       ├── gateWorkflow.ts       # Gate-In/Out workflow step + exception + decision signal model used by guided UI
 │       ├── gateOperationalGuardrails.ts # QR gate pass, duplicate seal/plate warning, driver/photo completeness model
 │       ├── reconciliationActions.ts # Reports action-center row decoration, deep links, SLA aging, resolved/ignored filtering
 │       ├── utils.ts              # formatDateTime, formatTime, **calcDwellDays** (Calendar Days +1), etc.
@@ -361,7 +363,7 @@ container-yard-system/
 │       ├── authFetch.ts          # **🔐 Client auth fetch** — auto-attach Bearer token + 401 redirect
 │       ├── audit.ts              # **🔐 Centralized logAudit()** — non-fatal AuditLog INSERT
 │       ├── portalEntityAccess.ts # Non-fatal upsert helper for PortalEntityAccess grants
-│       ├── portalAccess.ts       # Customer Portal access grants SQL helpers (PortalEntityAccess)
+│       ├── portalAccess.ts       # Customer Portal access grants SQL helpers + visibility reason subquery
 │       ├── portalGrantReconciler.ts # Admin preview/repair missing/stale PortalEntityAccess grants
 │       ├── portalBooking.ts      # Customer Portal booking ETA + empty-return instruction helpers
 │       ├── portalDocumentBundle.ts # Statement/invoice/EIR bundle index entries
@@ -379,11 +381,11 @@ container-yard-system/
 │           ├── approvalInbox.test.ts       # Supervisor inbox SLA/risk/exposure prioritization
 │           ├── arDunning.test.ts           # AR dunning stage/action/reminder draft generation
 │           ├── billingTariffSimulator.test.ts # Tariff simulator math + dwell scenarios
-│           ├── gateWorkflow.test.ts        # Gate guided workflow status + exception rules
+│           ├── gateWorkflow.test.ts        # Gate guided workflow status + exception + decision signal rules
 │           ├── gateOperationalGuardrails.test.ts # QR pass + duplicate seal/plate + evidence guardrails
 │           ├── reconciliationActions.test.ts # Reconciliation action row keys + deep links + status overlay
 │           ├── offlineQueue.test.ts        # Offline queue request classification + outbox retry/conflict/clear helpers
-│           ├── yardPlanning.test.ts        # Slot aging heatmap, move recommendation, release forecast
+│           ├── yardPlanning.test.ts        # Slot aging heatmap, move recommendation, WO target slot, release forecast
 │           ├── portalEntityAccess.test.ts  # PortalEntityAccess upsert helper + non-fatal failure
 │           ├── portalGrantReconciler.test.ts # PortalEntityAccess preview/repair source-of-truth SQL
 │           ├── portalBooking.test.ts       # Portal ETA status + empty-return instruction helpers
@@ -625,7 +627,7 @@ container-yard-system/
   - คำนวณด้วย `calcDwellDays()` (Calendar Days +1)
 - **2D / Bay / 3D** toggle (3 มุมมอง)
 - **2D**: Zone cards + occupancy bars
-- **Yard Planning panel**: slot aging heatmap, move recommendations, daily release forecast และ congestion forecast สำหรับงานวางแผนลาน
+- **Yard Planning panel**: slot aging heatmap, move recommendations, daily release forecast, congestion forecast และปุ่มสร้าง Work Order จาก recommendation พร้อม target slot
 - **Bay**: (**ใหม่**) Bay Cross-Section — แสดง Row×Tier grid แยกตาม Bay + เลือก Zone + สี shipping line/status + hover tooltip + click detail + legend
 - **3D**: Three.js — ตู้สมจริง (สัดส่วนจริง 20ft/40ft/45ft)
 - ตารางตู้ + filter + search + **pagination** (25 ตู้/หน้า + ปุ่มเลขหน้า + รีเซ็ตอัตโนมัติเมื่อเปลี่ยน filter)
@@ -665,7 +667,8 @@ container-yard-system/
 - Gate-In แสดงลำดับ: Container check → Resolve customer → Billing clearance → Inspection evidence → Issue EIR
 - Gate-Out แสดงลำดับ: Select container → Match booking → Billing clearance → Pickup request → Release and EIR
 - Exception panel แจ้ง blocker สำคัญ เช่น billing hold, booking mismatch, prefix/customer conflict, missing inspection/seal photo, permission missing
-- Unit test: `src/lib/__tests__/gateWorkflow.test.ts` ครอบคลุม billing blocker, ready-to-submit, booking mismatch + billing hold
+- เพิ่ม `GateDecisionBar.tsx` เป็น sticky decision bar สรุป Billing / Booking / Evidence / Supervisor state พร้อม next decision สำหรับงานหน้าด่าน
+- Unit test: `src/lib/__tests__/gateWorkflow.test.ts` ครอบคลุม billing blocker, ready-to-submit, booking mismatch + billing hold และ decision signals
 
 #### Gate Operational Guardrails (✅ เสร็จ — 21 พ.ค. 2569)
 - เพิ่ม `src/lib/gateOperationalGuardrails.ts` เป็น preflight model สำหรับ Gate-In/Gate-Out
@@ -1000,7 +1003,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - แท็บ "รายงาน" ในหน้าบัญชี + หน้าพิมพ์ A4 แยก (`/billing/print/report`)
   - รายวัน: KPIs, สรุปสถานะ, gate activity, แจกแจงตามประเภทค่าบริการ, รายการ invoice
   - รายเดือน: KPIs, top customers, daily breakdown table
-- [x] **AR Dunning Action Center** (✅ เสร็จ — 21 พ.ค. 2569) — เพิ่ม `src/lib/arDunning.ts` และ `ARDunningPanel.tsx` ใน AR Aging เพื่อจัด stage `friendly_reminder` / `second_notice` / `credit_hold_review` / `final_notice`, สรุป exposure, เรียงลำดับลูกค้าที่ต้องตาม และ copy reminder draft ได้จากยอดค้างจริง (ยังไม่ auto-send email จนกว่าจะล็อก recipient/audit policy)
+- [x] **AR Dunning Action Center** (✅ เสร็จ — 21 พ.ค. 2569) — เพิ่ม `src/lib/arDunning.ts` และ `ARDunningPanel.tsx` ใน AR Aging เพื่อจัด stage `friendly_reminder` / `second_notice` / `credit_hold_review` / `final_notice`, สรุป exposure, เรียงลำดับลูกค้าที่ต้องตาม, copy reminder draft และบันทึก contact attempt / promise-to-pay ผ่าน `POST /api/billing/dunning-actions` ลง audit log
 - [x] **📄 PDF Export** (ใหม่) — client-side PDF ผ่าน jsPDF + jspdf-autotable
   - `src/lib/pdfExport.ts` — 3 ฟังก์ชั่นสำเร็จรูป:
     - `generateBillingReportPDF()` — รายงานประจำวัน/เดือน (KPIs, ตารางบิล, gate activity, ยอดรายวัน, top ลูกค้า)
@@ -1097,10 +1100,11 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 ### 🧠 Yard Planning Heatmap + Forecast (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **Slot aging heatmap** — `src/lib/yardPlanning.ts` รวม occupancy, avg/max dwell และ active count ต่อ zone แล้วจัดระดับ `low/watch/high/critical`
 - [x] **Move recommendations** — แนะนำ pre-marshal ตู้พร้อมปล่อยที่อยู่ tier สูง/ค้างนาน และแยกตู้ hold/repair ให้เข้า repair review
+- [x] **Create Work Order action** — recommendation เลือก target slot ว่างจาก zone ที่เหมาะสม แล้วสร้าง `WorkOrders` ผ่าน `/api/operations` ได้ทันทีพร้อม from/to slot และ note จากเหตุผล planning
 - [x] **Daily release forecast** — สรุป ready today, next 3 days และ blocked count เพื่อช่วยวางแผนทีมหน้าลาน
 - [x] **Congestion forecast** — แสดง zone ที่เริ่มเสี่ยง/วิกฤต พร้อมคำแนะนำ operational action
 - [x] **UI integration** — เพิ่ม `src/components/yard/YardPlanningPanel.tsx` ในหน้า Yard Overview (2D view) ก่อน Yard Optimization
-- [x] **Unit tests** — `src/lib/__tests__/yardPlanning.test.ts` ครอบคลุม heatmap risk, move recommendation, release forecast
+- [x] **Unit tests** — `src/lib/__tests__/yardPlanning.test.ts` ครอบคลุม heatmap risk, move recommendation, target slot สำหรับ Work Order และ release forecast
 
 ### 📄 Table Pagination (✅ เสร็จ)
 - [x] **Gate History** — 25 รายการ/หน้า + ปุ่มเลขหน้า + Prev/Next
@@ -1297,9 +1301,10 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Policy decision** — fix policy เข้าระบบก่อน ยังไม่ทำหน้า configurable policy เพื่อลดความเสี่ยง data leakage และลด complexity
 - [x] **Source-of-truth ใหม่** — เพิ่ม `PortalEntityAccess` เก็บ explicit grant ต่อ `container` / `booking` / `gate_transaction` / `invoice` ด้วย `access_role` เช่น `owner`, `billing`, `booking_customer`, `invoice_customer`
 - [x] **Backfill จาก model เดิม** — `scripts/migrate-runtime-core-schema.js` สร้าง table/indexes และเติม grants จาก `Bookings.customer_id`, `Containers.container_owner_id`, `GateTransactions.container_owner_id/billing_customer_id`, `Invoices.customer_id`, และ `BookingContainers`
-- [x] **Helper กลาง** — `src/lib/portalAccess.ts` เพิ่ม `portalEntityAccessSql`, `portalBookingVisibilitySql`, `portalInvoiceVisibilitySql`, `portalContainerVisibilitySql`, `portalGateVisibilitySql`
+- [x] **Helper กลาง** — `src/lib/portalAccess.ts` เพิ่ม `portalEntityAccessSql`, `portalBookingVisibilitySql`, `portalInvoiceVisibilitySql`, `portalContainerVisibilitySql`, `portalGateVisibilitySql` และ `portalVisibilityReasonSql`
 - [x] **Write-time grants** — `portalEntityAccess.ts` upsert grant แบบ non-fatal ตอนสร้าง/แก้ booking, ผูกตู้กับ booking, สร้าง invoice/credit note/revised invoice, และสร้าง GateTransaction เพื่อให้ข้อมูลใหม่เห็นใน portal โดยไม่ต้อง rerun migration
 - [x] **Portal APIs updated** — `api/portal/containers`, `overview`, `bookings`, `bookings/detail`, `invoices`, `statement`, `eir-pdf`, `invoice-pdf`, `document-bundle`, `disputes` ใช้ grant table แทน direct `customer_id` / owner/billing SQL
+- [x] **Visibility reason** — Portal containers/bookings/invoices ส่ง `visibility_role` กลับให้ UI แสดงว่ารายการนี้เห็นเพราะ `owner`, `billing`, `booking_customer`, หรือ `invoice_customer`
 - [x] **Admin reconciler** — เพิ่ม `src/lib/portalGrantReconciler.ts` + `GET/POST /api/portal/grants/reconcile` สำหรับ `yard_manager` เท่านั้น: preview missing/stale grants แล้ว repair โดย insert grants ที่ควรมี และ deactivate เฉพาะ stale grants ที่มาจาก managed source tables (`Bookings`, `BookingContainers`, `Containers`, `GateTransactions`, `Invoices`) พร้อม audit `portal_grants_reconcile_repair`
 - [x] **Migration รันแล้วบน DB จริง** — `node scripts/migrate-runtime-core-schema.js` ผ่านหลัง aggregate duplicate container grants ให้เหลือหนึ่ง grant ต่อ `(customer, entity, role)`
 - [x] **Tests เพิ่มเติม** — `portalAccess.test.ts`, `portalEntityAccess.test.ts`, `portalGrantReconciler.test.ts`, `portal-containers.test.ts`, `portal-bookings.test.ts`, `portal-features.test.ts`, `portal-grant-reconcile.test.ts` ครอบคลุม grant-based SQL, write-time grant helper, reconciler และ portal route policy
@@ -1562,6 +1567,29 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 
 **Verify ล่าสุด:**
 - `npm test -- src/lib/__tests__/portalGrantReconciler.test.ts src/app/api/__tests__/portal-grant-reconcile.test.ts --runInBand` ✅ (6 tests)
+
+### 🧭 Operator Workflow Polish (✅ เสร็จ — 21 พ.ค. 2569)
+
+**ไฟล์ที่เกี่ยวข้อง:**
+- `src/components/gate/GateDecisionBar.tsx`
+- `src/lib/gateWorkflow.ts`
+- `src/app/api/billing/dunning-actions/route.ts`
+- `src/app/(dashboard)/billing/ARDunningPanel.tsx`
+- `src/components/yard/YardPlanningPanel.tsx`
+- `src/lib/yardPlanning.ts`
+- `src/lib/portalAccess.ts`
+
+**สิ่งที่เพิ่ม:**
+- [x] Gate-In/Gate-Out มี sticky decision bar สรุป `Billing`, `Booking`, `Evidence`, `Supervisor` และ next action
+- [x] AR Dunning บันทึก contact attempt / promise-to-pay ลง audit log ผ่าน actor จาก server
+- [x] Yard Planning recommendation สร้าง Work Order ได้ทันทีพร้อม from/to slot และ note จากเหตุผล planning
+- [x] Customer Portal แสดง `visibility_role` เพื่อบอกว่ารายการเห็นได้เพราะ owner/billing/booking/invoice grant
+
+**Verify ล่าสุด:**
+- `npm test -- src/lib/__tests__/gateWorkflow.test.ts src/lib/__tests__/arDunning.test.ts src/app/api/__tests__/billing-dunning-actions.test.ts src/lib/__tests__/yardPlanning.test.ts src/lib/__tests__/portalAccess.test.ts src/app/api/__tests__/portal-containers.test.ts src/app/api/__tests__/portal-bookings.test.ts src/app/api/__tests__/portal-features.test.ts --runInBand` ✅ (25 tests)
+- `npm run lint` ✅
+- `npx tsc --noEmit --pretty false` ✅
+- `npm test -- --runInBand` ✅ (46 suites / 511 tests)
 
 ---
 

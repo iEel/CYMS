@@ -2,6 +2,7 @@ import sql from 'mssql';
 
 type BranchInput = {
   branch_id?: unknown;
+  [key: string]: unknown;
 };
 
 interface DbRequest {

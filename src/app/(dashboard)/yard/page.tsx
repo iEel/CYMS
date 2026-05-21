@@ -50,6 +50,7 @@ interface ContainerData {
   type: string;
   status: string;
   yard_name: string;
+  zone_id?: number;
   zone_name: string;
   zone_type: string;
   bay: number;
@@ -447,7 +448,13 @@ export default function YardPage() {
                 </div>
               </div>
 
-              <YardPlanningPanel zones={zones} containers={activeContainers} />
+              <YardPlanningPanel
+                zones={zones}
+                containers={activeContainers}
+                yardId={yardId}
+                canCreateWorkOrder={canAssignLocation}
+                onWorkOrderCreated={fetchData}
+              />
 
               <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">

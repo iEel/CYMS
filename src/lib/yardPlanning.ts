@@ -1,14 +1,19 @@
 export interface YardPlanningZone {
+  zone_id?: number;
   zone_name: string;
   zone_type?: string | null;
   capacity?: number | null;
   container_count?: number | null;
   occupancy_pct?: number | null;
+  max_bay?: number | null;
+  max_row?: number | null;
+  max_tier?: number | null;
 }
 
 export interface YardPlanningContainer {
   container_id?: number;
   container_number: string;
+  zone_id?: number | null;
   zone_name?: string | null;
   bay?: number | null;
   row?: number | null;
@@ -38,9 +43,20 @@ export interface YardZoneHeatmapRow {
 }
 
 export interface YardMoveRecommendation {
+  container_id?: number;
   container_number: string;
   action: 'pre_marshal_for_release' | 'move_to_repair_review' | 'rebalance_congested_zone';
+  order_type: 'move' | 'shift' | 'restack';
   from_slot: string;
+  from_zone_id?: number | null;
+  from_bay?: number | null;
+  from_row?: number | null;
+  from_tier?: number | null;
+  to_slot?: string | null;
+  to_zone_id?: number | null;
+  to_bay?: number | null;
+  to_row?: number | null;
+  to_tier?: number | null;
   reason: string;
   priority: number;
 }
@@ -70,6 +86,70 @@ function riskFrom(occupancy: number, avgAge: number, maxAge: number): YardZoneHe
 
 function slotLabel(container: YardPlanningContainer) {
   return `${container.zone_name || '-'} B${container.bay || '-'}-R${container.row || '-'}-T${container.tier || '-'}`;
+}
+
+function zoneSlotLabel(zone: YardPlanningZone, bay: number, row: number, tier: number) {
+  return `${zone.zone_name} B${bay}-R${row}-T${tier}`;
+}
+
+function findEmptySlot(
+  zones: YardPlanningZone[],
+  containers: YardPlanningContainer[],
+  action: YardMoveRecommendation['action'],
+  currentZoneId?: number | null,
+) {
+  const occupied = new Set(
+    containers
+      .filter(container => active(container) && container.zone_name && container.bay && container.row && container.tier)
+      .map(container => `${container.zone_name}:${container.bay}:${container.row}:${container.tier}`)
+  );
+  const rankedZones = [...zones]
+    .filter(zone => zone.zone_id && zone.max_bay && zone.max_row && zone.max_tier)
+    .sort((a, b) => {
+      const repairBiasA = action === 'move_to_repair_review' && a.zone_type === 'repair' ? -100 : 0;
+      const repairBiasB = action === 'move_to_repair_review' && b.zone_type === 'repair' ? -100 : 0;
+      const currentBiasA = a.zone_id === currentZoneId ? 20 : 0;
+      const currentBiasB = b.zone_id === currentZoneId ? 20 : 0;
+      return (repairBiasA + Number(a.occupancy_pct || 0) + currentBiasA)
+        - (repairBiasB + Number(b.occupancy_pct || 0) + currentBiasB);
+    });
+
+  for (const zone of rankedZones) {
+    for (let bay = 1; bay <= Number(zone.max_bay); bay++) {
+      for (let row = 1; row <= Number(zone.max_row); row++) {
+        for (let tier = 1; tier <= Number(zone.max_tier); tier++) {
+          if (!occupied.has(`${zone.zone_name}:${bay}:${row}:${tier}`)) {
+            return {
+              to_zone_id: zone.zone_id,
+              to_bay: bay,
+              to_row: row,
+              to_tier: tier,
+              to_slot: zoneSlotLabel(zone, bay, row, tier),
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return {};
+}
+
+function workOrderFields(
+  container: YardPlanningContainer,
+  zones: YardPlanningZone[],
+  containers: YardPlanningContainer[],
+  action: YardMoveRecommendation['action'],
+) {
+  return {
+    container_id: container.container_id,
+    order_type: 'move' as const,
+    from_zone_id: container.zone_id || null,
+    from_bay: container.bay || null,
+    from_row: container.row || null,
+    from_tier: container.tier || null,
+    ...findEmptySlot(zones, containers, action, container.zone_id),
+  };
 }
 
 function isReleaseReady(container: YardPlanningContainer) {
@@ -117,6 +197,7 @@ export function buildYardPlanningSnapshot(input: YardPlanningInput) {
     const tier = Number(container.tier || 0);
     if (isReleaseReady(container) && (age >= 14 || tier >= 3)) {
       return [{
+        ...workOrderFields(container, input.zones, activeContainers, 'pre_marshal_for_release'),
         container_number: container.container_number,
         action: 'pre_marshal_for_release' as const,
         from_slot: slotLabel(container),
@@ -126,6 +207,7 @@ export function buildYardPlanningSnapshot(input: YardPlanningInput) {
     }
     if (isBlocked(container) && age >= 7) {
       return [{
+        ...workOrderFields(container, input.zones, activeContainers, 'move_to_repair_review'),
         container_number: container.container_number,
         action: 'move_to_repair_review' as const,
         from_slot: slotLabel(container),

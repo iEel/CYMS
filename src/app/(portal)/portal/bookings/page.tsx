@@ -8,6 +8,7 @@ interface Booking {
   vessel_name: string; voyage_number: string; container_count: number;
   received_count: number; released_count: number; eta: string;
   valid_from: string; valid_to: string; created_at: string;
+  visibility_role?: string;
   eta_status?: { code: string; label: string; tone: string; days: number | null };
   empty_return_instruction?: {
     title: string;
@@ -142,6 +143,7 @@ export default function PortalBookings() {
                     <span>รับแล้ว {bk.received_count}</span>
                     <span>ออกแล้ว {bk.released_count}</span>
                     {bk.eta_status && <EtaBadge status={bk.eta_status} />}
+                    <VisibilityPill role={bk.visibility_role} />
                     {bk.empty_return_instruction && <span className="text-amber-600">Empty return instruction</span>}
                     <span className="text-blue-500">ดูรายละเอียด</span>
                   </div>
@@ -313,4 +315,14 @@ function EtaBadge({ status }: { status: { code: string; label: string; tone: str
       {status.label}
     </span>
   );
+}
+
+function VisibilityPill({ role }: { role?: string }) {
+  const labels: Record<string, string> = {
+    booking_customer: 'Visible by booking',
+    owner: 'Visible by owner',
+    billing: 'Visible by billing',
+    invoice_customer: 'Visible by invoice',
+  };
+  return <span className="text-blue-500">{labels[role || ''] || 'Visible by grant'}</span>;
 }

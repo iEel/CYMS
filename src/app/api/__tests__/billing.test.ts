@@ -12,6 +12,19 @@ import { NextRequest } from 'next/server';
 // ── Jest mock setup (before imports that need mocks) ─────────────────
 jest.mock('@/lib/db', () => ({ getDb: jest.fn() }));
 jest.mock('@/lib/audit', () => ({ logAudit: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('@/lib/apiAuth', () => ({
+  requireRequestActor: jest.fn().mockReturnValue({ userId: 1, role: 'yard_manager' }),
+  requirePermission: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
+  requireYardAccess: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
+}));
+jest.mock('@/lib/approvalReview', () => ({
+  requireApprovalForAction: jest.fn().mockResolvedValue({
+    status: 'approved',
+    actor: { userId: 1, role: 'yard_manager' },
+    approvedBy: 1,
+  }),
+  logApprovalReview: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('@/lib/documentNumber', () => ({
   nextDocumentNumber: jest.fn(async ({ prefix }: { prefix: string }) => `${prefix}-202605-000001`),
 }));
@@ -203,11 +216,14 @@ describe('PUT /api/billing/invoices — status actions', () => {
       status: 'issued',
     };
     queryQueue = [
+      q([{ yard_id: 1 }]), // scope lookup
       q([original]), // original invoice
       q([{ credited_total: 0 }]), // previous CN
-      q([{ invoice_id: 21, invoice_number: 'CN-2026-000001', grand_total: -1070 }]), // insert CN
+      q([{ invoice_id: 21, invoice_number: 'CN-2026-000001', grand_total: -1070, customer_id: 2, container_id: 3 }]), // insert CN
+      q([]), // grant CN invoice portal access
+      q([]), // grant CN container portal access
       q([]), // cancel original
-      q([{ invoice_id: 22, invoice_number: 'INV-2026-000002', grand_total: 535 }]), // insert revised
+      q([{ invoice_id: 22, invoice_number: 'INV-2026-000002', grand_total: 535, customer_id: 2, container_id: 3 }]), // insert revised
     ];
 
     const res = await PUT(makeRequest('PUT', 'http://localhost/api/billing/invoices', {
@@ -231,6 +247,7 @@ describe('PUT /api/billing/invoices — status actions', () => {
 
   it('rejects cumulative credit notes over original invoice total', async () => {
     queryQueue = [
+      q([{ yard_id: 1 }]), // scope lookup
       q([{ invoice_id: 1, invoice_number: 'INV-2026-000001', grand_total: 1070, status: 'issued' }]),
       q([{ credited_total: 1000 }]),
     ];

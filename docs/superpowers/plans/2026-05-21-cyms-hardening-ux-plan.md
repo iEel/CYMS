@@ -144,22 +144,22 @@ Run tests, lint/build, update handoff, commit `Add offline outbox`.
 - Create small hooks/components for repeated status panels
 - Test: targeted tests when logic moves to libs
 
-- [ ] **Step 1: Gate sticky decision bar**
+- [x] **Step 1: Gate sticky decision bar**
 
 Add a sticky action/status bar summarizing billing, booking, inspection/photo completeness, and supervisor state.
 
-- [ ] **Step 2: Billing collector workbench**
+- [x] **Step 2: Billing collector workbench**
 
 Promote AR dunning from copy-only to logged contact attempts and promise-to-pay notes.
 
-- [ ] **Step 3: Yard move recommendation action**
+- [x] **Step 3: Yard move recommendation action**
 
 Let move recommendations create a work order directly with prefilled target slot.
 
-- [ ] **Step 4: Portal visibility reason**
+- [x] **Step 4: Portal visibility reason**
 
 Show why a portal item is visible: owner, billing, booking, invoice, or gate grant.
 
-- [ ] **Step 5: Verification and handoff**
+- [x] **Step 5: Verification and handoff**
 
 Run lint/build/full tests, update `DEVELOPER_HANDOFF.md`, commit `Polish operator workflows`, and push.

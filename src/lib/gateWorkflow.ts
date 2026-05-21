@@ -20,6 +20,36 @@ export interface GateWorkflowSummary {
   nextAction: string;
 }
 
+export type GateDecisionStatus = 'ok' | 'active' | 'pending' | 'blocked';
+
+export interface GateDecisionSignal {
+  key: 'billing' | 'booking' | 'evidence' | 'supervisor';
+  label: string;
+  value: string;
+  detail: string;
+  status: GateDecisionStatus;
+}
+
+export interface GateDecisionSignals {
+  items: GateDecisionSignal[];
+  canProceed: boolean;
+  nextAction: string;
+}
+
+export interface GateDecisionInput {
+  mode: 'gate_in' | 'gate_out';
+  workflow: GateWorkflowSummary;
+  billingRequired: boolean;
+  billingCleared: boolean;
+  bookingSelected?: boolean;
+  bookingWarnings?: string[];
+  evidenceComplete: boolean;
+  photoCompleted?: number;
+  photoRequired?: number;
+  supervisorPending?: boolean;
+  canSubmit: boolean;
+}
+
 export interface GateInWorkflowInput {
   containerNumber: string;
   containerValid: boolean | null;
@@ -268,4 +298,58 @@ export function buildGateOutWorkflow(input: GateOutWorkflowInput): GateWorkflowS
     'Confirm Gate-Out and issue EIR';
 
   return { steps, exceptions, nextAction };
+}
+
+function signal(
+  key: GateDecisionSignal['key'],
+  label: string,
+  value: string,
+  detail: string,
+  status: GateDecisionStatus
+): GateDecisionSignal {
+  return { key, label, value, detail, status };
+}
+
+export function buildGateDecisionSignals(input: GateDecisionInput): GateDecisionSignals {
+  const bookingWarnings = input.bookingWarnings || [];
+  const hasDanger = input.workflow.exceptions.some(item => item.severity === 'danger');
+  const hasWarning = input.workflow.exceptions.some(item => item.severity === 'warning');
+  const photoRequired = Number(input.photoRequired || 0);
+  const photoCompleted = Number(input.photoCompleted || 0);
+
+  const billing = !input.billingRequired
+    ? signal('billing', 'Billing', 'ไม่คิดเงิน', 'No clearance needed for this move', 'ok')
+    : input.billingCleared
+      ? signal('billing', 'Billing', 'Clear', 'Payment, credit, no-charge, or waiver is recorded', 'ok')
+      : signal('billing', 'Billing', 'ต้องเคลียร์', 'Clear charges before issuing EIR', 'blocked');
+
+  const booking = input.mode === 'gate_in'
+    ? input.bookingSelected
+      ? signal('booking', 'Booking', 'Linked', 'Booking reference is attached to Gate-In', 'ok')
+      : signal('booking', 'Booking', 'Optional', 'Gate-In can continue without a booking reference', 'pending')
+    : bookingWarnings.length > 0
+      ? signal('booking', 'Booking', 'Mismatch', bookingWarnings.join(' | '), 'blocked')
+      : input.bookingSelected
+        ? signal('booking', 'Booking', 'Matched', 'Release booking is selected', 'ok')
+        : signal('booking', 'Booking', 'ต้องเลือก', 'Select a release booking before Gate-Out', 'active');
+
+  const evidenceValue = photoRequired > 0 ? `${Math.min(photoCompleted, photoRequired)}/${photoRequired}` : (input.evidenceComplete ? 'ครบ' : 'รอตรวจ');
+  const evidence = input.evidenceComplete
+    ? signal('evidence', 'Evidence', evidenceValue, 'Inspection and photo evidence are ready', 'ok')
+    : signal('evidence', 'Evidence', evidenceValue, photoRequired > 0 ? 'Capture required photos before final confirmation' : 'Complete inspection evidence', 'active');
+
+  const supervisor = input.supervisorPending
+    ? signal('supervisor', 'Supervisor', 'Pending', 'Waiting for supervisor approval', 'blocked')
+    : !input.canSubmit || hasDanger
+      ? signal('supervisor', 'Supervisor', 'Blocked', 'Resolve permission or critical exception first', 'blocked')
+      : hasWarning
+        ? signal('supervisor', 'Supervisor', 'Review', 'Operational exception needs attention', 'active')
+        : signal('supervisor', 'Supervisor', 'Clear', 'No approval blocker detected', 'ok');
+
+  const items = [billing, booking, evidence, supervisor];
+  return {
+    items,
+    canProceed: items.every(item => item.status !== 'blocked') && input.canSubmit,
+    nextAction: input.workflow.nextAction,
+  };
 }

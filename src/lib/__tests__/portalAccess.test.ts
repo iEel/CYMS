@@ -5,6 +5,7 @@ import {
   portalContainerVisibilitySql,
   portalEntityAccessSql,
   portalGateVisibilitySql,
+  portalVisibilityReasonSql,
 } from '../portalAccess';
 
 function makeRequest(headers: Record<string, string> = {}) {
@@ -70,5 +71,16 @@ describe('portal access policy helpers', () => {
     expect(sql).not.toContain('g.container_owner_id = @cid');
     expect(sql).not.toContain('g.billing_customer_id = @cid');
     expect(sql).not.toContain('c.customer_id');
+  });
+
+  it('builds a visibility reason subquery from the active portal grant', () => {
+    const sql = portalVisibilityReasonSql('container', 'c.container_id', 'c.container_number');
+
+    expect(sql).toContain('SELECT TOP 1 pea.access_role');
+    expect(sql).toContain('PortalEntityAccess');
+    expect(sql).toContain("pea.entity_type = 'container'");
+    expect(sql).toContain('pea.entity_id = c.container_id');
+    expect(sql).toContain('pea.entity_ref = c.container_number');
+    expect(sql).toContain('ORDER BY CASE pea.access_role');
   });
 });

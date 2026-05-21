@@ -1,4 +1,4 @@
-import { buildARDunningPlan } from '../arDunning';
+import { buildARDunningContactAuditDetails, buildARDunningPlan } from '../arDunning';
 
 describe('AR dunning plan', () => {
   const customers = [
@@ -63,5 +63,29 @@ describe('AR dunning plan', () => {
     expect(beta.email_subject).toContain('Beta Line');
     expect(beta.email_body).toContain('฿85,000');
     expect(beta.email_body).toContain('120 วัน');
+  });
+
+  it('normalizes dunning contact audit details with promise-to-pay fields', () => {
+    const details = buildARDunningContactAuditDetails({
+      customer_id: 2,
+      customer_name: 'Beta Line',
+      stage: 'final_notice',
+      contact_method: 'phone',
+      outcome: 'promise_to_pay',
+      note: 'AP promised bank transfer after statement correction',
+      promise_to_pay_date: '2026-05-25',
+      promise_to_pay_amount: 50000,
+    });
+
+    expect(details).toEqual(expect.objectContaining({
+      customer_id: 2,
+      customer_name: 'Beta Line',
+      stage: 'final_notice',
+      contact_method: 'phone',
+      outcome: 'promise_to_pay',
+      promise_to_pay_date: '2026-05-25',
+      promise_to_pay_amount: 50000,
+    }));
+    expect(details.note).toContain('AP promised');
   });
 });

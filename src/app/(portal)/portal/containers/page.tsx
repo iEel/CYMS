@@ -9,6 +9,7 @@ interface Container {
   bay: number; row: number; tier: number;
   gate_in_date: string; gate_out_date: string;
   zone_name: string; yard_name: string;
+  visibility_role?: string;
 }
 
 const statusLabels: Record<string, { label: string; cls: string }> = {
@@ -96,9 +97,12 @@ export default function PortalContainers() {
                 <div key={c.container_id} className="p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-mono font-bold text-slate-800 dark:text-white">{c.container_number}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[c.status] || statusLabels.pending).cls}`}>
-                      {(statusLabels[c.status] || statusLabels.pending).label}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <VisibilityPill role={c.visibility_role} />
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[c.status] || statusLabels.pending).cls}`}>
+                        {(statusLabels[c.status] || statusLabels.pending).label}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex gap-4 text-xs text-slate-500">
                     <span>{c.size}&apos; {c.type}</span>
@@ -121,6 +125,7 @@ export default function PortalContainers() {
                   <th className="p-3">ขนาด</th>
                   <th className="p-3">สายเรือ</th>
                   <th className="p-3">สถานะ</th>
+                  <th className="p-3">สิทธิ์เห็นข้อมูล</th>
                   <th className="p-3">โซน</th>
                   <th className="p-3">Gate-In</th>
                   <th className="p-3">Gate-Out</th>
@@ -137,6 +142,7 @@ export default function PortalContainers() {
                         {(statusLabels[c.status] || statusLabels.pending).label}
                       </span>
                     </td>
+                    <td className="p-3"><VisibilityPill role={c.visibility_role} /></td>
                     <td className="p-3 text-slate-500">{c.zone_name || '-'}</td>
                     <td className="p-3 text-slate-500 text-xs">{c.gate_in_date ? new Date(c.gate_in_date).toLocaleDateString('th-TH') : '-'}</td>
                     <td className="p-3 text-slate-500 text-xs">{c.gate_out_date ? new Date(c.gate_out_date).toLocaleDateString('th-TH') : '-'}</td>
@@ -162,5 +168,19 @@ export default function PortalContainers() {
         </div>
       )}
     </div>
+  );
+}
+
+function VisibilityPill({ role }: { role?: string }) {
+  const labels: Record<string, string> = {
+    owner: 'Owner',
+    billing: 'Billing',
+    booking_customer: 'Booking',
+    invoice_customer: 'Invoice',
+  };
+  return (
+    <span className="inline-flex rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-300">
+      {labels[role || ''] || 'Grant'}
+    </span>
   );
 }

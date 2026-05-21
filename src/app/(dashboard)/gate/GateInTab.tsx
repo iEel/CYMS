@@ -15,9 +15,10 @@ import SignaturePad from '@/components/gate/SignaturePad';
 import ContainerInspection from '@/components/gate/ContainerInspection';
 import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import GateGuardrailPanel from '@/components/gate/GateGuardrailPanel';
+import GateDecisionBar from '@/components/gate/GateDecisionBar';
 import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 import type { EvidencePhoto, PhotoCompleteness, PhotoRequirement } from '@/lib/photoEvidence';
-import { buildGateInWorkflow } from '@/lib/gateWorkflow';
+import { buildGateDecisionSignals, buildGateInWorkflow } from '@/lib/gateWorkflow';
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -482,6 +483,30 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     inspectionCompleteness: inspectionReport?.photo_completeness || null,
     sealPhotoCaptured: !!sealPhoto,
   }), [gateInForm, inspectionReport?.photo_completeness, recentGateTransactions, sealPhoto]);
+  const gateInDecisionSignals = useMemo(() => {
+    const photoRequired = (inspectionReport?.photo_completeness?.required || (inspectionReport ? 1 : 0)) + (gateInForm.is_laden ? 1 : 0);
+    const photoCompleted = (inspectionReport?.photo_completeness?.completed || (inspectionReport ? 1 : 0)) + (gateInForm.is_laden && sealPhoto ? 1 : 0);
+    return buildGateDecisionSignals({
+      mode: 'gate_in',
+      workflow: gateInWorkflow,
+      billingRequired: gateInRequiresBillingClearance,
+      billingCleared: gateInBillingCleared,
+      bookingSelected: !!gateInForm.booking_ref,
+      evidenceComplete: !!inspectionReport && (!gateInForm.is_laden || !!sealPhoto),
+      photoCompleted,
+      photoRequired,
+      canSubmit: canGateIn,
+    });
+  }, [
+    canGateIn,
+    gateInBillingCleared,
+    gateInForm.booking_ref,
+    gateInForm.is_laden,
+    gateInRequiresBillingClearance,
+    gateInWorkflow,
+    inspectionReport,
+    sealPhoto,
+  ]);
 
   return (
     <>
@@ -501,6 +526,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         <div className="p-5 space-y-4">
           <GateWorkflowPanel title="Gate-In guided workflow" workflow={gateInWorkflow} />
           <GateGuardrailPanel title="Gate-In operational guardrails" snapshot={gateInGuardrails} />
+          <GateDecisionBar signals={gateInDecisionSignals} />
 
           {/* Container Info */}
           <div>

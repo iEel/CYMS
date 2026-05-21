@@ -20,6 +20,11 @@ jest.mock('@/lib/audit', () => ({
   logAudit: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('@/lib/apiAuth', () => ({
+  requirePermission: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
+  requireYardAccess: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
+}));
+
 function makeGetRequest(url: string): NextRequest {
   return new NextRequest(url, { method: 'GET' });
 }

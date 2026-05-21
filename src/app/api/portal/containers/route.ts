@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { getPortalCustomerId, portalContainerVisibilitySql } from '@/lib/portalAccess';
+import { getPortalCustomerId, portalContainerVisibilitySql, portalVisibilityReasonSql } from '@/lib/portalAccess';
 
 // GET — Customer's containers
 export async function GET(request: NextRequest) {
@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       SELECT c.container_id, c.container_number, c.size, c.type, c.shipping_line,
         c.status, c.is_laden, c.bay, c.[row], c.tier,
         c.gate_in_date, c.gate_out_date,
+        ${portalVisibilityReasonSql('container', 'c.container_id', 'c.container_number')} AS visibility_role,
         z.zone_name, y.yard_name
       FROM Containers c
       LEFT JOIN YardZones z ON c.zone_id = z.zone_id

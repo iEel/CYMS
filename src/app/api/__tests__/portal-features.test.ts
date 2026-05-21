@@ -25,11 +25,13 @@ function makeDb(queue: QueryResult[]) {
 }
 
 function portalRequest(url: string, init: RequestInit = {}) {
+  const { headers, signal, ...rest } = init;
+  void signal;
   return new NextRequest(url, {
-    ...init,
+    ...rest,
     headers: {
       'x-customer-id': '42',
-      ...(init.headers || {}),
+      ...(headers || {}),
     },
   });
 }

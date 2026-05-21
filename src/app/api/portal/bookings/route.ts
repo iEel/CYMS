@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { decoratePortalBookings } from '@/lib/portalBooking';
-import { getPortalCustomerId, portalBookingVisibilitySql } from '@/lib/portalAccess';
+import { getPortalCustomerId, portalBookingVisibilitySql, portalVisibilityReasonSql } from '@/lib/portalAccess';
 
 // GET — Customer's bookings
 export async function GET(request: NextRequest) {
@@ -34,7 +34,8 @@ export async function GET(request: NextRequest) {
       SELECT b.booking_id, b.booking_number, b.booking_type, b.status,
         b.vessel_name, b.voyage_number, b.container_count,
         b.received_count, b.released_count, b.eta,
-        b.valid_from, b.valid_to, b.created_at
+        b.valid_from, b.valid_to, b.created_at,
+        ${portalVisibilityReasonSql('booking', 'b.booking_id', 'b.booking_number')} AS visibility_role
       FROM Bookings b
       ${whereClause}
       ORDER BY b.created_at DESC

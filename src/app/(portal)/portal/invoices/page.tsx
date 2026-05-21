@@ -8,6 +8,7 @@ interface Invoice {
   total_before_vat: number; vat_amount: number; grand_total: number;
   status: string; created_at: string; paid_at: string; container_number: string;
   document_type?: string; ref_invoice_number?: string;
+  visibility_role?: string;
 }
 
 interface Statement {
@@ -195,6 +196,7 @@ export default function PortalInvoices() {
                     {inv.container_number && `ตู้: ${inv.container_number} | `}
                     {new Date(inv.created_at).toLocaleDateString('th-TH')}
                   </p>
+                  <VisibilityPill role={inv.visibility_role} />
                   <DocumentLinks inv={inv} isCreditNote={isCreditNote(inv)} onDispute={() => setDisputeTarget(inv)} />
                       </>
                     );
@@ -212,6 +214,7 @@ export default function PortalInvoices() {
                   <th className="p-3">ตู้</th>
                   <th className="p-3 text-right">ยอดรวม</th>
                   <th className="p-3">สถานะ</th>
+                  <th className="p-3">สิทธิ์เห็นข้อมูล</th>
                   <th className="p-3">วันที่</th>
                   <th className="p-3 text-right"></th>
                 </tr>
@@ -230,6 +233,7 @@ export default function PortalInvoices() {
                         {(statusLabels[displayStatus] || statusLabels.issued).label}
                       </span>
                     </td>
+                    <td className="p-3"><VisibilityPill role={inv.visibility_role} /></td>
                     <td className="p-3 text-slate-500 text-xs">{new Date(inv.created_at).toLocaleDateString('th-TH')}</td>
                     <td className="p-3 text-right">
                       <DocumentLinks inv={inv} isCreditNote={isCreditNote(inv)} alignRight onDispute={() => setDisputeTarget(inv)} />
@@ -334,5 +338,19 @@ function DocumentLinks({ inv, isCreditNote, alignRight = false, onDispute }: { i
         <MessageSquare size={12} /> Dispute
       </button>
     </div>
+  );
+}
+
+function VisibilityPill({ role }: { role?: string }) {
+  const labels: Record<string, string> = {
+    invoice_customer: 'Invoice grant',
+    billing: 'Billing grant',
+    owner: 'Owner grant',
+    booking_customer: 'Booking grant',
+  };
+  return (
+    <span className="inline-flex w-fit rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-300">
+      {labels[role || ''] || 'Portal grant'}
+    </span>
   );
 }

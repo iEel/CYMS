@@ -3,13 +3,15 @@ import { buildYardPlanningSnapshot } from '../yardPlanning';
 describe('yard planning helpers', () => {
   const now = new Date('2026-05-21T08:00:00.000Z');
   const zones = [
-    { zone_name: 'A', zone_type: 'dry', capacity: 10, container_count: 9, occupancy_pct: 90 },
-    { zone_name: 'B', zone_type: 'empty', capacity: 10, container_count: 4, occupancy_pct: 40 },
+    { zone_id: 1, zone_name: 'A', zone_type: 'dry', capacity: 10, container_count: 9, occupancy_pct: 90, max_bay: 1, max_row: 2, max_tier: 3 },
+    { zone_id: 2, zone_name: 'B', zone_type: 'empty', capacity: 10, container_count: 4, occupancy_pct: 40, max_bay: 1, max_row: 1, max_tier: 2 },
+    { zone_id: 3, zone_name: 'C', zone_type: 'empty', capacity: 10, container_count: 0, occupancy_pct: 0, max_bay: 1, max_row: 1, max_tier: 1 },
   ];
   const containers = [
     {
       container_id: 1,
       container_number: 'MSKU1111111',
+      zone_id: 1,
       zone_name: 'A',
       bay: 1,
       row: 1,
@@ -23,6 +25,7 @@ describe('yard planning helpers', () => {
     {
       container_id: 2,
       container_number: 'MSKU2222222',
+      zone_id: 1,
       zone_name: 'A',
       bay: 1,
       row: 1,
@@ -36,6 +39,7 @@ describe('yard planning helpers', () => {
     {
       container_id: 3,
       container_number: 'MSKU3333333',
+      zone_id: 2,
       zone_name: 'B',
       bay: 2,
       row: 1,
@@ -67,9 +71,12 @@ describe('yard planning helpers', () => {
     const snapshot = buildYardPlanningSnapshot({ zones, containers, now });
 
     expect(snapshot.move_recommendations[0]).toMatchObject({
+      container_id: 1,
       container_number: 'MSKU1111111',
       action: 'pre_marshal_for_release',
       from_slot: 'A B1-R1-T3',
+      to_zone_id: 3,
+      to_slot: 'C B1-R1-T1',
     });
   });
 

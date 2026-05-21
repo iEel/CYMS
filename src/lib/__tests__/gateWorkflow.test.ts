@@ -1,4 +1,8 @@
-import { buildGateInWorkflow, buildGateOutWorkflow } from '@/lib/gateWorkflow';
+import {
+  buildGateDecisionSignals,
+  buildGateInWorkflow,
+  buildGateOutWorkflow,
+} from '@/lib/gateWorkflow';
 
 describe('gate workflow helpers', () => {
   it('blocks gate-in completion when billing clearance is still required', () => {
@@ -78,5 +82,43 @@ describe('gate workflow helpers', () => {
     ]);
     expect(workflow.exceptions.map((item) => item.code)).toEqual(['booking_mismatch', 'billing_hold']);
     expect(workflow.nextAction).toBe('Resolve booking mismatch');
+  });
+
+  it('builds sticky decision signals for gate-out operators', () => {
+    const workflow = buildGateOutWorkflow({
+      containerSelected: true,
+      customerResolved: true,
+      bookingSelected: true,
+      bookingWarnings: ['Customer mismatch'],
+      billingRequired: true,
+      billingCleared: false,
+      releaseRequested: true,
+      readyToRelease: false,
+      exitPhotosCount: 0,
+      submitted: false,
+      canSubmit: true,
+    });
+
+    const signals = buildGateDecisionSignals({
+      mode: 'gate_out',
+      workflow,
+      billingRequired: true,
+      billingCleared: false,
+      bookingSelected: true,
+      bookingWarnings: ['Customer mismatch'],
+      evidenceComplete: false,
+      photoCompleted: 0,
+      photoRequired: 1,
+      canSubmit: true,
+    });
+
+    expect(signals.items.map(item => [item.key, item.status])).toEqual([
+      ['billing', 'blocked'],
+      ['booking', 'blocked'],
+      ['evidence', 'active'],
+      ['supervisor', 'blocked'],
+    ]);
+    expect(signals.canProceed).toBe(false);
+    expect(signals.nextAction).toBe('Resolve booking mismatch');
   });
 });

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { getPortalCustomerId, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
+import { getPortalCustomerId, portalInvoiceVisibilitySql, portalVisibilityReasonSql } from '@/lib/portalAccess';
 
 // GET — Customer's invoices
 export async function GET(request: NextRequest) {
@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
         i.total_amount as total_before_vat,
         i.vat_amount, i.grand_total, i.status, i.created_at, i.paid_at,
         i.document_type, i.ref_invoice_id, ref.invoice_number as ref_invoice_number,
+        ${portalVisibilityReasonSql('invoice', 'i.invoice_id', 'i.invoice_number')} AS visibility_role,
         c.container_number
       FROM Invoices i
       LEFT JOIN Invoices ref ON i.ref_invoice_id = ref.invoice_id

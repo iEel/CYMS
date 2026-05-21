@@ -8,6 +8,12 @@
 import { NextRequest } from 'next/server';
 import { GET, POST } from '../containers/route';
 
+jest.mock('@/lib/apiAuth', () => ({
+  requireAnyPermission: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
+  requirePermission: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
+  requireYardAccess: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
+}));
+
 // ── Mock DB (factory pattern to avoid hoisting issues) ───────────────
 let queryQueue: Array<{ recordset: unknown[] } | Error> = [];
 

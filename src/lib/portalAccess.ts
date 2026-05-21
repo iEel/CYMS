@@ -36,6 +36,33 @@ export function portalEntityAccessSql(
   )`;
 }
 
+export function portalVisibilityReasonSql(
+  entityType: PortalEntityType,
+  entityIdExpression: string,
+  entityRefExpression?: string,
+) {
+  const clauses = [`pea.entity_id = ${entityIdExpression}`];
+  if (entityRefExpression) {
+    clauses.push(`(pea.entity_ref IS NOT NULL AND pea.entity_ref = ${entityRefExpression})`);
+  }
+
+  return `(
+    SELECT TOP 1 pea.access_role
+    FROM PortalEntityAccess pea
+    WHERE pea.customer_id = @cid
+      AND pea.entity_type = '${entityType}'
+      AND pea.is_active = 1
+      AND (${clauses.join(' OR ')})
+    ORDER BY CASE pea.access_role
+      WHEN 'owner' THEN 1
+      WHEN 'billing' THEN 2
+      WHEN 'booking_customer' THEN 3
+      WHEN 'invoice_customer' THEN 4
+      ELSE 9
+    END
+  )`;
+}
+
 export function portalBookingVisibilitySql(bookingAlias = 'b') {
   return portalEntityAccessSql('booking', `${bookingAlias}.booking_id`, `${bookingAlias}.booking_number`);
 }

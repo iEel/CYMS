@@ -1,12 +1,16 @@
 'use client';
 
-import { useMemo } from 'react';
-import { ArrowRightLeft, CalendarDays, Flame, Gauge, Layers } from 'lucide-react';
-import { buildYardPlanningSnapshot, type YardPlanningContainer, type YardPlanningZone } from '@/lib/yardPlanning';
+import { useMemo, useState } from 'react';
+import { ArrowRightLeft, CalendarDays, Flame, Gauge, Layers, Loader2, Plus } from 'lucide-react';
+import { buildYardPlanningSnapshot, type YardMoveRecommendation, type YardPlanningContainer, type YardPlanningZone } from '@/lib/yardPlanning';
+import { useToast } from '@/components/providers/ToastProvider';
 
 interface Props {
   zones: YardPlanningZone[];
   containers: YardPlanningContainer[];
+  yardId?: number;
+  canCreateWorkOrder?: boolean;
+  onWorkOrderCreated?: () => void;
 }
 
 const riskClass: Record<string, string> = {
@@ -16,9 +20,50 @@ const riskClass: Record<string, string> = {
   low: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800/40',
 };
 
-export default function YardPlanningPanel({ zones, containers }: Props) {
+export default function YardPlanningPanel({ zones, containers, yardId, canCreateWorkOrder = false, onWorkOrderCreated }: Props) {
+  const { toast } = useToast();
+  const [creatingKey, setCreatingKey] = useState<string | null>(null);
   const snapshot = useMemo(() => buildYardPlanningSnapshot({ zones, containers }), [zones, containers]);
   const hotZones = snapshot.zone_heatmap.slice(0, 5);
+
+  const createWorkOrder = async (item: YardMoveRecommendation) => {
+    if (!yardId || !item.container_id || !item.to_zone_id) return;
+    const key = `${item.container_number}-${item.action}`;
+    setCreatingKey(key);
+    try {
+      const res = await fetch('/api/operations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yard_id: yardId,
+          order_type: item.order_type,
+          container_id: item.container_id,
+          from_zone_id: item.from_zone_id || null,
+          from_bay: item.from_bay || null,
+          from_row: item.from_row || null,
+          from_tier: item.from_tier || null,
+          to_zone_id: item.to_zone_id,
+          to_bay: item.to_bay || null,
+          to_row: item.to_row || null,
+          to_tier: item.to_tier || null,
+          priority: Math.min(Math.max(Math.ceil(item.priority / 10), 1), 5),
+          notes: `Yard planning: ${item.action} — ${item.reason}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast('error', 'สร้าง Work Order ไม่สำเร็จ', data.error || item.container_number);
+        return;
+      }
+      toast('success', 'สร้าง Work Order แล้ว', `${item.container_number} → ${item.to_slot}`);
+      onWorkOrderCreated?.();
+    } catch (error) {
+      console.error(error);
+      toast('error', 'สร้าง Work Order ไม่สำเร็จ', item.container_number);
+    } finally {
+      setCreatingKey(null);
+    }
+  };
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -70,16 +115,30 @@ export default function YardPlanningPanel({ zones, containers }: Props) {
           <div className="space-y-2">
             {snapshot.move_recommendations.length === 0 ? (
               <EmptyState text="ยังไม่มี move ที่ควรเร่ง" />
-            ) : snapshot.move_recommendations.slice(0, 5).map(item => (
-              <div key={`${item.container_number}-${item.action}`} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+            ) : snapshot.move_recommendations.slice(0, 5).map(item => {
+              const key = `${item.container_number}-${item.action}`;
+              const canCreate = canCreateWorkOrder && Boolean(yardId && item.container_id && item.to_zone_id);
+              return (
+              <div key={key} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-sm font-bold text-slate-800 dark:text-white">{item.container_number}</span>
                   <span className="text-[10px] text-blue-600 font-semibold">P{item.priority}</span>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">{item.from_slot}</p>
+                {item.to_slot && <p className="text-[10px] text-emerald-600 mt-1">→ {item.to_slot}</p>}
                 <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{item.reason}</p>
+                {canCreate && (
+                  <button
+                    onClick={() => createWorkOrder(item)}
+                    disabled={creatingKey === key}
+                    className="mt-2 h-8 px-3 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1.5"
+                  >
+                    {creatingKey === key ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                    สร้าง WO
+                  </button>
+                )}
               </div>
-            ))}
+            );})}
           </div>
         </section>
 

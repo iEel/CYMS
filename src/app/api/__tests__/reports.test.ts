@@ -38,6 +38,14 @@ jest.mock('@/lib/apiAuth', () => ({
     }
     return { userId, role };
   }),
+  requireYardAccess: jest.fn((_request: NextRequest, _db: unknown, yardId: string | number | null) => {
+    const { NextResponse } = jest.requireActual('next/server') as typeof import('next/server');
+    const parsed = Number(yardId);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+    return { userId: 1, role: 'yard_manager' };
+  }),
 }));
 
 jest.mock('@/lib/audit', () => ({
@@ -91,10 +99,10 @@ describe('GET /api/reports/dwell', () => {
     expect(body.byShippingLine).toHaveLength(2);
   });
 
-  it('defaults yard_id=1 when not provided', async () => {
+  it('requires yard_id after yard access hardening', async () => {
     queryQueue = [q([]), q([]), q([])];
     const res = await GET(makeRequest('http://localhost/api/reports/dwell'));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
   });
 
   it('respects custom overdue_days param', async () => {
