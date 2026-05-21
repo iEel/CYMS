@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + TOTP 2FA + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher** (~100%)
 
 ---
 
@@ -179,8 +179,8 @@ container-yard-system/
 │   │   │       ├── CompanySettings.tsx    # CRUD ข้อมูลองค์กร (+ logo upload + branch)
 │   │   │       ├── YardsSettings.tsx      # CRUD ลาน + โซน (+ branch สำนักงานใหญ่/สาขา)
 │   │   │       ├── CustomerMaster.tsx     # **🏢 CRUD ลูกค้า Multi-role** (checkbox roles + branch manager + EDI prefix + customer_code display)
-│   │   │       ├── UsersSettings.tsx      # CRUD ผู้ใช้งาน
-│   │   │       ├── SecuritySettings.tsx   # Password policy + account lockout + TOTP 2FA setup/disable
+│   │   │       ├── UsersSettings.tsx      # CRUD ผู้ใช้งาน + unlock/reset trusted device binding
+│   │   │       ├── SecuritySettings.tsx   # Password policy + account lockout + TOTP 2FA + trusted device policy
 │   │   │       ├── PermissionsMatrix.tsx  # Permission Matrix (33×6 incl. customers)
 │   │   │       ├── ApprovalHierarchy.tsx  # ลำดับชั้นอนุมัติ + วงเงิน
 │   │   │       ├── EDIConfiguration.tsx   # SFTP/FTP/API/**Email** endpoints — CRUD + **⏰ Auto-Schedule UI** + **📋 Template Editor** (2-tab layout, **drag-and-drop** field mapping, live preview)
@@ -203,7 +203,7 @@ container-yard-system/
 │   │   │       └── EIRPublicView.tsx # Client component แสดงข้อมูล + รูปถ่ายความเสียหาย HD
 │   │   │
 │   │   └── api/
-│   │       ├── auth/login/route.ts         # POST login → JWT + **🔐 Rate limit: 5 req/15min per IP** + TOTP challenge
+│   │       ├── auth/login/route.ts         # POST login → JWT + **🔐 Rate limit: 5 req/15min per IP** + TOTP challenge + trusted device enforcement
 │   │       ├── auth/2fa/route.ts           # GET/POST TOTP 2FA status/setup/verify/disable
 │   │       ├── auth/me/route.ts            # GET session restore — ตรวจ token จาก x-cyms-token header (proxy) หรือ cookie → ดึง user+role+yards จาก DB
 │   │       ├── boxtech/route.ts           # **GET Boxtech proxy** (token cache + BIC + container lookup + prefix→customer)
@@ -253,6 +253,8 @@ container-yard-system/
 │   │       │   ├── gate.test.ts             # GET (list, date/search filter)
 │   │       │   ├── billing.test.ts          # GET (list+stats) + POST (VAT calc) + PUT (pay/issue/cancel)
 │   │       │   ├── auth-login.test.ts       # Login 2FA challenge + valid TOTP session creation
+│   │       │   ├── auth-device-binding.test.ts # Login trusted-device auto-bind + mismatch rejection
+│   │       │   ├── settings-users-device-binding.test.ts # Admin reset trusted-device binding action
 │   │       │   ├── auth-2fa.test.ts         # 2FA status/setup/verify validation
 │   │       │   └── search.test.ts           # GET global search aggregation + yard filter + short query guard
 │   │       ├── settings/
@@ -277,7 +279,7 @@ container-yard-system/
 │   │   │   ├── Sidebar.tsx       # Left sidebar (collapsible + role-based menus + **สเมนู 'รายงาน' /reports BarChart3 icon**)
 │   │   │   └── Topbar.tsx        # Top header (**global search**, real yard switcher, **notification bell**, dark/high-contrast toggle)
 │   │   ├── providers/
-│   │   │   ├── AuthProvider.tsx  # Auth context (login/logout/session + TOTP challenge response)
+│   │   │   ├── AuthProvider.tsx  # Auth context (login/logout/session + TOTP challenge response + browser device id)
 │   │   │   └── ToastProvider.tsx # Toast notifications (success/error/warning/info)
 │   │   ├── ui/
 │   │   │   └── ConfirmDialog.tsx     # **🎨 Custom ConfirmDialog** — reusable modal (danger/warning/info variants, backdrop blur, Escape key, auto-focus cancel)
@@ -305,6 +307,7 @@ container-yard-system/
 │       ├── db.ts                 # MS SQL connection pool (mssql, useUTC: false)
 │       ├── auth.ts               # JWT create/verify functions
 │       ├── totp.ts               # RFC 6238 TOTP helper (secret generation, verify window, otpauth URI)
+│       ├── deviceBinding.ts      # Trusted browser device policy + id validation (uses legacy bound_device_mac column)
 │       ├── utils.ts              # formatDateTime, formatTime, **calcDwellDays** (Calendar Days +1), etc.
 │       ├── containerValidation.ts # **ISO 6346 check digit** validation + size/type parser + **`extractContainerNumber()` (4-strategy OCR smart extraction)** + `extractTruckPlate()`
 │       ├── offlineQueue.ts       # NFR1: IndexedDB offline queue + auto-sync
@@ -321,6 +324,7 @@ container-yard-system/
 │           ├── validators.test.ts          # Zod schemas — gate, billing, users, customers (multi-role), EDI (60 tests)
 │           ├── auth.test.ts                # JWT round-trip + tamper detection + role labels (16 tests)
 │           ├── totp.test.ts                # RFC 6238 compatibility + verify window + otpauth URI
+│           ├── deviceBinding.test.ts       # policy role matching + device id validation
 │           └── rateLimit.test.ts            # store clearing + stats + client IP extraction (14 tests)
 │
 ├── src/proxy.ts                  # **🔐 Next.js 16 Proxy** (เดิมคือ middleware.ts) — JWT enforcement ทุก /api/ + page guard + cookie→x-cyms-token forwarding
@@ -341,7 +345,7 @@ container-yard-system/
 | `Roles` | role_name, description | บทบาท (6 roles) |
 | `Permissions` | module, action, description | สิทธิ์ (33 permissions: 9 modules) |
 | `RolePermissions` | role_id, permission_id | Permission matrix |
-| `Users` | username, password_hash, role_id, status, **two_fa_enabled, two_fa_secret, two_fa_confirmed_at, notif_last_read_at** | ผู้ใช้งาน + TOTP 2FA + timestamp อ่านแจ้งเตือนล่าสุด (ซิงค์ข้าม browser) |
+| `Users` | username, password_hash, role_id, status, **two_fa_enabled, two_fa_secret, two_fa_confirmed_at, bound_device_mac, notif_last_read_at** | ผู้ใช้งาน + TOTP 2FA + trusted browser device id (`bound_device_mac` เป็นชื่อ legacy ไม่ใช่ MAC จริง) + timestamp อ่านแจ้งเตือนล่าสุด |
 | `UserYardAccess` | user_id, yard_id | สิทธิ์เข้าถึงลาน |
 | `ApprovalHierarchy` | approver_id, level | สายอนุมัติ |
 | `Containers` | container_number, size, type, status, zone/bay/row/tier, **is_soc** (BIT, SOC=ตู้ลูกค้า), **container_owner_id** (FK→Customers) | ตู้คอนเทนเนอร์ + SOC/COC |
@@ -383,7 +387,7 @@ container-yard-system/
 
 | Method | Endpoint | Body | Response |
 |--------|----------|------|----------|
-| POST | `/api/auth/login` | `{ username, password, totp_code? }` | ถ้าเปิด 2FA: `{ requires_2fa: true }`; ถ้าผ่าน: `{ token, user, yards }` + httpOnly cookie `cyms_token` |
+| POST | `/api/auth/login` | `{ username, password, totp_code?, device_id? }` | ถ้าเปิด 2FA: `{ requires_2fa: true }`; ถ้า device ไม่ตรง policy: `403`; ถ้าผ่าน: `{ token, user, yards }` + httpOnly cookie `cyms_token` |
 | GET | `/api/auth/2fa` | — | `{ enabled, has_secret }` สำหรับ user ปัจจุบัน |
 | POST | `/api/auth/2fa` | `{ action: 'setup' \| 'verify' \| 'disable', code? }` | setup คืน secret+otpauth URI, verify เปิดใช้งาน, disable ปิด 2FA |
 | GET | `/api/auth/me` | — | `{ authenticated, session }` — restore session จาก cookie (New Tab/Refresh) |
@@ -1070,7 +1074,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Document number mock alignment** — `billing.test.ts` และ `mnr.test.ts` mock `@/lib/documentNumber.nextDocumentNumber` โดยตรง หลัง production route เปลี่ยนมาใช้ `DocumentSequences`
 - [x] **ลบ query queue เก่า** — test ไม่จำลอง `COUNT(*)` เพื่อออกเลขเอกสารใน route แล้ว จึงไม่ consume mock result ผิดลำดับ
 - [x] **Assertion เพิ่มเติม** — billing ตรวจ `grand_total` จาก VAT 7% และ M&R ตรวจ `order.eor_id` เพื่อให้จับ regression ของ insert output ได้จริง
-- [x] **Full suite กลับมาเขียว** — ล่าสุด `npm test -- --runInBand` ผ่าน 360/360 tests ทั้ง 20 suites
+- [x] **Full suite กลับมาเขียว** — ล่าสุด `npm test -- --runInBand` ผ่าน 366/366 tests ทั้ง 23 suites
 
 ### 🧪 Automated Testing (✅ เสร็จ)
 - [x] **Jest + ts-jest** — ติดตั้งและตั้งค่า Jest สำหรับ Next.js + TypeScript (path alias `@/*`, jose ESM handling)
@@ -1209,14 +1213,15 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 **ไฟล์ที่เกี่ยวข้อง:**
 - `src/lib/passwordPolicy.ts` — validation logic + strength meter + config loader
 - `src/lib/totp.ts` — RFC 6238 TOTP generation/verification + otpauth URI
+- `src/lib/deviceBinding.ts` — trusted browser device policy + device id validation
 - `src/app/api/settings/security/route.ts` — GET policy+locked users, PUT update config/unlock
 - `src/app/api/auth/login/route.ts` — lockout enforcement (count, lock, auto-unlock)
 - `src/app/api/auth/2fa/route.ts` — 2FA status/setup/verify/disable สำหรับ user ปัจจุบัน
-- `src/app/api/settings/users/route.ts` — password validation on create/update, unlock action
+- `src/app/api/settings/users/route.ts` — password validation on create/update, unlock action, reset device binding
 - `src/app/(dashboard)/settings/SecuritySettings.tsx` — Admin UI แท็บ "ความปลอดภัย"
 - `src/app/login/page.tsx` — lockout feedback (remaining time, attempts warning) + TOTP challenge input
 - `scripts/migrate-password-policy.js` — DB migration
-- `scripts/migrate-runtime-core-schema.js` — เติม `two_fa_*` columns ใน Users table
+- `scripts/migrate-runtime-core-schema.js` — เติม `two_fa_*` + `bound_device_mac` columns ใน Users table
 
 **Password Policy (configurable via Admin UI):**
 - [x] ความยาวขั้นต่ำ (default 8, range 6-32)
@@ -1242,6 +1247,13 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] Disable ต้องกรอกรหัส TOTP ปัจจุบันก่อนล้าง secret
 - [x] Audit log ครอบคลุม setup started, enabled, disabled
 
+**Trusted Device Binding:**
+- [x] ใช้ browser device id แบบสุ่มจาก `AuthProvider` ส่งเป็น `device_id` ตอน login (ไม่ใช้ MAC address จริง เพราะ browser อ่าน MAC ไม่ได้)
+- [x] Policy อยู่ใน Settings → Security: เปิด/ปิด, auto-bind อุปกรณ์แรก, เลือก role ที่ต้อง enforce
+- [x] ค่า default ปิดอยู่ แต่ถ้าเปิดจะ enforce role `rs_driver` เป็นค่าเริ่มต้น
+- [x] ถ้า user มี binding แล้วและ `device_id` ไม่ตรง จะ reject login ด้วย `403 device_mismatch`
+- [x] Admin ล้าง binding ได้จาก UsersSettings เพื่อให้ user ผูก browser/device ใหม่
+
 **DB Columns (Users table):**
 ```sql
 failed_login_count  INT DEFAULT 0          -- จำนวน login ผิดติดต่อกัน
@@ -1250,6 +1262,7 @@ password_changed_at DATETIME2 NULL         -- เวลาเปลี่ยน�
 two_fa_enabled      BIT DEFAULT 0          -- เปิด/ปิด TOTP 2FA
 two_fa_secret       NVARCHAR(128) NULL     -- Base32 secret สำหรับ authenticator app
 two_fa_confirmed_at DATETIME2 NULL         -- เวลา verify เปิด 2FA สำเร็จ
+bound_device_mac    NVARCHAR(128) NULL     -- Trusted browser device id (legacy column name)
 notif_last_read_at  DATETIME2 NULL         -- เวลาที่อ่านการแจ้งเตือนล่าสุด (ซิงค์ข้าม browser)
 ```
 
@@ -1330,12 +1343,12 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 360/360; เพิ่ม global search + TOTP 2FA tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 366/366; เพิ่ม global search + TOTP 2FA + trusted device binding tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
 | **2FA (TOTP)** | ✅ **มีแล้ว** — Settings Security เปิด/ปิดได้ด้วย QR/secret, Login รองรับ `requires_2fa`, API `/api/auth/2fa`, audit log และ migration columns |
-| **Device Binding** | มี field `bound_device_mac` แต่ยังไม่ enforce ตอน login |
+| **Device Binding** | ✅ **มีแล้ว** — enforce ผ่าน trusted browser device id ตาม policy/role, auto-bind อุปกรณ์แรกได้, admin ล้าง binding ได้จาก UsersSettings (`bound_device_mac` เป็นชื่อ legacy ไม่ใช่ MAC จริง) |
 | **Password Policy** | ✅ **มีแล้ว** — configurable min_length, uppercase, lowercase, number, special char + strength meter UI |
 | **Account Lockout** | ✅ **มีแล้ว** — lock after N failed attempts, auto-unlock after duration, Admin unlock UI |
 | **Payment Gateway** | ยังไม่มี QR Code / payment integration |
@@ -1372,7 +1385,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 360/360 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 366/366 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)
@@ -1402,7 +1415,7 @@ node scripts/migrate-prefix-multi.js
 # Migration: Owner/Billing Separation (container_owner_id + billing_customer_id + is_soc)
 node scripts/migrate-gate-owner.js
 
-# Migration: Runtime Core Schema (runtime DDL cleanup + TOTP 2FA columns)
+# Migration: Runtime Core Schema (runtime DDL cleanup + TOTP 2FA + trusted device columns)
 node scripts/migrate-runtime-core-schema.js
 ```
 

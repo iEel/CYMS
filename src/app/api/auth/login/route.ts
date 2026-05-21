@@ -4,6 +4,7 @@ import { createToken } from '@/lib/auth';
 import { rateLimitLogin, getClientIP } from '@/lib/rateLimit';
 import { getPasswordPolicy } from '@/lib/passwordPolicy';
 import { verifyTotpCode } from '@/lib/totp';
+import { getDeviceBindingPolicy, isDeviceBindingRequired, normalizeDeviceId } from '@/lib/deviceBinding';
 import bcrypt from 'bcryptjs';
 import sql from 'mssql';
 
@@ -19,7 +20,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { username, password, totp_code } = await request.json();
+    const body = await request.json();
+    const { username, password, totp_code, device_id } = body;
 
     if (!username || !password) {
       return NextResponse.json(
@@ -37,6 +39,7 @@ export async function POST(request: NextRequest) {
       .query(`
         SELECT u.user_id, u.username, u.password_hash, u.full_name, u.status,
                u.failed_login_count, u.locked_at, u.two_fa_enabled, u.two_fa_secret,
+               u.bound_device_mac,
                r.role_code
         FROM Users u
         JOIN Roles r ON u.role_id = r.role_id
@@ -149,6 +152,53 @@ export async function POST(request: NextRequest) {
             error: 'รหัสยืนยัน 2FA ไม่ถูกต้อง',
           },
           { status: 401 }
+        );
+      }
+    }
+
+    // ===== TRUSTED DEVICE BINDING CHECK =====
+    const devicePolicy = await getDeviceBindingPolicy();
+    if (isDeviceBindingRequired(devicePolicy, user.role_code)) {
+      const currentDeviceId = normalizeDeviceId(device_id);
+      if (!currentDeviceId) {
+        return NextResponse.json(
+          {
+            error: 'บัญชีนี้ต้องล็อกอินจากอุปกรณ์ที่เชื่อถือได้ กรุณาเปิด browser เดิมหรือติดต่อผู้ดูแลระบบ',
+            device_required: true,
+          },
+          { status: 403 }
+        );
+      }
+
+      const boundDeviceId = normalizeDeviceId(user.bound_device_mac);
+      if (!boundDeviceId) {
+        if (!devicePolicy.auto_bind) {
+          return NextResponse.json(
+            {
+              error: 'บัญชีนี้ยังไม่ได้ผูกอุปกรณ์ กรุณาติดต่อผู้ดูแลระบบเพื่ออนุมัติอุปกรณ์',
+              device_unbound: true,
+            },
+            { status: 403 }
+          );
+        }
+
+        await db.request()
+          .input('userId', sql.Int, user.user_id)
+          .input('deviceId', sql.NVarChar, currentDeviceId)
+          .query(`
+            UPDATE Users
+            SET bound_device_mac = @deviceId,
+                updated_at = GETDATE()
+            WHERE user_id = @userId
+          `);
+        user.bound_device_mac = currentDeviceId;
+      } else if (boundDeviceId !== currentDeviceId) {
+        return NextResponse.json(
+          {
+            error: 'อุปกรณ์นี้ไม่ได้รับอนุญาตสำหรับบัญชีนี้ กรุณาติดต่อผู้ดูแลระบบเพื่อล้างการผูกอุปกรณ์',
+            device_mismatch: true,
+          },
+          { status: 403 }
         );
       }
     }

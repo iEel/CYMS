@@ -131,6 +131,26 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'ปลดล็อคบัญชีเรียบร้อย' });
     }
 
+    // Action: reset trusted-device binding
+    if (body.action === 'reset_device_binding' && body.user_id) {
+      await db.request()
+        .input('userId', sql.Int, body.user_id)
+        .query(`
+          UPDATE Users
+          SET bound_device_mac = NULL,
+              updated_at = GETDATE()
+          WHERE user_id = @userId
+        `);
+      await logAudit({
+        userId: actorId,
+        action: 'device_binding_reset',
+        entityType: 'user',
+        entityId: body.user_id,
+        details: { reset_user_id: body.user_id },
+      });
+      return NextResponse.json({ success: true, message: 'ล้างการผูกอุปกรณ์เรียบร้อย' });
+    }
+
     // หา role_id
     const roleResult = await db.request()
       .input('roleCode', sql.NVarChar, body.role_code)

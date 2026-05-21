@@ -179,6 +179,11 @@ async function migrate() {
         ALTER TABLE Users ADD two_fa_confirmed_at DATETIME2 NULL;
     `);
 
+    await runStep(pool, 'User trusted device binding column', `
+      IF COL_LENGTH('Users', 'bound_device_mac') IS NULL
+        ALTER TABLE Users ADD bound_device_mac NVARCHAR(128) NULL;
+    `);
+
     await runStep(pool, 'Document numbering and lifecycle tables', `
       IF OBJECT_ID('DocumentSequences', 'U') IS NULL
       BEGIN

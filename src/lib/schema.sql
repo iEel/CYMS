@@ -105,7 +105,7 @@ CREATE TABLE Users (
     two_fa_enabled  BIT DEFAULT 0,
     two_fa_secret   NVARCHAR(128) NULL, -- TOTP secret (base32)
     two_fa_confirmed_at DATETIME2 NULL, -- เวลาเปิดใช้งาน 2FA สำเร็จ
-    bound_device_mac NVARCHAR(50),     -- Device Binding สำหรับคนขับรถยก
+    bound_device_mac NVARCHAR(128),    -- Trusted browser device id (legacy column name; ไม่ใช่ MAC จริง)
     failed_login_count INT DEFAULT 0,  -- จำนวน login ผิดติดต่อกัน
     locked_at       DATETIME2 NULL,    -- เวลาที่ถูกล็อค (NULL = ไม่ถูกล็อค)
     password_changed_at DATETIME2 NULL,-- เวลาเปลี่ยนรหัสผ่านล่าสุด

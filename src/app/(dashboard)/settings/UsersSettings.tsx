@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/providers/ToastProvider';
-import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Trash2, Search, ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
+import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Trash2, Search, ChevronLeft, ChevronRight, Lock, Unlock, Key } from 'lucide-react';
 import { getPasswordStrength } from '@/lib/passwordStrength';
 import PermissionsMatrix from './PermissionsMatrix';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -20,6 +20,7 @@ interface UserData {
   customer_id?: number;
   failed_login_count?: number;
   locked_at?: string;
+  bound_device_mac?: string | null;
 }
 
 interface CustomerOption {
@@ -160,6 +161,32 @@ export default function UsersSettings() {
           if (json.success) fetchUsers();
           else toast('error', json.error || 'เกิดข้อผิดพลาด');
         } catch { toast('error', 'ไม่สามารถลบผู้ใช้ได้'); }
+      },
+    });
+  };
+
+  const handleResetDeviceBinding = (user: UserData) => {
+    setConfirmDlg({
+      open: true,
+      message: `ล้าง trusted device ของ "${user.full_name}" (@${user.username})? ผู้ใช้จะต้อง login จาก browser ใหม่เพื่อผูกอีกครั้ง`,
+      action: async () => {
+        setConfirmDlg(prev => ({ ...prev, open: false }));
+        try {
+          const res = await fetch('/api/settings/users', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'reset_device_binding', user_id: user.user_id }),
+          });
+          const json = await res.json();
+          if (json.success) {
+            toast('success', `ล้าง trusted device ของ ${user.username} แล้ว`);
+            fetchUsers();
+          } else {
+            toast('error', json.error || 'ไม่สามารถล้าง trusted device ได้');
+          }
+        } catch {
+          toast('error', 'เกิดข้อผิดพลาด');
+        }
       },
     });
   };
@@ -468,6 +495,11 @@ export default function UsersSettings() {
                             ⚠️ {user.failed_login_count}x
                           </span>
                         )}
+                        {user.bound_device_mac && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                            <Key size={9} /> device
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-right">
@@ -488,6 +520,13 @@ export default function UsersSettings() {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                               text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all">
                             <Unlock size={13} /> ปลดล็อค
+                          </button>
+                        )}
+                        {user.bound_device_mac && (
+                          <button onClick={() => handleResetDeviceBinding(user)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                              text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all">
+                            <Key size={13} /> ล้างอุปกรณ์
                           </button>
                         )}
                         <button onClick={() => openEdit(user)}

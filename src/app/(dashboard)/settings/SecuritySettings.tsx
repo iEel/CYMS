@@ -39,6 +39,12 @@ interface TwoFactorSetup {
   otpauth_uri: string;
 }
 
+interface DeviceBindingPolicy {
+  enabled: boolean;
+  auto_bind: boolean;
+  enforce_roles: string[];
+}
+
 const DEFAULT_POLICY: PolicyConfig = {
   min_length: 8,
   require_uppercase: true,
@@ -48,6 +54,21 @@ const DEFAULT_POLICY: PolicyConfig = {
   max_login_attempts: 5,
   lockout_duration_min: 30,
 };
+
+const DEFAULT_DEVICE_BINDING_POLICY: DeviceBindingPolicy = {
+  enabled: false,
+  auto_bind: true,
+  enforce_roles: ['rs_driver'],
+};
+
+const DEVICE_BINDING_ROLE_OPTIONS = [
+  { code: 'rs_driver', label: 'คนขับรถยก' },
+  { code: 'gate_clerk', label: 'พนักงานหน้าประตู' },
+  { code: 'surveyor', label: 'พนักงานสำรวจ' },
+  { code: 'yard_planner', label: 'ผู้วางแผนลาน' },
+  { code: 'supervisor', label: 'Supervisor' },
+  { code: 'billing_officer', label: 'บัญชี' },
+];
 
 export default function SecuritySettings() {
   const { toast } = useToast();
@@ -60,6 +81,9 @@ export default function SecuritySettings() {
   const [twoFactorSetup, setTwoFactorSetup] = useState<TwoFactorSetup | null>(null);
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [twoFactorBusy, setTwoFactorBusy] = useState(false);
+  const [deviceBindingPolicy, setDeviceBindingPolicy] = useState<DeviceBindingPolicy>(DEFAULT_DEVICE_BINDING_POLICY);
+  const [deviceBindingSaving, setDeviceBindingSaving] = useState(false);
+  const [deviceBindingSaved, setDeviceBindingSaved] = useState(false);
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchData = useCallback(async () => {
@@ -68,6 +92,7 @@ export default function SecuritySettings() {
       const res = await fetch('/api/settings/security');
       const data = await res.json();
       if (data.policy) setPolicy(data.policy);
+      if (data.device_binding_policy) setDeviceBindingPolicy(data.device_binding_policy);
       setLockedUsers(data.locked_users || []);
       const twoFactorRes = await fetch('/api/auth/2fa');
       if (twoFactorRes.ok) {
@@ -126,6 +151,39 @@ export default function SecuritySettings() {
         } catch { toast('error', 'เกิดข้อผิดพลาด'); }
       },
     });
+  };
+
+  const handleSaveDeviceBinding = async () => {
+    setDeviceBindingSaving(true);
+    try {
+      const res = await fetch('/api/settings/security', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_binding_policy: deviceBindingPolicy }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDeviceBindingSaved(true);
+        if (data.device_binding_policy) setDeviceBindingPolicy(data.device_binding_policy);
+        toast('success', 'บันทึกนโยบายอุปกรณ์เรียบร้อย');
+        setTimeout(() => setDeviceBindingSaved(false), 2000);
+      } else {
+        toast('error', data.error || 'ไม่สามารถบันทึกนโยบายอุปกรณ์ได้');
+      }
+    } catch {
+      toast('error', 'เกิดข้อผิดพลาด');
+    } finally {
+      setDeviceBindingSaving(false);
+    }
+  };
+
+  const toggleDeviceBindingRole = (roleCode: string, checked: boolean) => {
+    setDeviceBindingPolicy(prev => ({
+      ...prev,
+      enforce_roles: checked
+        ? Array.from(new Set([...prev.enforce_roles, roleCode]))
+        : prev.enforce_roles.filter(role => role !== roleCode),
+    }));
   };
 
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
@@ -346,7 +404,7 @@ export default function SecuritySettings() {
                     onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     inputMode="numeric"
                     maxLength={6}
-                    className={`${inputClass} font-mono tracking-[0.25em] max-w-[220px]`}
+                    className={`${inputClass} font-mono text-center max-w-[220px]`}
                     placeholder="000000" />
                 </div>
                 <div className="flex items-center gap-2">
@@ -372,7 +430,7 @@ export default function SecuritySettings() {
                   onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   inputMode="numeric"
                   maxLength={6}
-                  className={`${inputClass} font-mono tracking-[0.25em] w-[220px]`}
+                  className={`${inputClass} font-mono text-center w-[220px]`}
                   placeholder="000000" />
               </div>
               <button onClick={disableTwoFactor} disabled={twoFactorBusy}
@@ -382,6 +440,71 @@ export default function SecuritySettings() {
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ===== DEVICE BINDING ===== */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              deviceBindingPolicy.enabled
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600'
+                : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
+            }`}>
+              <Shield size={20} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-white">Trusted Device Binding</h3>
+              <p className="text-xs text-slate-400">บังคับบางบทบาทให้เข้าสู่ระบบจาก browser ที่ผูกไว้</p>
+            </div>
+          </div>
+          <button onClick={handleSaveDeviceBinding} disabled={deviceBindingSaving}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
+            {deviceBindingSaving ? <Loader2 size={14} className="animate-spin" /> : deviceBindingSaved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+            {deviceBindingSaved ? 'บันทึกแล้ว' : 'บันทึก'}
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">
+              <input type="checkbox" checked={deviceBindingPolicy.enabled}
+                onChange={e => setDeviceBindingPolicy(prev => ({ ...prev, enabled: e.target.checked }))}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+              <span>
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">เปิดใช้ device binding</span>
+                <span className="block text-xs text-slate-400 mt-0.5">Login ต้องมี trusted device id ตรงกับบัญชี</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">
+              <input type="checkbox" checked={deviceBindingPolicy.auto_bind}
+                onChange={e => setDeviceBindingPolicy(prev => ({ ...prev, auto_bind: e.target.checked }))}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+              <span>
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">ผูกอุปกรณ์แรกอัตโนมัติ</span>
+                <span className="block text-xs text-slate-400 mt-0.5">ถ้าปิด ต้องให้ Admin reset/เตรียม binding ก่อน</span>
+              </span>
+            </label>
+          </div>
+
+          <div>
+            <label className={labelClass}>บทบาทที่ต้องใช้ trusted device</label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {DEVICE_BINDING_ROLE_OPTIONS.map(role => (
+                <label key={role.code} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 cursor-pointer">
+                  <input type="checkbox" checked={deviceBindingPolicy.enforce_roles.includes(role.code)}
+                    onChange={e => toggleDeviceBindingRole(role.code, e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                  <span className="text-xs text-slate-600 dark:text-slate-300">{role.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/30 text-[11px] text-emerald-700 dark:text-emerald-400">
+            ระบบใช้ browser device id แบบสุ่ม ไม่ใช่ MAC address จริง หากผู้ใช้เปลี่ยนเครื่องหรือล้าง browser storage ให้ล้าง binding จากหน้า Users แล้ว login ใหม่
+          </div>
         </div>
       </div>
 

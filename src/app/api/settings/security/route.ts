@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import {
+  DEFAULT_DEVICE_BINDING_POLICY,
+  DEVICE_BINDING_SETTING_KEY,
+  sanitizeDeviceBindingPolicy,
+} from '@/lib/deviceBinding';
 
 const SETTING_KEY = 'password_policy';
 
@@ -29,6 +34,16 @@ export async function GET() {
       policy = { ...DEFAULT_CONFIG, ...JSON.parse(policyResult.recordset[0].setting_value) };
     }
 
+    const deviceBindingResult = await db.request()
+      .input('key', sql.NVarChar, DEVICE_BINDING_SETTING_KEY)
+      .query('SELECT setting_value FROM SystemSettings WHERE setting_key = @key');
+    const deviceBindingPolicy = deviceBindingResult.recordset[0]?.setting_value
+      ? sanitizeDeviceBindingPolicy({
+          ...DEFAULT_DEVICE_BINDING_POLICY,
+          ...JSON.parse(deviceBindingResult.recordset[0].setting_value),
+        })
+      : DEFAULT_DEVICE_BINDING_POLICY;
+
     // Get locked users
     const lockedResult = await db.request().query(`
       SELECT u.user_id, u.username, u.full_name, u.failed_login_count, u.locked_at,
@@ -41,6 +56,7 @@ export async function GET() {
 
     return NextResponse.json({
       policy,
+      device_binding_policy: deviceBindingPolicy,
       locked_users: lockedResult.recordset,
     });
   } catch (error) {
@@ -107,6 +123,37 @@ export async function PUT(request: NextRequest) {
       });
 
       return NextResponse.json({ success: true, policy: config });
+    }
+
+    if (body.device_binding_policy) {
+      const config = sanitizeDeviceBindingPolicy({
+        ...DEFAULT_DEVICE_BINDING_POLICY,
+        ...body.device_binding_policy,
+      });
+
+      await db.request()
+        .input('key', sql.NVarChar, DEVICE_BINDING_SETTING_KEY)
+        .input('value', sql.NVarChar, JSON.stringify(config))
+        .query(`
+          MERGE SystemSettings AS target
+          USING (SELECT @key AS setting_key) AS source
+          ON target.setting_key = source.setting_key
+          WHEN MATCHED THEN UPDATE SET setting_value = @value, updated_at = GETDATE()
+          WHEN NOT MATCHED THEN INSERT (setting_key, setting_value) VALUES (@key, @value);
+        `);
+
+      await logAudit({
+        userId: body.admin_user_id,
+        action: 'device_binding_policy_update',
+        entityType: 'system_settings',
+        details: {
+          enabled: config.enabled,
+          auto_bind: config.auto_bind,
+          enforce_roles: config.enforce_roles,
+        },
+      });
+
+      return NextResponse.json({ success: true, device_binding_policy: config });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

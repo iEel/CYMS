@@ -10,6 +10,11 @@ jest.mock('@/lib/rateLimit', () => ({
 jest.mock('@/lib/passwordPolicy', () => ({
   getPasswordPolicy: jest.fn(async () => ({ max_login_attempts: 5, lockout_duration_min: 30 })),
 }));
+jest.mock('@/lib/deviceBinding', () => ({
+  getDeviceBindingPolicy: jest.fn(async () => ({ enabled: false, auto_bind: true, enforce_roles: ['rs_driver'] })),
+  isDeviceBindingRequired: jest.fn(() => false),
+  normalizeDeviceId: jest.fn((value) => value || null),
+}));
 jest.mock('bcryptjs', () => ({
   __esModule: true,
   default: { compare: jest.fn() },

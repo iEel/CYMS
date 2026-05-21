@@ -16,6 +16,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+const DEVICE_ID_STORAGE_KEY = 'cyms_device_id';
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
@@ -30,6 +31,18 @@ function isTokenExpired(token: string): boolean {
     return (payload.exp as number) * 1000 < Date.now();
   } catch {
     return true; // parse ไม่ได้ → ถือว่าหมดอายุ
+  }
+}
+
+function getOrCreateDeviceId() {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+    if (existing) return existing;
+    const generated = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(DEVICE_ID_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    return undefined;
   }
 }
 
@@ -129,7 +142,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, ...(totpCode ? { totp_code: totpCode } : {}) }),
+        body: JSON.stringify({
+          username,
+          password,
+          device_id: getOrCreateDeviceId(),
+          ...(totpCode ? { totp_code: totpCode } : {}),
+        }),
       });
 
       const data = await res.json();
