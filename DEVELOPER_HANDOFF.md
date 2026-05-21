@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity** (~100%)
 
 ---
 
@@ -264,6 +264,7 @@ container-yard-system/
 │   │       │   ├── statement/route.ts       # Statement/AR aging summary via invoice grants
 │   │       │   ├── bookings/route.ts        # Bookings + progress + ETA/empty-return metadata via booking grants + visibility_role
 │   │       │   ├── bookings/detail/route.ts # Booking detail + container/EIR drilldown via booking grants
+│   │       │   ├── eir/route.ts             # Portal-scoped EIR JSON for A5 modal + inspection panel via gate/container grants
 │   │       │   ├── eir-pdf/route.ts         # Portal-scoped EIR PDF via gate/container grants
 │   │       │   ├── invoice-pdf/route.ts     # Portal-scoped invoice/receipt/CN PDF via invoice grants
 │   │       │   ├── document-bundle/route.ts # ZIP bundle: statement + invoice/EIR download index via grants
@@ -327,6 +328,8 @@ container-yard-system/
 │   │   │   └── YardAudit.tsx         # Audit checklist per zone/bay
 │   │   ├── containers/
 │   │   │   └── ContainerTimeline.tsx   # **Container Tracking Timeline** — visual vertical timeline (Gate-In→Move→Hold→Repair→Gate-Out)
+│   │   ├── portal/
+│   │   │   └── PortalInspectionModal.tsx # Customer Portal read-only inspection: 6-side SVG, damage points, photo evidence
 │   │   └── gate/
 │   │       ├── EIRDocument.tsx         # EIR A5 print (Portal, QR, condition, grade, signatures)
 │   │       ├── ContainerInspection.tsx  # 6-side SVG damage marking + photo + grade
@@ -362,6 +365,7 @@ container-yard-system/
 │       ├── apiAuth.ts            # **🔐 withAuth() wrapper** — JWT + rate limiting + role-based access
 │       ├── authFetch.ts          # **🔐 Client auth fetch** — auto-attach Bearer token + 401 redirect
 │       ├── audit.ts              # **🔐 Centralized logAudit()** — non-fatal AuditLog INSERT
+│       ├── eirPayload.ts         # Shared EIR payload builder: damage_report parse, condition/grade, company, lifecycle
 │       ├── portalEntityAccess.ts # Non-fatal upsert helper for PortalEntityAccess grants
 │       ├── portalAccess.ts       # Customer Portal access grants SQL helpers + visibility reason subquery
 │       ├── portalContainerSummary.ts # Shared Portal container KPI buckets (total/in-yard/released/hold/repair)
@@ -1285,12 +1289,13 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - `containers`: customer inventory แบบ paginated + summary tiles + status/search filter + latest booking/EIR/open invoice context โดย visibility มาจาก `PortalEntityAccess` เท่านั้น
   - `invoices`: invoices + summary (outstanding/paid)
   - `bookings`: bookings + progress (received/container_count) + ETA status + empty return instruction metadata
+  - `eir`: Portal-scoped EIR JSON สำหรับ modal A5 + ผลตรวจสภาพ โดยใช้ `PortalEntityAccess`
   - `document-bundle`: ZIP download รวม `statement.json`, invoice/receipt/CN PDF links และ EIR PDF links
   - `disputes`: POST dispute request ต่อ invoice โดย verify ownership จาก `x-customer-id`
 - [x] **Portal UI** (`app/(portal)/`):
   - Layout: responsive sidebar (desktop) + hamburger (mobile), auto-redirect non-customer
   - Overview: 4 KPI cards + recent gate activity
-  - Containers: customer inventory list แบบ mobile cards + desktop table, summary tiles, server-side search/status tabs, booking/EIR/invoice context, visibility reason และ quick action ไป EIR/Invoice
+  - Containers: customer inventory list แบบ mobile cards + desktop table, summary tiles, server-side search/status tabs, booking/EIR/invoice context, visibility reason, เปิด EIR A5 modal, ดูผลตรวจสภาพ 6 ด้าน และดาวน์โหลด PDF
   - Invoices: summary cards (ค้างชำระ/ชำระแล้ว) + table + pagination + Download bundle + Dispute modal
   - Bookings: cards with progress bar + vessel info + pagination + ETA badge + empty return instruction panel
 - [x] **Admin — จัดการลูกค้า**:
@@ -1316,11 +1321,25 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - Overview: `setInterval(fetchData, 30000)` + refresh button + last updated timestamp
   - Containers: เหมือนกัน — ลูกค้าเห็น status update ทุก 30s
 - [x] **Self-service PDF Downloads**:
-  - `api/portal/eir-pdf`: EIR PDF download (reuse `eirPdfGenerator.ts`, ตรวจสิทธิ์ผ่าน `PortalEntityAccess`)
+  - `api/portal/eir-pdf`: EIR PDF download (reuse `eirPdfGenerator.ts`, ตรวจสิทธิ์ผ่าน `PortalEntityAccess`, ส่ง condition/grade/damage_report เข้า PDF)
   - `api/portal/invoice-pdf`: Invoice PDF with Thai font (jsPDF + Sarabun, ตรวจสิทธิ์ผ่าน `PortalEntityAccess`)
   - Overview: ลิงก์ "EIR PDF" ที่ทุกแถว gate activity
   - Invoices: ปุ่ม "PDF" ทุกแถว (ทั้ง mobile cards + desktop table)
 - [x] **Data Isolation**: ทุก PDF endpoint ใช้ `PortalEntityAccess` — ลูกค้าดาวน์โหลดได้เฉพาะเอกสารที่มี grant เท่านั้น
+
+### 📄 Customer Portal EIR + Inspection Parity (✅ เสร็จ — 21 พ.ค. 2569)
+- [x] **Portal-scoped EIR JSON** — เพิ่ม `GET /api/portal/eir?eir_number=` ให้คืน payload แบบเดียวกับ `/api/gate/eir` แต่บังคับสิทธิ์ผ่าน `PortalEntityAccess` (`gate_transaction` + container linkage) และส่ง `lifecycle`
+- [x] **Shared EIR payload** — เพิ่ม `src/lib/eirPayload.ts` สำหรับ parse `damage_report`, คำนวณ `container_condition`, `container_grade`, company profile และ document lifecycle เพื่อลด drift ระหว่าง main/portal
+- [x] **EIR modal เหมือนหน้าหลัก** — หน้า `/portal/containers` กด `ดู EIR` แล้วเปิด `EIRDocument` A5 modal ตัวเดียวกับฝั่งพนักงาน แทนการ download PDF อย่างเดียว
+- [x] **Inspection panel** — เพิ่ม `PortalInspectionModal` แบบ read-only: 6-side SVG, damage point marker, severity, inspector note, photo evidence และ photo completeness
+- [x] **PDF parity** — `api/portal/eir-pdf` ส่ง condition/grade/damage_report เข้า `eirPdfGenerator`; PDF มี section Container Inspection + damage summary
+
+**Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/portal-eir.test.ts --runInBand` ✅ (2 tests)
+- `npm test -- src/app/api/__tests__/portal-eir.test.ts src/app/api/__tests__/portal-containers.test.ts src/app/api/__tests__/portal-overview.test.ts --runInBand` ✅ (6 tests)
+- `npm test -- --runInBand` ✅ (48 suites / 520 tests)
+- `npx tsc --noEmit --pretty false` ✅
+- `npm run lint` ✅
 
 ### 📦 Customer Portal Container Inventory (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **API inventory context** — `GET /api/portal/containers` ใช้ fixed server-side visibility ผ่าน `PortalEntityAccess` แล้ว enrich รายการตู้ด้วย latest booking, latest EIR/gate transaction, open invoice count/amount, dwell days และ `visibility_role`

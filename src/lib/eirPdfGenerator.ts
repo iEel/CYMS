@@ -46,12 +46,30 @@ export interface EIRData {
   processed_by?: string;
   notes?: string;
   date: string;
+  container_condition?: 'sound' | 'damage';
+  container_grade?: string;
+  damage_report?: {
+    points?: Array<{
+      side?: string;
+      type?: string;
+      severity?: string;
+      note?: string;
+    }>;
+    condition_grade?: string;
+    inspector_notes?: string;
+    photo_completeness?: {
+      required?: number;
+      completed?: number;
+      total?: number;
+      missing_categories?: string[];
+    };
+  } | null;
   company?: {
     company_name?: string;
     address?: string;
     phone?: string;
     tax_id?: string;
-  };
+  } | null;
 }
 
 export function generateEIRPDF(data: EIRData): Buffer {
@@ -132,6 +150,56 @@ export function generateEIRPDF(data: EIRData): Buffer {
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   y = (doc as any).lastAutoTable.finalY + 6;
+
+  // ─── Inspection Info ───
+  const hasDamage = data.container_condition === 'damage';
+  const grade = data.container_grade || data.damage_report?.condition_grade || 'A';
+  const damagePoints = data.damage_report?.points || [];
+  const completeness = data.damage_report?.photo_completeness;
+  const inspectionInfo = [
+    ['Condition', hasDamage ? 'Damage' : 'Sound'],
+    ['Grade', `Grade ${grade}`],
+    ['Damage Points', damagePoints.length ? `${damagePoints.length}` : '0'],
+    ['Photo Evidence', completeness ? `${completeness.completed || 0}/${completeness.required || 0}` : '-'],
+  ];
+  if (completeness?.missing_categories?.length) {
+    inspectionInfo.push(['Missing Photos', completeness.missing_categories.join(', ')]);
+  }
+  if (data.damage_report?.inspector_notes) {
+    inspectionInfo.push(['Inspector Notes', data.damage_report.inspector_notes]);
+  }
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Container Inspection', '']],
+    body: inspectionInfo,
+    theme: 'grid',
+    styles: { font: FONT_NAME, fontSize: 10, cellPadding: 3 },
+    headStyles: { fontStyle: 'normal', fillColor: hasDamage ? [239, 68, 68] : [16, 185, 129], textColor: 255 },
+    columnStyles: { 0: { cellWidth: 45, fontStyle: 'bold' as const } },
+    margin: { left: 14, right: 14 },
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  y = (doc as any).lastAutoTable.finalY + 6;
+
+  if (damagePoints.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [['Side', 'Damage', 'Severity', 'Note']],
+      body: damagePoints.slice(0, 8).map(point => [
+        point.side || '-',
+        point.type || '-',
+        point.severity || '-',
+        point.note || '-',
+      ]),
+      theme: 'striped',
+      styles: { font: FONT_NAME, fontSize: 8, cellPadding: 2 },
+      headStyles: { fontStyle: 'normal', fillColor: [100, 116, 139], textColor: 255 },
+      margin: { left: 14, right: 14 },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    y = (doc as any).lastAutoTable.finalY + 6;
+  }
 
   // ─── Location Info ───
   const locationInfo = [

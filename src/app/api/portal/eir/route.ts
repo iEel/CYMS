@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { generateEIRPDF } from '@/lib/eirPdfGenerator';
 import { getPortalCustomerId, portalGateVisibilitySql } from '@/lib/portalAccess';
-import { buildEIRPayload, fetchCompanyProfile } from '@/lib/eirPayload';
+import { buildEIRPayload, fetchCompanyProfile, fetchEIRLifecycle } from '@/lib/eirPayload';
+import { ensureDocumentLifecycle } from '@/lib/documentLifecycle';
 
-// GET — Customer Portal: Download EIR PDF
+// GET — Customer Portal EIR detail for modal/inspection view
 export async function GET(request: NextRequest) {
   try {
     const cid = getPortalCustomerId(request);
@@ -18,14 +18,14 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    await ensureDocumentLifecycle(db);
 
-    // Fetch EIR data only if it matches the fixed customer portal visibility policy.
     const result = await db.request()
       .input('eirNumber', sql.NVarChar, eirNumber)
       .input('cid', sql.Int, cid)
       .query(`
         SELECT g.*, c.container_number, c.size, c.type, c.shipping_line, c.is_laden,
-          c.bay, c.[row], c.tier,
+          c.container_grade, c.bay, c.[row], c.tier,
           u.full_name as processed_by_name,
           y.yard_name, y.yard_code,
           z.zone_name
@@ -43,22 +43,13 @@ export async function GET(request: NextRequest) {
     }
 
     const row = result.recordset[0];
-
     const company = await fetchCompanyProfile(db);
-    const eirData = buildEIRPayload(row, company);
-    const pdfBuffer = generateEIRPDF({
-      ...eirData,
-      date: new Date(row.created_at).toLocaleString('th-TH'),
-    });
+    const eir = buildEIRPayload(row, company);
+    const lifecycle = await fetchEIRLifecycle(db, Number(row.transaction_id), row.eir_number);
 
-    return new NextResponse(new Uint8Array(pdfBuffer), {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="EIR-${eirNumber}.pdf"`,
-      },
-    });
+    return NextResponse.json({ eir, lifecycle });
   } catch (error) {
-    console.error('❌ Portal EIR PDF error:', error);
-    return NextResponse.json({ error: 'ไม่สามารถสร้าง EIR PDF ได้' }, { status: 500 });
+    console.error('❌ Portal EIR detail error:', error);
+    return NextResponse.json({ error: 'ไม่สามารถโหลดข้อมูล EIR ได้' }, { status: 500 });
   }
 }
