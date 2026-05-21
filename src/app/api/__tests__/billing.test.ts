@@ -12,12 +12,17 @@ import { NextRequest } from 'next/server';
 // ── Jest mock setup (before imports that need mocks) ─────────────────
 jest.mock('@/lib/db', () => ({ getDb: jest.fn() }));
 jest.mock('@/lib/audit', () => ({ logAudit: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('@/lib/documentNumber', () => ({
+  nextDocumentNumber: jest.fn(async ({ prefix }: { prefix: string }) => `${prefix}-202605-000001`),
+}));
 
 // ── Imports (after mocks are registered) ─────────────────────────────
 import { GET, POST, PUT } from '../billing/invoices/route';
 import { getDb } from '@/lib/db';
+import { nextDocumentNumber } from '@/lib/documentNumber';
 
 const mockedGetDb = getDb as jest.Mock;
+const mockedNextDocumentNumber = nextDocumentNumber as jest.Mock;
 
 // ── Query queue helpers ──────────────────────────────────────────────
 let queryQueue: Array<{ recordset: unknown[] } | Error> = [];
@@ -39,6 +44,7 @@ function makeChain() {
 function setup() {
   queryQueue = [];
   mockedGetDb.mockResolvedValue({ request: makeChain });
+  mockedNextDocumentNumber.mockImplementation(async ({ prefix }: { prefix: string }) => `${prefix}-202605-000001`);
 }
 
 function q(recordset: unknown[]) { return { recordset }; }
@@ -111,7 +117,6 @@ describe('POST /api/billing/invoices', () => {
 
   it('creates invoice and returns invoice_number', async () => {
     queryQueue = [
-      q([{ cnt: 10 }]), // COUNT
       q([{ invoice_id: 11, invoice_number: 'INV-2569-000011', status: 'draft', grand_total: 5350 }]), // INSERT
     ];
     const res = await POST(makeRequest('POST', 'http://localhost/api/billing/invoices', validInvoice));
@@ -124,9 +129,11 @@ describe('POST /api/billing/invoices', () => {
 
   it('auto-calculates VAT (7%) in grand_total', async () => {
     // 10 * 500 = 5000 + 7% VAT = 5350
-    queryQueue = [q([{ cnt: 5 }]), q([{ invoice_id: 6, grand_total: 5350 }])];
+    queryQueue = [q([{ invoice_id: 6, grand_total: 5350 }])];
     const res = await POST(makeRequest('POST', 'http://localhost/api/billing/invoices', validInvoice));
     expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.invoice.grand_total).toBe(5350);
   });
 
   it('returns 500 on DB error', async () => {
@@ -198,10 +205,8 @@ describe('PUT /api/billing/invoices — status actions', () => {
     queryQueue = [
       q([original]), // original invoice
       q([{ credited_total: 0 }]), // previous CN
-      q([{ cnt: 0 }]), // CN number
       q([{ invoice_id: 21, invoice_number: 'CN-2026-000001', grand_total: -1070 }]), // insert CN
       q([]), // cancel original
-      q([{ cnt: 1 }]), // revised invoice number
       q([{ invoice_id: 22, invoice_number: 'INV-2026-000002', grand_total: 535 }]), // insert revised
     ];
 

@@ -19,6 +19,10 @@ jest.mock('@/lib/audit', () => ({
   logAudit: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('@/lib/documentNumber', () => ({
+  nextDocumentNumber: jest.fn(async ({ prefix }: { prefix: string }) => `${prefix}-202605-000001`),
+}));
+
 function makeRequest(method: string, url: string, body?: unknown): NextRequest {
   return new NextRequest(url, {
     method,
@@ -97,8 +101,6 @@ describe('POST /api/mnr', () => {
   };
 
   it('creates EOR with valid payload', async () => {
-    // COUNT query for EOR number generation
-    mockQuery.mockResolvedValueOnce({ recordset: [{ cnt: 5 }] });
     // INSERT query
     mockQuery.mockResolvedValueOnce({
       recordset: [{ eor_id: 6, eor_number: 'EOR-2569-000006', status: 'draft' }],
@@ -111,7 +113,8 @@ describe('POST /api/mnr', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(body.eor_number).toMatch(/^EOR-\d{4}-\d{6}$/);
+    expect(body.eor_number).toMatch(/^EOR-\d{6}-\d{6}$/);
+    expect(body.order.eor_id).toBe(6);
   });
 
   it('returns 400 when container_id is missing', async () => {
