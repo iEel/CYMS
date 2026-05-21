@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast** (~100%)
 
 ---
 
@@ -315,6 +315,7 @@ container-yard-system/
 │   │   │   ├── ContainerSearch.tsx   # Instant search + detail panel + photos + EIR link + **Dwell Days badge**
 │   │   │   ├── ContainerCardPWA.tsx  # Mobile card view + **Dwell Days badge**
 │   │   │   ├── ContainerDetailModal.tsx  # Container detail modal (SVG inspection, photos, actions)
+│   │   │   ├── YardPlanningPanel.tsx # Slot aging heatmap + move/release/congestion forecast panel
 │   │   │   └── YardAudit.tsx         # Audit checklist per zone/bay
 │   │   ├── containers/
 │   │   │   └── ContainerTimeline.tsx   # **Container Tracking Timeline** — visual vertical timeline (Gate-In→Move→Hold→Repair→Gate-Out)
@@ -341,6 +342,7 @@ container-yard-system/
 │       ├── utils.ts              # formatDateTime, formatTime, **calcDwellDays** (Calendar Days +1), etc.
 │       ├── containerValidation.ts # **ISO 6346 check digit** validation + size/type parser + **`extractContainerNumber()` (4-strategy OCR smart extraction)** + `extractTruckPlate()`
 │       ├── offlineQueue.ts       # NFR1: IndexedDB offline queue + auto-sync + queued/synced/conflict metadata
+│       ├── yardPlanning.ts       # Yard planning snapshot: slot aging risk, move recommendations, release/congestion forecast
 │       ├── rateLimit.ts          # **🔐 Rate limiter** — in-memory per-IP, DB-backed config (login/API/upload)
 │       ├── validators.ts         # **🔐 Zod schemas** — container numbers, gate, invoices, users, customers, EDI
 │       ├── apiAuth.ts            # **🔐 withAuth() wrapper** — JWT + rate limiting + role-based access
@@ -362,6 +364,7 @@ container-yard-system/
 │           ├── gateWorkflow.test.ts        # Gate guided workflow status + exception rules
 │           ├── reconciliationActions.test.ts # Reconciliation action row keys + deep links + status overlay
 │           ├── offlineQueue.test.ts        # Offline queue request classification + queued payload helpers
+│           ├── yardPlanning.test.ts        # Slot aging heatmap, move recommendation, release forecast
 │           ├── portalBooking.test.ts       # Portal ETA status + empty-return instruction helpers
 │           ├── portalDocumentBundle.test.ts # Bundle entries + ZIP archive smoke test
 │           └── rateLimit.test.ts            # store clearing + stats + client IP extraction (14 tests)
@@ -600,6 +603,7 @@ container-yard-system/
   - คำนวณด้วย `calcDwellDays()` (Calendar Days +1)
 - **2D / Bay / 3D** toggle (3 มุมมอง)
 - **2D**: Zone cards + occupancy bars
+- **Yard Planning panel**: slot aging heatmap, move recommendations, daily release forecast และ congestion forecast สำหรับงานวางแผนลาน
 - **Bay**: (**ใหม่**) Bay Cross-Section — แสดง Row×Tier grid แยกตาม Bay + เลือก Zone + สี shipping line/status + hover tooltip + click detail + legend
 - **3D**: Three.js — ตู้สมจริง (สัดส่วนจริง 20ft/40ft/45ft)
 - ตารางตู้ + filter + search + **pagination** (25 ตู้/หน้า + ปุ่มเลขหน้า + รีเซ็ตอัตโนมัติเมื่อเปลี่ยน filter)
@@ -1054,6 +1058,14 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - ไฟล์: `yard/page.tsx`, `containers/detail/route.ts`, `BayCrossSection.tsx`, `ContainerCardPWA.tsx`, `ContainerSearch.tsx`
 - Color coding: 🟢 ≤7 วัน (ปกติ) | 🟡 8-14 วัน (เริ่มนาน) | 🔴 >14 วัน (ค้างลานนาน)
 
+### 🧠 Yard Planning Heatmap + Forecast (✅ เสร็จ — 21 พ.ค. 2569)
+- [x] **Slot aging heatmap** — `src/lib/yardPlanning.ts` รวม occupancy, avg/max dwell และ active count ต่อ zone แล้วจัดระดับ `low/watch/high/critical`
+- [x] **Move recommendations** — แนะนำ pre-marshal ตู้พร้อมปล่อยที่อยู่ tier สูง/ค้างนาน และแยกตู้ hold/repair ให้เข้า repair review
+- [x] **Daily release forecast** — สรุป ready today, next 3 days และ blocked count เพื่อช่วยวางแผนทีมหน้าลาน
+- [x] **Congestion forecast** — แสดง zone ที่เริ่มเสี่ยง/วิกฤต พร้อมคำแนะนำ operational action
+- [x] **UI integration** — เพิ่ม `src/components/yard/YardPlanningPanel.tsx` ในหน้า Yard Overview (2D view) ก่อน Yard Optimization
+- [x] **Unit tests** — `src/lib/__tests__/yardPlanning.test.ts` ครอบคลุม heatmap risk, move recommendation, release forecast
+
 ### 📄 Table Pagination (✅ เสร็จ)
 - [x] **Gate History** — 25 รายการ/หน้า + ปุ่มเลขหน้า + Prev/Next
 - [x] **Invoices** — 25 รายการ/หน้า + ปุ่มเลขหน้า + Prev/Next
@@ -1424,7 +1436,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 402/402; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 406/406; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1466,7 +1478,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 402/402 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 406/406 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)

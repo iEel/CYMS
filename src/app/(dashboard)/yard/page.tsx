@@ -6,6 +6,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { formatShortDate, calcDwellDays } from '@/lib/utils';
 import ContainerSearch from '@/components/yard/ContainerSearch';
 import YardAudit from '@/components/yard/YardAudit';
+import YardPlanningPanel from '@/components/yard/YardPlanningPanel';
 import ContainerCardPWA from '@/components/yard/ContainerCardPWA';
 import BayCrossSection from '@/components/yard/BayCrossSection';
 import ContainerDetailModal from '@/components/yard/ContainerDetailModal';
@@ -445,6 +446,8 @@ export default function YardPage() {
                   })}
                 </div>
               </div>
+
+              <YardPlanningPanel zones={zones} containers={activeContainers} />
 
               <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
