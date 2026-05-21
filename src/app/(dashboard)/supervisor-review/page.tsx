@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  Banknote,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -13,10 +14,12 @@ import {
   RefreshCcw,
   Search,
   ShieldCheck,
+  TimerReset,
   User,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { APPROVAL_ACTION_INFO, buildApprovalInbox, type ApprovalInboxItem } from '@/lib/approvalInbox';
 
 interface ApprovalReview {
   review_id: number;
@@ -54,16 +57,7 @@ const statusInfo: Record<string, { label: string; color: string }> = {
   rejected: { label: 'ไม่เห็นชอบ', color: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800' },
 };
 
-const actionInfo: Record<string, { label: string; group: string }> = {
-  container_grade_change_after_save: { label: 'เปลี่ยนเกรดตู้หลังบันทึก', group: 'Survey' },
-  container_billing_hold_override: { label: 'เปลี่ยนสถานะตู้ที่ติด Billing Hold', group: 'Yard' },
-  gate_out_with_billing_hold: { label: 'Gate Out ทั้งที่ติด Billing Hold', group: 'Gate' },
-  billing_no_charge_recorded: { label: 'No Charge', group: 'Billing' },
-  billing_waive_recorded: { label: 'Waived / ลดค่าบริการ', group: 'Billing' },
-  credit_note_created: { label: 'ออกใบลดหนี้', group: 'Billing' },
-  invoice_cancel_after_issue: { label: 'ยกเลิก Invoice', group: 'Billing' },
-  billing_hold_released: { label: 'ปลด Billing Hold', group: 'Billing' },
-};
+const actionInfo = APPROVAL_ACTION_INFO;
 
 const detailLabels: Record<string, string> = {
   previous_grade: 'เกรดเดิม',
@@ -107,6 +101,26 @@ function formatValue(value: unknown) {
   if (typeof value === 'boolean') return value ? 'ใช่' : 'ไม่ใช่';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
+}
+
+function formatMoney(value: number) {
+  return `฿${Math.round(value).toLocaleString('th-TH')}`;
+}
+
+function slaLabel(item: ApprovalInboxItem) {
+  if (item.sla_status === 'breached') return `เกิน SLA ${item.age_hours}/${item.sla_hours} ชม.`;
+  if (item.sla_status === 'due_today') return `ใกล้ครบ SLA ${item.age_hours}/${item.sla_hours} ชม.`;
+  return `ใน SLA ${item.age_hours}/${item.sla_hours} ชม.`;
+}
+
+function severityClass(item: ApprovalInboxItem) {
+  if (item.severity === 'critical') {
+    return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300';
+  }
+  if (item.severity === 'warning') {
+    return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300';
+  }
+  return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-700/40 dark:text-slate-300';
 }
 
 export default function SupervisorReviewPage() {
@@ -176,6 +190,8 @@ export default function SupervisorReviewPage() {
   const pendingCount = reviews.filter(item => item.status === 'pending_review').length;
   const approvedCount = reviews.filter(item => item.status === 'approved').length;
   const rejectedCount = reviews.filter(item => item.status === 'rejected').length;
+  const inbox = useMemo(() => buildApprovalInbox(reviews), [reviews]);
+  const focusItems = inbox.items.slice(0, 4);
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
@@ -232,6 +248,89 @@ export default function SupervisorReviewPage() {
           <p className="text-xs text-rose-700 dark:text-rose-300">ไม่เห็นชอบ</p>
           <p className="text-2xl font-bold text-rose-700 dark:text-rose-300 mt-1">{rejectedCount}</p>
         </div>
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+              <ShieldCheck size={16} /> Approval Inbox Focus
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5">จัดลำดับงานรอตรวจตาม SLA, risk และยอดเงินที่กระทบ</p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
+            <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 px-3 py-2">
+              <p className="text-[10px] text-slate-400">Pending</p>
+              <p className="text-sm font-bold text-slate-800 dark:text-white">{inbox.summary.pending_total}</p>
+            </div>
+            <div className="rounded-lg bg-rose-50 dark:bg-rose-900/20 px-3 py-2">
+              <p className="text-[10px] text-rose-500">SLA Breach</p>
+              <p className="text-sm font-bold text-rose-700 dark:text-rose-300">{inbox.summary.breached_sla}</p>
+            </div>
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
+              <p className="text-[10px] text-amber-500">Critical</p>
+              <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{inbox.summary.critical_total}</p>
+            </div>
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2">
+              <p className="text-[10px] text-blue-500">Exposure</p>
+              <p className="text-sm font-bold text-blue-700 dark:text-blue-300">{formatMoney(inbox.summary.financial_exposure)}</p>
+            </div>
+          </div>
+        </div>
+
+        {focusItems.length === 0 ? (
+          <div className="p-5 text-center text-sm text-slate-400">ไม่มีรายการ pending ในชุดข้อมูลที่โหลดอยู่</div>
+        ) : (
+          <div className="p-4 grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-4">
+            <div className="space-y-2">
+              {focusItems.map(item => (
+                <button
+                  key={item.review_id}
+                  onClick={() => {
+                    setStatus('pending_review');
+                    setSearch(item.label);
+                    setCurrentPage(1);
+                  }}
+                  className={`w-full text-left rounded-lg border px-3 py-2 hover:shadow-sm transition-shadow ${severityClass(item)}`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-bold">{item.label}</span>
+                    <span className="text-[10px] font-semibold">{slaLabel(item)}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] opacity-80">
+                    <span>{item.group}</span>
+                    <span>โดย {item.requester}</span>
+                    {item.financial_amount > 0 && <span>{formatMoney(item.financial_amount)}</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="rounded-lg bg-slate-50 dark:bg-slate-700/30 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 mb-3">
+                <TimerReset size={14} /> Queue by group
+              </div>
+              <div className="space-y-2">
+                {Object.entries(inbox.summary.group_counts).map(([group, count]) => (
+                  <button
+                    key={group}
+                    onClick={() => {
+                      setStatus('pending_review');
+                      setSearch(group);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full h-8 px-2 rounded bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300"
+                  >
+                    <span>{group}</span>
+                    <span className="font-bold">{count}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 text-[10px] text-slate-400 flex items-center gap-1.5">
+                <Banknote size={12} /> Oldest pending {inbox.summary.oldest_hours} ชม.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
