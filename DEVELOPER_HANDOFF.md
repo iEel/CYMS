@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel** (~100%)
 
 ---
 
@@ -175,8 +175,14 @@ container-yard-system/
 │   │   │   ├── edi/page.tsx      # หน้า EDI (4 tabs: Bookings/นำเข้า/ตรวจซีล/CODECO)
 │   │   │   ├── mnr/page.tsx      # หน้า M&R (3 tabs: EOR/สร้าง EOR/รหัสความเสียหาย) + **actual_cost modal + notes field + user_id tracking**
 │   │   │   ├── billing/
-│   │   │   │   ├── page.tsx          # หน้าบัญชี (tabs: ใบแจ้งหนี้/Clearance/สร้างบิล/Tariff/Hold/AR/Credit/Payment QR/เอกสาร/ERP/รายงาน/Demurrage)
-│   │   │   │   └── DemurrageTab.tsx  # **Demurrage Calculator** — overview + risk cards + editable rates + per-container calculator + timeline
+│   │   │   │   ├── page.tsx              # หน้าบัญชี orchestrator (tabs + data fetch + modal state)
+│   │   │   │   ├── BillingClearanceTab.tsx # Clearance audit UI + No Charge/Waived/Credit control list
+│   │   │   │   ├── BillingReports.tsx    # Daily/monthly billing report + control report + PDF/Excel export
+│   │   │   │   ├── CreditControlTab.tsx   # Customer credit limit/overdue/hold monitor
+│   │   │   │   ├── ARAgingTab.tsx         # AR Aging report by customer
+│   │   │   │   ├── billingTypes.ts        # Shared billing UI types
+│   │   │   │   ├── billingUi.ts           # Shared billing labels/badges/export lazy loader
+│   │   │   │   └── DemurrageTab.tsx       # **Demurrage Calculator** — overview + risk cards + editable rates + per-container calculator + timeline
 │   │   │   └── settings/
 │   │   │       ├── page.tsx              # หน้าตั้งค่า (12 tabs, รวม Rate Limit)
 │   │   │       ├── CompanySettings.tsx    # CRUD ข้อมูลองค์กร (+ logo upload + branch)
@@ -263,6 +269,7 @@ container-yard-system/
 │   │       │   ├── payment-qr.test.ts       # PromptPay QR endpoint + missing config guard
 │   │       │   ├── settings-users-device-binding.test.ts # Admin reset trusted-device binding action
 │   │       │   ├── auth-2fa.test.ts         # 2FA status/setup/verify validation
+│   │       │   ├── component-boundaries.test.ts # Static guard: billing tabs must stay in focused component files
 │   │       │   └── search.test.ts           # GET global search aggregation + yard filter + short query guard
 │   │       ├── settings/
 │   │       │   ├── company/route.ts        # GET/POST company profile (+ branch + logo URL)
@@ -988,6 +995,12 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - UI สำคัญแสดงข้อความ “เข้าคิวออฟไลน์” แทนมองเป็น error เมื่อไม่มีเน็ต
   - Unit test: `src/lib/__tests__/offlineQueue.test.ts`
 
+### 🧩 Component Decomposition (✅ เสร็จ — 21 พ.ค. 2569)
+- [x] **Billing page split** — แยก `BillingClearanceTab`, `BillingReports`, `CreditControlTab`, `ARAgingTab` ออกจาก `billing/page.tsx` เป็น component files เฉพาะทาง
+- [x] **Shared billing UI contracts** — เพิ่ม `billingTypes.ts` และ `billingUi.ts` สำหรับ prop/data types, label mapping, badge helpers และ lazy export loader
+- [x] **Page orchestrator เบาลง** — `billing/page.tsx` เหลือบทบาทหลักเป็น tab orchestration, data loading, invoice/credit-note modal state
+- [x] **Static boundary guard** — เพิ่ม `src/app/api/__tests__/component-boundaries.test.ts` เพื่อกัน regression ไม่ให้ย้าย tab ใหญ่กลับเข้า `page.tsx`
+
 ### NFR: Non-Functional Requirements (✅ เสร็จ)
 - [x] NFR1: Offline-First — IndexedDB queue + `offlineFetch()` wrapper + auto-replay + operation status (`queued/synced/conflict`) สำหรับงานหน้าด่าน/Yard/M&R
 - [x] NFR3b: High-Contrast Theme — `.high-contrast` CSS + ☀️ toggle (sidebar white bg, เส้นขอบหนา, ตัวอักษรใหญ่)
@@ -1384,7 +1397,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 389/389; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Reports action center + Offline queue tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 390/390; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Reports action center + Offline queue + component boundary tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1426,7 +1439,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 389/389 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 390/390 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)
