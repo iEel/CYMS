@@ -238,6 +238,54 @@ CREATE INDEX IX_PortalEntityAccess_EntityRef
 ON PortalEntityAccess (entity_type, entity_ref, customer_id, is_active);
 
 -- ===================================
+-- ตาราง: Reefer Monitoring Policies + Checks
+-- ===================================
+CREATE TABLE ReeferCheckPolicies (
+    policy_id              INT PRIMARY KEY IDENTITY(1,1),
+    yard_id                INT NULL REFERENCES Yards(yard_id),
+    customer_id            INT NULL REFERENCES Customers(customer_id),
+    booking_id             INT NULL,
+    container_id           INT NULL REFERENCES Containers(container_id),
+    scope_type             NVARCHAR(20) NOT NULL,      -- default,yard,customer,booking,container
+    cargo_profile          NVARCHAR(40) NULL,          -- general,frozen,chilled,pharma
+    interval_hours         INT NOT NULL DEFAULT 4,
+    warning_grace_minutes  INT NOT NULL DEFAULT 30,
+    min_temp_c             DECIMAL(6,2) NULL,
+    max_temp_c             DECIMAL(6,2) NULL,
+    is_active              BIT NOT NULL DEFAULT 1,
+    created_at             DATETIME2 NOT NULL DEFAULT GETDATE(),
+    updated_at             DATETIME2 NULL
+);
+
+CREATE INDEX IX_ReeferCheckPolicies_Scope
+ON ReeferCheckPolicies (scope_type, yard_id, customer_id, booking_id, container_id, is_active);
+
+CREATE TABLE ReeferTemperatureChecks (
+    check_id            INT PRIMARY KEY IDENTITY(1,1),
+    container_id        INT NOT NULL REFERENCES Containers(container_id),
+    booking_id          INT NULL,
+    yard_id             INT NOT NULL REFERENCES Yards(yard_id),
+    customer_id         INT NULL REFERENCES Customers(customer_id),
+    measured_temp_c     DECIMAL(6,2) NULL,
+    set_point_c         DECIMAL(6,2) NULL,
+    supply_temp_c       DECIMAL(6,2) NULL,
+    return_temp_c       DECIMAL(6,2) NULL,
+    status              NVARCHAR(30) NOT NULL DEFAULT 'normal',
+    photo_url           NVARCHAR(500) NULL,
+    notes               NVARCHAR(1000) NULL,
+    checked_by_user_id  INT NULL REFERENCES Users(user_id),
+    checked_at          DATETIME2 NOT NULL DEFAULT GETDATE(),
+    policy_snapshot     NVARCHAR(MAX) NULL,
+    created_at          DATETIME2 NOT NULL DEFAULT GETDATE()
+);
+
+CREATE INDEX IX_ReeferTemperatureChecks_Container_Time
+ON ReeferTemperatureChecks (container_id, checked_at DESC);
+
+CREATE INDEX IX_ReeferTemperatureChecks_Yard_Status
+ON ReeferTemperatureChecks (yard_id, status, checked_at DESC);
+
+-- ===================================
 -- ตาราง: รหัสตู้มาตรฐาน ISO (ISO Container Codes)
 -- ===================================
 CREATE TABLE ISOContainerCodes (

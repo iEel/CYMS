@@ -34,6 +34,9 @@ const PERMISSION_SEEDS = [
   { code: 'yard.slot.move', module: 'yard', action: 'slot_move', description: 'ย้าย slot หรือตำแหน่งวางตู้' },
   { code: 'yard.location.assign', module: 'yard', action: 'location_assign', description: 'กำหนด location ให้ตู้' },
   { code: 'yard.hold.release', module: 'yard', action: 'hold_release', description: 'ปล่อยตู้ที่ติด hold หรือ billing hold', risk: 'high' },
+  { code: 'reefer.check.read', module: 'reefer', action: 'check_read', description: 'ดูคิวและประวัติการตรวจอุณหภูมิตู้เย็น' },
+  { code: 'reefer.check.record', module: 'reefer', action: 'check_record', description: 'บันทึกผลตรวจอุณหภูมิตู้เย็นพร้อมหลักฐานรูปถ่าย' },
+  { code: 'reefer.policy.manage', module: 'reefer', action: 'policy_manage', description: 'กำหนดรอบตรวจและช่วงอุณหภูมิตู้เย็น', risk: 'high' },
   { code: 'billing.invoice.create', module: 'billing', action: 'invoice_create', description: 'ออกใบแจ้งหนี้' },
   { code: 'billing.payment.receive', module: 'billing', action: 'payment_receive', description: 'รับชำระเงินและออกใบเสร็จ' },
   {
@@ -70,9 +73,9 @@ const PERMISSION_SEEDS = [
 ];
 
 const ROLE_GRANTS: Record<string, string[]> = {
-  gate_clerk: ['gate.in', 'gate.out', 'gate.eir.print', 'booking.manage', 'integration.logs.view'],
-  surveyor: ['survey.inspect', 'survey.damage.update', 'survey.grade.change', 'yard.location.assign', 'mnr.eor.create', 'reports.view'],
-  yard_planner: ['yard.slot.move', 'yard.location.assign', 'booking.manage', 'reports.view'],
+  gate_clerk: ['gate.in', 'gate.out', 'gate.eir.print', 'booking.manage', 'integration.logs.view', 'reefer.check.read'],
+  surveyor: ['survey.inspect', 'survey.damage.update', 'survey.grade.change', 'yard.location.assign', 'mnr.eor.create', 'reports.view', 'reefer.check.read', 'reefer.check.record'],
+  yard_planner: ['yard.slot.move', 'yard.location.assign', 'booking.manage', 'reports.view', 'reefer.check.read'],
   rs_driver: ['yard.slot.move', 'yard.location.assign'],
   billing_officer: [
     'billing.invoice.create',
@@ -94,6 +97,9 @@ const ROLE_GRANTS: Record<string, string[]> = {
     'yard.slot.move',
     'yard.location.assign',
     'yard.hold.release',
+    'reefer.check.read',
+    'reefer.check.record',
+    'reefer.policy.manage',
     'billing.invoice.create',
     'billing.payment.receive',
     'billing.waive.request',

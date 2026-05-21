@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import {
-  LayoutDashboard, Package, FileText, ClipboardList, LogOut, Menu, X, Ship,
+  LayoutDashboard, Package, FileText, ClipboardList, LogOut, Menu, X, Ship, Thermometer,
 } from 'lucide-react';
 
 // Global fetch interceptor — auto-attach JWT to API calls
@@ -37,6 +37,7 @@ if (typeof window !== 'undefined') {
 const navItems = [
   { label: 'ภาพรวม', href: '/portal', icon: <LayoutDashboard size={18} /> },
   { label: 'ตู้คอนเทนเนอร์', href: '/portal/containers', icon: <Package size={18} /> },
+  { label: 'ตู้เย็น', href: '/portal/reefer', icon: <Thermometer size={18} /> },
   { label: 'ใบแจ้งหนี้', href: '/portal/invoices', icon: <FileText size={18} /> },
   { label: 'Booking', href: '/portal/bookings', icon: <ClipboardList size={18} /> },
 ];

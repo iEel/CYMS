@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring** (~100%)
 
 ---
 
@@ -264,6 +264,7 @@ container-yard-system/
 │   │       │   ├── statement/route.ts       # Statement/AR aging summary via invoice grants
 │   │       │   ├── bookings/route.ts        # Bookings + progress + ETA/empty-return metadata via booking grants + visibility_role
 │   │       │   ├── bookings/detail/route.ts # Booking detail + container/EIR drilldown via booking grants
+│   │       │   ├── reefer/route.ts           # Portal read-only RF temperature tracking via PortalEntityAccess
 │   │       │   ├── eir/route.ts             # Portal-scoped EIR JSON for A5 modal + inspection panel via gate/container grants
 │   │       │   ├── eir-pdf/route.ts         # Portal-scoped EIR PDF via gate/container grants
 │   │       │   ├── invoice-pdf/route.ts     # Portal-scoped invoice/receipt/CN PDF via invoice grants
@@ -275,6 +276,9 @@ container-yard-system/
 │   │       │   ├── mnr/route.ts             # **📊 GET M&R Report** — EOR summary KPIs + by status + 6-month trend + full EOR list with date range filter
 │   │       │   └── reconciliation/route.ts  # **Action Center** — issue checks + row deep links/SLA + PATCH resolve/ignore
 │   │       ├── search/route.ts              # **GET global search** — containers + gate history + invoices + bookings for Topbar quick jump
+│   │       ├── reefer/
+│   │       │   ├── checks/route.ts          # GET RF check queue + POST temperature/photo evidence
+│   │       │   └── policies/route.ts        # GET/POST configurable reefer check intervals/thresholds
 │   │       ├── __tests__/                   # **🧪 API Integration Tests** — covers containers, mnr, reports, gate, billing, auth/2FA, no-runtime-DDL, portal, search
 │   │       │   ├── containers.test.ts       # GET (list, position check, filters) + POST (create, UNIQUE)
 │   │       │   ├── mnr.test.ts              # GET + POST (create EOR) + PUT (approve/reject/complete/404)
@@ -371,6 +375,7 @@ container-yard-system/
 │       ├── portalContainerSummary.ts # Shared Portal container KPI buckets (total/in-yard/released/hold/repair)
 │       ├── portalGrantReconciler.ts # Admin preview/repair missing/stale PortalEntityAccess grants
 │       ├── portalBooking.ts      # Customer Portal booking ETA + empty-return instruction helpers
+│       ├── reeferMonitoring.ts   # Reefer policy priority, due/overdue, and temperature status helpers
 │       ├── portalDocumentBundle.ts # Statement/invoice/EIR bundle index entries
 │       ├── zipArchive.ts         # Small no-dependency ZIP writer for portal bundles
 │       ├── ediFormatter.ts       # **📋 Shared CODECO formatter** — template-based CSV/JSON/EDIFACT (field mapping, headers, date format, delimiter)
@@ -413,7 +418,7 @@ container-yard-system/
 | `Yards` | yard_name, address, lat/lng, status, **branch_type, branch_number** | สาขาลาน |
 | `YardZones` | zone_name, zone_type, max_bay/row/tier | โซนในลาน |
 | `Roles` | role_name, description | บทบาท (6 roles) |
-| `Permissions` | module, action, description | สิทธิ์ (33 permissions: 9 modules) |
+| `Permissions` | module, action, description | สิทธิ์ (รวม reefer.check.read / reefer.check.record / reefer.policy.manage) |
 | `RolePermissions` | role_id, permission_id | Permission matrix |
 | `Users` | username, password_hash, role_id, status, **two_fa_enabled, two_fa_secret, two_fa_confirmed_at, bound_device_mac, notif_last_read_at** | ผู้ใช้งาน + TOTP 2FA + trusted browser device id (`bound_device_mac` เป็นชื่อ legacy ไม่ใช่ MAC จริง) + timestamp อ่านแจ้งเตือนล่าสุด |
 | `UserYardAccess` | user_id, yard_id | สิทธิ์เข้าถึงลาน |
@@ -422,6 +427,8 @@ container-yard-system/
 | `Customers` | customer_code (auto-gen `CUST-XXXXX`), customer_name, **is_line, is_forwarder, is_trucking, is_shipper, is_consignee** (Boolean flags), tax_id, address, billing_address, contact_name/phone/email, **default_payment_type** (CASH/CREDIT), credit_term, **edi_prefix** (บังคับเมื่อ is_line=1), is_active | ลูกค้า — **Multi-role** (1 บริษัท = หลายบทบาท) |
 | `CustomerBranches` | customer_id (FK), branch_code (default '00000'), branch_name, billing_address, contact_name/phone/email, is_default, is_active | **สาขาลูกค้า** — หลายสาขาต่อ 1 บริษัท |
 | `PortalEntityAccess` | customer_id, entity_type, entity_id/entity_ref, access_role, source_table/source_id, is_active | Source-of-truth สำหรับ Customer Portal visibility ต่อ `container` / `booking` / `gate_transaction` / `invoice` |
+| `ReeferCheckPolicies` | scope_type, yard/customer/booking/container id, interval_hours, grace, min/max °C, is_active | Policy รอบตรวจตู้เย็นแบบ priority: container > booking > customer > yard > default |
+| `ReeferTemperatureChecks` | container_id, booking_id, yard_id, customer_id, measured/set/supply/return °C, status, photo_url, checked_by | ประวัติการตรวจอุณหภูมิตู้ RF พร้อมรูปหลักฐานและ policy snapshot |
 | `ISOContainerCodes` | iso_code, description | รหัส ISO ตู้ |
 | `DocumentFormats` | doc_type, prefix, running_number | เลขเอกสาร |
 | `GateTransactions` | container_id, transaction_type, driver_name, truck_plate, eir_number, **container_owner_id** (FK→Customers), **billing_customer_id** (FK→Customers), **billing_clearance_id** | บันทึก Gate In/Out — **แยกเจ้าของตู้/คนจ่ายเงิน** + ผูกหลักฐาน Billing Clearance ก่อนออก EIR |
@@ -1358,6 +1365,22 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - `npx tsc --noEmit --pretty false` ✅
 - `npm run lint` ✅
 
+### 🌡️ Reefer Temperature Monitoring (✅ เสร็จ — 21 พ.ค. 2569)
+- [x] **Policy รอบตรวจที่กำหนดได้** — เพิ่ม `ReeferCheckPolicies` ใช้ priority แบบ server-side: `container > booking > customer > yard > default`; ตั้ง `interval_hours`, `warning_grace_minutes`, `min_temp_c`, `max_temp_c`
+- [x] **คิวตรวจฝั่งพนักงาน** — หน้า `/reefer` แสดงตู้ `RF` ในลาน, latest temperature, due/overdue/not checked, booking context และปุ่ม `บันทึกอุณหภูมิ`
+- [x] **บันทึกอุณหภูมิ + รูปหลักฐาน** — `POST /api/reefer/checks` อ่าน `container/customer/booking` จาก DB เท่านั้น ไม่รับ customer จาก body, บันทึก measured/set/supply/return °C, status, notes, photo_url และ policy snapshot พร้อม audit `reefer_check_record`
+- [x] **Portal read-only tracking** — หน้า `/portal/reefer` + `GET /api/portal/reefer` ให้ลูกค้าเห็นเฉพาะตู้ RF ที่มี `PortalEntityAccess` grant, ดู latest check และประวัติ/รูปหลักฐานได้แบบ read-only
+- [x] **RBAC/yard guard** — เพิ่ม permission `reefer.check.read`, `reefer.check.record`, `reefer.policy.manage`; API พนักงานบังคับ `requireYardAccess()` และ permission ฝั่ง server
+- [x] **Migration** — `scripts/migrate-runtime-core-schema.js` สร้าง `ReeferCheckPolicies`, `ReeferTemperatureChecks`, indexes และ default policy ทุก 4 ชม. + grace 30 นาที
+
+**Verify ล่าสุด:**
+- `npm test -- src/lib/__tests__/reeferMonitoring.test.ts src/app/api/__tests__/reefer-api.test.ts src/app/api/__tests__/reefer-ui.test.ts src/app/api/__tests__/yard-access-guard.test.ts --runInBand` ✅ (38 tests)
+- `node scripts/migrate-runtime-core-schema.js` ✅ (สร้าง/seed reefer tables + permissions)
+- `npx tsc --noEmit --pretty false` ✅
+- `npm run lint` ✅
+- `npm test -- --runInBand` ✅ (52 suites / 538 tests)
+- HTTP smoke: `http://localhost:3005/reefer` และ `http://localhost:3005/portal/reefer` คืน 200 ✅
+
 ### 📦 Customer Portal Container Inventory (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **API inventory context** — `GET /api/portal/containers` ใช้ fixed server-side visibility ผ่าน `PortalEntityAccess` แล้ว enrich รายการตู้ด้วย latest booking, EIR gate-in/gate-out แยกกัน, open invoice count/amount, dwell days และ `visibility_role` สำหรับ backend/debug
 - [x] **Server-side search/filter** — รองรับ `search`, `status`, `page`, `limit` แบบ parameterized และส่ง `summary` กลับมาสำหรับ total/in-yard/released/on-hold/repair
@@ -1664,7 +1687,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 430/430; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Portal entity access grants + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 52 suites / 538 tests; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Portal entity access grants + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning + Reefer Monitoring tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1706,7 +1729,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 430/430 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 52 suites / 538 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)

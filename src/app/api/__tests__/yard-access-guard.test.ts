@@ -24,6 +24,8 @@ const yardScopedRoutes = [
   'src/app/api/notifications/route.ts',
   'src/app/api/operations/route.ts',
   'src/app/api/operations/stream/route.ts',
+  'src/app/api/reefer/checks/route.ts',
+  'src/app/api/reefer/policies/route.ts',
   'src/app/api/reports/dwell/route.ts',
   'src/app/api/reports/gate/route.ts',
   'src/app/api/reports/mnr/route.ts',

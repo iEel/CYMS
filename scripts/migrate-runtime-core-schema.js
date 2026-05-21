@@ -694,6 +694,69 @@ async function migrate() {
       END;
     `);
 
+    await runStep(pool, 'Reefer monitoring tables', `
+      IF OBJECT_ID('ReeferCheckPolicies', 'U') IS NULL
+      BEGIN
+        CREATE TABLE ReeferCheckPolicies (
+          policy_id INT PRIMARY KEY IDENTITY(1,1),
+          yard_id INT NULL,
+          customer_id INT NULL,
+          booking_id INT NULL,
+          container_id INT NULL,
+          scope_type NVARCHAR(20) NOT NULL,
+          cargo_profile NVARCHAR(40) NULL,
+          interval_hours INT NOT NULL CONSTRAINT DF_ReeferCheckPolicies_Interval DEFAULT 4,
+          warning_grace_minutes INT NOT NULL CONSTRAINT DF_ReeferCheckPolicies_Grace DEFAULT 30,
+          min_temp_c DECIMAL(6,2) NULL,
+          max_temp_c DECIMAL(6,2) NULL,
+          is_active BIT NOT NULL CONSTRAINT DF_ReeferCheckPolicies_Active DEFAULT 1,
+          created_at DATETIME2 NOT NULL CONSTRAINT DF_ReeferCheckPolicies_Created DEFAULT GETDATE(),
+          updated_at DATETIME2 NULL
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('ReeferCheckPolicies') AND name = 'IX_ReeferCheckPolicies_Scope')
+        CREATE INDEX IX_ReeferCheckPolicies_Scope
+          ON ReeferCheckPolicies (scope_type, yard_id, customer_id, booking_id, container_id, is_active);
+
+      IF OBJECT_ID('ReeferTemperatureChecks', 'U') IS NULL
+      BEGIN
+        CREATE TABLE ReeferTemperatureChecks (
+          check_id INT PRIMARY KEY IDENTITY(1,1),
+          container_id INT NOT NULL,
+          booking_id INT NULL,
+          yard_id INT NOT NULL,
+          customer_id INT NULL,
+          measured_temp_c DECIMAL(6,2) NULL,
+          set_point_c DECIMAL(6,2) NULL,
+          supply_temp_c DECIMAL(6,2) NULL,
+          return_temp_c DECIMAL(6,2) NULL,
+          status NVARCHAR(30) NOT NULL CONSTRAINT DF_ReeferTemperatureChecks_Status DEFAULT 'normal',
+          photo_url NVARCHAR(500) NULL,
+          notes NVARCHAR(1000) NULL,
+          checked_by_user_id INT NULL,
+          checked_at DATETIME2 NOT NULL CONSTRAINT DF_ReeferTemperatureChecks_Checked DEFAULT GETDATE(),
+          policy_snapshot NVARCHAR(MAX) NULL,
+          created_at DATETIME2 NOT NULL CONSTRAINT DF_ReeferTemperatureChecks_Created DEFAULT GETDATE()
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('ReeferTemperatureChecks') AND name = 'IX_ReeferTemperatureChecks_Container_Time')
+        CREATE INDEX IX_ReeferTemperatureChecks_Container_Time
+          ON ReeferTemperatureChecks (container_id, checked_at DESC);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('ReeferTemperatureChecks') AND name = 'IX_ReeferTemperatureChecks_Yard_Status')
+        CREATE INDEX IX_ReeferTemperatureChecks_Yard_Status
+          ON ReeferTemperatureChecks (yard_id, status, checked_at DESC);
+
+      IF NOT EXISTS (
+        SELECT 1 FROM ReeferCheckPolicies
+        WHERE scope_type = 'default' AND is_active = 1
+      )
+        INSERT INTO ReeferCheckPolicies (scope_type, interval_hours, warning_grace_minutes, min_temp_c, max_temp_c)
+        VALUES ('default', 4, 30, NULL, NULL);
+    `);
+
     await runStep(pool, 'Granular RBAC permission columns', `
       IF COL_LENGTH('Permissions', 'permission_code') IS NULL
         ALTER TABLE Permissions ADD permission_code NVARCHAR(100) NULL;
@@ -730,6 +793,51 @@ async function migrate() {
 
       IF COL_LENGTH('Permissions', 'risk_level') IS NULL
         ALTER TABLE Permissions ADD risk_level NVARCHAR(20) NULL;
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'reefer.check.read')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('reefer.check.read', 'reefer', 'check_read', N'ดูคิวและประวัติการตรวจอุณหภูมิตู้เย็น', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'reefer.check.record')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('reefer.check.record', 'reefer', 'check_record', N'บันทึกผลตรวจอุณหภูมิตู้เย็นพร้อมหลักฐานรูปถ่าย', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'reefer.policy.manage')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('reefer.policy.manage', 'reefer', 'policy_manage', N'กำหนดรอบตรวจและช่วงอุณหภูมิตู้เย็น', 0, NULL, 'high');
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code IN ('yard_manager', 'supervisor', 'surveyor', 'yard_planner', 'gate_clerk')
+        AND p.permission_code = 'reefer.check.read'
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code IN ('yard_manager', 'supervisor', 'surveyor')
+        AND p.permission_code = 'reefer.check.record'
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code IN ('yard_manager', 'supervisor')
+        AND p.permission_code = 'reefer.policy.manage'
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
     `);
 
     console.log('Runtime schema migration complete.');

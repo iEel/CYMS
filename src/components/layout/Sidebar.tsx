@@ -18,6 +18,7 @@ import {
   ChevronRight,
   LogOut,
   BarChart3,
+  Thermometer,
 } from 'lucide-react';
 import type { UserRole } from '@/types';
 
@@ -63,6 +64,13 @@ const menuItems: MenuItem[] = [
     icon: <Truck size={20} />,
     roles: ['yard_manager', 'supervisor', 'yard_planner', 'rs_driver', 'surveyor'],
     permissions: ['yard.slot.move', 'yard.location.assign'],
+  },
+  {
+    label: 'ตู้เย็น Reefer',
+    href: '/reefer',
+    icon: <Thermometer size={20} />,
+    roles: ['yard_manager', 'supervisor', 'surveyor', 'yard_planner', 'gate_clerk'],
+    permissions: ['reefer.check.read', 'reefer.check.record', 'reefer.policy.manage'],
   },
   {
     label: 'EDI & ข้อมูลล่วงหน้า',
