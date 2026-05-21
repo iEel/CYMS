@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   CalendarDays,
   Clock,
-  Download,
   Eye,
   FileText,
   Filter,
@@ -36,6 +35,10 @@ interface Container {
   latest_eir_number?: string | null;
   latest_gate_type?: string | null;
   latest_gate_at?: string | null;
+  gate_in_eir_number?: string | null;
+  gate_in_eir_at?: string | null;
+  gate_out_eir_number?: string | null;
+  gate_out_eir_at?: string | null;
   open_invoice_count?: number;
   open_invoice_amount?: number;
 }
@@ -204,7 +207,6 @@ export default function PortalContainers() {
                   <div className="flex items-center justify-between">
                     <span className="font-mono font-bold text-slate-800 dark:text-white">{c.container_number}</span>
                     <div className="flex items-center gap-1">
-                      <VisibilityPill role={c.visibility_role} />
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(statusLabels[c.status] || statusLabels.pending).cls}`}>
                         {(statusLabels[c.status] || statusLabels.pending).label}
                       </span>
@@ -217,7 +219,8 @@ export default function PortalContainers() {
                   </div>
                   <ContainerContext container={c} compact />
                   <PortalEirActions
-                    eirNumber={c.latest_eir_number}
+                    gateInEirNumber={c.gate_in_eir_number}
+                    gateOutEirNumber={c.gate_out_eir_number}
                     onView={eirNumber => openPortalEIR(eirNumber, 'document')}
                     onInspect={eirNumber => openPortalEIR(eirNumber, 'inspection')}
                   />
@@ -237,7 +240,6 @@ export default function PortalContainers() {
                   <th className="p-3">ขนาด</th>
                   <th className="p-3">บริบท</th>
                   <th className="p-3">สถานะ</th>
-                  <th className="p-3">สิทธิ์เห็นข้อมูล</th>
                   <th className="p-3">โซน</th>
                   <th className="p-3">Dwell</th>
                   <th className="p-3">เอกสาร</th>
@@ -258,7 +260,6 @@ export default function PortalContainers() {
                       </span>
                       {c.hold_status && <p className="text-[10px] text-amber-600 mt-1">Hold: {c.hold_status}</p>}
                     </td>
-                    <td className="p-3"><VisibilityPill role={c.visibility_role} /></td>
                     <td className="p-3 text-slate-500">
                       <p>{c.zone_name || '-'}</p>
                       <p className="text-[10px] text-slate-400">{c.yard_name || '-'}</p>
@@ -270,7 +271,8 @@ export default function PortalContainers() {
                     <td className="p-3">
                       <div className="flex flex-col items-start gap-1.5">
                         <PortalEirActions
-                          eirNumber={c.latest_eir_number}
+                          gateInEirNumber={c.gate_in_eir_number}
+                          gateOutEirNumber={c.gate_out_eir_number}
                           onView={eirNumber => openPortalEIR(eirNumber, 'document')}
                           onInspect={eirNumber => openPortalEIR(eirNumber, 'inspection')}
                         />
@@ -381,41 +383,50 @@ function ContainerContext({ container, compact = false }: { container: Container
 }
 
 function PortalEirActions({
-  eirNumber,
+  gateInEirNumber,
+  gateOutEirNumber,
   onView,
   onInspect,
 }: {
-  eirNumber?: string | null;
+  gateInEirNumber?: string | null;
+  gateOutEirNumber?: string | null;
   onView: (eirNumber: string) => void;
   onInspect: (eirNumber: string) => void;
 }) {
-  if (!eirNumber) return <span className="text-[11px] text-slate-400">ยังไม่มี EIR</span>;
+  const documents = [
+    gateInEirNumber ? { label: 'EIR In', eirNumber: gateInEirNumber, tone: 'blue' } : null,
+    gateOutEirNumber ? { label: 'EIR Out', eirNumber: gateOutEirNumber, tone: 'emerald' } : null,
+  ].filter(Boolean) as Array<{ label: string; eirNumber: string; tone: 'blue' | 'emerald' }>;
+
+  if (documents.length === 0) return <span className="text-[11px] text-slate-400">ยังไม่มี EIR</span>;
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <button
-        onClick={() => onView(eirNumber)}
-        className="inline-flex h-7 items-center gap-1 rounded-lg bg-blue-50 px-2 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300"
-        title="ดู EIR แบบเดียวกับหน้าหลัก"
-      >
-        <Eye size={12} /> ดู EIR
-      </button>
-      <button
-        onClick={() => onInspect(eirNumber)}
-        className="inline-flex h-7 items-center gap-1 rounded-lg bg-emerald-50 px-2 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300"
-        title="ดูผลตรวจสภาพ"
-      >
-        <SearchCheck size={12} /> ผลตรวจ
-      </button>
-      <a
-        href={`/api/portal/eir-pdf?eir_number=${encodeURIComponent(eirNumber)}`}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex h-7 items-center gap-1 rounded-lg bg-slate-50 px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:bg-slate-700 dark:text-slate-200"
-        title="ดาวน์โหลด PDF"
-      >
-        <Download size={12} /> PDF
-      </a>
+    <div className="flex flex-col gap-1.5">
+      {documents.map(doc => (
+        <div key={`${doc.label}-${doc.eirNumber}`} className="flex flex-wrap items-center gap-1.5">
+          <span className={`inline-flex h-7 items-center rounded-lg px-2 text-[11px] font-bold ${
+            doc.tone === 'blue'
+              ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'
+              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+          }`}>
+            {doc.label}
+          </span>
+          <button
+            onClick={() => onView(doc.eirNumber)}
+            className="inline-flex h-7 items-center gap-1 rounded-lg bg-slate-50 px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 dark:bg-slate-700 dark:text-slate-200"
+            title={`ดู ${doc.label}`}
+          >
+            <Eye size={12} /> ดู
+          </button>
+          <button
+            onClick={() => onInspect(doc.eirNumber)}
+            className="inline-flex h-7 items-center gap-1 rounded-lg bg-slate-50 px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 dark:bg-slate-700 dark:text-slate-200"
+            title={`ดูผลตรวจ ${doc.label}`}
+          >
+            <SearchCheck size={12} /> ผลตรวจ
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -423,18 +434,4 @@ function PortalEirActions({
 function formatShortDate(value?: string | null) {
   if (!value) return '-';
   return new Date(value).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function VisibilityPill({ role }: { role?: string }) {
-  const labels: Record<string, string> = {
-    owner: 'Owner',
-    billing: 'Billing',
-    booking_customer: 'Booking',
-    invoice_customer: 'Invoice',
-  };
-  return (
-    <span className="inline-flex rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-300">
-      {labels[role || ''] || 'Grant'}
-    </span>
-  );
 }

@@ -64,6 +64,8 @@ describe('GET /api/portal/containers', () => {
           status: 'in_yard',
           latest_booking_number: 'BK-100',
           latest_eir_number: 'EIR-IN-1',
+          gate_in_eir_number: 'EIR-IN-1',
+          gate_out_eir_number: 'EIR-OUT-1',
           open_invoice_count: 1,
           dwell_days: 5,
           visibility_role: 'booking_customer',
@@ -81,6 +83,8 @@ describe('GET /api/portal/containers', () => {
       container_number: 'MSKU1234567',
       latest_booking_number: 'BK-100',
       latest_eir_number: 'EIR-IN-1',
+      gate_in_eir_number: 'EIR-IN-1',
+      gate_out_eir_number: 'EIR-OUT-1',
       open_invoice_count: 1,
       dwell_days: 5,
       visibility_role: 'booking_customer',
@@ -88,6 +92,8 @@ describe('GET /api/portal/containers', () => {
 
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('latest_booking_number');
+    expect(combinedSql).toContain('gate_in_eir_number');
+    expect(combinedSql).toContain('gate_out_eir_number');
     expect(combinedSql).toContain('open_invoice_count');
     expect(combinedSql).toContain('dwell_days');
     expect(combinedSql).toContain('PortalEntityAccess');

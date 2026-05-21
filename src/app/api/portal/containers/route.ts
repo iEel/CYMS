@@ -33,6 +33,24 @@ const PORTAL_CONTAINER_CONTEXT_SQL = `
     ORDER BY g.created_at DESC, g.transaction_id DESC
   ) latestGate
   OUTER APPLY (
+    SELECT TOP 1
+      g.eir_number,
+      g.created_at
+    FROM GateTransactions g
+    WHERE g.container_id = c.container_id
+      AND g.transaction_type = 'gate_in'
+    ORDER BY g.created_at DESC, g.transaction_id DESC
+  ) latestGateIn
+  OUTER APPLY (
+    SELECT TOP 1
+      g.eir_number,
+      g.created_at
+    FROM GateTransactions g
+    WHERE g.container_id = c.container_id
+      AND g.transaction_type = 'gate_out'
+    ORDER BY g.created_at DESC, g.transaction_id DESC
+  ) latestGateOut
+  OUTER APPLY (
     SELECT
       COUNT(*) AS open_invoice_count,
       ISNULL(SUM(ISNULL(i.balance_amount, i.grand_total)), 0) AS open_invoice_amount
@@ -79,6 +97,8 @@ export async function GET(request: NextRequest) {
         OR ISNULL(c.shipping_line, '') LIKE @search
         OR ISNULL(latestBooking.booking_number, '') LIKE @search
         OR ISNULL(latestGate.eir_number, '') LIKE @search
+        OR ISNULL(latestGateIn.eir_number, '') LIKE @search
+        OR ISNULL(latestGateOut.eir_number, '') LIKE @search
       )`);
     }
     const whereClause = `WHERE ${filterClauses.join(' AND ')}`;
@@ -124,6 +144,10 @@ export async function GET(request: NextRequest) {
         latestGate.eir_number AS latest_eir_number,
         latestGate.transaction_type AS latest_gate_type,
         latestGate.created_at AS latest_gate_at,
+        latestGateIn.eir_number AS gate_in_eir_number,
+        latestGateIn.created_at AS gate_in_eir_at,
+        latestGateOut.eir_number AS gate_out_eir_number,
+        latestGateOut.created_at AS gate_out_eir_at,
         invoiceContext.open_invoice_count,
         invoiceContext.open_invoice_amount,
         ${portalVisibilityReasonSql('container', 'c.container_id', 'c.container_number')} AS visibility_role,
