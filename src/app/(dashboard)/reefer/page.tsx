@@ -9,12 +9,14 @@ import {
   Loader2,
   RefreshCw,
   Save,
+  Search,
   Settings,
   Thermometer,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import PhotoCapture from '@/components/gate/PhotoCapture';
+import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 
 interface ReeferPolicy {
   policy_id?: number | null;
@@ -117,6 +119,9 @@ export default function ReeferMonitoringPage() {
   const [checkForm, setCheckForm] = useState<CheckForm>(initialCheckForm);
   const [savingCheck, setSavingCheck] = useState(false);
   const [checkError, setCheckError] = useState('');
+  const [quickSearch, setQuickSearch] = useState('');
+  const [queueFilter, setQueueFilter] = useState<'due' | 'exception' | 'all'>('due');
+  const [queuedNotice, setQueuedNotice] = useState('');
   const [policyForm, setPolicyForm] = useState<PolicyForm>(initialPolicyForm);
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [policyError, setPolicyError] = useState('');
@@ -162,9 +167,27 @@ export default function ReeferMonitoringPage() {
     exceptions: items.filter(item => item.active_exception_id).length,
   }), [items]);
 
+  const visibleItems = useMemo(() => {
+    const term = quickSearch.trim().toUpperCase();
+    return items.filter(item => {
+      const text = [
+        item.container_number,
+        item.booking_number,
+        item.shipping_line,
+        item.zone_name,
+      ].filter(Boolean).join(' ').toUpperCase();
+      const matchesSearch = !term || text.includes(term);
+      const matchesFilter = queueFilter === 'all'
+        || (queueFilter === 'due' && ['not_checked', 'due', 'overdue'].includes(item.due_status))
+        || (queueFilter === 'exception' && Boolean(item.active_exception_id));
+      return matchesSearch && matchesFilter;
+    });
+  }, [items, quickSearch, queueFilter]);
+
   const openRecord = (item: ReeferItem) => {
     setSelected(item);
     setCheckError('');
+    setQueuedNotice('');
     setCheckForm({
       measured_temp_c: item.latest_measured_temp_c != null ? String(item.latest_measured_temp_c) : '',
       set_point_c: item.latest_set_point_c != null ? String(item.latest_set_point_c) : '',
@@ -181,8 +204,9 @@ export default function ReeferMonitoringPage() {
     if (!selected || !activeYardId) return;
     setSavingCheck(true);
     setCheckError('');
+    setQueuedNotice('');
     try {
-      const res = await fetch('/api/reefer/checks', {
+      const res = await offlineFetch('/api/reefer/checks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -194,8 +218,16 @@ export default function ReeferMonitoringPage() {
           supply_temp_c: checkForm.supply_temp_c === '' ? null : Number(checkForm.supply_temp_c),
           return_temp_c: checkForm.return_temp_c === '' ? null : Number(checkForm.return_temp_c),
         }),
+      }, {
+        operation: 'reefer_check',
       });
       const data = await res.json();
+      if (isOfflineQueuedResponse(data)) {
+        setQueuedNotice(data.message || 'บันทึกเข้าคิวออฟไลน์แล้ว ระบบจะซิงค์เมื่อออนไลน์');
+        setSelected(null);
+        setCheckForm(initialCheckForm);
+        return;
+      }
       if (!res.ok || !data.success) {
         setCheckError(data.error || 'บันทึกอุณหภูมิไม่สำเร็จ');
         return;
@@ -308,17 +340,56 @@ export default function ReeferMonitoringPage() {
         )}
       </div>
 
+      {queuedNotice && (
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-sm font-medium text-cyan-800 dark:border-cyan-900/50 dark:bg-cyan-900/20 dark:text-cyan-200">
+          {queuedNotice}
+        </div>
+      )}
+
       {tab === 'queue' ? (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        <div className="space-y-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-white">
+                  <Thermometer size={17} className="text-cyan-600" /> โหมดเดินตรวจ
+                </h2>
+                <p className="mt-1 text-xs text-slate-400">สแกนหรือค้นเลขตู้แล้วบันทึกอุณหภูมิได้ทันที ถ้าออฟไลน์ระบบจะเก็บเข้าคิวซิงค์</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                แสดง {visibleItems.length.toLocaleString()} / {items.length.toLocaleString()}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+              <label className="relative block">
+                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={quickSearch}
+                  onChange={event => setQuickSearch(event.target.value)}
+                  placeholder="สแกน/ค้นเลขตู้, Booking, สายเรือ หรือโซน"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-cyan-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                />
+              </label>
+              <div className="grid grid-cols-3 rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900">
+                <button onClick={() => setQueueFilter('due')} className={filterClass(queueFilter === 'due')}>ต้องตรวจ</button>
+                <button onClick={() => setQueueFilter('exception')} className={filterClass(queueFilter === 'exception')}>Exception</button>
+                <button onClick={() => setQueueFilter('all')} className={filterClass(queueFilter === 'all')}>ทั้งหมด</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
           {loading ? (
             <div className="flex h-48 items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-cyan-500" />
             </div>
           ) : items.length === 0 ? (
             <p className="p-8 text-center text-sm text-slate-400">ยังไม่มีตู้ RF ในลานนี้</p>
+          ) : visibleItems.length === 0 ? (
+            <p className="p-8 text-center text-sm text-slate-400">ไม่พบตู้ตามเงื่อนไขที่ค้นหา</p>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {items.map(item => (
+              {visibleItems.map(item => (
                 <div key={item.container_id} className="grid gap-3 p-4 lg:grid-cols-[1.4fr_1fr_1fr_auto] lg:items-center">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -375,6 +446,7 @@ export default function ReeferMonitoringPage() {
               ))}
             </div>
           )}
+          </div>
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
@@ -544,6 +616,14 @@ function tabClass(active: boolean) {
     active
       ? 'border-cyan-500 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300'
       : 'border-slate-200 bg-white text-slate-500 hover:text-cyan-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+  }`;
+}
+
+function filterClass(active: boolean) {
+  return `h-8 rounded-md px-3 transition ${
+    active
+      ? 'bg-white text-cyan-700 shadow-sm dark:bg-slate-800 dark:text-cyan-300'
+      : 'text-slate-500 hover:text-cyan-700 dark:text-slate-400'
   }`;
 }
 
