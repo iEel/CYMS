@@ -8,7 +8,9 @@ import {
 } from 'lucide-react';
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import CameraOCR from '@/components/gate/CameraOCR';
+import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
+import { buildGateOutWorkflow } from '@/lib/gateWorkflow';
 import { useAuth } from '@/components/providers/AuthProvider';
 
 interface GateOutTabProps {
@@ -425,7 +427,6 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
         setBillingData(null);
         setBillingPaid(false);
         setBillingClearance(null);
-    setBillingClearance(null);
         setBillingInvoiceNumber('');
         setBillingInvoiceId(null);
         setTimeout(() => setGateOutResult(null), 15000);
@@ -435,6 +436,25 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     } catch (err) { console.error(err); setGateOutResult({ success: false, message: '❌ เกิดข้อผิดพลาด' }); }
     finally { setGateOutLoading(false); }
   };
+
+  const gateOutBookingWarnings = selectedBooking
+    ? getBookingCompatibility(selectedBooking).warnings
+    : bookingWarning
+      ? [bookingWarning]
+      : [];
+  const gateOutWorkflow = buildGateOutWorkflow({
+    containerSelected: !!selectedContainer,
+    customerResolved: !!resolvedCustomer,
+    bookingSelected: !!selectedBooking || !!gateOutForm.booking_ref,
+    bookingWarnings: gateOutBookingWarnings,
+    billingRequired: !!billingData,
+    billingCleared,
+    releaseRequested: gateOutPhase !== 'search',
+    readyToRelease: gateOutPhase === 'confirm_release',
+    exitPhotosCount: gateOutPhotos.length,
+    submitted: !!gateOutResult?.success,
+    canSubmit: canGateOut,
+  });
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -451,6 +471,8 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       </div>
 
       <div className="p-5 space-y-4">
+        <GateWorkflowPanel title="Gate-Out guided workflow" workflow={gateOutWorkflow} />
+
         {/* Search */}
         <div>
           <label className={labelClass}>ค้นหาตู้ในลาน</label>

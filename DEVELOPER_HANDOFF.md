@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel** (~100%)
 
 ---
 
@@ -167,8 +167,8 @@ container-yard-system/
 │   │   │   ├── gate/
 │   │   │   │   ├── page.tsx          # **🧩 Orchestrator** (95 lines) — tab switching + EIR modal + Timeline modal
 │   │   │   │   ├── types.ts          # Shared types (Transaction, ContainerResult, BillingCharge, BillingData, BillingClearance, GateOutBooking) + CSS constants
-│   │   │   │   ├── GateInTab.tsx     # Gate-In: auto-allocation + **ISO 6346 check digit** + **Boxtech auto-fill** + **prefix→customer** + billing + **Billing Clearance** + inspection + OCR
-│   │   │   │   ├── GateOutTab.tsx    # Gate-Out: **2-Phase workflow** (ขอดึง → รอรถยก → ปล่อยออก) + billing + payment + **Booking Picker/Summary** + **Billing Clearance**
+│   │   │   │   ├── GateInTab.tsx     # Gate-In: auto-allocation + **ISO 6346 check digit** + **Boxtech auto-fill** + **prefix→customer** + billing + **Billing Clearance** + inspection + OCR + guided workflow panel
+│   │   │   │   ├── GateOutTab.tsx    # Gate-Out: **2-Phase workflow** (ขอดึง → รอรถยก → ปล่อยออก) + billing + payment + **Booking Picker/Summary** + **Billing Clearance** + guided workflow panel
 │   │   │   │   ├── HistoryTab.tsx    # ประวัติ Gate: search + date filter + pagination + **Excel export**
 │   │   │   │   └── TransferTab.tsx   # ย้ายข้ามลาน: send transfer + receive in-transit
 │   │   │   ├── operations/page.tsx # หน้าปฏิบัติการ (3 tabs: Job Queue/สร้างงาน/Shifting)
@@ -301,6 +301,7 @@ container-yard-system/
 │   │   └── gate/
 │   │       ├── EIRDocument.tsx         # EIR A5 print (Portal, QR, condition, grade, signatures)
 │   │       ├── ContainerInspection.tsx  # 6-side SVG damage marking + photo + grade
+│   │       ├── GateWorkflowPanel.tsx    # Guided checklist/exception panel for Gate-In and Gate-Out
 │   │       ├── CameraOCR.tsx            # **📷 Full-screen PWA Camera OCR** — pre-warmed Tesseract worker, crop zone, smart container extraction (`extractContainerNumber` 4-strategy), confidence scoring, torch toggle, scan overlay, `loadedmetadata` race condition fix, `mode` prop (container/plate/seal/generic)
 │   │       ├── PhotoCapture.tsx         # Camera/upload photo → **auto-upload to server** (URL, not base64)
 │   │       └── SignaturePad.tsx         # Canvas digital signature pad
@@ -315,6 +316,7 @@ container-yard-system/
 │       ├── totp.ts               # RFC 6238 TOTP helper (secret generation, verify window, otpauth URI)
 │       ├── deviceBinding.ts      # Trusted browser device policy + id validation (uses legacy bound_device_mac column)
 │       ├── promptPay.ts          # PromptPay EMV QR payload builder + CRC16 validation
+│       ├── gateWorkflow.ts       # Gate-In/Out workflow step + exception model used by guided UI
 │       ├── utils.ts              # formatDateTime, formatTime, **calcDwellDays** (Calendar Days +1), etc.
 │       ├── containerValidation.ts # **ISO 6346 check digit** validation + size/type parser + **`extractContainerNumber()` (4-strategy OCR smart extraction)** + `extractTruckPlate()`
 │       ├── offlineQueue.ts       # NFR1: IndexedDB offline queue + auto-sync
@@ -333,6 +335,7 @@ container-yard-system/
 │           ├── totp.test.ts                # RFC 6238 compatibility + verify window + otpauth URI
 │           ├── deviceBinding.test.ts       # policy role matching + device id validation
 │           ├── promptPay.test.ts           # PromptPay payload format + fixed amount + CRC
+│           ├── gateWorkflow.test.ts        # Gate guided workflow status + exception rules
 │           └── rateLimit.test.ts            # store clearing + stats + client IP extraction (14 tests)
 │
 ├── src/proxy.ts                  # **🔐 Next.js 16 Proxy** (เดิมคือ middleware.ts) — JWT enforcement ทุก /api/ + page guard + cookie→x-cyms-token forwarding
@@ -601,6 +604,14 @@ container-yard-system/
 ### 7.5 ประตู Gate (Gate In/Out)
 
 3 แท็บ:
+
+#### Guided Workflow Panel (✅ เสร็จ — 21 พ.ค. 2569)
+- เพิ่ม `src/lib/gateWorkflow.ts` เป็น workflow model กลางสำหรับ Gate-In และ Gate-Out
+- เพิ่ม `src/components/gate/GateWorkflowPanel.tsx` แสดง checklist แบบ step-by-step พร้อมสถานะ `done / active / pending / blocked`
+- Gate-In แสดงลำดับ: Container check → Resolve customer → Billing clearance → Inspection evidence → Issue EIR
+- Gate-Out แสดงลำดับ: Select container → Match booking → Billing clearance → Pickup request → Release and EIR
+- Exception panel แจ้ง blocker สำคัญ เช่น billing hold, booking mismatch, prefix/customer conflict, missing inspection/seal photo, permission missing
+- Unit test: `src/lib/__tests__/gateWorkflow.test.ts` ครอบคลุม billing blocker, ready-to-submit, booking mismatch + billing hold
 
 #### แท็บ "Gate-In (รับเข้า)"
 - ฟอร์มกรอกข้อมูลตู้ (เลขตู้, ขนาด, ประเภท, สายเรือ, ซีล) + คนขับ/ทะเบียนรถ + Booking Ref
@@ -1354,7 +1365,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 374/374; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 378/378; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1396,7 +1407,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 374/374 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 378/378 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)

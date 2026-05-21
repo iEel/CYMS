@@ -13,8 +13,10 @@ import CameraOCR from '@/components/gate/CameraOCR';
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import SignaturePad from '@/components/gate/SignaturePad';
 import ContainerInspection from '@/components/gate/ContainerInspection';
+import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 import type { EvidencePhoto, PhotoCompleteness, PhotoRequirement } from '@/lib/photoEvidence';
+import { buildGateInWorkflow } from '@/lib/gateWorkflow';
 import { useAuth } from '@/components/providers/AuthProvider';
 
 interface GateInTabProps {
@@ -419,6 +421,35 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     setShowOCR(null);
   };
 
+  const gateInWorkflow = useMemo(() => buildGateInWorkflow({
+    containerNumber: gateInForm.container_number,
+    containerValid,
+    ownerResolved: !!containerOwnerId || !!resolvedCustomer,
+    billingCustomerResolved: !!billingCustomerId || !!resolvedCustomer,
+    billingRequired: gateInRequiresBillingClearance,
+    billingCleared: gateInBillingCleared,
+    inspectionComplete: !!inspectionReport,
+    sealRequired: gateInForm.is_laden,
+    sealCaptured: !!sealPhoto,
+    submitted: !!gateInResult?.success,
+    halted: showHaltPopup,
+    canSubmit: canGateIn,
+  }), [
+    billingCustomerId,
+    canGateIn,
+    containerOwnerId,
+    containerValid,
+    gateInBillingCleared,
+    gateInForm.container_number,
+    gateInForm.is_laden,
+    gateInRequiresBillingClearance,
+    gateInResult?.success,
+    inspectionReport,
+    resolvedCustomer,
+    sealPhoto,
+    showHaltPopup,
+  ]);
+
   return (
     <>
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -435,6 +466,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         </div>
 
         <div className="p-5 space-y-4">
+          <GateWorkflowPanel title="Gate-In guided workflow" workflow={gateInWorkflow} />
+
           {/* Container Info */}
           <div>
             <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2"><Package size={12} /> ข้อมูลตู้</h4>
