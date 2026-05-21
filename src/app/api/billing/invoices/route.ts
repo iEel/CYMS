@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
-import { logApprovalReview } from '@/lib/approvalReview';
+import { logApprovalReview, requireApprovalForAction } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { upsertPortalEntityAccess, type PortalEntityAccessDb } from '@/lib/portalEntityAccess';
@@ -345,7 +345,20 @@ export async function PUT(request: NextRequest) {
             .query("UPDATE Containers SET hold_status = NULL, updated_at = GETDATE() WHERE container_id = @cid AND hold_status = 'billing_hold'");
         }
         break;
-      case 'cancel':
+      case 'cancel': {
+        const cancelApproval = await requireApprovalForAction({
+          request,
+          db,
+          yardId: scopeYardId,
+          permissionCode: 'billing.invoice.cancel',
+          approvalPermissionCode: 'billing.invoice.cancel',
+          action: 'invoice_cancel_after_issue',
+          entityType: 'invoice',
+          entityId: invoice_id,
+          reason: body.reason || body.notes || null,
+          details: { invoice_id, invoice_number: bodyDocumentNumber || null },
+        });
+        if (cancelApproval instanceof NextResponse) return cancelApproval;
         await db.request().input('id', sql.Int, invoice_id)
           .query("UPDATE Invoices SET status = 'cancelled' WHERE invoice_id = @id");
         if (bodyDocumentNumber) {
@@ -370,11 +383,12 @@ export async function PUT(request: NextRequest) {
           entityType: 'invoice',
           entityId: invoice_id,
           requestedBy: actorUserId,
-          approvedBy: null,
+          approvedBy: cancelApproval.approvedBy,
           reason: body.reason || body.notes || null,
           details: { invoice_id, action },
         });
         break;
+      }
       case 'credit_note': {
         // Full credit note workflow: create a new CN invoice referencing the original
         const { reason, credit_amount, ref_invoice_id, create_revised_invoice, revised_invoice } = body;
@@ -415,6 +429,25 @@ export async function PUT(request: NextRequest) {
         if (creditAmt - remainingBeforeCredit > 0.01) {
           return NextResponse.json({ error: `ยอดลดหนี้เกินยอดคงเหลือของบิลเดิม (คงเหลือ ฿${remainingBeforeCredit.toLocaleString()})` }, { status: 400 });
         }
+
+        const creditApproval = await requireApprovalForAction({
+          request,
+          db,
+          yardId: orig.yard_id,
+          permissionCode: 'billing.credit_note.create',
+          approvalPermissionCode: 'billing.credit_note.approve',
+          action: 'credit_note_create',
+          entityType: 'invoice',
+          entityId: refId,
+          reason: reason || null,
+          details: {
+            ref_invoice_id: refId,
+            ref_invoice_number: orig.invoice_number,
+            credit_amount: creditAmt,
+            remaining_before_credit: remainingBeforeCredit,
+          },
+        });
+        if (creditApproval instanceof NextResponse) return creditApproval;
 
         const cnNumber = await nextDocumentNumber({
           db,
@@ -610,7 +643,7 @@ export async function PUT(request: NextRequest) {
           entityType: 'invoice',
           entityId: cnResult.recordset[0].invoice_id,
           requestedBy: actorUserId,
-          approvedBy: null,
+          approvedBy: creditApproval.approvedBy,
           reason: reason || null,
           details: {
             cn_number: cnNumber,
@@ -649,6 +682,19 @@ export async function PUT(request: NextRequest) {
         const inv3 = await db.request().input('id4', sql.Int, invoice_id)
           .query('SELECT container_id FROM Invoices WHERE invoice_id = @id4');
         if (inv3.recordset[0]?.container_id) {
+          const releaseApproval = await requireApprovalForAction({
+            request,
+            db,
+            yardId: scopeYardId,
+            permissionCode: 'yard.hold.release',
+            approvalPermissionCode: 'yard.hold.release',
+            action: 'billing_hold_release',
+            entityType: 'container',
+            entityId: inv3.recordset[0].container_id,
+            reason: body.reason || body.notes || null,
+            details: { invoice_id },
+          });
+          if (releaseApproval instanceof NextResponse) return releaseApproval;
           await db.request().input('cid3', sql.Int, inv3.recordset[0].container_id)
             .query("UPDATE Containers SET hold_status = NULL, updated_at = GETDATE() WHERE container_id = @cid3");
           await logApprovalReview({
@@ -659,7 +705,7 @@ export async function PUT(request: NextRequest) {
             entityType: 'container',
             entityId: inv3.recordset[0].container_id,
             requestedBy: actorUserId,
-            approvedBy: null,
+            approvedBy: releaseApproval.approvedBy,
             reason: body.reason || body.notes || null,
             details: { invoice_id },
           });

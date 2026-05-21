@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates** (~100%)
 
 ---
 
@@ -1501,6 +1501,36 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 - `npm test -- src/app/api/__tests__/api-auth-coverage.test.ts src/app/api/__tests__/yard-access-guard.test.ts src/lib/__tests__/apiAuth.test.ts src/app/api/__tests__/search.test.ts --runInBand` ✅ (66 tests)
 - `npm run lint` ✅
 - `npx tsc --noEmit --pretty false` ยัง fail จาก test type drift เดิมใน `portal-features.test.ts` และ `customerBranches.test.ts` (ไม่ใช่ไฟล์ที่แก้ในหัวข้อนี้)
+
+### 🧯 Hard Approval Gates (✅ เสร็จ — 21 พ.ค. 2569)
+
+**ไฟล์ที่เกี่ยวข้อง:**
+- `src/lib/approvalReview.ts` — เพิ่ม `requireApprovalForAction()` สำหรับ hard gate + pending approval response
+- `src/lib/__tests__/approvalReview.test.ts`
+- `src/app/api/__tests__/hard-approval-gates.test.ts`
+- `src/app/api/billing/clearance/route.ts`
+- `src/app/api/billing/invoices/route.ts`
+- `src/app/api/gate/route.ts`
+- `src/app/api/containers/route.ts`
+
+**Policy ที่ใช้ตอนนี้:**
+- ผู้ทำรายการต้องมี permission ปกติของ action ก่อน เช่น `billing.waive.request`, `billing.credit_note.create`, `gate.out`
+- ถ้า action เสี่ยงและผู้ทำรายการไม่มี approval permission จะ **ไม่ mutate ข้อมูล** แต่สร้าง `ApprovalReviews.status = pending_review` แล้วตอบ `202 { pending_approval: true, review_id }`
+- ถ้า actor มี approval permission หรือเป็น `yard_manager` จะดำเนินการทันที และบันทึก `approved_by` เป็น actor server-side
+
+**Hard gate ที่ครอบคลุมแล้ว:**
+- [x] Billing Clearance แบบ `waived`, `no_charge`, หรือส่วนลดที่ `final_amount < original_amount`
+- [x] Credit Note creation
+- [x] Cancel invoice หลังออกเอกสาร
+- [x] Billing hold release
+- [x] Gate-Out เมื่อ container ยังติด `billing_hold`
+- [x] Container grade override หลังบันทึก
+- [x] Container billing hold override
+
+**Verify ล่าสุด:**
+- `npm test -- src/lib/__tests__/approvalReview.test.ts src/app/api/__tests__/hard-approval-gates.test.ts src/app/api/__tests__/api-auth-coverage.test.ts --runInBand` ✅ (30 tests)
+- `npm run lint` ✅
+- `npx tsc --noEmit --pretty false` ยัง fail จาก test type drift เดิมใน `portal-features.test.ts` และ `customerBranches.test.ts`
 
 ---
 

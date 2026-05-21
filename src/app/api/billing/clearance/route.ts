@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
-import { logApprovalReview } from '@/lib/approvalReview';
+import { logApprovalReview, requireApprovalForAction } from '@/lib/approvalReview';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
@@ -153,6 +153,30 @@ export async function POST(request: NextRequest) {
       'คุณไม่มีสิทธิ์บันทึก Billing Clearance ประเภทนี้'
     );
     if (actor instanceof NextResponse) return actor;
+    const approval = isWaiveLike
+      ? await requireApprovalForAction({
+        request,
+        db,
+        yardId: yard_id,
+        permissionCode: 'billing.waive.request',
+        approvalPermissionCode: 'billing.waive.approve',
+        action: clearance_type === 'no_charge' ? 'billing_no_charge_request' : 'billing_waive_request',
+        entityType: 'billing_clearance',
+        reason: reason || null,
+        details: {
+          transaction_type,
+          container_id,
+          container_number,
+          customer_id,
+          clearance_type,
+          original_amount: originalAmount,
+          final_amount: finalAmount,
+          waived_amount: Math.max(originalAmount - finalAmount, 0),
+          invoice_id,
+        },
+      })
+      : null;
+    if (approval instanceof NextResponse) return approval;
 
     const result = await db.request()
       .input('yardId', sql.Int, yard_id)
@@ -165,7 +189,7 @@ export async function POST(request: NextRequest) {
       .input('finalAmount', sql.Decimal(12, 2), final_amount || 0)
       .input('reason', sql.NVarChar, reason || null)
       .input('invoiceId', sql.Int, invoice_id || null)
-      .input('approvedBy', sql.Int, isWaiveLike ? null : actor.userId)
+      .input('approvedBy', sql.Int, isWaiveLike ? approval?.approvedBy || null : actor.userId)
       .input('charges', sql.NVarChar, charges ? JSON.stringify(charges) : null)
       .input('createdBy', sql.Int, actor.userId)
       .query(`
@@ -210,7 +234,7 @@ export async function POST(request: NextRequest) {
         entityType: 'billing_clearance',
         entityId: clearance.clearance_id,
         requestedBy: actor.userId,
-        approvedBy: null,
+        approvedBy: approval?.approvedBy || null,
         reason: reason || null,
         details: {
           transaction_type,

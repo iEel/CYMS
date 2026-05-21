@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
-import { logApprovalReview } from '@/lib/approvalReview';
+import { logApprovalReview, requireApprovalForAction } from '@/lib/approvalReview';
 import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 // GET — ดึง containers ตาม yard_id + filter, หรือ check_position (conflict detection)
@@ -202,6 +202,50 @@ export async function PUT(request: NextRequest) {
       setClauses.push('gate_out_date = GETDATE()');
     }
 
+    let gradeApproval: { approvedBy: number } | null = null;
+    if (body.container_grade !== undefined && currentContainer && currentContainer.container_grade !== String(body.container_grade).toUpperCase()) {
+      const approval = await requireApprovalForAction({
+        request,
+        db,
+        yardId: body.yard_id || currentContainer.yard_id || null,
+        permissionCode: 'survey.grade.change',
+        approvalPermissionCode: 'survey.grade.approve',
+        action: 'container_grade_change_after_save',
+        entityType: 'container',
+        entityId: body.container_id,
+        reason: body.reason || body.notes || null,
+        details: {
+          previous_grade: currentContainer.container_grade,
+          new_grade: String(body.container_grade).toUpperCase(),
+          status: body.status,
+        },
+      });
+      if (approval instanceof NextResponse) return approval;
+      gradeApproval = approval;
+    }
+
+    let holdApproval: { approvedBy: number } | null = null;
+    if (currentContainer?.hold_status === 'billing_hold' && body.status && !['hold', 'in_yard'].includes(body.status)) {
+      const approval = await requireApprovalForAction({
+        request,
+        db,
+        yardId: body.yard_id || currentContainer.yard_id || null,
+        permissionCode: 'yard.hold.release',
+        approvalPermissionCode: 'yard.hold.release',
+        action: 'container_billing_hold_override',
+        entityType: 'container',
+        entityId: body.container_id,
+        reason: body.reason || body.notes || null,
+        details: {
+          previous_status: currentContainer.status,
+          new_status: body.status,
+          hold_status: currentContainer.hold_status,
+        },
+      });
+      if (approval instanceof NextResponse) return approval;
+      holdApproval = approval;
+    }
+
     await req.query(`UPDATE Containers SET ${setClauses.join(', ')} WHERE container_id = @containerId`);
 
     await logAudit({ userId: actorUserId, yardId: body.yard_id || null, action: 'container_update', entityType: 'container', entityId: body.container_id, details: { status: body.status, container_grade: body.container_grade, zone_id: body.zone_id, bay: body.bay, row: body.row, tier: body.tier } });
@@ -215,7 +259,7 @@ export async function PUT(request: NextRequest) {
         entityType: 'container',
         entityId: body.container_id,
         requestedBy: actorUserId,
-        approvedBy: null,
+        approvedBy: gradeApproval?.approvedBy || null,
         reason: body.reason || body.notes || null,
         details: {
           previous_grade: currentContainer.container_grade,
@@ -234,7 +278,7 @@ export async function PUT(request: NextRequest) {
         entityType: 'container',
         entityId: body.container_id,
         requestedBy: actorUserId,
-        approvedBy: null,
+        approvedBy: holdApproval?.approvedBy || null,
         reason: body.reason || body.notes || null,
         details: {
           previous_status: currentContainer.status,

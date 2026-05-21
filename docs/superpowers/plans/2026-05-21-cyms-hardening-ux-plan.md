@@ -74,19 +74,19 @@ Run targeted tests, lint, and update handoff. Commit as `Enforce API yard access
 - Modify: risky routes that currently only soft-log approval reviews
 - Test: `src/lib/__tests__/approvalReview.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Test that risky actions create a pending approval request and do not mutate the target entity until approved when policy requires hard approval.
 
-- [ ] **Step 2: Implement approval gate helper**
+- [x] **Step 2: Implement approval gate helper**
 
 Add `requireApprovalForAction` returning either `approved`, `pending`, or `forbidden`, with audit-safe response payload.
 
-- [ ] **Step 3: Apply to risky actions**
+- [x] **Step 3: Apply to risky actions**
 
 Apply hard gates to credit note, waive charge, release hold, grade override, and edit paid invoice.
 
-- [ ] **Step 4: Verify, document, commit**
+- [x] **Step 4: Verify, document, commit**
 
 Run targeted tests, lint/build as needed, update handoff, commit `Add hard approval gates`.
 

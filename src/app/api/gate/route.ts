@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { z } from 'zod';
 import { logAudit } from '@/lib/audit';
-import { logApprovalReview } from '@/lib/approvalReview';
+import { logApprovalReview, requireApprovalForAction } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
@@ -247,6 +247,7 @@ export async function POST(request: NextRequest) {
     let finalContainerId = container_id;
     let assignedLocation: { zone_name: string; zone_id: number; bay: number; row: number; tier: number; reason: string } | null = null;
     let gateOutHoldSnapshot: { hold_status?: string | null; status?: string | null; container_number?: string | null } | null = null;
+    let gateOutHoldApproval: { approvedBy: number } | null = null;
     const clearanceValidation = await validateBillingClearance(db, yard_id, transaction_type, billing_clearance_id || null);
     if (!clearanceValidation.ok) {
       return NextResponse.json({ error: clearanceValidation.error }, { status: 400 });
@@ -369,6 +370,28 @@ export async function POST(request: NextRequest) {
         .input('containerId', sql.Int, finalContainerId)
         .query('SELECT container_number, status, hold_status FROM Containers WHERE container_id = @containerId');
       gateOutHoldSnapshot = holdResult.recordset[0] || null;
+      if (gateOutHoldSnapshot?.hold_status === 'billing_hold') {
+        const approval = await requireApprovalForAction({
+          request,
+          db,
+          yardId: yard_id,
+          permissionCode: 'yard.hold.release',
+          approvalPermissionCode: 'yard.hold.release',
+          action: 'gate_out_with_billing_hold',
+          entityType: 'container',
+          entityId: finalContainerId,
+          reason: notes || null,
+          details: {
+            container_number: gateOutHoldSnapshot.container_number || container_number,
+            previous_status: gateOutHoldSnapshot.status,
+            hold_status: gateOutHoldSnapshot.hold_status,
+            billing_clearance_id,
+            booking_ref: booking_ref || null,
+          },
+        });
+        if (approval instanceof NextResponse) return approval;
+        gateOutHoldApproval = approval;
+      }
       await db.request()
         .input('containerId', sql.Int, finalContainerId)
         .input('sealNumber', sql.NVarChar, seal_number || null)
@@ -674,7 +697,7 @@ export async function POST(request: NextRequest) {
         entityType: 'container',
         entityId: finalContainerId,
         requestedBy: actorUserId,
-        approvedBy: null,
+        approvedBy: gateOutHoldApproval?.approvedBy || null,
         reason: notes || null,
         details: {
           eir_number: eirNumber,
