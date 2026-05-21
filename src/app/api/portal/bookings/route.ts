@@ -2,24 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { decoratePortalBookings } from '@/lib/portalBooking';
+import { getPortalCustomerId, portalBookingVisibilitySql } from '@/lib/portalAccess';
 
 // GET — Customer's bookings
 export async function GET(request: NextRequest) {
   try {
-    const customerId = request.headers.get('x-customer-id');
-    if (!customerId) {
-      return NextResponse.json({ error: 'ไม่พบข้อมูลลูกค้า' }, { status: 403 });
-    }
+    const cid = getPortalCustomerId(request);
+    if (cid instanceof NextResponse) return cid;
 
     const db = await getDb();
-    const cid = parseInt(customerId);
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
-    let whereClause = 'WHERE b.customer_id = @cid';
+    let whereClause = `WHERE ${portalBookingVisibilitySql('b')}`;
     if (status) whereClause += ' AND b.status = @status';
 
     const req = db.request().input('cid', sql.Int, cid);

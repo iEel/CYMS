@@ -207,6 +207,23 @@ async function run() {
         )`,
       },
       {
+        name: 'PortalEntityAccess',
+        sql: `CREATE TABLE PortalEntityAccess (
+          access_id       BIGINT PRIMARY KEY IDENTITY(1,1),
+          customer_id     INT NOT NULL REFERENCES Customers(customer_id),
+          entity_type     NVARCHAR(40) NOT NULL,
+          entity_id       INT NULL,
+          entity_ref      NVARCHAR(100) NULL,
+          access_role     NVARCHAR(40) NOT NULL,
+          source_table    NVARCHAR(80) NOT NULL,
+          source_id       INT NULL,
+          is_active       BIT DEFAULT 1,
+          created_at      DATETIME2 DEFAULT GETDATE(),
+          updated_at      DATETIME2 NULL,
+          CONSTRAINT CK_PortalEntityAccess_Target CHECK (entity_id IS NOT NULL OR entity_ref IS NOT NULL)
+        )`,
+      },
+      {
         name: 'ISOContainerCodes',
         sql: `CREATE TABLE ISOContainerCodes (
           code_id         INT PRIMARY KEY IDENTITY(1,1),

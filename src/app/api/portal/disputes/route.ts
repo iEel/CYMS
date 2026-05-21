@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { getPortalCustomerId } from '@/lib/portalAccess';
+import { getPortalCustomerId, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
 
 const ALLOWED_CATEGORIES = new Set(['billing', 'payment', 'damage', 'detention', 'document', 'other']);
 
@@ -37,13 +37,13 @@ export async function POST(request: NextRequest) {
       .input('cid', sql.Int, cid)
       .query(`
         SELECT TOP 1 invoice_id, invoice_number
-        FROM Invoices
-        WHERE invoice_id = @invoiceId
-          AND customer_id = @cid
+        FROM Invoices i
+        WHERE i.invoice_id = @invoiceId
+          AND ${portalInvoiceVisibilitySql('i')}
           AND (
-            status IN ('issued', 'paid', 'cancelled', 'credit_note')
-            OR document_type = 'credit_note'
-            OR invoice_number LIKE 'CN-%'
+            i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
+            OR i.document_type = 'credit_note'
+            OR i.invoice_number LIKE 'CN-%'
           )
       `);
 

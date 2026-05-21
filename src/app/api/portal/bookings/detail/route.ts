@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { decoratePortalBooking } from '@/lib/portalBooking';
+import { getPortalCustomerId, portalBookingVisibilitySql } from '@/lib/portalAccess';
 
 // GET — Customer Portal: read-only booking detail + container drill down
 export async function GET(request: NextRequest) {
   try {
-    const customerId = request.headers.get('x-customer-id');
-    if (!customerId) {
-      return NextResponse.json({ error: 'ไม่พบข้อมูลลูกค้า' }, { status: 403 });
-    }
+    const cid = getPortalCustomerId(request);
+    if (cid instanceof NextResponse) return cid;
 
     const { searchParams } = new URL(request.url);
     const bookingId = searchParams.get('booking_id');
@@ -18,7 +17,6 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
-    const cid = parseInt(customerId);
 
     const bookingResult = await db.request()
       .input('bookingId', sql.Int, parseInt(bookingId))
@@ -26,8 +24,8 @@ export async function GET(request: NextRequest) {
       .query(`
         SELECT booking_id, booking_number, booking_type, status, vessel_name, voyage_number,
           container_count, received_count, released_count, eta, valid_from, valid_to, created_at
-        FROM Bookings
-        WHERE booking_id = @bookingId AND customer_id = @cid
+        FROM Bookings b
+        WHERE b.booking_id = @bookingId AND ${portalBookingVisibilitySql('b')}
       `);
 
     if (bookingResult.recordset.length === 0) {

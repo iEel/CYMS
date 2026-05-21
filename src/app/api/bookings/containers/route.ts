@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
 
 // GET — ดึงรายการตู้ที่ผูกกับ Booking
 export async function GET(request: NextRequest) {
@@ -53,11 +54,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ตู้นี้ผูกกับ Booking นี้แล้ว' }, { status: 400 });
     }
 
-    await db.request()
+    const bookingResult = await db.request()
+      .input('bookingId', sql.Int, booking_id)
+      .query('SELECT customer_id FROM Bookings WHERE booking_id = @bookingId');
+    const bookingCustomerId = bookingResult.recordset[0]?.customer_id || null;
+
+    const linkResult = await db.request()
       .input('bookingId', sql.Int, booking_id)
       .input('containerId', sql.Int, container_id || null)
       .input('containerNumber', sql.NVarChar, container_number.toUpperCase())
-      .query(`INSERT INTO BookingContainers (booking_id, container_id, container_number) VALUES (@bookingId, @containerId, @containerNumber)`);
+      .query(`
+        INSERT INTO BookingContainers (booking_id, container_id, container_number)
+        OUTPUT INSERTED.id
+        VALUES (@bookingId, @containerId, @containerNumber)
+      `);
+
+    await upsertPortalEntityAccess({
+      db,
+      customerId: bookingCustomerId,
+      entityType: 'container',
+      entityId: container_id || null,
+      entityRef: container_number.toUpperCase(),
+      accessRole: 'booking_customer',
+      sourceTable: 'BookingContainers',
+      sourceId: linkResult.recordset[0]?.id || null,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

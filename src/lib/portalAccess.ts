@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export type PortalEntityType = 'booking' | 'container' | 'gate_transaction' | 'invoice';
+
 function parsePositiveInt(value: string | null): number | undefined {
   if (!value) return undefined;
   const parsed = Number(value);
@@ -14,38 +16,41 @@ export function getPortalCustomerId(request: NextRequest): number | NextResponse
   return customerId;
 }
 
-export function portalContainerVisibilitySql(containerAlias = 'c') {
-  return `(
-    ${containerAlias}.container_owner_id = @cid
-    OR EXISTS (
-      SELECT 1
-      FROM GateTransactions gt
-      WHERE gt.container_id = ${containerAlias}.container_id
-        AND (gt.container_owner_id = @cid OR gt.billing_customer_id = @cid)
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM Invoices inv
-      WHERE inv.container_id = ${containerAlias}.container_id
-        AND inv.customer_id = @cid
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM BookingContainers bc
-      JOIN Bookings b ON b.booking_id = bc.booking_id
-      WHERE b.customer_id = @cid
-        AND (
-          bc.container_id = ${containerAlias}.container_id
-          OR (bc.container_id IS NULL AND bc.container_number = ${containerAlias}.container_number)
-        )
-    )
+export function portalEntityAccessSql(
+  entityType: PortalEntityType,
+  entityIdExpression: string,
+  entityRefExpression?: string,
+) {
+  const clauses = [`pea.entity_id = ${entityIdExpression}`];
+  if (entityRefExpression) {
+    clauses.push(`(pea.entity_ref IS NOT NULL AND pea.entity_ref = ${entityRefExpression})`);
+  }
+
+  return `EXISTS (
+    SELECT 1
+    FROM PortalEntityAccess pea
+    WHERE pea.customer_id = @cid
+      AND pea.entity_type = '${entityType}'
+      AND pea.is_active = 1
+      AND (${clauses.join(' OR ')})
   )`;
+}
+
+export function portalBookingVisibilitySql(bookingAlias = 'b') {
+  return portalEntityAccessSql('booking', `${bookingAlias}.booking_id`, `${bookingAlias}.booking_number`);
+}
+
+export function portalInvoiceVisibilitySql(invoiceAlias = 'i') {
+  return portalEntityAccessSql('invoice', `${invoiceAlias}.invoice_id`, `${invoiceAlias}.invoice_number`);
+}
+
+export function portalContainerVisibilitySql(containerAlias = 'c') {
+  return portalEntityAccessSql('container', `${containerAlias}.container_id`, `${containerAlias}.container_number`);
 }
 
 export function portalGateVisibilitySql(gateAlias = 'g', containerAlias = 'c') {
   return `(
-    ${gateAlias}.container_owner_id = @cid
-    OR ${gateAlias}.billing_customer_id = @cid
+    ${portalEntityAccessSql('gate_transaction', `${gateAlias}.transaction_id`, `${gateAlias}.eir_number`)}
     OR ${portalContainerVisibilitySql(containerAlias)}
   )`;
 }

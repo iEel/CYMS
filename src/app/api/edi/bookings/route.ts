@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
 
 function bookingSummarySelect() {
   return `
@@ -253,15 +254,34 @@ export async function POST(request: NextRequest) {
       `);
 
     const booking = result.recordset[0];
+    await upsertPortalEntityAccess({
+      db,
+      customerId: booking.customer_id,
+      entityType: 'booking',
+      entityId: booking.booking_id,
+      entityRef: booking.booking_number,
+      accessRole: 'booking_customer',
+      sourceTable: 'Bookings',
+      sourceId: booking.booking_id,
+    });
 
     // Auto-create BookingContainers if container_numbers provided
     if (body.container_numbers && Array.isArray(body.container_numbers)) {
       for (const cn of body.container_numbers) {
         if (cn && cn.trim()) {
+          const containerNumber = cn.trim().toUpperCase();
           await db.request()
             .input('bookingId', sql.Int, booking.booking_id)
-            .input('containerNumber', sql.NVarChar, cn.trim().toUpperCase())
+            .input('containerNumber', sql.NVarChar, containerNumber)
             .query(`INSERT INTO BookingContainers (booking_id, container_number) VALUES (@bookingId, @containerNumber)`);
+          await upsertPortalEntityAccess({
+            db,
+            customerId: booking.customer_id,
+            entityType: 'container',
+            entityRef: containerNumber,
+            accessRole: 'booking_customer',
+            sourceTable: 'BookingContainers',
+          });
         }
       }
     }
@@ -302,6 +322,23 @@ export async function PUT(request: NextRequest) {
     if (sets.length === 0) return NextResponse.json({ error: 'ไม่มีข้อมูลที่ต้องอัปเดต' }, { status: 400 });
 
     await req.query(`UPDATE Bookings SET ${sets.join(', ')} WHERE booking_id = @bookingId`);
+
+    const updatedBookingResult = await db.request()
+      .input('bookingId', sql.Int, body.booking_id)
+      .query('SELECT booking_id, booking_number, customer_id FROM Bookings WHERE booking_id = @bookingId');
+    const updatedBooking = updatedBookingResult.recordset[0];
+    if (updatedBooking) {
+      await upsertPortalEntityAccess({
+        db,
+        customerId: updatedBooking.customer_id,
+        entityType: 'booking',
+        entityId: updatedBooking.booking_id,
+        entityRef: updatedBooking.booking_number,
+        accessRole: 'booking_customer',
+        sourceTable: 'Bookings',
+        sourceId: updatedBooking.booking_id,
+      });
+    }
 
     await logAudit({ action: 'booking_update', entityType: 'booking', entityId: body.booking_id, details: { status: body.status, vessel_name: body.vessel_name } });
 

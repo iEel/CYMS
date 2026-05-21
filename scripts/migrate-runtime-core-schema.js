@@ -506,6 +506,194 @@ async function migrate() {
           ON PortalDisputes (invoice_id, created_at);
     `);
 
+    await runStep(pool, 'Customer portal entity access grants', `
+      IF OBJECT_ID('PortalEntityAccess', 'U') IS NULL
+      BEGIN
+        CREATE TABLE PortalEntityAccess (
+          access_id BIGINT PRIMARY KEY IDENTITY(1,1),
+          customer_id INT NOT NULL,
+          entity_type NVARCHAR(40) NOT NULL,
+          entity_id INT NULL,
+          entity_ref NVARCHAR(100) NULL,
+          access_role NVARCHAR(40) NOT NULL,
+          source_table NVARCHAR(80) NOT NULL,
+          source_id INT NULL,
+          is_active BIT NOT NULL CONSTRAINT DF_PortalEntityAccess_Active DEFAULT 1,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          updated_at DATETIME2 NULL,
+          CONSTRAINT CK_PortalEntityAccess_Target CHECK (entity_id IS NOT NULL OR entity_ref IS NOT NULL)
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalEntityAccess') AND name = 'IX_PortalEntityAccess_Customer_Entity')
+        CREATE INDEX IX_PortalEntityAccess_Customer_Entity
+          ON PortalEntityAccess (customer_id, entity_type, entity_id, is_active);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalEntityAccess') AND name = 'IX_PortalEntityAccess_EntityRef')
+        CREATE INDEX IX_PortalEntityAccess_EntityRef
+          ON PortalEntityAccess (entity_type, entity_ref, customer_id, is_active);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalEntityAccess') AND name = 'UX_PortalEntityAccess_EntityIdRole')
+        CREATE UNIQUE INDEX UX_PortalEntityAccess_EntityIdRole
+          ON PortalEntityAccess (customer_id, entity_type, entity_id, access_role)
+          WHERE entity_id IS NOT NULL AND is_active = 1;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalEntityAccess') AND name = 'UX_PortalEntityAccess_EntityRefRole')
+        CREATE UNIQUE INDEX UX_PortalEntityAccess_EntityRefRole
+          ON PortalEntityAccess (customer_id, entity_type, entity_ref, access_role)
+          WHERE entity_id IS NULL AND entity_ref IS NOT NULL AND is_active = 1;
+
+      IF OBJECT_ID('Bookings', 'U') IS NOT NULL
+      BEGIN
+        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+        SELECT b.customer_id, 'booking', b.booking_id, b.booking_number, 'booking_customer', 'Bookings', b.booking_id
+        FROM Bookings b
+        WHERE b.customer_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM PortalEntityAccess pea
+            WHERE pea.customer_id = b.customer_id
+              AND pea.entity_type = 'booking'
+              AND pea.entity_id = b.booking_id
+              AND pea.access_role = 'booking_customer'
+              AND pea.is_active = 1
+          );
+      END;
+
+      IF OBJECT_ID('Containers', 'U') IS NOT NULL
+      BEGIN
+        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+        SELECT c.container_owner_id, 'container', c.container_id, c.container_number, 'owner', 'Containers', c.container_id
+        FROM Containers c
+        WHERE c.container_owner_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM PortalEntityAccess pea
+            WHERE pea.customer_id = c.container_owner_id
+              AND pea.entity_type = 'container'
+              AND pea.entity_id = c.container_id
+              AND pea.access_role = 'owner'
+              AND pea.is_active = 1
+          );
+      END;
+
+      IF OBJECT_ID('BookingContainers', 'U') IS NOT NULL AND OBJECT_ID('Bookings', 'U') IS NOT NULL
+      BEGIN
+        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+        SELECT b.customer_id, 'container', bc.container_id, MAX(bc.container_number), 'booking_customer', 'BookingContainers', MIN(bc.id)
+        FROM BookingContainers bc
+        JOIN Bookings b ON b.booking_id = bc.booking_id
+        WHERE b.customer_id IS NOT NULL
+          AND (bc.container_id IS NOT NULL OR bc.container_number IS NOT NULL)
+          AND NOT EXISTS (
+            SELECT 1 FROM PortalEntityAccess pea
+            WHERE pea.customer_id = b.customer_id
+              AND pea.entity_type = 'container'
+              AND pea.access_role = 'booking_customer'
+              AND pea.is_active = 1
+              AND (
+                (bc.container_id IS NOT NULL AND pea.entity_id = bc.container_id)
+                OR (bc.container_id IS NULL AND pea.entity_ref = bc.container_number)
+              )
+          )
+        GROUP BY b.customer_id, bc.container_id, bc.container_number;
+      END;
+
+      IF OBJECT_ID('GateTransactions', 'U') IS NOT NULL
+      BEGIN
+        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+        SELECT gt.container_owner_id, 'gate_transaction', gt.transaction_id, gt.eir_number, 'owner', 'GateTransactions', gt.transaction_id
+        FROM GateTransactions gt
+        WHERE gt.container_owner_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM PortalEntityAccess pea
+            WHERE pea.customer_id = gt.container_owner_id
+              AND pea.entity_type = 'gate_transaction'
+              AND pea.entity_id = gt.transaction_id
+              AND pea.access_role = 'owner'
+              AND pea.is_active = 1
+          );
+
+        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+        SELECT gt.billing_customer_id, 'gate_transaction', gt.transaction_id, gt.eir_number, 'billing', 'GateTransactions', gt.transaction_id
+        FROM GateTransactions gt
+        WHERE gt.billing_customer_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM PortalEntityAccess pea
+            WHERE pea.customer_id = gt.billing_customer_id
+              AND pea.entity_type = 'gate_transaction'
+              AND pea.entity_id = gt.transaction_id
+              AND pea.access_role = 'billing'
+              AND pea.is_active = 1
+          );
+
+        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+        SELECT gt.container_owner_id, 'container', gt.container_id, MAX(c.container_number), 'owner', 'GateTransactions', MIN(gt.transaction_id)
+        FROM GateTransactions gt
+        LEFT JOIN Containers c ON c.container_id = gt.container_id
+        WHERE gt.container_owner_id IS NOT NULL
+          AND gt.container_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM PortalEntityAccess pea
+            WHERE pea.customer_id = gt.container_owner_id
+              AND pea.entity_type = 'container'
+              AND pea.entity_id = gt.container_id
+              AND pea.access_role = 'owner'
+              AND pea.is_active = 1
+          )
+        GROUP BY gt.container_owner_id, gt.container_id;
+
+        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+        SELECT gt.billing_customer_id, 'container', gt.container_id, MAX(c.container_number), 'billing', 'GateTransactions', MIN(gt.transaction_id)
+        FROM GateTransactions gt
+        LEFT JOIN Containers c ON c.container_id = gt.container_id
+        WHERE gt.billing_customer_id IS NOT NULL
+          AND gt.container_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM PortalEntityAccess pea
+            WHERE pea.customer_id = gt.billing_customer_id
+              AND pea.entity_type = 'container'
+              AND pea.entity_id = gt.container_id
+              AND pea.access_role = 'billing'
+              AND pea.is_active = 1
+          )
+        GROUP BY gt.billing_customer_id, gt.container_id;
+      END;
+
+      IF OBJECT_ID('Invoices', 'U') IS NOT NULL
+      BEGIN
+        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+        SELECT i.customer_id, 'invoice', i.invoice_id, i.invoice_number, 'invoice_customer', 'Invoices', i.invoice_id
+        FROM Invoices i
+        WHERE i.customer_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM PortalEntityAccess pea
+            WHERE pea.customer_id = i.customer_id
+              AND pea.entity_type = 'invoice'
+              AND pea.entity_id = i.invoice_id
+              AND pea.access_role = 'invoice_customer'
+              AND pea.is_active = 1
+          );
+
+        IF COL_LENGTH('Invoices', 'container_id') IS NOT NULL
+        BEGIN
+          INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+          SELECT i.customer_id, 'container', i.container_id, MAX(c.container_number), 'invoice_customer', 'Invoices', MIN(i.invoice_id)
+          FROM Invoices i
+          LEFT JOIN Containers c ON c.container_id = i.container_id
+          WHERE i.customer_id IS NOT NULL
+            AND i.container_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM PortalEntityAccess pea
+              WHERE pea.customer_id = i.customer_id
+                AND pea.entity_type = 'container'
+                AND pea.entity_id = i.container_id
+                AND pea.access_role = 'invoice_customer'
+                AND pea.is_active = 1
+            )
+          GROUP BY i.customer_id, i.container_id;
+        END;
+      END;
+    `);
+
     await runStep(pool, 'Granular RBAC permission columns', `
       IF COL_LENGTH('Permissions', 'permission_code') IS NULL
         ALTER TABLE Permissions ADD permission_code NVARCHAR(100) NULL;

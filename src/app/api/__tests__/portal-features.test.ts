@@ -62,7 +62,8 @@ describe('Customer Portal feature APIs', () => {
     await expect(res.json()).resolves.toMatchObject({ success: true, dispute_id: 55 });
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('invoice_id = @invoiceId');
-    expect(combinedSql).toContain('customer_id = @cid');
+    expect(combinedSql).toContain('PortalEntityAccess');
+    expect(combinedSql).toContain("pea.entity_type = 'invoice'");
     expect(combinedSql).toContain('INSERT INTO PortalDisputes');
   });
 
@@ -86,6 +87,7 @@ describe('Customer Portal feature APIs', () => {
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('FROM Invoices');
     expect(combinedSql).toContain('FROM GateTransactions g');
-    expect(combinedSql).toContain('g.container_owner_id = @cid');
+    expect(combinedSql).toContain('PortalEntityAccess');
+    expect(combinedSql).toContain("pea.entity_type = 'gate_transaction'");
   });
 });

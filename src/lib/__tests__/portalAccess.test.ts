@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getPortalCustomerId,
+  portalBookingVisibilitySql,
   portalContainerVisibilitySql,
+  portalEntityAccessSql,
   portalGateVisibilitySql,
 } from '../portalAccess';
 
@@ -26,23 +28,47 @@ describe('portal access policy helpers', () => {
     });
   });
 
-  it('builds container visibility from owner, gate billing, invoices, and bookings', () => {
+  it('builds entity access checks against PortalEntityAccess grants', () => {
+    const sql = portalEntityAccessSql('booking', 'b.booking_id', 'b.booking_number');
+
+    expect(sql).toContain('PortalEntityAccess');
+    expect(sql).toContain("pea.entity_type = 'booking'");
+    expect(sql).toContain('pea.entity_id = b.booking_id');
+    expect(sql).toContain('pea.entity_ref = b.booking_number');
+    expect(sql).toContain('pea.is_active = 1');
+  });
+
+  it('builds container visibility from explicit portal entity grants', () => {
     const sql = portalContainerVisibilitySql('c');
 
-    expect(sql).toContain('c.container_owner_id = @cid');
-    expect(sql).toContain('GateTransactions');
-    expect(sql).toContain('billing_customer_id = @cid');
-    expect(sql).toContain('Invoices');
-    expect(sql).toContain('BookingContainers');
+    expect(sql).toContain('PortalEntityAccess');
+    expect(sql).toContain("pea.entity_type = 'container'");
+    expect(sql).toContain('pea.entity_id = c.container_id');
+    expect(sql).toContain('pea.entity_ref = c.container_number');
+    expect(sql).not.toContain('GateTransactions');
+    expect(sql).not.toContain('Invoices');
+    expect(sql).not.toContain('BookingContainers');
     expect(sql).not.toContain('c.customer_id');
   });
 
-  it('builds gate visibility from gate owner/billing plus container policy', () => {
+  it('builds booking visibility from explicit portal entity grants', () => {
+    const sql = portalBookingVisibilitySql('b');
+
+    expect(sql).toContain("pea.entity_type = 'booking'");
+    expect(sql).toContain('pea.entity_id = b.booking_id');
+    expect(sql).toContain('pea.entity_ref = b.booking_number');
+    expect(sql).not.toContain('b.customer_id = @cid');
+  });
+
+  it('builds gate visibility from gate transaction grants plus container policy', () => {
     const sql = portalGateVisibilitySql('g', 'c');
 
-    expect(sql).toContain('g.container_owner_id = @cid');
-    expect(sql).toContain('g.billing_customer_id = @cid');
-    expect(sql).toContain('c.container_owner_id = @cid');
+    expect(sql).toContain("pea.entity_type = 'gate_transaction'");
+    expect(sql).toContain('pea.entity_id = g.transaction_id');
+    expect(sql).toContain('pea.entity_ref = g.eir_number');
+    expect(sql).toContain("pea.entity_type = 'container'");
+    expect(sql).not.toContain('g.container_owner_id = @cid');
+    expect(sql).not.toContain('g.billing_customer_id = @cid');
     expect(sql).not.toContain('c.customer_id');
   });
 });

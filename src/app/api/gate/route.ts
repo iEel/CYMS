@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
+import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
 
 async function validateBillingClearance(
   db: sql.ConnectionPool,
@@ -401,6 +402,48 @@ export async function POST(request: NextRequest) {
           @ownerId, @billingId, @billingClearanceId)
       `);
 
+    const gateTransaction = txResult.recordset[0];
+    await upsertPortalEntityAccess({
+      db,
+      customerId: container_owner_id || null,
+      entityType: 'gate_transaction',
+      entityId: gateTransaction.transaction_id,
+      entityRef: eirNumber,
+      accessRole: 'owner',
+      sourceTable: 'GateTransactions',
+      sourceId: gateTransaction.transaction_id,
+    });
+    await upsertPortalEntityAccess({
+      db,
+      customerId: billing_customer_id || null,
+      entityType: 'gate_transaction',
+      entityId: gateTransaction.transaction_id,
+      entityRef: eirNumber,
+      accessRole: 'billing',
+      sourceTable: 'GateTransactions',
+      sourceId: gateTransaction.transaction_id,
+    });
+    await upsertPortalEntityAccess({
+      db,
+      customerId: container_owner_id || null,
+      entityType: 'container',
+      entityId: finalContainerId,
+      entityRef: container_number,
+      accessRole: 'owner',
+      sourceTable: 'GateTransactions',
+      sourceId: gateTransaction.transaction_id,
+    });
+    await upsertPortalEntityAccess({
+      db,
+      customerId: billing_customer_id || null,
+      entityType: 'container',
+      entityId: finalContainerId,
+      entityRef: container_number,
+      accessRole: 'billing',
+      sourceTable: 'GateTransactions',
+      sourceId: gateTransaction.transaction_id,
+    });
+
     // === Booking Auto-Link ===
     if (booking_ref) {
       try {
@@ -409,7 +452,7 @@ export async function POST(request: NextRequest) {
           const bkResult = await db.request()
             .input('bkRef', sql.NVarChar, booking_ref)
             .input('bkYardId', sql.Int, yard_id)
-            .query(`SELECT booking_id, status FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId`);
+            .query(`SELECT booking_id, booking_number, customer_id, status FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId`);
 
           if (bkResult.recordset.length > 0) {
             const bk = bkResult.recordset[0];
@@ -440,6 +483,16 @@ export async function POST(request: NextRequest) {
                 .input('bkId3', sql.Int, bk.booking_id)
                 .query(`UPDATE Bookings SET received_count = (SELECT COUNT(*) FROM BookingContainers WHERE booking_id = @bkId3 AND status IN ('received', 'released')) WHERE booking_id = @bkId3`);
 
+              await upsertPortalEntityAccess({
+                db,
+                customerId: bk.customer_id,
+                entityType: 'container',
+                entityId: finalContainerId,
+                entityRef: container_number,
+                accessRole: 'booking_customer',
+                sourceTable: 'BookingContainers',
+              });
+
               // Send email: container received
               try {
                 const { getEmailConfig, sendEmail, bookingStatusEmail } = await import('@/lib/emailService');
@@ -468,7 +521,7 @@ export async function POST(request: NextRequest) {
           const bkResult = await db.request()
             .input('bkRef', sql.NVarChar, booking_ref)
             .input('bkYardId', sql.Int, yard_id)
-            .query(`SELECT booking_id, container_count FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId AND status != 'cancelled'`);
+            .query(`SELECT booking_id, booking_number, customer_id, container_count FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId AND status != 'cancelled'`);
 
           if (bkResult.recordset.length > 0) {
             const bk = bkResult.recordset[0];
@@ -519,6 +572,16 @@ export async function POST(request: NextRequest) {
                   received_count = (SELECT COUNT(*) FROM BookingContainers WHERE booking_id = @bkId2 AND status IN ('received', 'released'))
                 WHERE booking_id = @bkId2
               `);
+
+            await upsertPortalEntityAccess({
+              db,
+              customerId: bk.customer_id,
+              entityType: 'container',
+              entityId: finalContainerId,
+              entityRef: finalContainerNumber,
+              accessRole: 'booking_customer',
+              sourceTable: 'BookingContainers',
+            });
 
             // Auto-complete if all containers released
             const updBk = await db.request()

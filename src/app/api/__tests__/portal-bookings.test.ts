@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { GET } from '../portal/containers/route';
+import { GET } from '../portal/bookings/route';
 import { getDb } from '@/lib/db';
 
 jest.mock('@/lib/db', () => ({
@@ -20,18 +20,18 @@ function makeDb() {
   return { request, input, query, queries };
 }
 
-function makeRequest(url = 'http://localhost/api/portal/containers') {
+function makeRequest(url = 'http://localhost/api/portal/bookings') {
   return new NextRequest(url, {
     headers: { 'x-customer-id': '42' },
   });
 }
 
-describe('GET /api/portal/containers', () => {
+describe('GET /api/portal/bookings', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('uses explicit portal entity grants instead of inferred owner/billing SQL', async () => {
+  it('uses explicit portal entity grants instead of Bookings.customer_id as the access policy', async () => {
     const db = makeDb();
     mockedGetDb.mockResolvedValue(db);
 
@@ -40,13 +40,9 @@ describe('GET /api/portal/containers', () => {
     expect(res.status).toBe(200);
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('PortalEntityAccess');
-    expect(combinedSql).toContain("pea.entity_type = 'container'");
-    expect(combinedSql).toContain('pea.entity_id = c.container_id');
-    expect(combinedSql).toContain('pea.entity_ref = c.container_number');
-    expect(combinedSql).not.toContain('c.container_owner_id = @cid');
-    expect(combinedSql).not.toContain('billing_customer_id = @cid');
-    expect(combinedSql).not.toContain('BookingContainers');
-    expect(combinedSql).not.toContain('Invoices');
-    expect(combinedSql).not.toContain('c.customer_id');
+    expect(combinedSql).toContain("pea.entity_type = 'booking'");
+    expect(combinedSql).toContain('pea.entity_id = b.booking_id');
+    expect(combinedSql).toContain('pea.entity_ref = b.booking_number');
+    expect(combinedSql).not.toContain('b.customer_id = @cid');
   });
 });

@@ -4,16 +4,15 @@ import sql from 'mssql';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sarabunBase64 } from '@/lib/sarabunFont';
+import { getPortalCustomerId, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
 
 const FONT = 'Sarabun';
 
 // GET — Customer Portal: Download Invoice PDF
 export async function GET(request: NextRequest) {
   try {
-    const customerId = request.headers.get('x-customer-id');
-    if (!customerId) {
-      return NextResponse.json({ error: 'ไม่พบข้อมูลลูกค้า' }, { status: 403 });
-    }
+    const cid = getPortalCustomerId(request);
+    if (cid instanceof NextResponse) return cid;
 
     const { searchParams } = new URL(request.url);
     const invoiceId = searchParams.get('invoice_id');
@@ -26,9 +25,8 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
-    const cid = parseInt(customerId);
 
-    // Fetch invoice — only if belongs to this customer
+    // Fetch invoice — only if the portal grant table allows this customer.
     const result = await db.request()
       .input('invoiceId', sql.Int, parseInt(invoiceId))
       .input('cid', sql.Int, cid)
@@ -41,7 +39,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN Invoices ref ON i.ref_invoice_id = ref.invoice_id
         LEFT JOIN Containers c ON i.container_id = c.container_id
         JOIN Customers cust ON i.customer_id = cust.customer_id
-        WHERE i.invoice_id = @invoiceId AND i.customer_id = @cid
+        WHERE i.invoice_id = @invoiceId AND ${portalInvoiceVisibilitySql('i')}
           AND (
             i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
             OR i.document_type = 'credit_note'

@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { writeIntegrationLog } from '@/lib/integrationLog';
-import { getPortalCustomerId, portalContainerVisibilitySql, portalGateVisibilitySql } from '@/lib/portalAccess';
+import {
+  getPortalCustomerId,
+  portalBookingVisibilitySql,
+  portalContainerVisibilitySql,
+  portalGateVisibilitySql,
+  portalInvoiceVisibilitySql,
+} from '@/lib/portalAccess';
 
 // GET — Customer Portal Overview
 export async function GET(request: NextRequest) {
@@ -35,7 +41,8 @@ export async function GET(request: NextRequest) {
       .input('cid', sql.Int, cid)
       .query(`
         SELECT COUNT(*) as count, ISNULL(SUM(grand_total), 0) as total
-        FROM Invoices WHERE customer_id = @cid AND status = 'issued'
+        FROM Invoices i
+        WHERE ${portalInvoiceVisibilitySql('i')} AND i.status = 'issued'
       `);
     const outstanding = invResult.recordset[0] || { count: 0, total: 0 };
 
@@ -44,7 +51,8 @@ export async function GET(request: NextRequest) {
       .input('cid', sql.Int, cid)
       .query(`
         SELECT COUNT(*) as count
-        FROM Bookings WHERE customer_id = @cid AND status IN ('pending', 'confirmed')
+        FROM Bookings b
+        WHERE ${portalBookingVisibilitySql('b')} AND b.status IN ('pending', 'confirmed')
       `);
     const activeBookings = bkResult.recordset[0]?.count || 0;
 

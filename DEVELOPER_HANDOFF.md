@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox** (~100%)
 
 ---
 
@@ -258,15 +258,15 @@ container-yard-system/
 │   │       │   └── demurrage/route.ts      # **GET/POST/PUT demurrage** — overview, single calc, rates CRUD
 │   │       ├── portal/
 │   │       │   ├── overview/route.ts        # Customer KPIs + recent gate activity
-│   │       │   ├── containers/route.ts      # Portal-scoped container list (owner/billing/booking/invoice visibility)
-│   │       │   ├── invoices/route.ts        # Portal invoices + AR summary
-│   │       │   ├── statement/route.ts       # Statement/AR aging summary
-│   │       │   ├── bookings/route.ts        # Bookings + progress + ETA/empty-return metadata
-│   │       │   ├── bookings/detail/route.ts # Booking detail + container/EIR drilldown
-│   │       │   ├── eir-pdf/route.ts         # Portal-scoped EIR PDF
-│   │       │   ├── invoice-pdf/route.ts     # Portal-scoped invoice/receipt/CN PDF
-│   │       │   ├── document-bundle/route.ts # ZIP bundle: statement + invoice/EIR download index
-│   │       │   └── disputes/route.ts        # POST invoice dispute request
+│   │       │   ├── containers/route.ts      # Portal-scoped container list via PortalEntityAccess grants
+│   │       │   ├── invoices/route.ts        # Portal invoices + AR summary via invoice grants
+│   │       │   ├── statement/route.ts       # Statement/AR aging summary via invoice grants
+│   │       │   ├── bookings/route.ts        # Bookings + progress + ETA/empty-return metadata via booking grants
+│   │       │   ├── bookings/detail/route.ts # Booking detail + container/EIR drilldown via booking grants
+│   │       │   ├── eir-pdf/route.ts         # Portal-scoped EIR PDF via gate/container grants
+│   │       │   ├── invoice-pdf/route.ts     # Portal-scoped invoice/receipt/CN PDF via invoice grants
+│   │       │   ├── document-bundle/route.ts # ZIP bundle: statement + invoice/EIR download index via grants
+│   │       │   └── disputes/route.ts        # POST invoice dispute request via invoice grants
 │   │       ├── reports/
 │   │       │   ├── dwell/route.ts           # **📊 GET Container Dwell Report** — by shipping line (avg/max/min dwell) + overdue list (>${overdueDays}d) + distribution buckets (7/14/30d)
 │   │       │   ├── mnr/route.ts             # **📊 GET M&R Report** — EOR summary KPIs + by status + 6-month trend + full EOR list with date range filter
@@ -285,6 +285,7 @@ container-yard-system/
 │   │       │   ├── auth-2fa.test.ts         # 2FA status/setup/verify validation
 │   │       │   ├── component-boundaries.test.ts # Static guard: billing tabs must stay in focused component files
 │   │       │   ├── portal-features.test.ts  # Portal dispute API + document bundle ZIP API
+│   │       │   ├── portal-bookings.test.ts  # Portal booking API grant-based access policy
 │   │       │   └── search.test.ts           # GET global search aggregation + yard filter + short query guard
 │   │       ├── settings/
 │   │       │   ├── company/route.ts        # GET/POST company profile (+ branch + logo URL)
@@ -356,11 +357,13 @@ container-yard-system/
 │       ├── apiAuth.ts            # **🔐 withAuth() wrapper** — JWT + rate limiting + role-based access
 │       ├── authFetch.ts          # **🔐 Client auth fetch** — auto-attach Bearer token + 401 redirect
 │       ├── audit.ts              # **🔐 Centralized logAudit()** — non-fatal AuditLog INSERT
+│       ├── portalEntityAccess.ts # Non-fatal upsert helper for PortalEntityAccess grants
+│       ├── portalAccess.ts       # Customer Portal access grants SQL helpers (PortalEntityAccess)
 │       ├── portalBooking.ts      # Customer Portal booking ETA + empty-return instruction helpers
 │       ├── portalDocumentBundle.ts # Statement/invoice/EIR bundle index entries
 │       ├── zipArchive.ts         # Small no-dependency ZIP writer for portal bundles
 │       ├── ediFormatter.ts       # **📋 Shared CODECO formatter** — template-based CSV/JSON/EDIFACT (field mapping, headers, date format, delimiter)
-│       ├── schema.sql            # SQL schema reference (17 tables, incl. CustomerBranches)
+│       ├── schema.sql            # SQL schema reference (incl. PortalEntityAccess)
 │       └── __tests__/            # **🧪 Unit Tests** (Jest + ts-jest)
 │           ├── containerValidation.test.ts  # ISO 6346 check digit + validation + parseSizeTypeCode (20 tests)
 │           ├── utils.test.ts               # formatContainerNumber + status colors/labels (24 tests)
@@ -377,6 +380,7 @@ container-yard-system/
 │           ├── reconciliationActions.test.ts # Reconciliation action row keys + deep links + status overlay
 │           ├── offlineQueue.test.ts        # Offline queue request classification + queued payload helpers
 │           ├── yardPlanning.test.ts        # Slot aging heatmap, move recommendation, release forecast
+│           ├── portalEntityAccess.test.ts  # PortalEntityAccess upsert helper + non-fatal failure
 │           ├── portalBooking.test.ts       # Portal ETA status + empty-return instruction helpers
 │           ├── portalDocumentBundle.test.ts # Bundle entries + ZIP archive smoke test
 │           └── rateLimit.test.ts            # store clearing + stats + client IP extraction (14 tests)
@@ -405,6 +409,7 @@ container-yard-system/
 | `Containers` | container_number, size, type, status, zone/bay/row/tier, **is_soc** (BIT, SOC=ตู้ลูกค้า), **container_owner_id** (FK→Customers) | ตู้คอนเทนเนอร์ + SOC/COC |
 | `Customers` | customer_code (auto-gen `CUST-XXXXX`), customer_name, **is_line, is_forwarder, is_trucking, is_shipper, is_consignee** (Boolean flags), tax_id, address, billing_address, contact_name/phone/email, **default_payment_type** (CASH/CREDIT), credit_term, **edi_prefix** (บังคับเมื่อ is_line=1), is_active | ลูกค้า — **Multi-role** (1 บริษัท = หลายบทบาท) |
 | `CustomerBranches` | customer_id (FK), branch_code (default '00000'), branch_name, billing_address, contact_name/phone/email, is_default, is_active | **สาขาลูกค้า** — หลายสาขาต่อ 1 บริษัท |
+| `PortalEntityAccess` | customer_id, entity_type, entity_id/entity_ref, access_role, source_table/source_id, is_active | Source-of-truth สำหรับ Customer Portal visibility ต่อ `container` / `booking` / `gate_transaction` / `invoice` |
 | `ISOContainerCodes` | iso_code, description | รหัส ISO ตู้ |
 | `DocumentFormats` | doc_type, prefix, running_number | เลขเอกสาร |
 | `GateTransactions` | container_id, transaction_type, driver_name, truck_plate, eir_number, **container_owner_id** (FK→Customers), **billing_customer_id** (FK→Customers), **billing_clearance_id** | บันทึก Gate In/Out — **แยกเจ้าของตู้/คนจ่ายเงิน** + ผูกหลักฐาน Billing Clearance ก่อนออก EIR |
@@ -1279,36 +1284,34 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - `CustomerMaster.tsx`: ปุ่ม 🔑 (KeyRound) สร้างบัญชี → แสดง username/password ใน alert
   - Username = contact_email, Password = สุ่ม 8 ตัว, auto-enable `is_portal_enabled`
 
-### 🔐 Portal Owner/Billing Visibility Fix (✅ เสร็จ — 21 พ.ค. 2569)
+### 🔐 Portal Entity Access Grants (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **Policy decision** — fix policy เข้าระบบก่อน ยังไม่ทำหน้า configurable policy เพื่อลดความเสี่ยง data leakage และลด complexity
-- [x] **Fixed default policy** — customer user เห็นข้อมูลของ `Users.customer_id` ตัวเองผ่าน relationship ต่อไปนี้:
-  - ตู้: `Containers.container_owner_id = customer_id`
-  - Gate/EIR: `GateTransactions.container_owner_id = customer_id` หรือ `GateTransactions.billing_customer_id = customer_id`
-  - Invoice/Statement: `Invoices.customer_id = customer_id`
-  - Booking: `Bookings.customer_id = customer_id`
-  - Cross-link: container ที่เกี่ยวกับ invoice/booking/gate ของลูกค้าคนนั้นยังมองเห็นได้แม้ไม่ได้มี legacy `Containers.customer_id`
-- [x] **Helper กลาง** — `src/lib/portalAccess.ts` เพิ่ม `getPortalCustomerId`, `portalContainerVisibilitySql`, `portalGateVisibilitySql`
-- [x] **Portal APIs updated** — `api/portal/containers`, `api/portal/overview`, `api/portal/eir-pdf` ไม่ใช้ `c.customer_id` legacy filter แล้ว
-- [x] **Tests เพิ่มเติม** — `src/lib/__tests__/portalAccess.test.ts` + `src/app/api/__tests__/portal-containers.test.ts` รวม 5 tests ครอบคลุม policy SQL และ container endpoint
-- ทำหน้า configurable policy ภายหลังเมื่อมี use case จริง เช่น shipping line/forwarder/trucker/shipper ต้องเห็นข้อมูลคนละ scope
+- [x] **Source-of-truth ใหม่** — เพิ่ม `PortalEntityAccess` เก็บ explicit grant ต่อ `container` / `booking` / `gate_transaction` / `invoice` ด้วย `access_role` เช่น `owner`, `billing`, `booking_customer`, `invoice_customer`
+- [x] **Backfill จาก model เดิม** — `scripts/migrate-runtime-core-schema.js` สร้าง table/indexes และเติม grants จาก `Bookings.customer_id`, `Containers.container_owner_id`, `GateTransactions.container_owner_id/billing_customer_id`, `Invoices.customer_id`, และ `BookingContainers`
+- [x] **Helper กลาง** — `src/lib/portalAccess.ts` เพิ่ม `portalEntityAccessSql`, `portalBookingVisibilitySql`, `portalInvoiceVisibilitySql`, `portalContainerVisibilitySql`, `portalGateVisibilitySql`
+- [x] **Write-time grants** — `portalEntityAccess.ts` upsert grant แบบ non-fatal ตอนสร้าง/แก้ booking, ผูกตู้กับ booking, สร้าง invoice/credit note/revised invoice, และสร้าง GateTransaction เพื่อให้ข้อมูลใหม่เห็นใน portal โดยไม่ต้อง rerun migration
+- [x] **Portal APIs updated** — `api/portal/containers`, `overview`, `bookings`, `bookings/detail`, `invoices`, `statement`, `eir-pdf`, `invoice-pdf`, `document-bundle`, `disputes` ใช้ grant table แทน direct `customer_id` / owner/billing SQL
+- [x] **Migration รันแล้วบน DB จริง** — `node scripts/migrate-runtime-core-schema.js` ผ่านหลัง aggregate duplicate container grants ให้เหลือหนึ่ง grant ต่อ `(customer, entity, role)`
+- [x] **Tests เพิ่มเติม** — `portalAccess.test.ts`, `portalEntityAccess.test.ts`, `portal-containers.test.ts`, `portal-bookings.test.ts`, `portal-features.test.ts` ครอบคลุม grant-based SQL, write-time grant helper และ portal route policy
+- ทำหน้า configurable policy ภายหลังเมื่อมี use case จริง เช่น shipping line/forwarder/trucker/shipper ต้องเห็นข้อมูลคนละ scope โดยต้องมี admin-only + audit + preview affected records + default deny
 
 ### 🔄 Portal Enhancements — Auto-refresh & Self-service PDF (✅ เสร็จ)
 - [x] **Auto-refresh Polling (30 วินาที)**:
   - Overview: `setInterval(fetchData, 30000)` + refresh button + last updated timestamp
   - Containers: เหมือนกัน — ลูกค้าเห็น status update ทุก 30s
 - [x] **Self-service PDF Downloads**:
-  - `api/portal/eir-pdf`: EIR PDF download (reuse `eirPdfGenerator.ts`, ตรวจ customer_id ownership)
-  - `api/portal/invoice-pdf`: Invoice PDF with Thai font (jsPDF + Sarabun, ตรวจ customer_id ownership)
+  - `api/portal/eir-pdf`: EIR PDF download (reuse `eirPdfGenerator.ts`, ตรวจสิทธิ์ผ่าน `PortalEntityAccess`)
+  - `api/portal/invoice-pdf`: Invoice PDF with Thai font (jsPDF + Sarabun, ตรวจสิทธิ์ผ่าน `PortalEntityAccess`)
   - Overview: ลิงก์ "EIR PDF" ที่ทุกแถว gate activity
   - Invoices: ปุ่ม "PDF" ทุกแถว (ทั้ง mobile cards + desktop table)
-- [x] **Data Isolation**: ทุก PDF endpoint ใช้ `WHERE customer_id = @cid` — ลูกค้าดาวน์โหลดได้เฉพาะเอกสารตัวเอง
+- [x] **Data Isolation**: ทุก PDF endpoint ใช้ `PortalEntityAccess` — ลูกค้าดาวน์โหลดได้เฉพาะเอกสารที่มี grant เท่านั้น
 
 ### 📦 Customer Portal Self-Service Bundle + Dispute (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **Document bundle download** — `GET /api/portal/document-bundle` สร้าง ZIP แบบไม่พึ่ง dependency เพิ่ม โดยมี `statement.json`, `invoices.csv`, `eir-documents.csv` พร้อมลิงก์ PDF ที่ผ่าน portal scope เดิม
-- [x] **Invoice dispute request** — `POST /api/portal/disputes` ตรวจ `invoice_id + customer_id` ก่อน insert ลง `PortalDisputes`; UI หน้า Invoices มี modal เลือกประเภทและข้อความ
+- [x] **Invoice dispute request** — `POST /api/portal/disputes` ตรวจ invoice grant ผ่าน `PortalEntityAccess` ก่อน insert ลง `PortalDisputes`; UI หน้า Invoices มี modal เลือกประเภทและข้อความ
 - [x] **Booking ETA** — `portalBooking.ts` คำนวณ `eta_status` (`today/soon/overdue/scheduled/completed/no ETA`) และส่งให้ `/api/portal/bookings` + detail
 - [x] **Empty return instruction** — booking type `empty_return` ได้คำแนะนำ/cut-off/steps ใน API และแสดง panel ใน booking detail
-- [x] **Migration** — `scripts/migrate-runtime-core-schema.js` เพิ่มตาราง `PortalDisputes` + indexes และรันแล้วบน DB จริง (`PortalDisputes=1`)
+- [x] **Migration** — `scripts/migrate-runtime-core-schema.js` เพิ่มตาราง `PortalDisputes` + `PortalEntityAccess` + indexes และรันแล้วบน DB จริง
 - [x] **Tests** — `portalBooking.test.ts`, `portalDocumentBundle.test.ts`, `portal-features.test.ts` ครอบคลุม helper, ZIP smoke test, dispute ownership check และ bundle route
 
 ### 👥 User Management UX (✅ เสร็จ)
@@ -1464,7 +1467,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 423/423; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 430/430; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Portal entity access grants + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1506,7 +1509,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 423/423 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 430/430 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { buildPortalDocumentBundleEntries } from '@/lib/portalDocumentBundle';
-import { getPortalCustomerId, portalGateVisibilitySql } from '@/lib/portalAccess';
+import { getPortalCustomerId, portalGateVisibilitySql, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
 import { createZipArchive } from '@/lib/zipArchive';
 
 function requestBaseUrl(request: NextRequest) {
@@ -27,18 +27,18 @@ export async function GET(request: NextRequest) {
       .input('cid', sql.Int, cid)
       .query(`
         SELECT
-          ISNULL(SUM(CASE WHEN status = 'issued' THEN grand_total ELSE 0 END), 0) as outstanding,
-          ISNULL(SUM(CASE WHEN status = 'paid' THEN grand_total ELSE 0 END), 0) as paid_total,
-          ISNULL(SUM(CASE WHEN status = 'credit_note' OR document_type = 'credit_note' OR invoice_number LIKE 'CN-%' THEN ABS(grand_total) ELSE 0 END), 0) as credit_note_total,
-          COUNT(CASE WHEN status = 'issued' THEN 1 END) as open_count,
-          COUNT(CASE WHEN status = 'paid' THEN 1 END) as paid_count,
-          COUNT(CASE WHEN status = 'credit_note' OR document_type = 'credit_note' OR invoice_number LIKE 'CN-%' THEN 1 END) as credit_note_count
-        FROM Invoices
-        WHERE customer_id = @cid
+          ISNULL(SUM(CASE WHEN i.status = 'issued' THEN i.grand_total ELSE 0 END), 0) as outstanding,
+          ISNULL(SUM(CASE WHEN i.status = 'paid' THEN i.grand_total ELSE 0 END), 0) as paid_total,
+          ISNULL(SUM(CASE WHEN i.status = 'credit_note' OR i.document_type = 'credit_note' OR i.invoice_number LIKE 'CN-%' THEN ABS(i.grand_total) ELSE 0 END), 0) as credit_note_total,
+          COUNT(CASE WHEN i.status = 'issued' THEN 1 END) as open_count,
+          COUNT(CASE WHEN i.status = 'paid' THEN 1 END) as paid_count,
+          COUNT(CASE WHEN i.status = 'credit_note' OR i.document_type = 'credit_note' OR i.invoice_number LIKE 'CN-%' THEN 1 END) as credit_note_count
+        FROM Invoices i
+        WHERE ${portalInvoiceVisibilitySql('i')}
           AND (
-            status IN ('issued', 'paid', 'cancelled', 'credit_note')
-            OR document_type = 'credit_note'
-            OR invoice_number LIKE 'CN-%'
+            i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
+            OR i.document_type = 'credit_note'
+            OR i.invoice_number LIKE 'CN-%'
           )
       `);
 
@@ -46,12 +46,12 @@ export async function GET(request: NextRequest) {
       .input('cid', sql.Int, cid)
       .query(`
         SELECT TOP 200 invoice_id, invoice_number, status, grand_total, document_type
-        FROM Invoices
-        WHERE customer_id = @cid
+        FROM Invoices i
+        WHERE ${portalInvoiceVisibilitySql('i')}
           AND (
-            status IN ('issued', 'paid', 'cancelled', 'credit_note')
-            OR document_type = 'credit_note'
-            OR invoice_number LIKE 'CN-%'
+            i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
+            OR i.document_type = 'credit_note'
+            OR i.invoice_number LIKE 'CN-%'
           )
         ORDER BY created_at DESC
       `);

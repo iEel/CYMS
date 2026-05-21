@@ -214,6 +214,30 @@ CREATE TABLE CustomerBranches (
 );
 
 -- ===================================
+-- ตาราง: Portal Entity Access (สิทธิ์ลูกค้าต่อ entity)
+-- ===================================
+CREATE TABLE PortalEntityAccess (
+    access_id           BIGINT PRIMARY KEY IDENTITY(1,1),
+    customer_id         INT NOT NULL REFERENCES Customers(customer_id),
+    entity_type         NVARCHAR(40) NOT NULL,        -- 'container','booking','gate_transaction','invoice'
+    entity_id           INT NULL,                     -- primary key ของ entity (ถ้ามี)
+    entity_ref          NVARCHAR(100) NULL,           -- เลขตู้/booking/invoice/EIR สำหรับกรณี pre-link
+    access_role         NVARCHAR(40) NOT NULL,        -- owner,billing,booking_customer,invoice_customer,forwarder,shipper,consignee
+    source_table        NVARCHAR(80) NOT NULL,        -- แหล่งข้อมูลที่สร้าง grant
+    source_id           INT NULL,
+    is_active           BIT DEFAULT 1,
+    created_at          DATETIME2 DEFAULT GETDATE(),
+    updated_at          DATETIME2 NULL,
+    CONSTRAINT CK_PortalEntityAccess_Target CHECK (entity_id IS NOT NULL OR entity_ref IS NOT NULL)
+);
+
+CREATE INDEX IX_PortalEntityAccess_Customer_Entity
+ON PortalEntityAccess (customer_id, entity_type, entity_id, is_active);
+
+CREATE INDEX IX_PortalEntityAccess_EntityRef
+ON PortalEntityAccess (entity_type, entity_ref, customer_id, is_active);
+
+-- ===================================
 -- ตาราง: รหัสตู้มาตรฐาน ISO (ISO Container Codes)
 -- ===================================
 CREATE TABLE ISOContainerCodes (
