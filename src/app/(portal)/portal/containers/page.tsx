@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   CalendarDays,
   Clock,
-  Eye,
   FileText,
   Filter,
   Loader2,
@@ -404,19 +403,16 @@ function PortalEirActions({
     <div className="flex flex-col gap-1.5">
       {documents.map(doc => (
         <div key={`${doc.label}-${doc.eirNumber}`} className="flex flex-wrap items-center gap-1.5">
-          <span className={`inline-flex h-7 items-center rounded-lg px-2 text-[11px] font-bold ${
-            doc.tone === 'blue'
-              ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'
-              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
-          }`}>
-            {doc.label}
-          </span>
           <button
             onClick={() => onView(doc.eirNumber)}
-            className="inline-flex h-7 items-center gap-1 rounded-lg bg-slate-50 px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 dark:bg-slate-700 dark:text-slate-200"
-            title={`ดู ${doc.label}`}
+            className={`inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] font-bold hover:brightness-95 ${
+              doc.tone === 'blue'
+                ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'
+                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+            }`}
+            title={`เปิด ${doc.label}`}
           >
-            <Eye size={12} /> ดู
+            <FileText size={12} /> {doc.label}
           </button>
           <button
             onClick={() => onInspect(doc.eirNumber)}
