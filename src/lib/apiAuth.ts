@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken, UserPayload } from '@/lib/auth';
 import { rateLimitAPI, getClientIP } from '@/lib/rateLimit';
+import sql from 'mssql';
 
 /**
  * API Authentication Middleware
@@ -16,10 +17,105 @@ interface AuthenticatedRequest extends NextRequest {
   user: UserPayload;
 }
 
+export interface RequestActor {
+  userId: number;
+  role: string;
+  username?: string;
+  customerId?: number;
+}
+
+interface PermissionDbRequest {
+  input(name: string, type: unknown, value: unknown): PermissionDbRequest;
+  query(statement: string): Promise<{ recordset: unknown[] }>;
+}
+
+interface PermissionDb {
+  request(): PermissionDbRequest;
+}
+
 type AuthHandler = (
   request: AuthenticatedRequest,
   context?: Record<string, unknown>
 ) => Promise<NextResponse>;
+
+function parsePositiveInt(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+export function getRequestActor(request: NextRequest): RequestActor | null {
+  const userId = parsePositiveInt(request.headers.get('x-user-id'));
+  const role = request.headers.get('x-user-role')?.trim();
+  if (!userId || !role) return null;
+
+  const username = request.headers.get('x-user-name')?.trim() || undefined;
+  const customerId = parsePositiveInt(request.headers.get('x-customer-id'));
+
+  return {
+    userId,
+    role,
+    ...(username ? { username } : {}),
+    ...(customerId ? { customerId } : {}),
+  };
+}
+
+export function requireRequestActor(request: NextRequest): RequestActor | NextResponse {
+  const actor = getRequestActor(request);
+  if (!actor) {
+    return NextResponse.json(
+      { error: 'ไม่ได้รับอนุญาต — กรุณาเข้าสู่ระบบ' },
+      { status: 401 }
+    );
+  }
+  return actor;
+}
+
+export function requireRole(
+  request: NextRequest,
+  allowedRoles: string[],
+  message = 'คุณไม่มีสิทธิ์เข้าถึงฟังก์ชันนี้'
+): RequestActor | NextResponse {
+  const actor = requireRequestActor(request);
+  if (actor instanceof NextResponse) return actor;
+
+  if (!allowedRoles.includes(actor.role)) {
+    return NextResponse.json({ error: message }, { status: 403 });
+  }
+
+  return actor;
+}
+
+export async function requirePermission(
+  request: NextRequest,
+  db: PermissionDb,
+  permissionCode: string,
+  message = 'คุณไม่มีสิทธิ์เข้าถึงฟังก์ชันนี้'
+): Promise<RequestActor | NextResponse> {
+  const actor = requireRequestActor(request);
+  if (actor instanceof NextResponse) return actor;
+
+  // Yard Manager is the system administrator role and receives all seeded grants.
+  if (actor.role === 'yard_manager') return actor;
+
+  const result = await db.request()
+    .input('roleCode', sql.NVarChar, actor.role)
+    .input('permissionCode', sql.NVarChar, permissionCode)
+    .query(`
+      SELECT TOP 1 1 as granted
+      FROM Roles r
+      JOIN RolePermissions rp ON rp.role_id = r.role_id
+      JOIN Permissions p ON p.permission_id = rp.permission_id
+      WHERE r.role_code = @roleCode
+        AND p.permission_code = @permissionCode
+    `);
+
+  if (result.recordset.length === 0) {
+    return NextResponse.json({ error: message }, { status: 403 });
+  }
+
+  return actor;
+}
 
 /**
  * Wrap an API handler with authentication + rate limiting

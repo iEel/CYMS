@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requireRole } from '@/lib/apiAuth';
+
+function requireCustomerAdmin(req: NextRequest) {
+  return requireRole(req, ['yard_manager'], 'เฉพาะ Yard Manager เท่านั้นที่จัดการข้อมูลลูกค้าได้');
+}
 
 // Auto-migrate: add multi-role columns + CustomerBranches table if missing
 async function ensureColumns(pool: Awaited<ReturnType<typeof getDb>>) {
@@ -157,6 +162,9 @@ export async function GET(req: NextRequest) {
 
 // POST — Create new customer (with auto-generated customer_code)
 export async function POST(req: NextRequest) {
+  const auth = requireCustomerAdmin(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
     const { customer_name, is_line, is_forwarder, is_trucking, is_shipper, is_consignee,
@@ -252,7 +260,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await logAudit({ userId: body.user_id, yardId: body.yard_id, action: 'customer_create', entityType: 'customer', entityId: created.customer_id, details: { customer_name, customer_code: customerCode, roles: { is_line, is_forwarder, is_trucking, is_shipper, is_consignee } } });
+    await logAudit({ userId: auth.userId, yardId: body.yard_id, action: 'customer_create', entityType: 'customer', entityId: created.customer_id, details: { customer_name, customer_code: customerCode, roles: { is_line, is_forwarder, is_trucking, is_shipper, is_consignee } } });
     return NextResponse.json({ success: true, data: created });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -262,6 +270,9 @@ export async function POST(req: NextRequest) {
 
 // PUT — Update customer
 export async function PUT(req: NextRequest) {
+  const auth = requireCustomerAdmin(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
     const { customer_id, customer_name, is_line, is_forwarder, is_trucking, is_shipper, is_consignee,
@@ -389,7 +400,7 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    await logAudit({ userId: body.user_id, yardId: body.yard_id, action: 'customer_update', entityType: 'customer', entityId: customer_id, details: { customer_name } });
+    await logAudit({ userId: auth.userId, yardId: body.yard_id, action: 'customer_update', entityType: 'customer', entityId: customer_id, details: { customer_name } });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -399,6 +410,9 @@ export async function PUT(req: NextRequest) {
 
 // DELETE — Delete customer
 export async function DELETE(req: NextRequest) {
+  const auth = requireCustomerAdmin(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(req.url);
     const customer_id = searchParams.get('customer_id');
@@ -417,7 +431,7 @@ export async function DELETE(req: NextRequest) {
       .query('DELETE FROM CustomerBranches WHERE customer_id = @id');
     await pool.request().input('id', customer_id)
       .query('DELETE FROM Customers WHERE customer_id = @id');
-    await logAudit({ action: 'customer_delete', entityType: 'customer', entityId: parseInt(customer_id), details: { customer_id } });
+    await logAudit({ userId: auth.userId, action: 'customer_delete', entityType: 'customer', entityId: parseInt(customer_id), details: { customer_id } });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';

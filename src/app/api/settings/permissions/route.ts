@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requireRole } from '@/lib/apiAuth';
 
 const ROLE_SEEDS = [
   { code: 'yard_manager', name: 'ผู้จัดการลาน / Admin' },
@@ -226,8 +227,15 @@ async function ensureGranularRbac(db: sql.ConnectionPool) {
   `);
 }
 
+function requireYardManager(request: NextRequest) {
+  return requireRole(request, ['yard_manager'], 'เฉพาะ Yard Manager เท่านั้นที่จัดการสิทธิ์ได้');
+}
+
 // GET — ดึง Permissions ทั้งหมด + RolePermissions matrix
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = requireYardManager(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const db = await getDb();
     await ensureGranularRbac(db);
@@ -267,6 +275,9 @@ export async function GET() {
 
 // PUT — อัปเดต RolePermissions (toggle สิทธิ์)
 export async function PUT(request: NextRequest) {
+  const auth = requireYardManager(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { role_id, permission_id, granted } = await request.json();
     const db = await getDb();
@@ -288,7 +299,7 @@ export async function PUT(request: NextRequest) {
         .query('DELETE FROM RolePermissions WHERE role_id = @roleId AND permission_id = @permId');
     }
 
-    await logAudit({ action: 'permission_update', entityType: 'permission', details: { role_id, permission_id, granted } });
+    await logAudit({ userId: auth.userId, action: 'permission_update', entityType: 'permission', details: { role_id, permission_id, granted } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT permission error:', error);

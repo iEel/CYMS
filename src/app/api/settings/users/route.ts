@@ -4,18 +4,13 @@ import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
 import { getPasswordPolicy, validatePassword } from '@/lib/passwordPolicy';
+import { requireRole } from '@/lib/apiAuth';
 
 // [Security] ตรวจ role จาก JWT header (ตั้งโดย middleware) — ต้องเป็น yard_manager เท่านั้น
 function requireYardManager(request: NextRequest): { actorId: number } | NextResponse {
-  const role = request.headers.get('x-user-role');
-  const userId = request.headers.get('x-user-id');
-  if (role !== 'yard_manager') {
-    return NextResponse.json(
-      { error: 'เฉพาะ Yard Manager เท่านั้นที่จัดการผู้ใช้งานได้' },
-      { status: 403 }
-    );
-  }
-  return { actorId: parseInt(userId || '0') };
+  const actor = requireRole(request, ['yard_manager'], 'เฉพาะ Yard Manager เท่านั้นที่จัดการผู้ใช้งานได้');
+  if (actor instanceof NextResponse) return actor;
+  return { actorId: actor.userId };
 }
 
 // GET — ดึงรายชื่อผู้ใช้ทั้งหมด (yard_manager only)
