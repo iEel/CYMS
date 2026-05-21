@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix** (~100%)
 
 ---
 
@@ -1127,15 +1127,18 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - `CustomerMaster.tsx`: ปุ่ม 🔑 (KeyRound) สร้างบัญชี → แสดง username/password ใน alert
   - Username = contact_email, Password = สุ่ม 8 ตัว, auto-enable `is_portal_enabled`
 
-**Portal ownership policy — แนวทางหัวข้อถัดไป (แนะนำให้ fix เข้าระบบก่อนทำหน้า policy):**
-- Policy หลักควรเป็น fixed default ใน code ก่อน: customer user เห็นข้อมูลที่เกี่ยวกับ `Users.customer_id` ของตัวเองเท่านั้น
-- ความสัมพันธ์ที่ควรนับเป็น visible:
+### 🔐 Portal Owner/Billing Visibility Fix (✅ เสร็จ — 21 พ.ค. 2569)
+- [x] **Policy decision** — fix policy เข้าระบบก่อน ยังไม่ทำหน้า configurable policy เพื่อลดความเสี่ยง data leakage และลด complexity
+- [x] **Fixed default policy** — customer user เห็นข้อมูลของ `Users.customer_id` ตัวเองผ่าน relationship ต่อไปนี้:
   - ตู้: `Containers.container_owner_id = customer_id`
   - Gate/EIR: `GateTransactions.container_owner_id = customer_id` หรือ `GateTransactions.billing_customer_id = customer_id`
   - Invoice/Statement: `Invoices.customer_id = customer_id`
   - Booking: `Bookings.customer_id = customer_id`
-- ยังไม่ควรทำหน้า configurable policy ตอนนี้ เพราะจะเพิ่มความซับซ้อนและความเสี่ยง data leakage โดยไม่จำเป็น; ทำหน้า policy ภายหลังเมื่อมี use case จริง เช่น shipping line/forwarder/trucker/shipper ต้องเห็นข้อมูลคนละ scope
-- งาน pending: portal API บางจุดยังอ้าง `c.customer_id` legacy path หลังมี owner/billing separation ต้องปรับให้ตรง policy ข้างบน
+  - Cross-link: container ที่เกี่ยวกับ invoice/booking/gate ของลูกค้าคนนั้นยังมองเห็นได้แม้ไม่ได้มี legacy `Containers.customer_id`
+- [x] **Helper กลาง** — `src/lib/portalAccess.ts` เพิ่ม `getPortalCustomerId`, `portalContainerVisibilitySql`, `portalGateVisibilitySql`
+- [x] **Portal APIs updated** — `api/portal/containers`, `api/portal/overview`, `api/portal/eir-pdf` ไม่ใช้ `c.customer_id` legacy filter แล้ว
+- [x] **Tests เพิ่มเติม** — `src/lib/__tests__/portalAccess.test.ts` + `src/app/api/__tests__/portal-containers.test.ts` รวม 5 tests ครอบคลุม policy SQL และ container endpoint
+- ทำหน้า configurable policy ภายหลังเมื่อมี use case จริง เช่น shipping line/forwarder/trucker/shipper ต้องเห็นข้อมูลคนละ scope
 
 ### 🔄 Portal Enhancements — Auto-refresh & Self-service PDF (✅ เสร็จ)
 - [x] **Auto-refresh Polling (30 วินาที)**:
@@ -1279,7 +1282,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ⚠️ **Re-opened** — พบ dynamic SQL ใน customer branch update (`api/settings/customers`) ต้องแก้ในหัวข้อ SQL hardening ถัดไป |
-| **Automated Testing** | ⚠️ **มีแล้ว แต่มี test drift** — ล่าสุด full `npm test -- --runInBand` ผ่าน 201/205; fail 4 จุดเดิมใน billing/M&R mock flow ต้องอัปเดตในหัวข้อ quality |
+| **Automated Testing** | ⚠️ **มีแล้ว แต่มี test drift** — ล่าสุด full `npm test -- --runInBand` ผ่าน 206/210; fail 4 จุดเดิมใน billing/M&R mock flow ต้องอัปเดตในหัวข้อ quality |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |

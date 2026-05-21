@@ -2,17 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { writeIntegrationLog } from '@/lib/integrationLog';
+import { getPortalCustomerId, portalContainerVisibilitySql, portalGateVisibilitySql } from '@/lib/portalAccess';
 
 // GET — Customer Portal Overview
 export async function GET(request: NextRequest) {
   try {
-    const customerId = request.headers.get('x-customer-id');
-    if (!customerId) {
-      return NextResponse.json({ error: 'ไม่พบข้อมูลลูกค้า' }, { status: 403 });
-    }
+    const cid = getPortalCustomerId(request);
+    if (cid instanceof NextResponse) return cid;
 
     const db = await getDb();
-    const cid = parseInt(customerId);
 
     // Customer info
     const custResult = await db.request()
@@ -27,7 +25,8 @@ export async function GET(request: NextRequest) {
         SELECT COUNT(*) as total,
           SUM(CASE WHEN status = 'in_yard' THEN 1 ELSE 0 END) as in_yard,
           SUM(CASE WHEN status = 'released' THEN 1 ELSE 0 END) as released
-        FROM Containers WHERE customer_id = @cid
+        FROM Containers c
+        WHERE ${portalContainerVisibilitySql('c')}
       `);
     const containers = contResult.recordset[0] || { total: 0, in_yard: 0, released: 0 };
 
@@ -57,7 +56,7 @@ export async function GET(request: NextRequest) {
           c.container_number, c.size, c.type
         FROM GateTransactions g
         JOIN Containers c ON g.container_id = c.container_id
-        WHERE c.customer_id = @cid
+        WHERE ${portalGateVisibilitySql('g', 'c')}
         ORDER BY g.created_at DESC
       `);
 

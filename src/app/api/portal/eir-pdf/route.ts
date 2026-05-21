@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { generateEIRPDF } from '@/lib/eirPdfGenerator';
+import { getPortalCustomerId, portalGateVisibilitySql } from '@/lib/portalAccess';
 
 // GET — Customer Portal: Download EIR PDF
 export async function GET(request: NextRequest) {
   try {
-    const customerId = request.headers.get('x-customer-id');
-    if (!customerId) {
-      return NextResponse.json({ error: 'ไม่พบข้อมูลลูกค้า' }, { status: 403 });
-    }
+    const cid = getPortalCustomerId(request);
+    if (cid instanceof NextResponse) return cid;
 
     const { searchParams } = new URL(request.url);
     const eirNumber = searchParams.get('eir_number');
@@ -18,9 +17,8 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
-    const cid = parseInt(customerId);
 
-    // Fetch EIR data — only if container belongs to this customer
+    // Fetch EIR data only if it matches the fixed customer portal visibility policy.
     const result = await db.request()
       .input('eirNumber', sql.NVarChar, eirNumber)
       .input('cid', sql.Int, cid)
@@ -35,7 +33,8 @@ export async function GET(request: NextRequest) {
         LEFT JOIN Users u ON g.processed_by = u.user_id
         LEFT JOIN Yards y ON g.yard_id = y.yard_id
         LEFT JOIN YardZones z ON c.zone_id = z.zone_id
-        WHERE g.eir_number = @eirNumber AND c.customer_id = @cid
+        WHERE g.eir_number = @eirNumber
+          AND ${portalGateVisibilitySql('g', 'c')}
       `);
 
     if (result.recordset.length === 0) {
