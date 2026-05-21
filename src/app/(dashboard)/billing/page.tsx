@@ -15,6 +15,7 @@ import BillingClearanceTab from './BillingClearanceTab';
 import BillingReports from './BillingReports';
 import CreditControlTab from './CreditControlTab';
 import ARAgingTab from './ARAgingTab';
+import TariffSimulatorPanel from './TariffSimulatorPanel';
 import type { ClearanceRow, ClearanceStats, CreditCustomer } from './billingTypes';
 
 interface TariffRow {
@@ -683,6 +684,12 @@ export default function BillingPage() {
                   <button onClick={handleCreateTariff} disabled={!canManageSettings} className="h-10 px-4 rounded-lg bg-blue-600 text-white text-xs font-medium whitespace-nowrap hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"><Plus size={12} /></button>
                 </div>
               </div>
+              <TariffSimulatorPanel
+                draftTariff={tariffForm}
+                savedTariffs={tariffs}
+                chargeLabels={CHARGE_LABELS}
+                unitLabels={UNIT_LABELS}
+              />
             </div>
 
             {tariffLoading ? (
