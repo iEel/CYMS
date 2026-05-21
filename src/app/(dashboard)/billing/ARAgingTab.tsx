@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Users } from 'lucide-react';
 import type { ARCustomer } from './billingTypes';
+import ARDunningPanel from './ARDunningPanel';
 
 export default function ARAgingTab({ yardId }: { yardId: number }) {
   const [data, setData] = useState<{
@@ -67,6 +68,8 @@ export default function ARAgingTab({ yardId }: { yardId: number }) {
           </div>
         )}
       </div>
+
+      <ARDunningPanel customers={data.customers} />
 
       {/* Customer Breakdown */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">

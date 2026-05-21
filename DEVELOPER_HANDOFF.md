@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center** (~100%)
 
 ---
 
@@ -19,7 +19,7 @@
 | **เฟส 5** | ปฏิบัติการ, Job Queue, Smart Shifting, **Tablet-optimized buttons** | ✅ เสร็จ |
 | **เฟส 6** | EDI, Booking/Manifest, Seal Validation, **CSV/Excel file import**, **CODECO Outbound (EDIFACT/CSV/JSON)**, **SFTP auto-upload**, **📧 Email delivery**, **⏰ Auto-Schedule (node-cron)** | ✅ เสร็จ |
 | **เฟส 7** | ซ่อมบำรุง M&R, EOR, CEDEX, **Audit Trail, Zod Validation, Actual Cost Modal, CEDEX ภาษาไทย** | ✅ เสร็จ |
-| **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Demurrage Calculator** | ✅ เสร็จ |
+| **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
 
 ---
@@ -180,6 +180,7 @@ container-yard-system/
 │   │   │   │   ├── BillingReports.tsx    # Daily/monthly billing report + control report + PDF/Excel export
 │   │   │   │   ├── CreditControlTab.tsx   # Customer credit limit/overdue/hold monitor
 │   │   │   │   ├── ARAgingTab.tsx         # AR Aging report by customer
+│   │   │   │   ├── ARDunningPanel.tsx     # AR dunning action center + reminder draft copy
 │   │   │   │   ├── TariffSimulatorPanel.tsx # Billing tariff preview/simulation before saving rates
 │   │   │   │   ├── billingTypes.ts        # Shared billing UI types
 │   │   │   │   ├── billingUi.ts           # Shared billing labels/badges/export lazy loader
@@ -339,6 +340,7 @@ container-yard-system/
 │       ├── totp.ts               # RFC 6238 TOTP helper (secret generation, verify window, otpauth URI)
 │       ├── deviceBinding.ts      # Trusted browser device policy + id validation (uses legacy bound_device_mac column)
 │       ├── promptPay.ts          # PromptPay EMV QR payload builder + CRC16 validation
+│       ├── arDunning.ts          # AR dunning stage/action/reminder draft builder
 │       ├── billingTariffSimulator.ts # Billing tariff preview math for per-day/per-container/fixed rates
 │       ├── gateWorkflow.ts       # Gate-In/Out workflow step + exception model used by guided UI
 │       ├── gateOperationalGuardrails.ts # QR gate pass, duplicate seal/plate warning, driver/photo completeness model
@@ -365,6 +367,7 @@ container-yard-system/
 │           ├── totp.test.ts                # RFC 6238 compatibility + verify window + otpauth URI
 │           ├── deviceBinding.test.ts       # policy role matching + device id validation
 │           ├── promptPay.test.ts           # PromptPay payload format + fixed amount + CRC
+│           ├── arDunning.test.ts           # AR dunning stage/action/reminder draft generation
 │           ├── billingTariffSimulator.test.ts # Tariff simulator math + dwell scenarios
 │           ├── gateWorkflow.test.ts        # Gate guided workflow status + exception rules
 │           ├── gateOperationalGuardrails.test.ts # QR pass + duplicate seal/plate + evidence guardrails
@@ -984,6 +987,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - แท็บ "รายงาน" ในหน้าบัญชี + หน้าพิมพ์ A4 แยก (`/billing/print/report`)
   - รายวัน: KPIs, สรุปสถานะ, gate activity, แจกแจงตามประเภทค่าบริการ, รายการ invoice
   - รายเดือน: KPIs, top customers, daily breakdown table
+- [x] **AR Dunning Action Center** (✅ เสร็จ — 21 พ.ค. 2569) — เพิ่ม `src/lib/arDunning.ts` และ `ARDunningPanel.tsx` ใน AR Aging เพื่อจัด stage `friendly_reminder` / `second_notice` / `credit_hold_review` / `final_notice`, สรุป exposure, เรียงลำดับลูกค้าที่ต้องตาม และ copy reminder draft ได้จากยอดค้างจริง (ยังไม่ auto-send email จนกว่าจะล็อก recipient/audit policy)
 - [x] **📄 PDF Export** (ใหม่) — client-side PDF ผ่าน jsPDF + jspdf-autotable
   - `src/lib/pdfExport.ts` — 3 ฟังก์ชั่นสำเร็จรูป:
     - `generateBillingReportPDF()` — รายงานประจำวัน/เดือน (KPIs, ตารางบิล, gate activity, ยอดรายวัน, top ลูกค้า)
@@ -1451,7 +1455,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 415/415; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 419/419; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1493,7 +1497,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 415/415 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 419/419 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)
