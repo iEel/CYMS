@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { requireRole } from '@/lib/apiAuth';
+import { deleteRemovedCustomerBranches, parseBranchId } from '@/lib/customerBranches';
 
 function requireCustomerAdmin(req: NextRequest) {
   return requireRole(req, ['yard_manager'], 'เฉพาะ Yard Manager เท่านั้นที่จัดการข้อมูลลูกค้าได้');
@@ -351,23 +352,24 @@ export async function PUT(req: NextRequest) {
 
     // Update branches if provided
     if (Array.isArray(branches)) {
-      // Delete branches not in the new list
-      const branchIds = branches.filter(b => b.branch_id).map(b => b.branch_id);
-      if (branchIds.length > 0) {
-        await pool.request()
-          .input('cid', sql.Int, customer_id)
-          .query(`DELETE FROM CustomerBranches WHERE customer_id = @cid AND branch_id NOT IN (${branchIds.join(',')})`);
-      } else {
-        await pool.request()
-          .input('cid', sql.Int, customer_id)
-          .query(`DELETE FROM CustomerBranches WHERE customer_id = @cid`);
+      try {
+        await deleteRemovedCustomerBranches(pool, customer_id, branches);
+      } catch {
+        return NextResponse.json({ error: 'branch_id must be a positive integer' }, { status: 400 });
       }
 
       // Upsert branches
       for (const b of branches) {
-        if (b.branch_id) {
+        let branchId: number | null;
+        try {
+          branchId = parseBranchId(b.branch_id);
+        } catch {
+          return NextResponse.json({ error: 'branch_id must be a positive integer' }, { status: 400 });
+        }
+
+        if (branchId) {
           await pool.request()
-            .input('bid', sql.Int, b.branch_id)
+            .input('bid', sql.Int, branchId)
             .input('code', sql.VarChar, b.branch_code || '00000')
             .input('name', sql.NVarChar, b.branch_name || '')
             .input('addr', sql.NVarChar, b.billing_address || '')
