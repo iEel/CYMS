@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates** (~100%)
 
 ---
 
@@ -308,7 +308,9 @@ container-yard-system/
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── Sidebar.tsx       # Left sidebar (collapsible + role-based menus + **สเมนู 'รายงาน' /reports BarChart3 icon**)
-│   │   │   └── Topbar.tsx        # Top header (**global search**, real yard switcher, **notification bell**, dark/high-contrast toggle)
+│   │   │   └── Topbar.tsx        # Top header (**global search**, real yard switcher, **offline outbox**, **notification bell**, dark/high-contrast toggle)
+│   │   ├── offline/
+│   │   │   └── OfflineOutbox.tsx # Queue monitor with queued/conflict/synced filters + retry/discard
 │   │   ├── providers/
 │   │   │   ├── AuthProvider.tsx  # Auth context (login/logout/session + TOTP challenge response + browser device id)
 │   │   │   └── ToastProvider.tsx # Toast notifications (success/error/warning/info)
@@ -380,7 +382,7 @@ container-yard-system/
 │           ├── gateWorkflow.test.ts        # Gate guided workflow status + exception rules
 │           ├── gateOperationalGuardrails.test.ts # QR pass + duplicate seal/plate + evidence guardrails
 │           ├── reconciliationActions.test.ts # Reconciliation action row keys + deep links + status overlay
-│           ├── offlineQueue.test.ts        # Offline queue request classification + queued payload helpers
+│           ├── offlineQueue.test.ts        # Offline queue request classification + outbox retry/conflict/clear helpers
 │           ├── yardPlanning.test.ts        # Slot aging heatmap, move recommendation, release forecast
 │           ├── portalEntityAccess.test.ts  # PortalEntityAccess upsert helper + non-fatal failure
 │           ├── portalGrantReconciler.test.ts # PortalEntityAccess preview/repair source-of-truth SQL
@@ -1044,7 +1046,11 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - Auto-sync แยกผล `synced / failed / conflict` และแจ้ง toast จาก Topbar
   - Gate-In submit, Gate-Out pickup/release, PhotoCapture upload, Yard Audit save/position update, M&R photo/EOR/action update ใช้ offline queue แล้ว
   - UI สำคัญแสดงข้อความ “เข้าคิวออฟไลน์” แทนมองเป็น error เมื่อไม่มีเน็ต
-  - Unit test: `src/lib/__tests__/offlineQueue.test.ts`
+- [x] **Offline Outbox UX** (✅ เสร็จ — 21 พ.ค. 2569):
+  - Topbar มี outbox dropdown สำหรับดู queued/synced/conflict, retry รายการ, discard รายการ และ clear synced
+  - `offlineQueue.ts` เพิ่ม `listQueuedRequests`, `retryQueuedRequest`, `markConflict`, `clearSynced` และเก็บ metadata `lastAttemptAt/lastError/lastHttpStatus/conflictReason`
+  - Auto-sync ไม่ลบรายการที่สำเร็จทันที แต่ mark เป็น `synced` ให้ operator เห็นหลักฐานก่อนล้างเอง
+  - Unit test: `src/lib/__tests__/offlineQueue.test.ts` ครอบคลุม list/remove/retry/conflict/clear synced
 
 ### 🧩 Component Decomposition (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **Billing page split** — แยก `BillingClearanceTab`, `BillingReports`, `CreditControlTab`, `ARAgingTab` ออกจาก `billing/page.tsx` เป็น component files เฉพาะทาง
@@ -1053,7 +1059,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Static boundary guard** — เพิ่ม `src/app/api/__tests__/component-boundaries.test.ts` เพื่อกัน regression ไม่ให้ย้าย tab ใหญ่กลับเข้า `page.tsx`
 
 ### NFR: Non-Functional Requirements (✅ เสร็จ)
-- [x] NFR1: Offline-First — IndexedDB queue + `offlineFetch()` wrapper + auto-replay + operation status (`queued/synced/conflict`) สำหรับงานหน้าด่าน/Yard/M&R
+- [x] NFR1: Offline-First — IndexedDB queue + `offlineFetch()` wrapper + auto-replay + operation status (`queued/synced/conflict`) สำหรับงานหน้าด่าน/Yard/M&R + Operator Outbox
 - [x] NFR3b: High-Contrast Theme — `.high-contrast` CSS + ☀️ toggle (sidebar white bg, เส้นขอบหนา, ตัวอักษรใหญ่)
 - [x] Dark Mode — `@variant dark (&:is(.dark *))` สำหรับ Tailwind v4 class strategy
 

@@ -121,19 +121,19 @@ Run tests, lint, update handoff, commit `Add portal grant reconciler`.
 - Modify: layout/topbar or dashboard to expose outbox
 - Test: `src/lib/__tests__/offlineQueue.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Test queue listing, retry, conflict status retention, and remove/clear behavior.
 
-- [ ] **Step 2: Extend queue API**
+- [x] **Step 2: Extend queue API**
 
 Add exported `retryQueuedRequest`, `markConflict`, and `clearSynced` helpers.
 
-- [ ] **Step 3: Build UI**
+- [x] **Step 3: Build UI**
 
 Add operator outbox with queued/synced/conflict filters, retry, discard, and conflict details.
 
-- [ ] **Step 4: Verify, document, commit**
+- [x] **Step 4: Verify, document, commit**
 
 Run tests, lint/build, update handoff, commit `Add offline outbox`.
 

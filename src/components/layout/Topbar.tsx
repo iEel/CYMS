@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/providers/ToastProvider';
+import OfflineOutbox from '@/components/offline/OfflineOutbox';
 import {
   Search,
   Bell,
@@ -385,6 +386,8 @@ export default function Topbar() {
 
       {/* Right Actions */}
       <div className="flex items-center gap-2">
+        <OfflineOutbox />
+
         {/* Yard Switcher */}
         <div ref={yardRef} className="relative">
           <button
