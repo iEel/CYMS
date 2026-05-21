@@ -1,7 +1,19 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Package, FileText, ClipboardList, ArrowUpRight, ArrowDownLeft, Loader2, RefreshCw, Download } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Bell,
+  ClipboardList,
+  Download,
+  FileText,
+  Loader2,
+  Package,
+  RefreshCw,
+  Thermometer,
+} from 'lucide-react';
 
 interface Overview {
   customer: { customer_name: string; contact_email: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean };
@@ -14,8 +26,24 @@ interface Overview {
   }>;
 }
 
+interface PortalNotification {
+  id: string;
+  type: 'reefer_exception' | 'booking_status' | string;
+  severity: string;
+  title: string;
+  detail: string;
+  time: string;
+  deep_link: string;
+}
+
+function notificationLink(notification: PortalNotification) {
+  if (notification.deep_link) return notification.deep_link;
+  return notification.type === 'reefer_exception' ? '/portal/reefer?container_id=' : '/portal/bookings';
+}
+
 export default function PortalOverview() {
   const [data, setData] = useState<Overview | null>(null);
+  const [notifications, setNotifications] = useState<PortalNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -23,6 +51,9 @@ export default function PortalOverview() {
     fetch('/api/portal/overview').then(r => r.json()).then(d => {
       setData(d); setLoading(false); setLastUpdated(new Date());
     }).catch(() => setLoading(false));
+    fetch('/api/portal/notifications?limit=6').then(r => r.json()).then(d => {
+      setNotifications(Array.isArray(d.notifications) ? d.notifications : []);
+    }).catch(() => setNotifications([]));
   }, []);
 
   useEffect(() => {
@@ -89,6 +120,55 @@ export default function PortalOverview() {
             <p className="text-[10px] text-slate-400 mt-0.5">{k.sub}</p>
           </div>
         ))}
+      </div>
+
+      {/* Customer Notifications */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200/60 dark:border-slate-700/50">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+            <Bell size={16} className="text-blue-600" /> การแจ้งเตือนล่าสุด
+          </h2>
+          {notifications.length > 0 && (
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 dark:bg-blue-900/20 dark:text-blue-300">
+              {notifications.length} รายการ
+            </span>
+          )}
+        </div>
+        {notifications.length === 0 ? (
+          <p className="p-6 text-center text-slate-400 text-sm">ยังไม่มีการแจ้งเตือนใหม่</p>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+            {notifications.map(notification => (
+              <a
+                key={notification.id}
+                href={notificationLink(notification)}
+                className="flex items-start gap-3 p-3 px-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors"
+              >
+                <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                  notification.type === 'reefer_exception'
+                    ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-300'
+                    : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300'
+                }`}>
+                  {notification.type === 'reefer_exception' ? <Thermometer size={15} /> : <ClipboardList size={15} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-white">{notification.title}</p>
+                    {notification.severity !== 'info' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                        <AlertTriangle size={10} /> {notification.severity}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{notification.detail}</p>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {new Date(notification.time).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent Gate Activity */}

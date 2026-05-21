@@ -22,4 +22,13 @@ describe('Customer Portal UI', () => {
     expect(source).toContain('กิจกรรมตู้ใน Booking');
     expect(source).toContain("fetch('/api/portal/bookings'");
   });
+
+  it('shows customer scoped notifications on the portal overview', () => {
+    const source = fs.readFileSync(path.join(root, 'src/app/(portal)/portal/page.tsx'), 'utf8');
+
+    expect(source).toContain('/api/portal/notifications');
+    expect(source).toContain('การแจ้งเตือนล่าสุด');
+    expect(source).toContain('reefer_exception');
+    expect(source).toContain('/portal/reefer?container_id=');
+  });
 });
