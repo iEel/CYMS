@@ -1,39 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { ensureCustomerCreditColumns, getCustomerCreditSnapshot } from '@/lib/customerCredit';
-
-async function ensureCustomer360Columns(db: Awaited<ReturnType<typeof getDb>>) {
-  await ensureCustomerCreditColumns(db);
-  await db.request().query(`
-    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'CustomerBranches')
-    BEGIN
-      CREATE TABLE CustomerBranches (
-        branch_id INT PRIMARY KEY IDENTITY(1,1),
-        customer_id INT NOT NULL REFERENCES Customers(customer_id),
-        branch_code VARCHAR(10) NOT NULL DEFAULT '00000',
-        branch_name NVARCHAR(200) NULL,
-        billing_address NVARCHAR(MAX) NULL,
-        contact_name NVARCHAR(100) NULL,
-        contact_phone NVARCHAR(50) NULL,
-        contact_email NVARCHAR(100) NULL,
-        is_default BIT DEFAULT 0,
-        is_active BIT DEFAULT 1,
-        created_at DATETIME2 DEFAULT GETDATE()
-      );
-    END;
-    IF COL_LENGTH('Containers', 'customer_id') IS NULL
-      ALTER TABLE Containers ADD customer_id INT NULL;
-    IF COL_LENGTH('GateTransactions', 'billing_customer_id') IS NULL
-      ALTER TABLE GateTransactions ADD billing_customer_id INT NULL;
-    IF COL_LENGTH('GateTransactions', 'container_owner_id') IS NULL
-      ALTER TABLE GateTransactions ADD container_owner_id INT NULL;
-    IF COL_LENGTH('RepairOrders', 'customer_id') IS NULL
-      ALTER TABLE RepairOrders ADD customer_id INT NULL;
-    IF COL_LENGTH('RepairOrders', 'billing_customer_id') IS NULL
-      ALTER TABLE RepairOrders ADD billing_customer_id INT NULL;
-  `);
-}
+import { getCustomerCreditSnapshot } from '@/lib/customerCredit';
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,7 +14,6 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
-    await ensureCustomer360Columns(db);
 
     const customerResult = await db.request()
       .input('customerId', sql.Int, customerId)

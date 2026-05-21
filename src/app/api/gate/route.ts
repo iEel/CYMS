@@ -4,41 +4,8 @@ import sql from 'mssql';
 import { z } from 'zod';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
-import { ensureDocumentLifecycle, logDocumentLifecycle } from '@/lib/documentLifecycle';
+import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
-
-async function ensureContainerGradeColumn(db: sql.ConnectionPool) {
-  await db.request().query(`
-    IF COL_LENGTH('Containers', 'container_grade') IS NULL
-      ALTER TABLE Containers ADD container_grade NVARCHAR(1) NOT NULL CONSTRAINT DF_Containers_Grade DEFAULT 'A'
-  `);
-  await db.request().query(`
-    IF OBJECT_ID('BillingClearances', 'U') IS NULL
-    BEGIN
-      CREATE TABLE BillingClearances (
-        clearance_id INT PRIMARY KEY IDENTITY(1,1),
-        yard_id INT NOT NULL,
-        transaction_type NVARCHAR(20) NOT NULL,
-        container_id INT NULL,
-        container_number NVARCHAR(15) NULL,
-        customer_id INT NULL,
-        clearance_type NVARCHAR(20) NOT NULL,
-        original_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
-        final_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
-        reason NVARCHAR(500) NULL,
-        invoice_id INT NULL,
-        approved_by INT NULL,
-        charges NVARCHAR(MAX) NULL,
-        created_by INT NULL,
-        created_at DATETIME2 NOT NULL DEFAULT GETDATE()
-      );
-    END
-  `);
-  await db.request().query(`
-    IF COL_LENGTH('GateTransactions', 'billing_clearance_id') IS NULL
-      ALTER TABLE GateTransactions ADD billing_clearance_id INT NULL
-  `);
-}
 
 async function validateBillingClearance(
   db: sql.ConnectionPool,
@@ -187,8 +154,6 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
 
     const db = await getDb();
-    await ensureContainerGradeColumn(db);
-    await ensureDocumentLifecycle(db);
     const req = db.request();
     const conditions: string[] = [];
 
@@ -257,7 +222,6 @@ export async function POST(request: NextRequest) {
     } = body;
 
     const db = await getDb();
-    await ensureContainerGradeColumn(db);
     const containerGrade = typeof damage_report?.condition_grade === 'string'
       && ['A', 'B', 'C', 'D'].includes(damage_report.condition_grade.toUpperCase())
       ? damage_report.condition_grade.toUpperCase()

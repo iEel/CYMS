@@ -9,84 +9,6 @@ function requireCustomerAdmin(req: NextRequest) {
   return requireRole(req, ['yard_manager'], 'เฉพาะ Yard Manager เท่านั้นที่จัดการข้อมูลลูกค้าได้');
 }
 
-// Auto-migrate: add multi-role columns + CustomerBranches table if missing
-async function ensureColumns(pool: Awaited<ReturnType<typeof getDb>>) {
-  try {
-    await pool.request().query(`
-      -- Multi-role boolean flags
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'is_line')
-        ALTER TABLE Customers ADD is_line BIT DEFAULT 0;
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'is_forwarder')
-        ALTER TABLE Customers ADD is_forwarder BIT DEFAULT 0;
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'is_trucking')
-        ALTER TABLE Customers ADD is_trucking BIT DEFAULT 0;
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'is_shipper')
-        ALTER TABLE Customers ADD is_shipper BIT DEFAULT 0;
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'is_consignee')
-        ALTER TABLE Customers ADD is_consignee BIT DEFAULT 0;
-
-      -- New fields
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'customer_code')
-        ALTER TABLE Customers ADD customer_code VARCHAR(20) NULL;
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'billing_address')
-        ALTER TABLE Customers ADD billing_address NVARCHAR(MAX) NULL;
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'default_payment_type')
-        ALTER TABLE Customers ADD default_payment_type VARCHAR(20) DEFAULT 'CASH';
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'edi_prefix')
-        ALTER TABLE Customers ADD edi_prefix NVARCHAR(10) NULL;
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'credit_limit')
-        ALTER TABLE Customers ADD credit_limit DECIMAL(12,2) NULL;
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'credit_hold')
-        ALTER TABLE Customers ADD credit_hold BIT NOT NULL CONSTRAINT DF_Customers_CreditHold DEFAULT 0;
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'credit_hold_reason')
-        ALTER TABLE Customers ADD credit_hold_reason NVARCHAR(300) NULL;
-
-      -- Legacy columns (keep for backward compat)
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'branch_type')
-        ALTER TABLE Customers ADD branch_type NVARCHAR(20) DEFAULT 'head_office';
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'branch_number')
-        ALTER TABLE Customers ADD branch_number NVARCHAR(10) DEFAULT '00000';
-      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Customers') AND name = 'shipping_line_code')
-        ALTER TABLE Customers ADD shipping_line_code NVARCHAR(50) NULL;
-    `);
-
-    // Migrate legacy customer_type → boolean flags
-    await pool.request().query(`
-      UPDATE Customers SET is_line = 1
-      WHERE customer_type = 'shipping_line' AND (is_line IS NULL OR is_line = 0);
-      UPDATE Customers SET is_trucking = 1
-      WHERE customer_type IN ('trucker', 'trucking') AND (is_trucking IS NULL OR is_trucking = 0);
-    `);
-
-    // Auto-generate customer_code for existing records that don't have one
-    await pool.request().query(`
-      UPDATE Customers SET customer_code = 'CUST-' + RIGHT('00000' + CAST(customer_id AS VARCHAR), 5)
-      WHERE customer_code IS NULL OR customer_code = '';
-    `);
-
-    // Create CustomerBranches table if not exists
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'CustomerBranches')
-      BEGIN
-        CREATE TABLE CustomerBranches (
-          branch_id       INT PRIMARY KEY IDENTITY(1,1),
-          customer_id     INT NOT NULL REFERENCES Customers(customer_id),
-          branch_code     VARCHAR(10) NOT NULL DEFAULT '00000',
-          branch_name     NVARCHAR(200),
-          billing_address NVARCHAR(MAX),
-          contact_name    NVARCHAR(100),
-          contact_phone   NVARCHAR(50),
-          contact_email   NVARCHAR(100),
-          is_default      BIT DEFAULT 0,
-          is_active       BIT DEFAULT 1,
-          created_at      DATETIME2 DEFAULT GETDATE(),
-          CONSTRAINT UQ_Customer_Branch UNIQUE (customer_id, branch_code)
-        );
-      END
-    `);
-  } catch { /* columns/table may already exist */ }
-}
-
 // Helper: generate next customer_code
 async function generateCustomerCode(pool: Awaited<ReturnType<typeof getDb>>): Promise<string> {
   const result = await pool.request().query(`
@@ -102,7 +24,6 @@ async function generateCustomerCode(pool: Awaited<ReturnType<typeof getDb>>): Pr
 export async function GET(req: NextRequest) {
   try {
     const pool = await getDb();
-    await ensureColumns(pool);
 
     const { searchParams } = new URL(req.url);
     const role = searchParams.get('role'); // 'line', 'forwarder', 'trucking', 'shipper', 'consignee'
@@ -178,7 +99,6 @@ export async function POST(req: NextRequest) {
     }
 
     const pool = await getDb();
-    await ensureColumns(pool);
 
     // Duplicate check: company name
     const dupName = await pool.request()
@@ -286,7 +206,6 @@ export async function PUT(req: NextRequest) {
     }
 
     const pool = await getDb();
-    await ensureColumns(pool);
 
     // Duplicate check: company name (exclude self)
     if (customer_name) {

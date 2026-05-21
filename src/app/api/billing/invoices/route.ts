@@ -6,21 +6,6 @@ import { logApprovalReview } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 
-type DbPool = Awaited<ReturnType<typeof getDb>>;
-
-async function ensureInvoiceDocumentColumns(db: DbPool) {
-  await db.request().query(`
-    IF COL_LENGTH('Invoices', 'ref_invoice_id') IS NULL
-      ALTER TABLE Invoices ADD ref_invoice_id INT NULL;
-    IF COL_LENGTH('Invoices', 'replaces_invoice_id') IS NULL
-      ALTER TABLE Invoices ADD replaces_invoice_id INT NULL;
-    IF COL_LENGTH('Invoices', 'document_type') IS NULL
-      ALTER TABLE Invoices ADD document_type NVARCHAR(30) NULL;
-    IF COL_LENGTH('Invoices', 'balance_amount') IS NULL
-      ALTER TABLE Invoices ADD balance_amount DECIMAL(12,2) NULL;
-  `);
-}
-
 function normalizePositiveAmount(value: unknown, fallback: number) {
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -45,7 +30,6 @@ export async function GET(request: NextRequest) {
     const invoiceId = searchParams.get('invoice_id');
 
     const db = await getDb();
-    await ensureInvoiceDocumentColumns(db);
     const req = db.request();
     const conditions: string[] = [];
 
@@ -127,7 +111,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
-    await ensureInvoiceDocumentColumns(db);
 
     const invNumber = await nextDocumentNumber({
       db,
@@ -207,7 +190,6 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { invoice_id, action } = body;
     const db = await getDb();
-    await ensureInvoiceDocumentColumns(db);
     const bodyDocumentNumber = typeof body.invoice_number === 'string' ? body.invoice_number : '';
     const bodyDocumentType = body.document_type === 'credit_note' ? 'credit_note' : 'invoice';
     const bodyPreviousStatus = typeof body.previous_status === 'string' ? body.previous_status : undefined;

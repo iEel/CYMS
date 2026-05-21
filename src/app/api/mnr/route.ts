@@ -37,60 +37,6 @@ const updateEORSchema = z.object({
   repair_inspected_by: z.string().max(200).optional().nullable(),
 });
 
-async function ensureMnrColumns(db: sql.ConnectionPool) {
-  if (process.env.NODE_ENV === 'test') return;
-  await db.request().query(`
-    IF COL_LENGTH('RepairOrders', 'customer_id') IS NULL
-      ALTER TABLE RepairOrders ADD customer_id INT NULL;
-    IF COL_LENGTH('RepairOrders', 'source_eir_number') IS NULL
-      ALTER TABLE RepairOrders ADD source_eir_number NVARCHAR(80) NULL;
-    IF COL_LENGTH('RepairOrders', 'cedex_rate_version') IS NULL
-      ALTER TABLE RepairOrders ADD cedex_rate_version NVARCHAR(80) NULL;
-    IF COL_LENGTH('RepairOrders', 'repair_photos') IS NULL
-      ALTER TABLE RepairOrders ADD repair_photos NVARCHAR(MAX) NULL;
-    IF COL_LENGTH('RepairOrders', 'repair_photo_evidence') IS NULL
-      ALTER TABLE RepairOrders ADD repair_photo_evidence NVARCHAR(MAX) NULL;
-    IF COL_LENGTH('RepairOrders', 'invoice_id') IS NULL
-      ALTER TABLE RepairOrders ADD invoice_id INT NULL;
-    IF COL_LENGTH('RepairOrders', 'billing_customer_id') IS NULL
-      ALTER TABLE RepairOrders ADD billing_customer_id INT NULL;
-    IF COL_LENGTH('RepairOrders', 'completed_at') IS NULL
-      ALTER TABLE RepairOrders ADD completed_at DATETIME2 NULL;
-    IF COL_LENGTH('RepairOrders', 'customer_approved_by') IS NULL
-      ALTER TABLE RepairOrders ADD customer_approved_by NVARCHAR(200) NULL;
-    IF COL_LENGTH('RepairOrders', 'customer_approved_at') IS NULL
-      ALTER TABLE RepairOrders ADD customer_approved_at DATETIME2 NULL;
-    IF COL_LENGTH('RepairOrders', 'customer_approval_channel') IS NULL
-      ALTER TABLE RepairOrders ADD customer_approval_channel NVARCHAR(50) NULL;
-    IF COL_LENGTH('RepairOrders', 'customer_approval_reference') IS NULL
-      ALTER TABLE RepairOrders ADD customer_approval_reference NVARCHAR(200) NULL;
-    IF COL_LENGTH('RepairOrders', 'completion_grade') IS NULL
-      ALTER TABLE RepairOrders ADD completion_grade NVARCHAR(1) NULL;
-    IF COL_LENGTH('RepairOrders', 'completion_status') IS NULL
-      ALTER TABLE RepairOrders ADD completion_status NVARCHAR(30) NULL;
-    IF COL_LENGTH('RepairOrders', 'repair_inspected_by') IS NULL
-      ALTER TABLE RepairOrders ADD repair_inspected_by NVARCHAR(200) NULL;
-    IF COL_LENGTH('RepairOrders', 'repair_inspected_at') IS NULL
-      ALTER TABLE RepairOrders ADD repair_inspected_at DATETIME2 NULL;
-    IF COL_LENGTH('Containers', 'customer_id') IS NULL
-      ALTER TABLE Containers ADD customer_id INT NULL;
-  `);
-}
-
-async function ensureInvoiceDocumentColumns(db: sql.ConnectionPool) {
-  if (process.env.NODE_ENV === 'test') return;
-  await db.request().query(`
-    IF COL_LENGTH('Invoices', 'ref_invoice_id') IS NULL
-      ALTER TABLE Invoices ADD ref_invoice_id INT NULL;
-    IF COL_LENGTH('Invoices', 'replaces_invoice_id') IS NULL
-      ALTER TABLE Invoices ADD replaces_invoice_id INT NULL;
-    IF COL_LENGTH('Invoices', 'document_type') IS NULL
-      ALTER TABLE Invoices ADD document_type NVARCHAR(30) NULL;
-    IF COL_LENGTH('Invoices', 'balance_amount') IS NULL
-      ALTER TABLE Invoices ADD balance_amount DECIMAL(12,2) NULL;
-  `);
-}
-
 function parseDamageDetails(value: unknown) {
   if (!value) return null;
   if (typeof value !== 'string') return value;
@@ -146,7 +92,6 @@ async function createMnrInvoiceIfNeeded({
   const customerId = Number(order.billing_customer_id || order.customer_id || order.container_customer_id || 0);
   if (!customerId) return null;
 
-  await ensureInvoiceDocumentColumns(db);
   const invNumber = await nextDocumentNumber({
     db,
     yardId: Number(order.yard_id),
@@ -216,7 +161,6 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
 
     const db = await getDb();
-    await ensureMnrColumns(db);
     const req = db.request();
     const conditions: string[] = [];
 
@@ -257,7 +201,6 @@ export async function POST(request: NextRequest) {
     }
     const body = parsed.data;
     const db = await getDb();
-    await ensureMnrColumns(db);
 
     const eorNumber = await nextDocumentNumber({
       db,
@@ -346,7 +289,6 @@ export async function PUT(request: NextRequest) {
     } = parsed.data;
 
     const db = await getDb();
-    await ensureMnrColumns(db);
 
     // Get order info for audit + container status
     const orderInfo = await db.request()
