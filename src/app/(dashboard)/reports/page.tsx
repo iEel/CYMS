@@ -8,7 +8,7 @@ import {
   Loader2, BarChart3, Wrench, Package,
   FileSpreadsheet, TrendingDown, TrendingUp,
   AlertTriangle, CheckCircle2, Clock, RefreshCw,
-  FileCheck2, ExternalLink, Ban,
+  FileCheck2, ExternalLink, Ban, Thermometer,
 } from 'lucide-react';
 
 // ── Types ──
@@ -86,6 +86,56 @@ interface DocumentConsistencyData {
   checks: DocumentConsistencyCheck[];
 }
 
+interface ReeferReportSummary {
+  total_rf: number;
+  normal_count: number;
+  out_of_range_count: number;
+  unreadable_count: number;
+  power_issue_count: number;
+  not_checked_count: number;
+  active_exceptions: number;
+  compliance_rate: number;
+}
+
+interface ReeferTrend {
+  check_date: string;
+  total_checks: number;
+  normal_count: number;
+  exception_count: number;
+  compliance_rate: number;
+}
+
+interface ReeferExceptionRow {
+  exception_id: number;
+  container_number: string;
+  severity: string;
+  status: string;
+  reason: string;
+  recommended_action?: string;
+  age_hours: number;
+  zone_name?: string;
+  measured_temp_c?: number | null;
+  set_point_c?: number | null;
+  checked_at?: string | null;
+}
+
+interface ReeferCustomerRow {
+  customer_name: string;
+  container_count: number;
+  exception_count: number;
+  avg_temp_c?: number | null;
+}
+
+interface ReeferReportData {
+  summary: ReeferReportSummary;
+  trend: ReeferTrend[];
+  openExceptions: ReeferExceptionRow[];
+  byCustomer: ReeferCustomerRow[];
+  dateFrom: string;
+  dateTo: string;
+  generatedAt: string;
+}
+
 // ── Constants ──
 
 const STATUS_TH: Record<string, string> = {
@@ -108,6 +158,11 @@ const labelClass = 'block text-xs font-medium text-slate-500 dark:text-slate-400
 
 function formatCurrency(n: number) {
   return `฿${(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatTemp(value?: number | null) {
+  if (value === null || value === undefined) return '-';
+  return `${Number(value).toFixed(1)}°C`;
 }
 
 function issueRowKey(issueCode: string, row: Record<string, unknown>) {
@@ -860,12 +915,193 @@ function DocumentConsistencyTab({ yardId }: { yardId: number }) {
 }
 
 // ════════════════════════════════════════════════════════════════
+// REEFER COMPLIANCE TAB
+// ════════════════════════════════════════════════════════════════
+
+function ReeferComplianceTab({ yardId }: { yardId: number }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ReeferReportData | null>(null);
+  const [dateFrom, setDateFrom] = useState(weekAgo);
+  const [dateTo, setDateTo] = useState(today);
+  const { toast } = useToast();
+
+  const fetchReport = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ yard_id: String(yardId), date_from: dateFrom, date_to: dateTo });
+      const res = await fetch(`/api/reports/reefer?${params}`);
+      const body = await res.json();
+      if (!res.ok || body.error) throw new Error(body.error || 'Failed to load report');
+      setData(body);
+    } catch {
+      toast('error', 'โหลดรายงาน Reefer Compliance ล้มเหลว');
+    } finally {
+      setLoading(false);
+    }
+  }, [yardId, dateFrom, dateTo, toast]);
+
+  useEffect(() => { fetchReport(); }, [fetchReport]);
+
+  const summary = data?.summary;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className={labelClass}>ตั้งแต่</label>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>ถึง</label>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputClass} />
+        </div>
+        <button onClick={fetchReport} disabled={loading}
+          className="h-10 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-all">
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          รีเฟรช
+        </button>
+        {data?.generatedAt && <p className="text-xs text-slate-400">อัปเดตล่าสุด {formatDate(data.generatedAt)}</p>}
+      </div>
+
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KPICard label="Reefer Compliance" value={`${Number(summary.compliance_rate || 0).toFixed(1)}%`} sub="latest check ปกติ" icon={<Thermometer size={20} />} color={summary.compliance_rate >= 95 ? 'emerald' : summary.compliance_rate >= 80 ? 'amber' : 'rose'} />
+          <KPICard label="ตู้ RF ในลาน" value={summary.total_rf || 0} icon={<Package size={20} />} color="blue" />
+          <KPICard label="Exception เปิด" value={summary.active_exceptions || 0} icon={<AlertTriangle size={20} />} color={summary.active_exceptions > 0 ? 'rose' : 'emerald'} />
+          <KPICard label="ยังไม่เคยตรวจ" value={summary.not_checked_count || 0} icon={<Clock size={20} />} color={summary.not_checked_count > 0 ? 'amber' : 'emerald'} />
+        </div>
+      )}
+
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-xs text-slate-400">ปกติ</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-600">{summary.normal_count || 0}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-xs text-slate-400">นอกช่วง</p>
+            <p className="mt-1 text-2xl font-bold text-rose-600">{summary.out_of_range_count || 0}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-xs text-slate-400">อ่านค่าไม่ได้</p>
+            <p className="mt-1 text-2xl font-bold text-amber-600">{summary.unreadable_count || 0}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-xs text-slate-400">ไฟ/ปลั๊กมีปัญหา</p>
+            <p className="mt-1 text-2xl font-bold text-orange-600">{summary.power_issue_count || 0}</p>
+          </div>
+        </div>
+      )}
+
+      {data?.trend && data.trend.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+            <TrendingUp size={16} className="text-blue-500" />
+            <h3 className="font-semibold text-slate-700 dark:text-white text-sm">Compliance Trend</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">วันที่</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">ตรวจทั้งหมด</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">ปกติ</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Exception</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Compliance</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                {data.trend.map(row => (
+                  <tr key={row.check_date} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <td className="px-4 py-2.5 text-slate-700 dark:text-slate-200">{formatDate(row.check_date)}</td>
+                    <td className="px-4 py-2.5 text-center text-slate-600 dark:text-slate-300">{row.total_checks}</td>
+                    <td className="px-4 py-2.5 text-center text-emerald-600 font-semibold">{row.normal_count}</td>
+                    <td className="px-4 py-2.5 text-center text-rose-600 font-semibold">{row.exception_count}</td>
+                    <td className="px-4 py-2.5 text-center font-semibold text-slate-800 dark:text-white">{Number(row.compliance_rate || 0).toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {data?.openExceptions && data.openExceptions.length > 0 && (
+        <div className="rounded-xl border border-rose-200 bg-white dark:border-rose-800 dark:bg-slate-800 overflow-hidden">
+          <div className="px-4 py-3 border-b border-rose-100 bg-rose-50 dark:border-rose-800 dark:bg-rose-900/10 flex items-center gap-2">
+            <AlertTriangle size={16} className="text-rose-500" />
+            <h3 className="font-semibold text-rose-700 dark:text-rose-300 text-sm">Open Reefer Exceptions</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">เลขตู้</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">สาเหตุ</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Temp</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">อายุ</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                {data.openExceptions.map(row => (
+                  <tr key={row.exception_id} className="hover:bg-rose-50 dark:hover:bg-rose-900/10">
+                    <td className="px-4 py-2.5">
+                      <p className="font-mono font-bold text-slate-800 dark:text-white">{row.container_number}</p>
+                      <p className="text-[11px] text-slate-400">{row.zone_name || '-'} · {row.severity}</p>
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">{row.reason}</td>
+                    <td className="px-4 py-2.5 text-center text-slate-700 dark:text-slate-200">{formatTemp(row.measured_temp_c)} / {formatTemp(row.set_point_c)}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">{row.age_hours || 0} ชม.</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-slate-500">{row.recommended_action || 'ตรวจสอบและปิด exception'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {data?.byCustomer && data.byCustomer.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+          <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-white">สรุปตามลูกค้า</h3>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {data.byCustomer.map(row => (
+              <div key={row.customer_name} className="rounded-lg border border-slate-100 p-3 dark:border-slate-700">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white">{row.customer_name}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${row.exception_count > 0 ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'}`}>
+                    {row.exception_count || 0} exception
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">RF {row.container_count || 0} ตู้ · Avg {formatTemp(row.avg_temp_c)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && data && (!data.trend || data.trend.length === 0) && (!data.openExceptions || data.openExceptions.length === 0) && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center dark:border-emerald-800 dark:bg-emerald-900/20">
+          <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-600" />
+          <p className="font-semibold text-emerald-700 dark:text-emerald-300">ไม่พบ exception เปิด และยังไม่มี check ในช่วงวันที่เลือก</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════
 
 export default function ReportsPage() {
   const { session, hasPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState<'dwell' | 'mnr' | 'reconciliation' | 'documents'>('dwell');
+  const [activeTab, setActiveTab] = useState<'dwell' | 'mnr' | 'reconciliation' | 'documents' | 'reefer'>('dwell');
   const yardId = session?.activeYardId || 1;
   const canViewReports = hasPermission('reports.view');
 
@@ -874,6 +1110,7 @@ export default function ReportsPage() {
     { id: 'mnr' as const, label: '🔧 M&R Report', icon: <Wrench size={15} /> },
     { id: 'reconciliation' as const, label: '⚠️ Reconciliation', icon: <AlertTriangle size={15} /> },
     { id: 'documents' as const, label: 'Document Check', icon: <FileCheck2 size={15} /> },
+    { id: 'reefer' as const, label: 'Reefer Compliance', icon: <Thermometer size={15} /> },
   ];
 
   if (!canViewReports) {
@@ -885,7 +1122,7 @@ export default function ReportsPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-white">รายงาน (Reports)</h1>
-            <p className="text-xs text-slate-400">Container Dwell Report · M&R Report · Reconciliation · Document Check</p>
+            <p className="text-xs text-slate-400">Container Dwell Report · M&R Report · Reconciliation · Document Check · Reefer Compliance</p>
           </div>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
@@ -904,7 +1141,7 @@ export default function ReportsPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-800 dark:text-white">รายงาน (Reports)</h1>
-          <p className="text-xs text-slate-400">Container Dwell Report · M&R Report · Reconciliation · Document Check</p>
+          <p className="text-xs text-slate-400">Container Dwell Report · M&R Report · Reconciliation · Document Check · Reefer Compliance</p>
         </div>
       </div>
 
@@ -928,6 +1165,7 @@ export default function ReportsPage() {
       {activeTab === 'mnr' && <MnRReportTab yardId={yardId} />}
       {activeTab === 'reconciliation' && <ReconciliationReportTab yardId={yardId} />}
       {activeTab === 'documents' && <DocumentConsistencyTab yardId={yardId} />}
+      {activeTab === 'reefer' && <ReeferComplianceTab yardId={yardId} />}
     </div>
   );
 }

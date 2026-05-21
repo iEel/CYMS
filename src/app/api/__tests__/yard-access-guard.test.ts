@@ -30,6 +30,7 @@ const yardScopedRoutes = [
   'src/app/api/reports/dwell/route.ts',
   'src/app/api/reports/gate/route.ts',
   'src/app/api/reports/mnr/route.ts',
+  'src/app/api/reports/reefer/route.ts',
   'src/app/api/reports/reconciliation/route.ts',
   'src/app/api/search/route.ts',
   'src/app/api/settings/storage-rates/route.ts',
