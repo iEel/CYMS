@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useToast } from '@/components/providers/ToastProvider';
 import {
   Search,
   Bell,
@@ -41,6 +42,7 @@ interface SearchResult {
 
 export default function Topbar() {
   const { session, switchYard } = useAuth();
+  const { toast } = useToast();
   const router = useRouter();
   const [isDark, setIsDark] = useState(false);
   const [isHighContrast, setIsHighContrast] = useState(false);
@@ -87,6 +89,27 @@ export default function Topbar() {
     // NFR1 — Initialize offline sync
     initOfflineSync();
   }, []);
+
+  useEffect(() => {
+    const onQueued = (event: Event) => {
+      const detail = (event as CustomEvent<{ operation?: string }>).detail;
+      toast('info', 'บันทึกเข้าคิวออฟไลน์', detail?.operation || 'ระบบจะซิงค์เมื่อออนไลน์');
+    };
+    const onSync = (event: Event) => {
+      const detail = (event as CustomEvent<{ success: number; failed: number; conflict: number }>).detail;
+      if (detail?.conflict > 0) {
+        toast('warning', 'ซิงค์บางรายการมี conflict', `สำเร็จ ${detail.success} / conflict ${detail.conflict}`);
+      } else if (detail?.success > 0) {
+        toast('success', 'ซิงค์งานออฟไลน์แล้ว', `${detail.success} รายการ`);
+      }
+    };
+    window.addEventListener('cyms:queued', onQueued);
+    window.addEventListener('cyms:sync', onSync);
+    return () => {
+      window.removeEventListener('cyms:queued', onQueued);
+      window.removeEventListener('cyms:sync', onSync);
+    };
+  }, [toast]);
 
   useEffect(() => {
     if (!session?.userId) return;

@@ -11,6 +11,7 @@ import CameraOCR from '@/components/gate/CameraOCR';
 import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 import { buildGateOutWorkflow } from '@/lib/gateWorkflow';
+import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
 
 interface GateOutTabProps {
@@ -363,7 +364,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     if (!selectedContainer) return;
     setReleaseLoading(true);
     try {
-      const res = await fetch('/api/operations', {
+      const res = await offlineFetch('/api/operations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -377,8 +378,18 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           priority: 3,
           notes: `Gate-Out → ดึงตู้ ${selectedContainer.container_number} จาก Zone ${selectedContainer.zone_name || '-'} B${selectedContainer.bay}-R${selectedContainer.row}-T${selectedContainer.tier} ไปที่ประตู${gateOutForm.truck_plate ? ` | 🚛 ${gateOutForm.truck_plate}` : ''}${gateOutForm.driver_name ? ` | 👤 ${gateOutForm.driver_name}` : ''}`,
         }),
-      });
+      }, { operation: 'gate_out_pickup_request' });
       const data = await res.json();
+      if (isOfflineQueuedResponse(data)) {
+        try {
+          localStorage.setItem(
+            `gateout_driver_${selectedContainer.container_number}`,
+            JSON.stringify(gateOutForm)
+          );
+        } catch { /* ignore */ }
+        setGateOutPhase('pending_pickup');
+        return;
+      }
       if (data.success) {
         try {
           localStorage.setItem(
@@ -399,7 +410,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     setGateOutLoading(true);
     setGateOutResult(null);
     try {
-      const res = await fetch('/api/gate', {
+      const res = await offlineFetch('/api/gate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -413,8 +424,25 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           ...(gateOutPhotos.length > 0 ? { damage_report: { exit_photos: gateOutPhotos } } : {}),
           ...gateOutForm,
         }),
-      });
+      }, { operation: 'gate_out' });
       const data = await res.json();
+      if (isOfflineQueuedResponse(data)) {
+        setGateOutResult({ success: true, message: `บันทึก Gate-Out ${selectedContainer.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
+        try { localStorage.removeItem(`gateout_driver_${selectedContainer.container_number}`); } catch { /* ignore */ }
+        setSelectedContainer(null);
+        setSearchResults([]);
+        setSearchQuery('');
+        setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
+        setGateOutPhotos([]);
+        setGateOutPhase('search');
+        setBillingData(null);
+        setBillingPaid(false);
+        setBillingClearance(null);
+        setBillingInvoiceNumber('');
+        setBillingInvoiceId(null);
+        setTimeout(() => setGateOutResult(null), 15000);
+        return;
+      }
       if (data.success) {
         setGateOutResult({ success: true, message: `✅ ปล่อยตู้ ${selectedContainer.container_number} ออกจากลานสำเร็จ`, eir_number: data.eir_number });
         try { localStorage.removeItem(`gateout_driver_${selectedContainer.container_number}`); } catch { /* ignore */ }

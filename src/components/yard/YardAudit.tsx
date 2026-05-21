@@ -5,6 +5,7 @@ import {
   ClipboardCheck, CheckCircle2, AlertTriangle, XCircle, MapPin, Loader2, RotateCcw,
   Pencil, Save, X, ArrowLeftRight, Upload, History, ChevronDown,
 } from 'lucide-react';
+import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 
 interface AuditContainer {
   container_id: number;
@@ -128,7 +129,7 @@ export default function YardAudit({ yardId, zones }: Props) {
         found: checkedIds.has(c.container_id),
       }));
 
-      const res = await fetch('/api/yard/audit', {
+      const res = await offlineFetch('/api/yard/audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -136,12 +137,15 @@ export default function YardAudit({ yardId, zones }: Props) {
           yard_id: yardId,
           audited_containers: auditedContainers,
         }),
-      });
+      }, { operation: 'yard_audit' });
       const data = await res.json();
+      if (isOfflineQueuedResponse(data)) {
+        setSubmitResult(`บันทึกผลตรวจนับเข้าคิวออฟไลน์แล้ว — ตรง ${matched}/${total} และจะซิงค์เมื่อออนไลน์`);
+      } else
       if (data.success) {
         setSubmitResult(`✅ บันทึกผลตรวจนับสำเร็จ — ตรง ${data.results.matched} | ผิด ${data.results.misplaced} | ไม่พบ ${data.not_found_count}`);
         // Log the audit
-        await fetch('/api/yard/audit-log', {
+        await offlineFetch('/api/yard/audit-log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -151,7 +155,7 @@ export default function YardAudit({ yardId, zones }: Props) {
             entity_id: selectedZone,
             details: JSON.stringify({ zone_id: selectedZone, matched, total, not_found: total - matched }),
           }),
-        });
+        }, { operation: 'yard_audit_log' });
       } else {
         setSubmitResult('❌ ไม่สามารถบันทึกผลได้');
       }
@@ -204,7 +208,7 @@ export default function YardAudit({ yardId, zones }: Props) {
   };
 
   const doSavePosition = async (containerId: number, bay: number, row: number, tier: number, originalContainer: AuditContainer) => {
-    const res = await fetch('/api/containers', {
+    const res = await offlineFetch('/api/containers', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -214,11 +218,11 @@ export default function YardAudit({ yardId, zones }: Props) {
         yard_id: yardId,
         zone_id: selectedZone,
       }),
-    });
+    }, { operation: 'yard_position_update' });
     const data = await res.json();
-    if (data.success) {
+    if (isOfflineQueuedResponse(data) || data.success) {
       // Log the change
-      await fetch('/api/yard/audit-log', {
+      await offlineFetch('/api/yard/audit-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -232,7 +236,7 @@ export default function YardAudit({ yardId, zones }: Props) {
             to: { bay, row, tier },
           }),
         }),
-      });
+      }, { operation: 'yard_audit_log' });
 
       // Update local state
       setContainers(prev => prev.map(ct =>
@@ -252,7 +256,7 @@ export default function YardAudit({ yardId, zones }: Props) {
       const { targetContainer, existingContainer, newPosition } = conflict;
 
       // 1. ย้ายตู้เดิม → ตำแหน่งของตู้ target
-      await fetch('/api/containers', {
+      await offlineFetch('/api/containers', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -264,13 +268,13 @@ export default function YardAudit({ yardId, zones }: Props) {
           yard_id: yardId,
           zone_id: selectedZone,
         }),
-      });
+      }, { operation: 'yard_position_swap' });
 
       // 2. ย้ายตู้ target → ตำแหน่งใหม่
       await doSavePosition(targetContainer.container_id, newPosition.bay, newPosition.row, newPosition.tier, targetContainer);
 
       // Log swap
-      await fetch('/api/yard/audit-log', {
+      await offlineFetch('/api/yard/audit-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -285,7 +289,7 @@ export default function YardAudit({ yardId, zones }: Props) {
             ],
           }),
         }),
-      });
+      }, { operation: 'yard_audit_log' });
 
       // Update local
       setContainers(prev => prev.map(ct => {
@@ -308,7 +312,7 @@ export default function YardAudit({ yardId, zones }: Props) {
       const { targetContainer, existingContainer, newPosition } = conflict;
 
       // 1. ยกตู้เดิมออก (set bay/row/tier = null)
-      await fetch('/api/containers', {
+      await offlineFetch('/api/containers', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -318,13 +322,13 @@ export default function YardAudit({ yardId, zones }: Props) {
           yard_id: yardId,
           zone_id: selectedZone,
         }),
-      });
+      }, { operation: 'yard_position_float' });
 
       // 2. ย้ายตู้ target → ตำแหน่งใหม่
       await doSavePosition(targetContainer.container_id, newPosition.bay, newPosition.row, newPosition.tier, targetContainer);
 
       // Log float
-      await fetch('/api/yard/audit-log', {
+      await offlineFetch('/api/yard/audit-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -337,7 +341,7 @@ export default function YardAudit({ yardId, zones }: Props) {
             reason: `ถูกแทนที่โดย ${targetContainer.container_number}`,
           }),
         }),
-      });
+      }, { operation: 'yard_audit_log' });
 
       setConflict(null);
     } catch (err) { console.error(err); setEditError('Float ล้มเหลว'); }

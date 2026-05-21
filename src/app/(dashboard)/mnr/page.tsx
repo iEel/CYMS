@@ -11,6 +11,7 @@ import {
   Printer, Link2,
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 
 interface EORRow {
   eor_id: number; eor_number: string; container_number: string;
@@ -104,12 +105,13 @@ function readFileAsDataUrl(file: File): Promise<string> {
 async function uploadMnrPhoto(file: File, category: string): Promise<string> {
   const dataUrl = await readFileAsDataUrl(file);
   try {
-    const res = await fetch('/api/uploads', {
+    const res = await offlineFetch('/api/uploads', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: dataUrl, folder: 'mnr', filename_prefix: category }),
-    });
+    }, { operation: 'mnr_photo_upload' });
     const json = await res.json();
+    if (isOfflineQueuedResponse(json)) return dataUrl;
     return json.success && json.url ? json.url : dataUrl;
   } catch {
     return dataUrl;
@@ -418,7 +420,7 @@ export default function MnRPage() {
           snapshot_at: new Date().toISOString(),
         } : null;
       }).filter(Boolean);
-      const res = await fetch('/api/mnr', {
+      const res = await offlineFetch('/api/mnr', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           container_id: selectedContainer.container_id, yard_id: yardId,
@@ -440,9 +442,12 @@ export default function MnRPage() {
           notes: eorNotes || null,
           user_id: session?.userId || null,
         }),
-      });
+      }, { operation: 'mnr_create_eor' });
       const data = await res.json();
-      if (data.success) {
+      if (isOfflineQueuedResponse(data)) {
+        setCreateResult({ success: true, message: `บันทึก EOR เข้าคิวออฟไลน์แล้ว — ราคาประเมิน ฿${estimatedCost.toLocaleString()} (พร้อมรูปถ่าย ${allRepairPhotos.length} รูป)` });
+        setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]); setRepairPhotoEvidence({}); setRepairEvidenceEnabled(false); setBillingCustomerId(''); setEorNotes(''); setSourceEirNumber(''); setSourceDamagePoints([]);
+      } else if (data.success) {
         setCreateResult({ success: true, message: `✅ สร้าง EOR ${data.eor_number} สำเร็จ — ราคาประเมิน ฿${estimatedCost.toLocaleString()} (พร้อมรูปถ่าย ${allRepairPhotos.length} รูป)` });
         setSelectedContainer(null); setSelectedCodes([]); setRepairPhotos([]); setRepairPhotoEvidence({}); setRepairEvidenceEnabled(false); setBillingCustomerId(''); setEorNotes(''); setSourceEirNumber(''); setSourceDamagePoints([]);
       } else {
@@ -533,10 +538,15 @@ export default function MnRPage() {
       (['approve', 'reject', 'customer_approve'].includes(action) && canApproveEor) ||
       (['start_repair', 'complete'].includes(action) && canUpdateEor);
     if (!allowed) return;
-    await fetch('/api/mnr', {
+    const res = await offlineFetch('/api/mnr', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ eor_id: eorId, action, user_id: session?.userId || null, ...payload }),
-    });
+    }, { operation: `mnr_${action}` });
+    const data = await res.json().catch(() => null);
+    if (data && isOfflineQueuedResponse(data)) {
+      toast('info', 'บันทึกงาน M&R เข้าคิวออฟไลน์', 'ระบบจะซิงค์เมื่อกลับมาออนไลน์');
+      return;
+    }
     fetchOrders();
   };
 

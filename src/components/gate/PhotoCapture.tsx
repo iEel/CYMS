@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useToast } from '@/components/providers/ToastProvider';
 import { Camera, Upload, X, Loader2 } from 'lucide-react';
+import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 
 interface PhotoCaptureProps {
   label: string;
@@ -12,14 +13,15 @@ interface PhotoCaptureProps {
   folder?: string;
 }
 
-async function uploadPhoto(dataUrl: string, folder: string): Promise<string> {
-  const res = await fetch('/api/uploads', {
+async function uploadPhoto(dataUrl: string, folder: string): Promise<{ url: string; queued: boolean }> {
+  const res = await offlineFetch('/api/uploads', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ data: dataUrl, folder }),
-  });
+  }, { operation: 'photo_upload' });
   const data = await res.json();
-  if (data.success) return data.url;
+  if (isOfflineQueuedResponse(data)) return { url: dataUrl, queued: true };
+  if (data.success) return { url: data.url, queued: false };
   throw new Error(data.error || 'Upload failed');
 }
 
@@ -59,9 +61,10 @@ export default function PhotoCapture({ label, required, onCapture, value, folder
     setPreview(dataUrl); // Show preview immediately
     setUploading(true);
     try {
-      const url = await uploadPhoto(dataUrl, folder);
+      const { url, queued } = await uploadPhoto(dataUrl, folder);
       setPreview(url); // Switch to server URL
       onCapture(url);
+      if (queued) toast('info', 'รูปถูกบันทึกเข้าคิวออฟไลน์', 'ระบบจะอัปโหลดเมื่อกลับมาออนไลน์');
     } catch (err) {
       console.error('Upload failed:', err);
       // Fallback: use base64 if upload fails
@@ -69,7 +72,7 @@ export default function PhotoCapture({ label, required, onCapture, value, folder
     } finally {
       setUploading(false);
     }
-  }, [folder, onCapture]);
+  }, [folder, onCapture, toast]);
 
   const capture = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;

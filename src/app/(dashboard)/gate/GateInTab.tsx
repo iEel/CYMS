@@ -17,6 +17,7 @@ import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 import type { EvidencePhoto, PhotoCompleteness, PhotoRequirement } from '@/lib/photoEvidence';
 import { buildGateInWorkflow } from '@/lib/gateWorkflow';
+import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
 
 interface GateInTabProps {
@@ -364,7 +365,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     setGateInLoading(true);
     setGateInResult(null);
     try {
-      const res = await fetch('/api/gate', {
+      const res = await offlineFetch('/api/gate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -378,8 +379,18 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           billing_clearance_id: gateInClearance?.clearance_id || undefined,
           damage_report: inspectionReport || null,
         }),
-      });
+      }, { operation: 'gate_in' });
       const data = await res.json();
+      if (isOfflineQueuedResponse(data)) {
+        setGateInResult({ success: true, message: `บันทึก Gate-In ${gateInForm.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
+        setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '' });
+        setGateInClearance(null);
+        setInspectionReport(null);
+        setBoxtechResult(null);
+        setContainerValid(null);
+        setTimeout(() => setGateInResult(null), 15000);
+        return;
+      }
       if (data.success) {
         if (boxtechResult?.unknown_prefix) {
           fetch('/api/yard/audit-log', {
