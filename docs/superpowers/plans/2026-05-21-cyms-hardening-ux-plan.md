@@ -97,19 +97,19 @@ Run targeted tests, lint/build as needed, update handoff, commit `Add hard appro
 - Create/Modify: `src/app/api/portal/grants/reconcile/route.ts` or admin settings route
 - Test: `src/lib/__tests__/portalGrantReconciler.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Test missing booking/container/invoice grants and stale inactive grants detection.
 
-- [ ] **Step 2: Implement reconciler**
+- [x] **Step 2: Implement reconciler**
 
 Build SQL that previews missing/stale grants and can repair them using existing source-of-truth tables.
 
-- [ ] **Step 3: Add admin-only API**
+- [x] **Step 3: Add admin-only API**
 
 Expose preview and repair actions to yard managers only, with audit logging.
 
-- [ ] **Step 4: Verify, document, commit**
+- [x] **Step 4: Verify, document, commit**
 
 Run tests, lint, update handoff, commit `Add portal grant reconciler`.
 

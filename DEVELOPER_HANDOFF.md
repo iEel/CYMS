@@ -266,7 +266,8 @@ container-yard-system/
 │   │       │   ├── eir-pdf/route.ts         # Portal-scoped EIR PDF via gate/container grants
 │   │       │   ├── invoice-pdf/route.ts     # Portal-scoped invoice/receipt/CN PDF via invoice grants
 │   │       │   ├── document-bundle/route.ts # ZIP bundle: statement + invoice/EIR download index via grants
-│   │       │   └── disputes/route.ts        # POST invoice dispute request via invoice grants
+│   │       │   ├── disputes/route.ts        # POST invoice dispute request via invoice grants
+│   │       │   └── grants/reconcile/route.ts # Admin preview/repair PortalEntityAccess grants
 │   │       ├── reports/
 │   │       │   ├── dwell/route.ts           # **📊 GET Container Dwell Report** — by shipping line (avg/max/min dwell) + overdue list (>${overdueDays}d) + distribution buckets (7/14/30d)
 │   │       │   ├── mnr/route.ts             # **📊 GET M&R Report** — EOR summary KPIs + by status + 6-month trend + full EOR list with date range filter
@@ -359,6 +360,7 @@ container-yard-system/
 │       ├── audit.ts              # **🔐 Centralized logAudit()** — non-fatal AuditLog INSERT
 │       ├── portalEntityAccess.ts # Non-fatal upsert helper for PortalEntityAccess grants
 │       ├── portalAccess.ts       # Customer Portal access grants SQL helpers (PortalEntityAccess)
+│       ├── portalGrantReconciler.ts # Admin preview/repair missing/stale PortalEntityAccess grants
 │       ├── portalBooking.ts      # Customer Portal booking ETA + empty-return instruction helpers
 │       ├── portalDocumentBundle.ts # Statement/invoice/EIR bundle index entries
 │       ├── zipArchive.ts         # Small no-dependency ZIP writer for portal bundles
@@ -381,6 +383,7 @@ container-yard-system/
 │           ├── offlineQueue.test.ts        # Offline queue request classification + queued payload helpers
 │           ├── yardPlanning.test.ts        # Slot aging heatmap, move recommendation, release forecast
 │           ├── portalEntityAccess.test.ts  # PortalEntityAccess upsert helper + non-fatal failure
+│           ├── portalGrantReconciler.test.ts # PortalEntityAccess preview/repair source-of-truth SQL
 │           ├── portalBooking.test.ts       # Portal ETA status + empty-return instruction helpers
 │           ├── portalDocumentBundle.test.ts # Bundle entries + ZIP archive smoke test
 │           └── rateLimit.test.ts            # store clearing + stats + client IP extraction (14 tests)
@@ -1291,8 +1294,9 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Helper กลาง** — `src/lib/portalAccess.ts` เพิ่ม `portalEntityAccessSql`, `portalBookingVisibilitySql`, `portalInvoiceVisibilitySql`, `portalContainerVisibilitySql`, `portalGateVisibilitySql`
 - [x] **Write-time grants** — `portalEntityAccess.ts` upsert grant แบบ non-fatal ตอนสร้าง/แก้ booking, ผูกตู้กับ booking, สร้าง invoice/credit note/revised invoice, และสร้าง GateTransaction เพื่อให้ข้อมูลใหม่เห็นใน portal โดยไม่ต้อง rerun migration
 - [x] **Portal APIs updated** — `api/portal/containers`, `overview`, `bookings`, `bookings/detail`, `invoices`, `statement`, `eir-pdf`, `invoice-pdf`, `document-bundle`, `disputes` ใช้ grant table แทน direct `customer_id` / owner/billing SQL
+- [x] **Admin reconciler** — เพิ่ม `src/lib/portalGrantReconciler.ts` + `GET/POST /api/portal/grants/reconcile` สำหรับ `yard_manager` เท่านั้น: preview missing/stale grants แล้ว repair โดย insert grants ที่ควรมี และ deactivate เฉพาะ stale grants ที่มาจาก managed source tables (`Bookings`, `BookingContainers`, `Containers`, `GateTransactions`, `Invoices`) พร้อม audit `portal_grants_reconcile_repair`
 - [x] **Migration รันแล้วบน DB จริง** — `node scripts/migrate-runtime-core-schema.js` ผ่านหลัง aggregate duplicate container grants ให้เหลือหนึ่ง grant ต่อ `(customer, entity, role)`
-- [x] **Tests เพิ่มเติม** — `portalAccess.test.ts`, `portalEntityAccess.test.ts`, `portal-containers.test.ts`, `portal-bookings.test.ts`, `portal-features.test.ts` ครอบคลุม grant-based SQL, write-time grant helper และ portal route policy
+- [x] **Tests เพิ่มเติม** — `portalAccess.test.ts`, `portalEntityAccess.test.ts`, `portalGrantReconciler.test.ts`, `portal-containers.test.ts`, `portal-bookings.test.ts`, `portal-features.test.ts`, `portal-grant-reconcile.test.ts` ครอบคลุม grant-based SQL, write-time grant helper, reconciler และ portal route policy
 - ทำหน้า configurable policy ภายหลังเมื่อมี use case จริง เช่น shipping line/forwarder/trucker/shipper ต้องเห็นข้อมูลคนละ scope โดยต้องมี admin-only + audit + preview affected records + default deny
 
 ### 🔄 Portal Enhancements — Auto-refresh & Self-service PDF (✅ เสร็จ)
@@ -1531,6 +1535,27 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 - `npm test -- src/lib/__tests__/approvalReview.test.ts src/app/api/__tests__/hard-approval-gates.test.ts src/app/api/__tests__/api-auth-coverage.test.ts --runInBand` ✅ (30 tests)
 - `npm run lint` ✅
 - `npx tsc --noEmit --pretty false` ยัง fail จาก test type drift เดิมใน `portal-features.test.ts` และ `customerBranches.test.ts`
+
+### 🔁 Portal Grant Reconciler/Admin Repair (✅ เสร็จ — 21 พ.ค. 2569)
+
+**ไฟล์ที่เกี่ยวข้อง:**
+- `src/lib/portalGrantReconciler.ts`
+- `src/lib/__tests__/portalGrantReconciler.test.ts`
+- `src/app/api/portal/grants/reconcile/route.ts`
+- `src/app/api/__tests__/portal-grant-reconcile.test.ts`
+
+**Policy ที่ใช้ตอนนี้:**
+- ยังใช้ fixed server-side policy ตาม owner/billing/booking/invoice linkage ไม่เปิดหน้า config policy กว้าง ๆ เพื่อลด data leakage
+- Expected grants มาจาก `Bookings.customer_id`, `BookingContainers`, `Containers.container_owner_id`, `GateTransactions.container_owner_id/billing_customer_id`, และ `Invoices.customer_id/container_id`
+- Repair จะ insert เฉพาะ grant ที่ควรมี และ deactivate เฉพาะ active stale grants ที่ `source_table` อยู่ใน managed source tables เท่านั้น เพื่อไม่ไปปิด future/manual grants นอก policy นี้
+
+**Admin API:**
+- `GET /api/portal/grants/reconcile?limit=` — preview `missing` / `stale` grants
+- `POST /api/portal/grants/reconcile?limit=` — repair grants + บันทึก audit `portal_grants_reconcile_repair`
+- ทั้งสอง endpoint จำกัดเฉพาะ `yard_manager` ก่อนเปิด DB connection
+
+**Verify ล่าสุด:**
+- `npm test -- src/lib/__tests__/portalGrantReconciler.test.ts src/app/api/__tests__/portal-grant-reconcile.test.ts --runInBand` ✅ (6 tests)
 
 ---
 
