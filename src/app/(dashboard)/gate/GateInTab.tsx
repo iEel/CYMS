@@ -14,9 +14,11 @@ import PhotoCapture from '@/components/gate/PhotoCapture';
 import SignaturePad from '@/components/gate/SignaturePad';
 import ContainerInspection from '@/components/gate/ContainerInspection';
 import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
+import GateGuardrailPanel from '@/components/gate/GateGuardrailPanel';
 import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 import type { EvidencePhoto, PhotoCompleteness, PhotoRequirement } from '@/lib/photoEvidence';
 import { buildGateInWorkflow } from '@/lib/gateWorkflow';
+import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
 
@@ -134,6 +136,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
 
   const [gateInLoading, setGateInLoading] = useState(false);
   const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string; assigned_location?: { zone_name: string; bay: number; row: number; tier: number; reason: string } } | null>(null);
+  const [recentGateTransactions, setRecentGateTransactions] = useState<GateRecentTransaction[]>([]);
 
   // === Check Digit Validation + Boxtech Auto-Lookup ===
   useEffect(() => {
@@ -217,6 +220,17 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       .then(data => { if (Array.isArray(data)) setCustomerList(data); })
       .catch(err => console.error('Load customers error:', err));
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/gate?yard_id=${yardId}&date=today`, { signal: controller.signal })
+      .then(res => res.json())
+      .then(data => setRecentGateTransactions(Array.isArray(data.transactions) ? data.transactions : []))
+      .catch(err => {
+        if (err.name !== 'AbortError') console.error('Load gate preflight history error:', err);
+      });
+    return () => controller.abort();
+  }, [yardId]);
 
   // Fetch gate-in billing when form has valid data
   useEffect(() => {
@@ -461,6 +475,14 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     showHaltPopup,
   ]);
 
+  const gateInGuardrails = useMemo(() => buildGateOperationalGuardrails({
+    mode: 'gate_in',
+    form: gateInForm,
+    recentTransactions: recentGateTransactions,
+    inspectionCompleteness: inspectionReport?.photo_completeness || null,
+    sealPhotoCaptured: !!sealPhoto,
+  }), [gateInForm, inspectionReport?.photo_completeness, recentGateTransactions, sealPhoto]);
+
   return (
     <>
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -478,6 +500,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
 
         <div className="p-5 space-y-4">
           <GateWorkflowPanel title="Gate-In guided workflow" workflow={gateInWorkflow} />
+          <GateGuardrailPanel title="Gate-In operational guardrails" snapshot={gateInGuardrails} />
 
           {/* Container Info */}
           <div>

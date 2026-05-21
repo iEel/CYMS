@@ -9,8 +9,10 @@ import {
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import CameraOCR from '@/components/gate/CameraOCR';
 import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
+import GateGuardrailPanel from '@/components/gate/GateGuardrailPanel';
 import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 import { buildGateOutWorkflow } from '@/lib/gateWorkflow';
+import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
 
@@ -43,6 +45,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [gateOutPhase, setGateOutPhase] = useState<'search' | 'pending_pickup' | 'confirm_release'>('search');
   const [releaseLoading, setReleaseLoading] = useState(false);
   const [showOCR, setShowOCR] = useState<'plate' | 'seal' | null>(null);
+  const [recentGateTransactions, setRecentGateTransactions] = useState<GateRecentTransaction[]>([]);
 
   // Billing
   const [billingData, setBillingData] = useState<BillingData | null>(null);
@@ -78,6 +81,17 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       .then(data => { if (Array.isArray(data)) setCustomerList(data); })
       .catch(err => console.error('Load customers error:', err));
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/gate?yard_id=${yardId}&date=today`, { signal: controller.signal })
+      .then(res => res.json())
+      .then(data => setRecentGateTransactions(Array.isArray(data.transactions) ? data.transactions : []))
+      .catch(err => {
+        if (err.name !== 'AbortError') console.error('Load gate preflight history error:', err);
+      });
+    return () => controller.abort();
+  }, [yardId]);
 
   // Resolved customer: auto-matched or manually selected
   const resolvedCustomer = useMemo(() => {
@@ -483,6 +497,16 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     submitted: !!gateOutResult?.success,
     canSubmit: canGateOut,
   });
+  const gateOutGuardrails = useMemo(() => buildGateOperationalGuardrails({
+    mode: 'gate_out',
+    form: {
+      ...gateOutForm,
+      container_number: selectedContainer?.container_number,
+    },
+    recentTransactions: recentGateTransactions,
+    exitPhotosCount: gateOutPhotos.length,
+    releasePhase: gateOutPhase,
+  }), [gateOutForm, gateOutPhase, gateOutPhotos.length, recentGateTransactions, selectedContainer?.container_number]);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -500,6 +524,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
 
       <div className="p-5 space-y-4">
         <GateWorkflowPanel title="Gate-Out guided workflow" workflow={gateOutWorkflow} />
+        <GateGuardrailPanel title="Gate-Out operational guardrails" snapshot={gateOutGuardrails} />
 
         {/* Search */}
         <div>
