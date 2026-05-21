@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import {
   Loader2,
@@ -23,6 +23,7 @@ const ContainerTimeline = dynamic(() => import('@/components/containers/Containe
 export default function GatePage() {
   const { session, hasPermission, hasAnyPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<'gate_in' | 'gate_out' | 'history' | 'transfer' | 'report'>('gate_in');
+  const [initialHistorySearch, setInitialHistorySearch] = useState('');
 
   // EIR Preview (shared across tabs)
   const [showEIR, setShowEIR] = useState<string | null>(null);
@@ -43,6 +44,19 @@ export default function GatePage() {
     { id: 'report' as const, label: 'รายงาน', icon: <BarChart3 size={14} />, allowed: canViewEir || canGateIn || canGateOut },
   ].filter(tab => tab.allowed);
   const effectiveTab = gateTabs.some(tab => tab.id === activeTab) ? activeTab : gateTabs[0]?.id;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const queryTab = params.get('tab');
+    const querySearch = params.get('search') || '';
+    if (querySearch) {
+      setInitialHistorySearch(querySearch);
+      setActiveTab('history');
+    }
+    if (queryTab && ['gate_in', 'gate_out', 'history', 'transfer', 'report'].includes(queryTab)) {
+      setActiveTab(queryTab as typeof activeTab);
+    }
+  }, []);
 
   // View EIR — shared callback for all tabs
   const viewEIR = useCallback(async (eirNumber: string) => {
@@ -97,6 +111,7 @@ export default function GatePage() {
         <HistoryTab
           yardId={yardId}
           onViewEIR={viewEIR}
+          initialSearch={initialHistorySearch}
         />
       )}
 

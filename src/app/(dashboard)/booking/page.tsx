@@ -48,6 +48,15 @@ export default function BookingPage() {
   const [bkTotal, setBkTotal] = useState(0);
   const BK_LIMIT = 20;
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const querySearch = params.get('search');
+    if (!querySearch) return;
+    setActiveTab('bookings');
+    setBkSearch(querySearch);
+    setBkPage(1);
+  }, []);
+
   // === Detail / Containers ===
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
   const [bookingContainers, setBookingContainers] = useState<BookingContainerRow[]>([]);

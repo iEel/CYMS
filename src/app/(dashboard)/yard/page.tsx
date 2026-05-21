@@ -134,6 +134,15 @@ export default function YardPage() {
   const canAssignLocation = hasAnyPermission(['yard.location.assign', 'yard.slot.move']);
   const effectiveTab = activeTab === 'allocate' && !canAssignLocation ? 'overview' : activeTab;
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const querySearch = params.get('search');
+    if (!querySearch) return;
+    setSearch(querySearch);
+    setActiveTab('overview');
+    setViewMode('2d');
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       const [statsRes, containersRes] = await Promise.all([

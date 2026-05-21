@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher** (~100%)
 
 ---
 
@@ -243,12 +243,14 @@ container-yard-system/
 │   │       ├── reports/
 │   │       │   ├── dwell/route.ts           # **📊 GET Container Dwell Report** — by shipping line (avg/max/min dwell) + overdue list (>${overdueDays}d) + distribution buckets (7/14/30d)
 │   │       │   └── mnr/route.ts             # **📊 GET M&R Report** — EOR summary KPIs + by status + 6-month trend + full EOR list with date range filter
-│   │       ├── __tests__/                   # **🧪 API Integration Tests** — 48 tests (containers, mnr, reports/dwell, reports/mnr, gate, billing/invoices)
+│   │       ├── search/route.ts              # **GET global search** — containers + gate history + invoices + bookings for Topbar quick jump
+│   │       ├── __tests__/                   # **🧪 API Integration Tests** — covers containers, mnr, reports, gate, billing, no-runtime-DDL, portal, search
 │   │       │   ├── containers.test.ts       # GET (list, position check, filters) + POST (create, UNIQUE)
 │   │       │   ├── mnr.test.ts              # GET + POST (create EOR) + PUT (approve/reject/complete/404)
 │   │       │   ├── reports.test.ts          # GET /reports/dwell + GET /reports/mnr — structure + error handling
 │   │       │   ├── gate.test.ts             # GET (list, date/search filter)
-│   │       │   └── billing.test.ts          # GET (list+stats) + POST (VAT calc) + PUT (pay/issue/cancel)
+│   │       │   ├── billing.test.ts          # GET (list+stats) + POST (VAT calc) + PUT (pay/issue/cancel)
+│   │       │   └── search.test.ts           # GET global search aggregation + yard filter + short query guard
 │   │       ├── settings/
 │   │       │   ├── company/route.ts        # GET/POST company profile (+ branch + logo URL)
 │   │       │   ├── customers/route.ts      # **GET/POST/PUT/DELETE customers** — Multi-role boolean flags + auto customer_code + CustomerBranches CRUD + legacy migration
@@ -269,7 +271,7 @@ container-yard-system/
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── Sidebar.tsx       # Left sidebar (collapsible + role-based menus + **สเมนู 'รายงาน' /reports BarChart3 icon**)
-│   │   │   └── Topbar.tsx        # Top header (**real API search**, yard switcher, **notification bell**, dark/high-contrast toggle)
+│   │   │   └── Topbar.tsx        # Top header (**global search**, real yard switcher, **notification bell**, dark/high-contrast toggle)
 │   │   ├── providers/
 │   │   │   ├── AuthProvider.tsx  # Auth context (login/logout/session)
 │   │   │   └── ToastProvider.tsx # Toast notifications (success/error/warning/info)
@@ -682,12 +684,16 @@ container-yard-system/
 - Fallback: ถ้าอัปโหลดไม่สำเร็จจะ fallback เป็น base64
 - `/public/uploads` อยู่ใน `.gitignore`
 
-### 7.8b Global Search (Topbar)
-- ช่องค้นหาบนสุดค้นหา **จาก API จริง** (`/api/containers?search=`)
-- Debounce 300ms, แสดงสูงสุด 8 ผลลัพธ์
-- แสดง: เลขตู้, ขนาด/ประเภท, สายเรือ, ตำแหน่ง Zone, สถานะ (badge สี)
-- กดเลือก → ไปหน้า Yard Management
-- ไม่พบผลลัพธ์ → แสดงข้อความ "ไม่พบ"
+### 7.8b Global Search + Real Yard Switcher (Topbar) (✅ เสร็จ — 21 พ.ค. 2569)
+- ช่องค้นหาบนสุดใช้ **API กลางใหม่** `GET /api/search?q=&yard_id=&limit=` แทนการยิงเฉพาะ `/api/containers`
+- ค้นหาข้าม 4 entity หลัก: Containers, GateTransactions/EIR, Invoices, Bookings
+- ผลลัพธ์ normalized เป็น `{ id, kind, title, subtitle, meta, status, href }` เพื่อให้ UI แสดง badge/icon และ quick jump ได้สม่ำเสมอ
+- มี short-query guard: คำค้นน้อยกว่า 2 ตัวอักษรคืน `{ results: [] }` และไม่แตะ DB
+- Topbar มี debounce 250ms, loading state, empty state, กด Enter เพื่อเปิดผลลัพธ์แรก, Escape เพื่อปิด dropdown
+- Quick jump อ่าน query string ปลายทางแล้ว: `/yard?search=`, `/gate?tab=history&search=`, `/billing?tab=invoices&invoice_id=`, `/booking?search=`
+- Yard Switcher เปลี่ยนจาก `DEMO_YARDS` เป็นโหลดจาก `/api/settings/yards` จริง แล้วกรองด้วย `session.yardIds`
+- ถ้า active yard ไม่อยู่ในลิสต์ที่ผู้ใช้เข้าถึงได้ ระบบจะสลับไป yard แรกที่เข้าถึงได้อัตโนมัติ
+- Tests: `src/app/api/__tests__/search.test.ts` ครอบคลุม aggregation, yard binding, short query guard, DB error
 
 ### 7.8c Notification Bell (Topbar)
 - กระดิ้งแจ้งเตือนทำงานได้จริง — ดึงกิจกรรมล่าสุดจาก Gate + Work Orders
@@ -1056,7 +1062,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Document number mock alignment** — `billing.test.ts` และ `mnr.test.ts` mock `@/lib/documentNumber.nextDocumentNumber` โดยตรง หลัง production route เปลี่ยนมาใช้ `DocumentSequences`
 - [x] **ลบ query queue เก่า** — test ไม่จำลอง `COUNT(*)` เพื่อออกเลขเอกสารใน route แล้ว จึงไม่ consume mock result ผิดลำดับ
 - [x] **Assertion เพิ่มเติม** — billing ตรวจ `grand_total` จาก VAT 7% และ M&R ตรวจ `order.eor_id` เพื่อให้จับ regression ของ insert output ได้จริง
-- [x] **Full suite กลับมาเขียว** — ล่าสุด `npm test -- --runInBand` ผ่าน 219/219 tests ทั้ง 16 suites
+- [x] **Full suite กลับมาเขียว** — ล่าสุด `npm test -- --runInBand` ผ่าน 348/348 tests ทั้ง 17 suites
 
 ### 🧪 Automated Testing (✅ เสร็จ)
 - [x] **Jest + ts-jest** — ติดตั้งและตั้งค่า Jest สำหรับ Next.js + TypeScript (path alias `@/*`, jose ESM handling)
@@ -1303,7 +1309,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 343/343; billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 348/348; เพิ่ม global search tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1345,7 +1351,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 343/343 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 348/348 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)

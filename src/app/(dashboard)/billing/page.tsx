@@ -122,6 +122,20 @@ export default function BillingPage() {
   const [invPage, setInvPage] = useState(1);
   const invPerPage = 25;
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const queryTab = params.get('tab');
+    const querySearch = params.get('search') || params.get('invoice_id') || '';
+    if (queryTab && ['invoices', 'clearance', 'create', 'tariffs', 'hold', 'documents', 'export', 'reports', 'demurrage', 'ar_aging', 'credit_control'].includes(queryTab)) {
+      setActiveTab(queryTab as typeof activeTab);
+    }
+    if (querySearch) {
+      setActiveTab('invoices');
+      setInvSearch(querySearch);
+      setInvPage(1);
+    }
+  }, []);
+
   // Tariffs
   const [tariffs, setTariffs] = useState<TariffRow[]>([]);
   const [tariffLoading, setTariffLoading] = useState(false);
@@ -313,6 +327,7 @@ export default function BillingPage() {
     const q = invSearch.toLowerCase();
     const matchesSearch = !q ||
       inv.invoice_number?.toLowerCase().includes(q) ||
+      String(inv.invoice_id).includes(q) ||
       inv.customer_name?.toLowerCase().includes(q) ||
       inv.container_number?.toLowerCase().includes(q) ||
       inv.description?.toLowerCase().includes(q);

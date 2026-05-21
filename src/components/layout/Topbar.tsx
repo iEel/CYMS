@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import {
   Search,
@@ -12,22 +14,42 @@ import {
   User,
   X,
   SunDim,
+  Loader2,
+  Package,
+  Truck,
+  Receipt,
+  ClipboardList,
 } from 'lucide-react';
 import { initOfflineSync } from '@/lib/offlineQueue';
 
-// ข้อมูลลานจำลอง
-const DEMO_YARDS = [
-  { yard_id: 1, yard_name: 'ลานตู้สาขาหลัก', yard_code: 'YARD-01' },
-  { yard_id: 2, yard_name: 'ลานตู้สาขา 2', yard_code: 'YARD-02' },
-];
+interface YardOption {
+  yard_id: number;
+  yard_name: string;
+  yard_code: string;
+  is_active?: boolean;
+}
+
+interface SearchResult {
+  id: string;
+  kind: 'container' | 'gate' | 'invoice' | 'booking';
+  title: string;
+  subtitle: string;
+  meta?: string;
+  status?: string;
+  href: string;
+}
 
 export default function Topbar() {
   const { session, switchYard } = useAuth();
+  const router = useRouter();
   const [isDark, setIsDark] = useState(false);
   const [isHighContrast, setIsHighContrast] = useState(false);
   const [yardDropdownOpen, setYardDropdownOpen] = useState(false);
+  const [yards, setYards] = useState<YardOption[]>([]);
+  const [yardsLoading, setYardsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<{ id: string; label: string; type: string; location?: string; status?: string }[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const yardRef = useRef<HTMLDivElement>(null);
@@ -65,6 +87,30 @@ export default function Topbar() {
     // NFR1 — Initialize offline sync
     initOfflineSync();
   }, []);
+
+  useEffect(() => {
+    if (!session?.userId) return;
+    let cancelled = false;
+
+    async function fetchYards() {
+      setYardsLoading(true);
+      try {
+        const res = await fetch('/api/settings/yards');
+        const data = await res.json();
+        if (!cancelled) {
+          setYards(Array.isArray(data) ? data.filter((yard: YardOption) => yard.is_active !== false) : []);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) setYards([]);
+      } finally {
+        if (!cancelled) setYardsLoading(false);
+      }
+    }
+
+    fetchYards();
+    return () => { cancelled = true; };
+  }, [session?.userId]);
 
   // Fetch notifications (รวม last_read_at จาก DB ด้วย)
   const fetchNotifications = useCallback(async () => {
@@ -124,33 +170,42 @@ export default function Topbar() {
     }
   };
 
-  // Real API search with debounce
+  // Global API search with debounce
   useEffect(() => {
-    if (searchQuery.length < 2) {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < 2) {
       setSearchResults([]);
       setShowSearch(false);
+      setIsSearching(false);
       return;
     }
+    let cancelled = false;
     const timer = setTimeout(async () => {
+      setIsSearching(true);
+      setShowSearch(true);
       try {
-        const yardId = session?.activeYardId || 1;
-        const res = await fetch(`/api/containers?yard_id=${yardId}&search=${encodeURIComponent(searchQuery)}`);
+        const params = new URLSearchParams({ q: trimmed, limit: '12' });
+        if (session?.activeYardId) params.set('yard_id', String(session.activeYardId));
+        const res = await fetch(`/api/search?${params.toString()}`);
         const data = await res.json();
-        const results = (Array.isArray(data) ? data : []).slice(0, 8).map((c: {
-          container_id: number; container_number: string; size: string; type: string;
-          shipping_line?: string; zone_name?: string; bay?: number; row?: number; tier?: number; status: string;
-        }) => ({
-          id: String(c.container_id),
-          label: c.container_number,
-          type: `${c.size}'${c.type} • ${c.shipping_line || '-'}`,
-          location: c.zone_name ? `Zone ${c.zone_name} B${c.bay}-R${c.row}-T${c.tier}` : '',
-          status: c.status,
-        }));
-        setSearchResults(results);
-        setShowSearch(results.length > 0);
-      } catch (err) { console.error(err); }
-    }, 300);
-    return () => clearTimeout(timer);
+        if (!cancelled) {
+          setSearchResults(Array.isArray(data.results) ? data.results : []);
+          setShowSearch(true);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setSearchResults([]);
+          setShowSearch(true);
+        }
+      } finally {
+        if (!cancelled) setIsSearching(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [searchQuery, session?.activeYardId]);
 
   // Close dropdowns on outside click
@@ -170,13 +225,62 @@ export default function Topbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const activeYard = DEMO_YARDS.find(y => y.yard_id === session?.activeYardId);
+  const accessibleYards = useMemo(() => {
+    const allowed = session?.yardIds || [];
+    return yards.filter(yard => allowed.length === 0 || allowed.includes(yard.yard_id));
+  }, [yards, session?.yardIds]);
+
+  const activeYard = accessibleYards.find(y => y.yard_id === session?.activeYardId)
+    || (session?.activeYardId ? yards.find(y => y.yard_id === session.activeYardId) : undefined);
+
+  useEffect(() => {
+    if (!session || accessibleYards.length === 0) return;
+    if (!accessibleYards.some(yard => yard.yard_id === session.activeYardId)) {
+      switchYard(accessibleYards[0].yard_id);
+    }
+  }, [accessibleYards, session, switchYard]);
 
   const statusLabel: Record<string, { text: string; color: string }> = {
     in_yard: { text: 'ในลาน', color: 'bg-emerald-100 text-emerald-700' },
+    gated_out: { text: 'ออกแล้ว', color: 'bg-slate-100 text-slate-500' },
     released: { text: 'ออกแล้ว', color: 'bg-slate-100 text-slate-500' },
+    available: { text: 'ว่าง', color: 'bg-blue-100 text-blue-700' },
+    hold: { text: 'Hold', color: 'bg-amber-100 text-amber-700' },
     damaged: { text: 'ชำรุด', color: 'bg-rose-100 text-rose-600' },
     reserved: { text: 'จอง', color: 'bg-amber-100 text-amber-700' },
+    gate_in: { text: 'Gate-In', color: 'bg-emerald-100 text-emerald-700' },
+    gate_out: { text: 'Gate-Out', color: 'bg-blue-100 text-blue-700' },
+    draft: { text: 'ร่าง', color: 'bg-slate-100 text-slate-500' },
+    issued: { text: 'แจ้งหนี้', color: 'bg-blue-100 text-blue-700' },
+    paid: { text: 'ชำระแล้ว', color: 'bg-emerald-100 text-emerald-700' },
+    overdue: { text: 'เกินกำหนด', color: 'bg-rose-100 text-rose-600' },
+    cancelled: { text: 'ยกเลิก', color: 'bg-slate-100 text-slate-500' },
+    pending: { text: 'รอยืนยัน', color: 'bg-amber-100 text-amber-700' },
+    confirmed: { text: 'ยืนยันแล้ว', color: 'bg-blue-100 text-blue-700' },
+    completed: { text: 'เสร็จ', color: 'bg-emerald-100 text-emerald-700' },
+  };
+
+  const getResultKind = (kind: SearchResult['kind']) => {
+    switch (kind) {
+      case 'container':
+        return { label: 'ตู้', icon: <Package size={14} />, box: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300' };
+      case 'gate':
+        return { label: 'Gate', icon: <Truck size={14} />, box: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300' };
+      case 'invoice':
+        return { label: 'บิล', icon: <Receipt size={14} />, box: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300' };
+      case 'booking':
+        return { label: 'Booking', icon: <ClipboardList size={14} />, box: 'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-300' };
+      default:
+        return { label: 'ผลลัพธ์', icon: <Search size={14} />, box: 'bg-slate-100 dark:bg-slate-700 text-slate-500' };
+    }
+  };
+
+  const openFirstSearchResult = () => {
+    const first = searchResults[0];
+    if (!first) return;
+    setShowSearch(false);
+    setSearchQuery('');
+    router.push(first.href);
   };
 
   return (
@@ -187,9 +291,14 @@ export default function Topbar() {
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="ค้นหาเลขตู้, ทะเบียนรถ, เลขซีล..."
+            placeholder="ค้นหาเลขตู้, EIR, ใบแจ้งหนี้, Booking..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => { if (searchQuery.trim().length >= 2) setShowSearch(true); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setShowSearch(false);
+              if (e.key === 'Enter') openFirstSearchResult();
+            }}
             className="w-full h-10 pl-10 pr-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm
               text-slate-700 dark:text-slate-200 placeholder:text-slate-400
               border border-transparent focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20
@@ -198,6 +307,7 @@ export default function Topbar() {
           {searchQuery && (
             <button
               onClick={() => { setSearchQuery(''); setShowSearch(false); }}
+              aria-label="ล้างคำค้นหา"
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
             >
               <X size={16} />
@@ -206,36 +316,46 @@ export default function Topbar() {
         </div>
 
         {/* Search Results Dropdown */}
-        {showSearch && searchResults.length > 0 && (
+        {showSearch && searchQuery.trim().length >= 2 && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden z-50 max-h-80 overflow-y-auto">
-            <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700">
-              <p className="text-[10px] text-slate-400 font-medium">พบ {searchResults.length} ผลลัพธ์</p>
+            <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+              <p className="text-[10px] text-slate-400 font-medium">
+                {isSearching ? 'กำลังค้นหา...' : `พบ ${searchResults.length} ผลลัพธ์`}
+              </p>
+              {isSearching && <Loader2 size={12} className="animate-spin text-blue-500" />}
             </div>
+            {isSearching && searchResults.length === 0 && (
+              <div className="p-4 text-center text-sm text-slate-400">กำลังค้นหาข้อมูลในระบบ...</div>
+            )}
+            {!isSearching && searchResults.length === 0 && (
+              <div className="p-4 text-center text-sm text-slate-400">
+                ไม่พบผลลัพธ์สำหรับ &quot;{searchQuery.trim()}&quot;
+              </div>
+            )}
             {searchResults.map((result) => {
               const st = statusLabel[result.status || ''] || { text: result.status || '-', color: 'bg-slate-100 text-slate-400' };
+              const kind = getResultKind(result.kind);
               return (
-                <a
+                <Link
                   key={result.id}
-                  href="/yard"
+                  href={result.href}
                   className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
                   onClick={() => { setShowSearch(false); setSearchQuery(''); }}
                 >
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-                    <Search size={14} className="text-[#3B82F6]" />
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${kind.box}`}>
+                    {kind.icon}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">{result.label}</p>
-                    <p className="text-xs text-slate-400 truncate">{result.type}{result.location ? ` • ${result.location}` : ''}</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate">{result.title}</p>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-400 shrink-0">{kind.label}</span>
+                    </div>
+                    <p className="text-xs text-slate-400 truncate">{result.subtitle}{result.meta ? ` • ${result.meta}` : ''}</p>
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${st.color}`}>{st.text}</span>
-                </a>
+                </Link>
               );
             })}
-          </div>
-        )}
-        {showSearch && searchResults.length === 0 && searchQuery.length >= 2 && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 z-50 p-4 text-center">
-            <p className="text-sm text-slate-400">ไม่พบผลลัพธ์สำหรับ &quot;{searchQuery}&quot;</p>
           </div>
         )}
       </div>
@@ -246,12 +366,13 @@ export default function Topbar() {
         <div ref={yardRef} className="relative">
           <button
             onClick={() => setYardDropdownOpen(!yardDropdownOpen)}
+            aria-label="สลับลาน"
             className="flex items-center gap-2 h-10 px-3 rounded-xl bg-slate-100 dark:bg-slate-800
               text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700
               transition-all duration-200 border border-transparent"
           >
             <MapPin size={16} className="text-[#3B82F6]" />
-            <span className="hidden sm:inline font-medium">{activeYard?.yard_name || 'เลือกลาน'}</span>
+            <span className="hidden sm:inline font-medium max-w-[180px] truncate">{activeYard?.yard_name || 'เลือกลาน'}</span>
             <ChevronDown size={14} className={`transition-transform duration-200 ${yardDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
 
@@ -260,24 +381,32 @@ export default function Topbar() {
               <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700">
                 <p className="text-xs text-slate-400 font-medium">สลับสาขาลาน</p>
               </div>
-              {DEMO_YARDS.filter(y => session?.yardIds.includes(y.yard_id)).map((yard) => (
-                <button
-                  key={yard.yard_id}
-                  onClick={() => { switchYard(yard.yard_id); setYardDropdownOpen(false); }}
-                  className={`w-full px-4 py-3 flex items-center gap-3 transition-colors text-left
-                    ${yard.yard_id === session?.activeYardId
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-[#3B82F6]'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
-                    }
-                  `}
-                >
-                  <MapPin size={16} />
-                  <div>
-                    <p className="text-sm font-medium">{yard.yard_name}</p>
-                    <p className="text-xs opacity-60">{yard.yard_code}</p>
-                  </div>
-                </button>
-              ))}
+              {yardsLoading ? (
+                <div className="px-4 py-5 flex items-center justify-center gap-2 text-sm text-slate-400">
+                  <Loader2 size={14} className="animate-spin" /> กำลังโหลดลาน
+                </div>
+              ) : accessibleYards.length === 0 ? (
+                <div className="px-4 py-5 text-sm text-slate-400 text-center">ไม่มีลานที่เข้าถึงได้</div>
+              ) : (
+                accessibleYards.map((yard) => (
+                  <button
+                    key={yard.yard_id}
+                    onClick={() => { switchYard(yard.yard_id); setYardDropdownOpen(false); }}
+                    className={`w-full px-4 py-3 flex items-center gap-3 transition-colors text-left
+                      ${yard.yard_id === session?.activeYardId
+                        ? 'bg-blue-50 dark:bg-blue-900/20 text-[#3B82F6]'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }
+                    `}
+                  >
+                    <MapPin size={16} className="shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{yard.yard_name}</p>
+                      <p className="text-xs opacity-60 truncate">{yard.yard_code}</p>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -286,6 +415,7 @@ export default function Topbar() {
         <div ref={notifRef} className="relative">
           <button
             onClick={() => { setNotifOpen(!notifOpen); if (!notifOpen) fetchNotifications(); }}
+            aria-label="เปิดการแจ้งเตือน"
             className="relative w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center
               text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200"
           >
@@ -367,6 +497,7 @@ export default function Topbar() {
         {/* Dark Mode Toggle */}
         <button
           onClick={toggleDarkMode}
+          aria-label={isDark ? 'เปลี่ยนเป็นโหมดสว่าง' : 'เปลี่ยนเป็นโหมดมืด'}
           className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center
             text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200"
         >
@@ -376,6 +507,7 @@ export default function Topbar() {
         {/* High Contrast Toggle (NFR3b — สู้แสงแดด) */}
         <button
           onClick={toggleHighContrast}
+          aria-label="สลับโหมดคอนทราสต์สูง"
           className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
             isHighContrast
               ? 'bg-yellow-400 text-black ring-2 ring-yellow-500'

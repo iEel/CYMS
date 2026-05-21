@@ -12,13 +12,14 @@ import { Transaction } from './types';
 interface HistoryTabProps {
   yardId: number;
   onViewEIR: (eirNumber: string) => void;
+  initialSearch?: string;
 }
 
-export default function HistoryTab({ yardId, onViewEIR }: HistoryTabProps) {
+export default function HistoryTab({ yardId, onViewEIR, initialSearch = '' }: HistoryTabProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyDate, setHistoryDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [historySearch, setHistorySearch] = useState<string>('');
+  const [historySearch, setHistorySearch] = useState<string>(initialSearch);
   const [histPage, setHistPage] = useState(1);
   const histPerPage = 25;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -36,6 +37,13 @@ export default function HistoryTab({ yardId, onViewEIR }: HistoryTabProps) {
     } catch (err) { console.error(err); }
     finally { setHistoryLoading(false); }
   }, [yardId, historyDate, historySearch]);
+
+  useEffect(() => {
+    if (!initialSearch) return;
+    setHistorySearch(initialSearch);
+    setHistoryDate('');
+    setHistPage(1);
+  }, [initialSearch]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
