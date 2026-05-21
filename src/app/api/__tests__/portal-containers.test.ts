@@ -91,6 +91,7 @@ describe('GET /api/portal/containers', () => {
     expect(combinedSql).toContain('open_invoice_count');
     expect(combinedSql).toContain('dwell_days');
     expect(combinedSql).toContain('PortalEntityAccess');
+    expect(combinedSql).not.toContain('g.container_number');
     expect(db.input).toHaveBeenCalledWith('status', expect.anything(), 'in_yard');
     expect(db.input).toHaveBeenCalledWith('search', expect.anything(), '%MSKU%');
   });

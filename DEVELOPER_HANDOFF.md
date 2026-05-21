@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment** (~100%)
 
 ---
 
@@ -364,6 +364,7 @@ container-yard-system/
 │       ├── audit.ts              # **🔐 Centralized logAudit()** — non-fatal AuditLog INSERT
 │       ├── portalEntityAccess.ts # Non-fatal upsert helper for PortalEntityAccess grants
 │       ├── portalAccess.ts       # Customer Portal access grants SQL helpers + visibility reason subquery
+│       ├── portalContainerSummary.ts # Shared Portal container KPI buckets (total/in-yard/released/hold/repair)
 │       ├── portalGrantReconciler.ts # Admin preview/repair missing/stale PortalEntityAccess grants
 │       ├── portalBooking.ts      # Customer Portal booking ETA + empty-return instruction helpers
 │       ├── portalDocumentBundle.ts # Statement/invoice/EIR bundle index entries
@@ -1280,7 +1281,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - Login page: redirect customer role → `/portal`
   - **Data isolation**: ทุก portal API ใช้ `customer_id` จาก JWT เท่านั้น (ไม่รับจาก query params)
 - [x] **Portal API** (`api/portal/`):
-  - `overview`: KPIs (ตู้ในลาน, ค้างชำระ, Booking active) + recent gate activity
+  - `overview`: KPIs + container summary buckets ชุดเดียวกับ `/portal/containers` + ค้างชำระ/Booking active + recent gate activity
   - `containers`: customer inventory แบบ paginated + summary tiles + status/search filter + latest booking/EIR/open invoice context โดย visibility มาจาก `PortalEntityAccess` เท่านั้น
   - `invoices`: invoices + summary (outstanding/paid)
   - `bookings`: bookings + progress (received/container_count) + ETA status + empty return instruction metadata
@@ -1324,12 +1325,15 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 ### 📦 Customer Portal Container Inventory (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **API inventory context** — `GET /api/portal/containers` ใช้ fixed server-side visibility ผ่าน `PortalEntityAccess` แล้ว enrich รายการตู้ด้วย latest booking, latest EIR/gate transaction, open invoice count/amount, dwell days และ `visibility_role`
 - [x] **Server-side search/filter** — รองรับ `search`, `status`, `page`, `limit` แบบ parameterized และส่ง `summary` กลับมาสำหรับ total/in-yard/released/on-hold/repair
+- [x] **Overview alignment** — `api/portal/overview` และ `api/portal/containers` ใช้ `portalContainerSummary.ts` ชุดเดียวกัน: `released` รวม `released` + `gated_out`, และส่ง `on_hold`/`repair` เหมือนกัน
+- [x] **Schema-safe gate context** — latest gate ในหน้า Containers lookup ผ่าน `GateTransactions.container_id` เท่านั้น ไม่อ้าง `g.container_number` ที่ไม่มีใน DB จริง
 - [x] **Portal UI inventory view** — หน้า `/portal/containers` เพิ่ม summary tiles, status tabs, search debounce, auto-refresh 30 วินาที และตาราง/การ์ดที่แสดงบริบทตู้พร้อม action ดาวน์โหลด EIR หรือไปหน้า invoice
 - [x] **Policy ยืนยัน** — ลูกค้าเห็นตู้จาก grant เท่านั้น โดย grant มาจาก owner/billing/booking/invoice linkage ฝั่ง backend; ไม่รับ customer id จาก query/body และไม่เปิด configurable policy ในรอบนี้
 
 **Verify ล่าสุด:**
-- `npm test -- src/app/api/__tests__/portal-containers.test.ts --runInBand` ✅ (3 tests)
-- `npm test -- --runInBand` ✅ (46 suites / 513 tests)
+- `npm test -- src/app/api/__tests__/portal-overview.test.ts src/app/api/__tests__/portal-containers.test.ts --runInBand` ✅ (4 tests)
+- API check จริงด้วย customer token: `/api/portal/overview` และ `/api/portal/containers?limit=5` คืน `summary` ตรงกัน ✅
+- `npm test -- --runInBand` ✅ (47 suites / 516 tests)
 - `npx tsc --noEmit --pretty false` ✅
 - `npm run lint` ✅
 

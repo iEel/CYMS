@@ -9,6 +9,7 @@ import {
   portalGateVisibilitySql,
   portalInvoiceVisibilitySql,
 } from '@/lib/portalAccess';
+import { normalizePortalContainerSummary, portalContainerSummarySelect } from '@/lib/portalContainerSummary';
 
 // GET — Customer Portal Overview
 export async function GET(request: NextRequest) {
@@ -28,13 +29,12 @@ export async function GET(request: NextRequest) {
     const contResult = await db.request()
       .input('cid', sql.Int, cid)
       .query(`
-        SELECT COUNT(*) as total,
-          SUM(CASE WHEN status = 'in_yard' THEN 1 ELSE 0 END) as in_yard,
-          SUM(CASE WHEN status = 'released' THEN 1 ELSE 0 END) as released
+        SELECT
+          ${portalContainerSummarySelect('c')}
         FROM Containers c
         WHERE ${portalContainerVisibilitySql('c')}
       `);
-    const containers = contResult.recordset[0] || { total: 0, in_yard: 0, released: 0 };
+    const containers = normalizePortalContainerSummary(contResult.recordset[0]);
 
     // Outstanding invoices
     const invResult = await db.request()

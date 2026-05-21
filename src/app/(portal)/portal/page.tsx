@@ -5,7 +5,7 @@ import { Package, FileText, ClipboardList, ArrowUpRight, ArrowDownLeft, Loader2,
 
 interface Overview {
   customer: { customer_name: string; contact_email: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean };
-  containers: { total: number; in_yard: number; released: number };
+  containers: { total: number; in_yard: number; released: number; on_hold: number; repair: number };
   outstanding: { count: number; total: number };
   activeBookings: number;
   recentGate: Array<{
@@ -40,16 +40,16 @@ export default function PortalOverview() {
 
   // Safe defaults in case API returns partial data
   const customer = data.customer || { customer_name: 'ลูกค้า', contact_email: '', is_line: false, is_trucking: false, is_forwarder: false };
-  const containers = data.containers || { total: 0, in_yard: 0, released: 0 };
+  const containers = data.containers || { total: 0, in_yard: 0, released: 0, on_hold: 0, repair: 0 };
   const outstanding = data.outstanding || { count: 0, total: 0 };
   const activeBookings = data.activeBookings || 0;
   const recentGate = data.recentGate || [];
 
   const kpis = [
-    { label: 'ตู้ในลาน', value: containers.in_yard, icon: <Package size={20} />, color: 'blue', sub: `ทั้งหมด ${containers.total} ตู้` },
+    { label: 'ตู้ทั้งหมด', value: containers.total, icon: <Package size={20} />, color: 'blue', sub: `ในลาน ${containers.in_yard} · ปล่อยออก ${containers.released}` },
     { label: 'ค้างชำระ', value: `฿${outstanding.total.toLocaleString()}`, icon: <FileText size={20} />, color: 'amber', sub: `${outstanding.count} รายการ` },
     { label: 'Booking Active', value: activeBookings, icon: <ClipboardList size={20} />, color: 'emerald', sub: 'pending + confirmed' },
-    { label: 'ตู้ปล่อยออก', value: containers.released, icon: <ArrowUpRight size={20} />, color: 'purple', sub: 'ทั้งหมด' },
+    { label: 'ตู้ปล่อยออก', value: containers.released, icon: <ArrowUpRight size={20} />, color: 'purple', sub: `Hold ${containers.on_hold} · ซ่อม ${containers.repair}` },
   ];
 
   const colorMap: Record<string, string> = {

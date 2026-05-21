@@ -7,6 +7,7 @@ import {
   portalInvoiceVisibilitySql,
   portalVisibilityReasonSql,
 } from '@/lib/portalAccess';
+import { normalizePortalContainerSummary, portalContainerSummarySelect } from '@/lib/portalContainerSummary';
 
 const PORTAL_CONTAINER_CONTEXT_SQL = `
   OUTER APPLY (
@@ -29,7 +30,6 @@ const PORTAL_CONTAINER_CONTEXT_SQL = `
       g.created_at
     FROM GateTransactions g
     WHERE g.container_id = c.container_id
-      OR g.container_number = c.container_number
     ORDER BY g.created_at DESC, g.transaction_id DESC
   ) latestGate
   OUTER APPLY (
@@ -87,15 +87,11 @@ export async function GET(request: NextRequest) {
       .input('cid', sql.Int, cid)
       .query(`
         SELECT
-          COUNT(*) AS total,
-          SUM(CASE WHEN c.status = 'in_yard' THEN 1 ELSE 0 END) AS in_yard,
-          SUM(CASE WHEN c.status IN ('released', 'gated_out') THEN 1 ELSE 0 END) AS released,
-          SUM(CASE WHEN ISNULL(c.hold_status, '') <> '' THEN 1 ELSE 0 END) AS on_hold,
-          SUM(CASE WHEN c.status IN ('repair', 'under_repair', 'mnr') THEN 1 ELSE 0 END) AS repair
+          ${portalContainerSummarySelect('c')}
         FROM Containers c
         WHERE ${portalContainerVisibilitySql('c')}
       `);
-    const summary = summaryResult.recordset[0] || {};
+    const summary = normalizePortalContainerSummary(summaryResult.recordset[0]);
 
     const req = db.request().input('cid', sql.Int, cid);
     if (status && !['released', 'repair', 'hold'].includes(status)) req.input('status', sql.NVarChar, status);
@@ -143,13 +139,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       containers: result.recordset,
-      summary: {
-        total: Number(summary.total || 0),
-        in_yard: Number(summary.in_yard || 0),
-        released: Number(summary.released || 0),
-        on_hold: Number(summary.on_hold || 0),
-        repair: Number(summary.repair || 0),
-      },
+      summary,
       total,
       page,
       totalPages: Math.ceil(total / limit),
