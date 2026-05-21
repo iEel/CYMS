@@ -476,6 +476,36 @@ async function migrate() {
         ALTER TABLE PrefixMapping ADD CONSTRAINT UQ_Prefix_Customer UNIQUE (prefix_code, customer_id);
     `);
 
+    await runStep(pool, 'Customer portal dispute support', `
+      IF OBJECT_ID('PortalDisputes', 'U') IS NULL
+      BEGIN
+        CREATE TABLE PortalDisputes (
+          dispute_id BIGINT PRIMARY KEY IDENTITY(1,1),
+          customer_id INT NOT NULL,
+          invoice_id INT NULL,
+          invoice_number NVARCHAR(80) NULL,
+          booking_id INT NULL,
+          container_number NVARCHAR(15) NULL,
+          category NVARCHAR(40) NOT NULL,
+          message NVARCHAR(MAX) NOT NULL,
+          status NVARCHAR(30) NOT NULL DEFAULT 'open',
+          created_by_user_id INT NULL,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          resolved_by INT NULL,
+          resolved_at DATETIME2 NULL,
+          resolution_note NVARCHAR(MAX) NULL
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalDisputes') AND name = 'IX_PortalDisputes_Customer_Status')
+        CREATE INDEX IX_PortalDisputes_Customer_Status
+          ON PortalDisputes (customer_id, status, created_at);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalDisputes') AND name = 'IX_PortalDisputes_Invoice')
+        CREATE INDEX IX_PortalDisputes_Invoice
+          ON PortalDisputes (invoice_id, created_at);
+    `);
+
     await runStep(pool, 'Granular RBAC permission columns', `
       IF COL_LENGTH('Permissions', 'permission_code') IS NULL
         ALTER TABLE Permissions ADD permission_code NVARCHAR(100) NULL;

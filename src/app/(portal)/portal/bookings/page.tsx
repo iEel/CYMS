@@ -8,6 +8,13 @@ interface Booking {
   vessel_name: string; voyage_number: string; container_count: number;
   received_count: number; released_count: number; eta: string;
   valid_from: string; valid_to: string; created_at: string;
+  eta_status?: { code: string; label: string; tone: string; days: number | null };
+  empty_return_instruction?: {
+    title: string;
+    cut_off_date: string | null;
+    cut_off_status: string;
+    steps: string[];
+  } | null;
 }
 
 interface BookingContainer {
@@ -134,7 +141,8 @@ export default function PortalBookings() {
                     <span className="flex items-center gap-1"><Package size={10} /> {bk.container_count} ตู้</span>
                     <span>รับแล้ว {bk.received_count}</span>
                     <span>ออกแล้ว {bk.released_count}</span>
-                    {bk.eta && <span>ETA: {new Date(bk.eta).toLocaleDateString('th-TH')}</span>}
+                    {bk.eta_status && <EtaBadge status={bk.eta_status} />}
+                    {bk.empty_return_instruction && <span className="text-amber-600">Empty return instruction</span>}
                     <span className="text-blue-500">ดูรายละเอียด</span>
                   </div>
                 </button>
@@ -185,11 +193,44 @@ export default function PortalBookings() {
               </div>
             ) : detail && (
               <div className="p-4 space-y-4">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <Metric label="จำนวน" value={detail.booking.container_count} />
                   <Metric label="รับแล้ว" value={detail.booking.received_count} color="text-blue-600" />
                   <Metric label="ออกแล้ว" value={detail.booking.released_count} color="text-emerald-600" />
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                    <p className="text-[10px] text-slate-400">ETA</p>
+                    {detail.booking.eta_status ? (
+                      <EtaBadge status={detail.booking.eta_status} />
+                    ) : (
+                      <p className="text-sm font-bold text-slate-400">-</p>
+                    )}
+                  </div>
                 </div>
+
+                {detail.booking.empty_return_instruction && (
+                  <div className="rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-900/10 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                          {detail.booking.empty_return_instruction.title}
+                        </h3>
+                        {detail.booking.empty_return_instruction.cut_off_date && (
+                          <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80 mt-0.5">
+                            Cut-off: {new Date(detail.booking.empty_return_instruction.cut_off_date).toLocaleDateString('th-TH')}
+                          </p>
+                        )}
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-white/70 dark:bg-slate-800 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                        {detail.booking.empty_return_instruction.cut_off_status}
+                      </span>
+                    </div>
+                    <ol className="mt-3 space-y-1 text-xs text-amber-900 dark:text-amber-100">
+                      {detail.booking.empty_return_instruction.steps.map((step, index) => (
+                        <li key={index}>{index + 1}. {step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
 
                 <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
                   <div className="px-3 py-2 bg-slate-50 dark:bg-slate-700/30 text-xs font-semibold text-slate-600 dark:text-slate-300">
@@ -257,4 +298,19 @@ function StatusPill({ status }: { status: string }) {
   };
   const item = config[status] || config.pending;
   return <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${item.cls}`}>{item.label}</span>;
+}
+
+function EtaBadge({ status }: { status: { code: string; label: string; tone: string; days: number | null } }) {
+  const cls: Record<string, string> = {
+    slate: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    rose: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls[status.tone] || cls.slate}`}>
+      {status.label}
+    </span>
+  );
 }

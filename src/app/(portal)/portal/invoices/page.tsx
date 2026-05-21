@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Loader2, Filter, Download, Receipt, ArrowDownToLine, BarChart3 } from 'lucide-react';
+import { FileText, Loader2, Filter, Download, Receipt, ArrowDownToLine, BarChart3, MessageSquare, X } from 'lucide-react';
 
 interface Invoice {
   invoice_id: number; invoice_number: string; charge_type: string;
@@ -38,6 +38,11 @@ export default function PortalInvoices() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
+  const [disputeTarget, setDisputeTarget] = useState<Invoice | null>(null);
+  const [disputeCategory, setDisputeCategory] = useState('billing');
+  const [disputeMessage, setDisputeMessage] = useState('');
+  const [disputeLoading, setDisputeLoading] = useState(false);
+  const [disputeResult, setDisputeResult] = useState<string | null>(null);
 
   const loadData = useCallback((p = 1, status = statusFilter) => {
     setLoading(true);
@@ -73,13 +78,47 @@ export default function PortalInvoices() {
 
   const isCreditNote = (inv: Invoice) => inv.status === 'credit_note' || inv.document_type === 'credit_note' || inv.invoice_number?.startsWith('CN-');
 
+  const submitDispute = async () => {
+    if (!disputeTarget) return;
+    setDisputeLoading(true);
+    setDisputeResult(null);
+    try {
+      const res = await fetch('/api/portal/disputes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id: disputeTarget.invoice_id,
+          category: disputeCategory,
+          message: disputeMessage,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setDisputeResult(data.error || 'ส่งคำร้องไม่สำเร็จ');
+        return;
+      }
+      setDisputeResult(`ส่งคำร้องแล้ว #${data.dispute_id}`);
+      setDisputeMessage('');
+    } catch {
+      setDisputeResult('ส่งคำร้องไม่สำเร็จ');
+    } finally {
+      setDisputeLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-          <FileText size={22} className="text-blue-600" /> ใบแจ้งหนี้ / Invoice
-        </h1>
-        <p className="text-xs text-slate-400 mt-0.5">{total} รายการทั้งหมด</p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            <FileText size={22} className="text-blue-600" /> ใบแจ้งหนี้ / Invoice
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5">{total} รายการทั้งหมด</p>
+        </div>
+        <a href="/api/portal/document-bundle" target="_blank" rel="noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">
+          <Download size={14} /> Download bundle
+        </a>
       </div>
 
       {/* Summary Cards */}
@@ -156,7 +195,7 @@ export default function PortalInvoices() {
                     {inv.container_number && `ตู้: ${inv.container_number} | `}
                     {new Date(inv.created_at).toLocaleDateString('th-TH')}
                   </p>
-                  <DocumentLinks inv={inv} isCreditNote={isCreditNote(inv)} />
+                  <DocumentLinks inv={inv} isCreditNote={isCreditNote(inv)} onDispute={() => setDisputeTarget(inv)} />
                       </>
                     );
                   })()}
@@ -193,7 +232,7 @@ export default function PortalInvoices() {
                     </td>
                     <td className="p-3 text-slate-500 text-xs">{new Date(inv.created_at).toLocaleDateString('th-TH')}</td>
                     <td className="p-3 text-right">
-                      <DocumentLinks inv={inv} isCreditNote={isCreditNote(inv)} alignRight />
+                      <DocumentLinks inv={inv} isCreditNote={isCreditNote(inv)} alignRight onDispute={() => setDisputeTarget(inv)} />
                     </td>
                   </tr>
                 );})}
@@ -216,6 +255,46 @@ export default function PortalInvoices() {
           ))}
         </div>
       )}
+
+      {disputeTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm p-4">
+          <div className="mx-auto mt-10 max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-700 p-4">
+              <div>
+                <h2 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                  <MessageSquare size={16} className="text-blue-600" /> Dispute Request
+                </h2>
+                <p className="mt-1 text-xs text-slate-400">{disputeTarget.invoice_number}</p>
+              </div>
+              <button onClick={() => { setDisputeTarget(null); setDisputeResult(null); }}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 p-4">
+              <select value={disputeCategory} onChange={e => setDisputeCategory(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-white">
+                <option value="billing">ยอด/รายการคิดเงิน</option>
+                <option value="payment">การชำระเงิน</option>
+                <option value="damage">ความเสียหาย/M&R</option>
+                <option value="detention">Demurrage/Detention</option>
+                <option value="document">เอกสาร</option>
+                <option value="other">อื่นๆ</option>
+              </select>
+              <textarea value={disputeMessage} onChange={e => setDisputeMessage(e.target.value)}
+                rows={5}
+                placeholder="อธิบายรายละเอียดที่ต้องการให้ทีม CYMS ตรวจสอบ..."
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-white" />
+              {disputeResult && <p className="text-xs text-blue-600 dark:text-blue-400">{disputeResult}</p>}
+              <button onClick={submitDispute} disabled={disputeLoading || disputeMessage.trim().length < 10}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                {disputeLoading ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+                ส่งคำร้อง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -230,7 +309,7 @@ function MiniMetric({ label, value, warn, danger }: { label: string; value: numb
   );
 }
 
-function DocumentLinks({ inv, isCreditNote, alignRight = false }: { inv: Invoice; isCreditNote: boolean; alignRight?: boolean }) {
+function DocumentLinks({ inv, isCreditNote, alignRight = false, onDispute }: { inv: Invoice; isCreditNote: boolean; alignRight?: boolean; onDispute: () => void }) {
   const baseClass = 'inline-flex items-center gap-1 text-xs hover:underline transition-colors';
   return (
     <div className={`flex flex-wrap gap-2 ${alignRight ? 'justify-end' : ''}`}>
@@ -251,6 +330,9 @@ function DocumentLinks({ inv, isCreditNote, alignRight = false }: { inv: Invoice
           <Receipt size={12} /> Receipt PDF
         </a>
       )}
+      <button onClick={onDispute} className={`${baseClass} text-slate-500`}>
+        <MessageSquare size={12} /> Dispute
+      </button>
     </div>
   );
 }

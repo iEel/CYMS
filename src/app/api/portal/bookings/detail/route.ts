@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { decoratePortalBooking } from '@/lib/portalBooking';
 
 // GET — Customer Portal: read-only booking detail + container drill down
 export async function GET(request: NextRequest) {
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
       `);
 
     return NextResponse.json({
-      booking: bookingResult.recordset[0],
+      booking: decoratePortalBooking(bookingResult.recordset[0]),
       containers: containersResult.recordset,
     });
   } catch (error) {

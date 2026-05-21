@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { decoratePortalBookings } from '@/lib/portalBooking';
 
 // GET — Customer's bookings
 export async function GET(request: NextRequest) {
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     `);
 
     return NextResponse.json({
-      bookings: result.recordset,
+      bookings: decoratePortalBookings(result.recordset),
       total,
       page,
       totalPages: Math.ceil(total / limit),
