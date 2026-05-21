@@ -95,7 +95,7 @@ async function migrate() {
         ALTER TABLE Containers ADD hold_status NVARCHAR(30) NULL
       `;
       console.log('✅ hold_status column checked/added to Containers');
-    } catch (e) {
+    } catch {
       console.log('⚠️ hold_status column may already exist');
     }
 

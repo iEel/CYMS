@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { AlertTriangle, CheckCircle2, X, Camera, ImageIcon } from 'lucide-react';
+import { RawImage } from '@/components/ui/RawImage';
 import {
   PHOTO_CATEGORY_LABELS,
   STANDARD_PHOTO_CATEGORIES,
@@ -669,7 +670,7 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
               <div className="flex items-center gap-2">
                 {p.photo ? (
                   <div className="relative">
-                    <img src={p.photo} alt="damage" className="w-16 h-12 rounded object-cover border border-slate-200" />
+                    <RawImage src={p.photo} alt="damage" className="w-16 h-12 rounded object-cover border border-slate-200" />
                     <button onClick={() => setPoints(pts => pts.map(pt => pt.id === p.id ? { ...pt, photo: undefined } : pt))}
                       className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[8px]">✕</button>
                   </div>
@@ -727,7 +728,7 @@ export default function ContainerInspection({ containerType = 'GP', containerSiz
         <div className="flex gap-2 flex-wrap">
           {evidencePhotos.map(photo => (
             <div key={photo.id} className="relative group">
-              <img src={photo.url} alt={photo.label} className="w-24 h-16 rounded-lg object-cover border border-slate-200" />
+              <RawImage src={photo.url} alt={photo.label} className="w-24 h-16 rounded-lg object-cover border border-slate-200" />
               <span className="absolute left-1 bottom-1 max-w-[5.5rem] px-1 py-0.5 rounded bg-black/60 text-white text-[8px] truncate">
                 {photo.label}
               </span>

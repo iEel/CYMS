@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { formatDateTime } from '@/lib/utils';
+import { RawImage } from '@/components/ui/RawImage';
 import {
   PHOTO_CATEGORY_LABELS,
   buildDamageEvidencePhotos,
@@ -230,7 +231,7 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
             <div className="p-4 grid grid-cols-2 gap-3">
               {allPhotos.map((photo, i) => (
                 <button key={i} onClick={() => setSelectedPhoto(photo.src)} className="text-left">
-                  <img src={photo.src} alt={photo.label}
+                  <RawImage src={photo.src} alt={photo.label}
                     className="w-full h-32 object-cover rounded-xl border border-slate-200 hover:border-blue-400 transition-all" />
                   <p className="text-[10px] text-slate-400 mt-1 truncate">{photo.label}</p>
                   {photo.taken_at && <p className="text-[9px] text-slate-300 truncate">{formatDateTime(photo.taken_at)}</p>}
@@ -262,7 +263,7 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
                   {point.photo && (
                     <button onClick={() => setSelectedPhoto(point.photo!)}
                       className="ml-auto">
-                      <img src={point.photo} alt="" className="w-10 h-10 rounded-lg object-cover border border-slate-200" />
+                      <RawImage src={point.photo} alt="" className="w-10 h-10 rounded-lg object-cover border border-slate-200" />
                     </button>
                   )}
                 </div>
@@ -290,7 +291,7 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
       {selectedPhoto && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setSelectedPhoto(null)}>
           <button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-lg flex items-center justify-center">✕</button>
-          <img src={selectedPhoto} alt="Damage Photo" className="max-w-full max-h-[90vh] object-contain rounded-lg" />
+          <RawImage src={selectedPhoto} alt="Damage Photo" className="max-w-full max-h-[90vh] object-contain rounded-lg" />
         </div>
       )}
     </div>

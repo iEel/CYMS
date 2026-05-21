@@ -78,7 +78,7 @@ const SHIPPING_COLORS: Record<string, number> = {
 };
 
 // สร้าง container mesh — NO edges, NO z-fighting
-function createContainerMesh(ctr: ContainerBlock, _scene: THREE.Scene): THREE.Group {
+function createContainerMesh(ctr: ContainerBlock): THREE.Group {
   const is40 = ctr.size === '40' || ctr.size === '45';
   const w = is40 ? CW_40 : CW_20;
   const h = ctr.size === '45' ? CH * 1.12 : CH;
@@ -286,10 +286,9 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
         if (!ctr.bay || !ctr.row || !ctr.tier) continue;
 
         const is40 = ctr.size === '40' || ctr.size === '45';
-        const cw = is40 ? CW_40 : CW_20;
         const ch = ctr.size === '45' ? CH * 1.12 : CH;
 
-        const containerGroup = createContainerMesh(ctr, scene);
+        const containerGroup = createContainerMesh(ctr);
 
         // 40ft ตู้ใหญ่กินพื้นที่ 2 bays — ต้องชดเชย offset ให้ยาวขึ้น
         const baySlot = CW_20 + GAP_X;
@@ -485,7 +484,6 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     let glowTime = 0;
     const animateGlow = () => {
       glowTime += 0.06;
-      const intensity = 0.4 + Math.sin(glowTime * 3) * 0.4;
       const beaconPulse = 0.5 + Math.sin(glowTime * 4) * 0.3;
 
       // Glow the highlighted container (smooth, non-flickering)

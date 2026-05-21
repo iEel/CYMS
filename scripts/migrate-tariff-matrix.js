@@ -30,7 +30,7 @@ async function migrate() {
         ALTER TABLE StorageRateTiers ADD customer_id INT NULL
       `;
       console.log('✅ customer_id column added to StorageRateTiers');
-    } catch (e) {
+    } catch {
       console.log('⚠️ customer_id column may already exist');
     }
 
@@ -41,7 +41,7 @@ async function migrate() {
         ALTER TABLE StorageRateTiers ADD cargo_status VARCHAR(10) DEFAULT 'any'
       `;
       console.log('✅ cargo_status column added to StorageRateTiers');
-    } catch (e) {
+    } catch {
       console.log('⚠️ cargo_status column may already exist');
     }
 
@@ -52,7 +52,7 @@ async function migrate() {
         ALTER TABLE StorageRateTiers ADD CONSTRAINT FK_StorageTiers_Customer FOREIGN KEY (customer_id) REFERENCES Customers(customer_id)
       `;
       console.log('✅ FK constraint added');
-    } catch (e) {
+    } catch {
       console.log('⚠️ FK constraint may already exist');
     }
 

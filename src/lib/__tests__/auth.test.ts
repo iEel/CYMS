@@ -7,7 +7,7 @@
 // Mock jose module before importing auth
 jest.mock('jose', () => {
   // Simple HMAC-like signing for test purposes
-  const sign = (payload: Record<string, unknown>, _secret: Uint8Array) => {
+  const sign = (payload: Record<string, unknown>) => {
     const header = Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url');
     const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
     const sig = Buffer.from('test-signature').toString('base64url');
@@ -24,12 +24,12 @@ jest.mock('jose', () => {
           finalPayload = { ...finalPayload, exp: Math.floor(Date.now() / 1000) + 3600 };
           return this;
         }),
-        sign: jest.fn().mockImplementation((_secret: Uint8Array) => {
-          return Promise.resolve(sign(finalPayload, _secret));
+        sign: jest.fn().mockImplementation(() => {
+          return Promise.resolve(sign(finalPayload));
         }),
       };
     }),
-    jwtVerify: jest.fn().mockImplementation(async (token: string, _secret: Uint8Array) => {
+    jwtVerify: jest.fn().mockImplementation(async (token: string) => {
       try {
         const parts = token.split('.');
         if (parts.length !== 3) throw new Error('Invalid token');

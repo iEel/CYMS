@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
+import { RawImage } from '@/components/ui/RawImage';
 
 interface EORRow {
   eor_id: number; eor_number: string; container_number: string;
@@ -869,7 +870,7 @@ export default function MnRPage() {
                       <div className="flex gap-2 flex-wrap">
                         {(repairPhotoEvidence[category.key] || []).map((photo, i) => (
                           <div key={`${category.key}-${i}`} className="relative">
-                            <img src={photo} alt={`${category.label} ${i + 1}`} className="w-20 h-16 rounded-lg object-cover border border-slate-200" />
+                            <RawImage src={photo} alt={`${category.label} ${i + 1}`} className="w-20 h-16 rounded-lg object-cover border border-slate-200" />
                             <button onClick={() => removeEvidencePhoto(category.key, i)}
                               className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px]">✕</button>
                           </div>

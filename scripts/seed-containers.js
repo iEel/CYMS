@@ -156,7 +156,7 @@ async function run() {
             `);
           count++;
           placed++;
-        } catch (e) { /* skip duplicates */ }
+        } catch { /* skip duplicates */ }
       }
       console.log(`  ✅ Zone ${zone.zone_name} — ${placed} ตู้ (stacked ถูกต้อง)`);
     }

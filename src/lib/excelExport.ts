@@ -4,20 +4,6 @@
  * Client-side download — ไม่ต้องส่งผ่าน server
  */
 
-// ─── Types ───────────────────────────────────────────────
-
-interface ExcelStyle {
-  font?: { bold?: boolean; color?: { rgb: string }; sz?: number };
-  fill?: { fgColor: { rgb: string } };
-  alignment?: { horizontal?: string; vertical?: string; wrapText?: boolean };
-  border?: {
-    top?: { style: string; color: { rgb: string } };
-    bottom?: { style: string; color: { rgb: string } };
-    left?: { style: string; color: { rgb: string } };
-    right?: { style: string; color: { rgb: string } };
-  };
-}
-
 // ─── Helper ───────────────────────────────────────────────
 
 function formatCurrency(n: number | null | undefined): string {

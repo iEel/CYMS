@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useToast } from '@/components/providers/ToastProvider';
+import { RawImage } from '@/components/ui/RawImage';
 import {
   Camera, ScanLine, Loader2, X, RotateCcw, CheckCircle2,
   Flashlight, FlashlightOff, ZoomIn, AlertTriangle,
@@ -42,7 +43,6 @@ export default function CameraOCR({
   const [streaming, setStreaming] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [rawOcrText, setRawOcrText] = useState('');
   const [displayText, setDisplayText] = useState('');
   const [confidence, setConfidence] = useState<'high' | 'medium' | 'low' | null>(null);
   const [torchOn, setTorchOn] = useState(false);
@@ -226,7 +226,6 @@ export default function CameraOCR({
       if (tempWorker) await worker.terminate();
 
       const rawText: string = data.text || '';
-      setRawOcrText(rawText);
 
       // Smart extraction based on mode
       if (mode === 'container') {
@@ -273,7 +272,6 @@ export default function CameraOCR({
   const handleRetry = () => {
     setCapturedImage(null);
     setDisplayText('');
-    setRawOcrText('');
     setConfidence(null);
     startCamera();
   };
@@ -334,7 +332,7 @@ export default function CameraOCR({
 
         {/* Captured image preview */}
         {capturedImage && (
-          <img src={capturedImage} alt="Captured" className="w-full h-full object-contain" />
+          <RawImage src={capturedImage} alt="Captured" className="w-full h-full object-contain" />
         )}
 
         {/* Loading state */}

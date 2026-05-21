@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Search, MapPin, Package, Ship, Sparkles, ExternalLink, Calendar, Truck, User, Image as ImageIcon, Clock } from 'lucide-react';
 import { calcDwellDays } from '@/lib/utils';
+import { RawImage } from '@/components/ui/RawImage';
 import { buildPhotoEvidenceSnapshot, normalizeEvidencePhotos, type EvidencePhoto, type PhotoCompleteness, type PhotoRequirement } from '@/lib/photoEvidence';
 
 interface SearchResult {
@@ -278,7 +279,7 @@ export default function ContainerSearch({ yardId, onLocate }: Props) {
                     <div className="grid grid-cols-4 gap-1.5">
                       {allPhotos.slice(0, 8).map((photo, i) => (
                         <button key={i} onClick={() => setFullPhoto(photo)} className="group">
-                          <img src={photo} alt={`Photo ${i + 1}`}
+                          <RawImage src={photo} alt={`Photo ${i + 1}`}
                             className="w-full h-16 object-cover rounded-lg border border-slate-200 dark:border-slate-600 group-hover:border-blue-400 transition-colors" />
                         </button>
                       ))}
@@ -310,7 +311,7 @@ export default function ContainerSearch({ yardId, onLocate }: Props) {
       {fullPhoto && (
         <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 cursor-pointer" onClick={() => setFullPhoto(null)}>
           <button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-lg flex items-center justify-center hover:bg-white/30">✕</button>
-          <img src={fullPhoto} alt="Full-size" className="max-w-full max-h-[90vh] object-contain rounded-lg" />
+          <RawImage src={fullPhoto} alt="Full-size" className="max-w-full max-h-[90vh] object-contain rounded-lg" />
         </div>
       )}
     </>

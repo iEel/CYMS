@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useToast } from '@/components/providers/ToastProvider';
 import { Camera, Upload, X, Loader2 } from 'lucide-react';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
+import { RawImage } from '@/components/ui/RawImage';
 
 interface PhotoCaptureProps {
   label: string;
@@ -49,7 +50,7 @@ export default function PhotoCapture({ label, required, onCapture, value, folder
     } catch {
       toast('error', 'ไม่สามารถเปิดกล้องได้');
     }
-  }, []);
+  }, [toast]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop());
@@ -105,7 +106,7 @@ export default function PhotoCapture({ label, required, onCapture, value, folder
 
       {preview ? (
         <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
-          <img src={preview} alt={label} className="w-full h-40 object-cover" />
+          <RawImage src={preview} alt={label} className="w-full h-40 object-cover" />
           {uploading && (
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
               <div className="flex items-center gap-2 text-white text-xs font-medium">

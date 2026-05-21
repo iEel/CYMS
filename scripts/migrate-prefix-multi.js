@@ -63,7 +63,7 @@ async function migrate() {
         ALTER TABLE PrefixMapping ADD is_primary BIT DEFAULT 0
       `;
       console.log('✅ is_primary column added');
-    } catch (e) {
+    } catch {
       console.log('⚠️ is_primary column may already exist');
     }
 

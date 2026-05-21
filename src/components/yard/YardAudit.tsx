@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
-  ClipboardCheck, CheckCircle2, AlertTriangle, XCircle, MapPin, Loader2, RotateCcw,
-  Pencil, Save, X, ArrowLeftRight, Upload, History, ChevronDown,
+  ClipboardCheck, CheckCircle2, AlertTriangle, MapPin, Loader2, RotateCcw,
+  Pencil, Save, X, ArrowLeftRight, Upload, History,
 } from 'lucide-react';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 
@@ -181,7 +181,6 @@ export default function YardAudit({ yardId, zones }: Props) {
 
     try {
       // ตรวจว่ามีตู้อื่นที่ตำแหน่งนี้ไหม
-      const zone = zones.find(z => z.zone_id === selectedZone);
       const checkRes = await fetch(
         `/api/containers?yard_id=${yardId}&zone_id=${selectedZone}&bay=${editForm.bay}&row=${editForm.row}&tier=${editForm.tier}&check_position=1`
       );

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '@/components/providers/ToastProvider';
 import { Building2, Save, Loader2, CheckCircle, Upload, ImageIcon, X } from 'lucide-react';
+import { RawImage } from '@/components/ui/RawImage';
 
 interface CompanyData {
   company_id?: number;
@@ -183,7 +184,7 @@ export default function CompanySettings() {
             {/* Preview */}
             <div className="shrink-0 w-28 h-28 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center overflow-hidden relative">
               {data.logo_url ? (
-                <img
+                <RawImage
                   src={data.logo_url}
                   alt="Company Logo"
                   className="w-full h-full object-contain p-1"
@@ -350,4 +351,3 @@ export default function CompanySettings() {
     </div>
   );
 }
-

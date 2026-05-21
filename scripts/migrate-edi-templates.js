@@ -140,7 +140,7 @@ async function migrate() {
       ALTER TABLE EDIEndpoints ADD template_id INT NULL
     `);
     console.log('✅ Added template_id to EDIEndpoints');
-  } catch (e) {
+  } catch {
     console.log('⏭️ template_id column may already exist');
   }
 

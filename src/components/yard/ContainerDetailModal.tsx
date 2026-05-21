@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { X, ExternalLink, ArrowRightLeft, Loader2, AlertTriangle, CheckCircle2, FileText, Receipt, Ship, Radio, Clock, User, ShieldCheck } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { RawImage } from '@/components/ui/RawImage';
 import {
   buildPhotoEvidenceSnapshot,
   normalizeEvidencePhotos,
@@ -696,7 +697,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
                     <div className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 flex items-start gap-3">
                       {selectedPoint.photo && (
                         <button onClick={() => setFullPhoto(selectedPoint.photo!)}>
-                          <img src={selectedPoint.photo} alt="damage" className="w-24 h-20 rounded-lg object-cover border border-slate-200 hover:border-blue-400 transition-colors cursor-pointer" />
+                          <RawImage src={selectedPoint.photo} alt="damage" className="w-24 h-20 rounded-lg object-cover border border-slate-200 hover:border-blue-400 transition-colors cursor-pointer" />
                         </button>
                       )}
                       <div className="flex-1 min-w-0">
@@ -761,7 +762,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
                 <div className="p-4 grid grid-cols-3 md:grid-cols-4 gap-2">
                   {galleryPhotos.map(photo => (
                     <button key={photo.id} onClick={() => setFullPhoto(photo.url)} className="text-left group">
-                      <img src={photo.url} alt={photo.label}
+                      <RawImage src={photo.url} alt={photo.label}
                         className="w-full h-20 object-cover rounded-lg border border-slate-200 group-hover:border-blue-400 transition-all" />
                       <p className="text-[9px] text-slate-400 mt-0.5 truncate">{photo.label}</p>
                     </button>
@@ -1145,7 +1146,7 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
       {fullPhoto && (
         <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 cursor-pointer" onClick={() => setFullPhoto(null)}>
           <button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-lg flex items-center justify-center hover:bg-white/30">✕</button>
-          <img src={fullPhoto} alt="Full-size photo" className="max-w-full max-h-[90vh] object-contain rounded-lg" />
+          <RawImage src={fullPhoto} alt="Full-size photo" className="max-w-full max-h-[90vh] object-contain rounded-lg" />
         </div>
       )}
     </>

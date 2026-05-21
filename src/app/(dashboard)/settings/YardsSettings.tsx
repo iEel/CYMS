@@ -225,6 +225,13 @@ export default function YardsSettings() {
         </button>
       </div>
 
+      {deleteError && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+          <X size={16} className="mt-0.5 shrink-0" />
+          <span>{deleteError}</span>
+        </div>
+      )}
+
       {/* Add Yard Form */}
       {showAddYard && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border-2 border-[#10B981]/30 p-5">

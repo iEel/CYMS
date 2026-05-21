@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Image, Save, CheckCircle2, Loader2, Trash2, HardDrive, AlertTriangle, Play,
+  Image as ImageIcon, Save, CheckCircle2, Loader2, Trash2, HardDrive, AlertTriangle,
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -135,7 +135,7 @@ export default function PhotoRetentionSettings() {
         <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600">
-              <Image size={20} />
+              <ImageIcon size={20} />
             </div>
             <div>
               <h3 className="font-semibold text-slate-800 dark:text-white">การเก็บรักษารูปภาพ</h3>

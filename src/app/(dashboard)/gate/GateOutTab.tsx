@@ -15,6 +15,7 @@ import { buildGateOutWorkflow } from '@/lib/gateWorkflow';
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { RawImage } from '@/components/ui/RawImage';
 
 interface GateOutTabProps {
   yardId: number;
@@ -1124,7 +1125,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                     <div className="flex gap-2 mb-3 flex-wrap">
                       {gateOutPhotos.map((photo, i) => (
                         <div key={i} className="relative">
-                          <img src={photo} alt={`Exit photo ${i + 1}`} className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
+                          <RawImage src={photo} alt={`Exit photo ${i + 1}`} className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
                           <button onClick={() => setGateOutPhotos(gateOutPhotos.filter((_, idx) => idx !== i))}
                             className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">×</button>
                         </div>

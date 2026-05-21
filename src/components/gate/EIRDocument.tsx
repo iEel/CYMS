@@ -3,6 +3,7 @@
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatDateTime } from '@/lib/utils';
+import { RawImage } from '@/components/ui/RawImage';
 import type { EvidencePhoto, PhotoCompleteness, PhotoRequirement } from '@/lib/photoEvidence';
 
 interface DamagePoint {
@@ -57,20 +58,6 @@ interface EIRDocumentProps {
   onClose?: () => void;
 }
 
-const SIDE_LABELS: Record<string, string> = {
-  front: 'ด้านหน้า', back: 'ด้านหลัง', left: 'ด้านซ้าย',
-  right: 'ด้านขวา', top: 'ด้านบน', floor: 'พื้น',
-};
-
-const DAMAGE_LABELS: Record<string, string> = {
-  dent: 'บุ๋ม (Dent)', hole: 'ทะลุ (Hole)', rust: 'สนิม (Rust)',
-  scratch: 'ขีดข่วน (Scratch)', crack: 'แตกร้าว (Crack)', missing_part: 'ชิ้นส่วนหาย',
-};
-
-const SEVERITY_LABELS: Record<string, string> = {
-  minor: 'เล็กน้อย', major: 'ปานกลาง', severe: 'รุนแรง',
-};
-
 const GRADE_INFO: Record<string, { label: string; desc: string; color: string }> = {
   A: { label: 'Grade A', desc: 'สภาพดี', color: '#10B981' },
   B: { label: 'Grade B', desc: 'สภาพพอใช้', color: '#F59E0B' },
@@ -83,7 +70,6 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
   const qrUrl = `${origin}/eir/${data.eir_number}`;
   const isGateIn = data.transaction_type === 'gate_in';
   const gradeInfo = GRADE_INFO[data.container_grade] || GRADE_INFO['A'];
-  const damagePoints = data.damage_report?.points || [];
   const hasDamage = data.container_condition === 'damage';
 
   const content = (
@@ -112,7 +98,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
         <div className="border-b-2 border-blue-600 px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {data.company?.logo_url ? (
-              <img src={data.company.logo_url} alt="Logo" className="w-8 h-8 rounded-lg object-contain" />
+              <RawImage src={data.company.logo_url} alt="Logo" className="w-8 h-8 rounded-lg object-contain" />
             ) : (
               <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white text-sm font-black">
                 {(data.company?.company_name || 'C').charAt(0)}

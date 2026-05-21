@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { RawImage } from '@/components/ui/RawImage';
 
 interface InvoiceData {
   invoice_id: number; invoice_number: string; customer_name: string;
@@ -269,7 +270,7 @@ export default function PrintInvoicePage() {
           <div className="flex-1">
             <div className="flex items-start gap-3 mb-1">
               {company?.logo_url && (
-                <img src={company.logo_url} alt="Logo" className="h-12 w-12 object-contain flex-shrink-0" />
+                <RawImage src={company.logo_url} alt="Logo" className="h-12 w-12 object-contain flex-shrink-0" />
               )}
               <div>
                 <h2 className="text-lg font-bold text-slate-800">

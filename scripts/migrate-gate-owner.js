@@ -30,7 +30,7 @@ async function migrate() {
         ALTER TABLE GateTransactions ADD container_owner_id INT NULL
       `;
       console.log('✅ container_owner_id added to GateTransactions');
-    } catch (e) {
+    } catch {
       console.log('⚠️ container_owner_id may already exist');
     }
 
@@ -41,7 +41,7 @@ async function migrate() {
         ALTER TABLE GateTransactions ADD billing_customer_id INT NULL
       `;
       console.log('✅ billing_customer_id added to GateTransactions');
-    } catch (e) {
+    } catch {
       console.log('⚠️ billing_customer_id may already exist');
     }
 
@@ -56,7 +56,7 @@ async function migrate() {
         ALTER TABLE GateTransactions ADD CONSTRAINT FK_GateTx_Billing FOREIGN KEY (billing_customer_id) REFERENCES Customers(customer_id)
       `;
       console.log('✅ FK constraints added');
-    } catch (e) {
+    } catch {
       console.log('⚠️ FK constraints may already exist');
     }
 
@@ -67,7 +67,7 @@ async function migrate() {
         ALTER TABLE Containers ADD is_soc BIT DEFAULT 0
       `;
       console.log('✅ is_soc added to Containers');
-    } catch (e) {
+    } catch {
       console.log('⚠️ is_soc may already exist');
     }
 
@@ -78,7 +78,7 @@ async function migrate() {
         ALTER TABLE Containers ADD container_owner_id INT NULL
       `;
       console.log('✅ container_owner_id added to Containers');
-    } catch (e) {
+    } catch {
       console.log('⚠️ container_owner_id on Containers may already exist');
     }
 

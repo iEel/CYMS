@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { PenTool, RotateCcw, CheckCircle2 } from 'lucide-react';
 
 interface SignaturePadProps {
