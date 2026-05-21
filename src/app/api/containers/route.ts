@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
+import { requireAnyPermission, requirePermission } from '@/lib/apiAuth';
 
 // GET — ดึง containers ตาม yard_id + filter, หรือ check_position (conflict detection)
 export async function GET(request: NextRequest) {
@@ -83,6 +84,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, ['gate.in', 'yard.location.assign'], 'คุณไม่มีสิทธิ์เพิ่มตู้เข้าลาน');
+    if (actor instanceof NextResponse) return actor;
 
     const result = await db.request()
       .input('containerNumber', sql.NVarChar, body.container_number)
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest) {
 
     const created = result.recordset[0];
 
-    await logAudit({ action: 'container_create', entityType: 'container', entityId: created.container_id, details: { container_number: body.container_number, size: body.size, type: body.type, yard_id: body.yard_id } });
+    await logAudit({ userId: actor.userId, yardId: body.yard_id || null, action: 'container_create', entityType: 'container', entityId: created.container_id, details: { container_number: body.container_number, size: body.size, type: body.type, yard_id: body.yard_id } });
 
     return NextResponse.json({ success: true, data: created });
   } catch (error: unknown) {
@@ -125,6 +128,26 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const permissionChecks = new Set<string>();
+    if (body.container_grade !== undefined) permissionChecks.add('survey.grade.change');
+    if (body.status !== undefined && body.status !== 'in_yard') permissionChecks.add('yard.hold.release');
+    if (
+      body.yard_id !== undefined ||
+      body.zone_id !== undefined ||
+      body.bay !== undefined ||
+      body.row !== undefined ||
+      body.tier !== undefined
+    ) {
+      permissionChecks.add('yard.slot.move');
+    }
+    if (permissionChecks.size === 0) permissionChecks.add('yard.location.assign');
+
+    let actorUserId: number | null = null;
+    for (const permissionCode of permissionChecks) {
+      const actor = await requirePermission(request, db, permissionCode, 'คุณไม่มีสิทธิ์อัปเดตข้อมูลตู้นี้');
+      if (actor instanceof NextResponse) return actor;
+      actorUserId = actor.userId;
+    }
 
     const currentResult = await db.request()
       .input('containerId', sql.Int, body.container_id)
@@ -177,7 +200,7 @@ export async function PUT(request: NextRequest) {
 
     await req.query(`UPDATE Containers SET ${setClauses.join(', ')} WHERE container_id = @containerId`);
 
-    await logAudit({ action: 'container_update', entityType: 'container', entityId: body.container_id, details: { status: body.status, container_grade: body.container_grade, zone_id: body.zone_id, bay: body.bay, row: body.row, tier: body.tier } });
+    await logAudit({ userId: actorUserId, yardId: body.yard_id || null, action: 'container_update', entityType: 'container', entityId: body.container_id, details: { status: body.status, container_grade: body.container_grade, zone_id: body.zone_id, bay: body.bay, row: body.row, tier: body.tier } });
 
     if (body.container_grade !== undefined && currentContainer && currentContainer.container_grade !== String(body.container_grade).toUpperCase()) {
       await logApprovalReview({
@@ -187,8 +210,8 @@ export async function PUT(request: NextRequest) {
         action: 'container_grade_change_after_save',
         entityType: 'container',
         entityId: body.container_id,
-        requestedBy: body.user_id || null,
-        approvedBy: body.approved_by || null,
+        requestedBy: actorUserId,
+        approvedBy: null,
         reason: body.reason || body.notes || null,
         details: {
           previous_grade: currentContainer.container_grade,
@@ -206,8 +229,8 @@ export async function PUT(request: NextRequest) {
         action: 'container_billing_hold_override',
         entityType: 'container',
         entityId: body.container_id,
-        requestedBy: body.user_id || null,
-        approvedBy: body.approved_by || null,
+        requestedBy: actorUserId,
+        approvedBy: null,
         reason: body.reason || body.notes || null,
         details: {
           previous_status: currentContainer.status,

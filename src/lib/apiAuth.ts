@@ -117,6 +117,46 @@ export async function requirePermission(
   return actor;
 }
 
+export async function requireAnyPermission(
+  request: NextRequest,
+  db: PermissionDb,
+  permissionCodes: string[],
+  message = 'คุณไม่มีสิทธิ์เข้าถึงฟังก์ชันนี้'
+): Promise<RequestActor | NextResponse> {
+  const actor = requireRequestActor(request);
+  if (actor instanceof NextResponse) return actor;
+
+  const uniqueCodes = Array.from(new Set(permissionCodes.filter(Boolean)));
+  if (uniqueCodes.length === 0) {
+    return NextResponse.json({ error: message }, { status: 403 });
+  }
+
+  // Yard Manager is the system administrator role and receives all seeded grants.
+  if (actor.role === 'yard_manager') return actor;
+
+  const req = db.request().input('roleCode', sql.NVarChar, actor.role);
+  const codeParams = uniqueCodes.map((code, index) => {
+    const paramName = `permissionCode${index}`;
+    req.input(paramName, sql.NVarChar, code);
+    return `@${paramName}`;
+  });
+
+  const result = await req.query(`
+    SELECT TOP 1 1 as granted
+    FROM Roles r
+    JOIN RolePermissions rp ON rp.role_id = r.role_id
+    JOIN Permissions p ON p.permission_id = rp.permission_id
+    WHERE r.role_code = @roleCode
+      AND p.permission_code IN (${codeParams.join(', ')})
+  `);
+
+  if (result.recordset.length === 0) {
+    return NextResponse.json({ error: message }, { status: 403 });
+  }
+
+  return actor;
+}
+
 /**
  * Wrap an API handler with authentication + rate limiting
  * 

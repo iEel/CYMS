@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox + ESLint Warning Cleanup** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening** (~100%)
 
 ---
 
@@ -1454,6 +1454,33 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
          → auth/me อ่าน x-cyms-token header → verify JWT → ดึง user จาก DB → return session ✅
          → AuthProvider เก็บ session ลง localStorage + state
 ```
+
+### 🔐 API Actor Attribution Hardening (✅ เสร็จ — 21 พ.ค. 2569)
+
+**ไฟล์ที่เกี่ยวข้อง:**
+- `src/lib/apiAuth.ts` — เพิ่ม `requireAnyPermission()` สำหรับ route ที่ยอมรับได้หลาย permission โดยอ่าน actor จาก proxy headers เท่านั้น
+- `src/app/api/approval-reviews/route.ts`
+- `src/app/api/billing/clearance/route.ts`
+- `src/app/api/billing/invoices/route.ts`
+- `src/app/api/gate/route.ts`
+- `src/app/api/mnr/route.ts`
+- `src/app/api/yard/audit-log/route.ts`
+- `src/app/api/attachments/route.ts`
+- `src/app/api/operations/route.ts`
+- `src/app/api/containers/route.ts`
+- `src/app/api/__tests__/api-auth-coverage.test.ts`
+
+**สิ่งที่แก้แล้ว:**
+- [x] Mutation API ชุดเสี่ยงไม่รับ `user_id`, `approved_by`, `uploaded_by` จาก request body แล้ว
+- [x] Audit/approval/document lifecycle ใช้ `actor.userId` จาก `x-user-id` ที่ `proxy.ts` inject หลังตรวจ JWT
+- [x] Billing/Gate/M&R/Operations/Containers ใส่ server-side permission guard ก่อนเขียนข้อมูล
+- [x] Attachment และ manual audit-log API ต้องมี authenticated actor ก่อนบันทึก
+- [x] เพิ่ม static Jest coverage กัน regressions ไม่ให้ route เสี่ยงกลับไป trust actor จาก body อีก
+
+**Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/api-auth-coverage.test.ts --runInBand` ✅
+- `npm test -- src/lib/__tests__/apiAuth.test.ts src/app/api/__tests__/api-auth-coverage.test.ts --runInBand` ✅
+- `npm run lint` ✅
 
 ---
 

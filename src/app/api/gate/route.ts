@@ -7,6 +7,7 @@ import { logApprovalReview } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
+import { requirePermission } from '@/lib/apiAuth';
 
 async function validateBillingClearance(
   db: sql.ConnectionPool,
@@ -139,7 +140,6 @@ const gateBodySchema = z.object({
   notes: z.string().max(500).optional(),
   damage_report: z.any().optional(),
   container_id: z.number().int().positive().optional(),
-  user_id: z.number().int().positive().optional(),
   container_owner_id: z.number().int().positive().optional().nullable(),
   billing_customer_id: z.number().int().positive().optional().nullable(),
   billing_clearance_id: z.number().int().positive().optional().nullable(),
@@ -217,12 +217,19 @@ export async function POST(request: NextRequest) {
       driver_name, driver_license, truck_plate, truck_company, seal_number, booking_ref, notes,
       damage_report,
       container_id,
-      user_id,
       container_owner_id, billing_customer_id,
       billing_clearance_id,
     } = body;
 
     const db = await getDb();
+    const actor = await requirePermission(
+      request,
+      db,
+      transaction_type === 'gate_in' ? 'gate.in' : 'gate.out',
+      transaction_type === 'gate_in' ? 'คุณไม่มีสิทธิ์ Gate-In' : 'คุณไม่มีสิทธิ์ Gate-Out'
+    );
+    if (actor instanceof NextResponse) return actor;
+    const actorUserId = actor.userId;
     const containerGrade = typeof damage_report?.condition_grade === 'string'
       && ['A', 'B', 'C', 'D'].includes(damage_report.condition_grade.toUpperCase())
       ? damage_report.condition_grade.toUpperCase()
@@ -386,7 +393,7 @@ export async function POST(request: NextRequest) {
       .input('eirNumber', sql.NVarChar, eirNumber)
       .input('notes', sql.NVarChar, notes || null)
       .input('damageReport', sql.NVarChar, damage_report ? JSON.stringify(damage_report) : null)
-      .input('processedBy', sql.Int, user_id || null)
+      .input('processedBy', sql.Int, actorUserId)
       .input('ownerId', sql.Int, container_owner_id || null)
       .input('billingId', sql.Int, billing_customer_id || null)
       .input('billingClearanceId', sql.Int, billing_clearance_id || null)
@@ -626,7 +633,7 @@ export async function POST(request: NextRequest) {
 
     // Audit log
     await logAudit({
-      userId: user_id || null,
+      userId: actorUserId,
       yardId: yard_id,
       action: transaction_type,
       entityType: 'container',
@@ -645,7 +652,7 @@ export async function POST(request: NextRequest) {
       documentNumber: eirNumber,
       status: 'issued',
       eventType: 'eir_issued',
-      userId: user_id || null,
+      userId: actorUserId,
       yardId: yard_id,
       details: {
         transaction_type,
@@ -657,7 +664,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (transaction_type === 'gate_out' && gateOutHoldSnapshot?.hold_status === 'billing_hold') {
-      const approvedBy = typeof body.approved_by === 'number' ? body.approved_by : null;
       await logApprovalReview({
         db,
         yardId: yard_id,
@@ -665,8 +671,8 @@ export async function POST(request: NextRequest) {
         action: 'gate_out_with_billing_hold',
         entityType: 'container',
         entityId: finalContainerId,
-        requestedBy: user_id || null,
-        approvedBy,
+        requestedBy: actorUserId,
+        approvedBy: null,
         reason: notes || null,
         details: {
           eir_number: eirNumber,

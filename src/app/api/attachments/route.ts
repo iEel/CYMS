@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { ensureAttachmentCenter, logAttachment } from '@/lib/attachmentCenter';
+import { requireRequestActor } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -48,6 +49,8 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = requireRequestActor(request);
+    if (actor instanceof NextResponse) return actor;
     const attachment = await logAttachment({
       db,
       entityType: body.entity_type,
@@ -57,7 +60,7 @@ export async function POST(request: NextRequest) {
       fileUrl: body.file_url,
       fileName: body.file_name || null,
       mimeType: body.mime_type || null,
-      uploadedBy: body.uploaded_by ? Number(body.uploaded_by) : null,
+      uploadedBy: actor.userId,
     });
 
     return NextResponse.json({ success: true, attachment });

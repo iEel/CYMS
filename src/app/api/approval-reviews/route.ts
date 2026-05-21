@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { ensureApprovalReviews } from '@/lib/approvalReview';
+import { requireAnyPermission } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { review_id, status = 'approved', approved_by, reason } = body;
+    const { review_id, status = 'approved', reason } = body;
 
     if (!review_id || !['approved', 'rejected', 'pending_review'].includes(status)) {
       return NextResponse.json({ error: 'review_id หรือ status ไม่ถูกต้อง' }, { status: 400 });
@@ -62,11 +63,22 @@ export async function PUT(request: NextRequest) {
 
     const db = await getDb();
     await ensureApprovalReviews(db);
+    const actor = await requireAnyPermission(request, db, [
+      'billing.waive.approve',
+      'billing.credit_note.approve',
+      'survey.grade.approve',
+      'yard.hold.release',
+      'mnr.eor.approve',
+      'permissions.manage',
+    ], 'คุณไม่มีสิทธิ์ review/อนุมัติรายการนี้');
+    if (actor instanceof NextResponse) return actor;
+
+    const reviewedBy = status === 'pending_review' ? null : actor.userId;
 
     await db.request()
       .input('reviewId', sql.Int, review_id)
       .input('status', sql.NVarChar, status)
-      .input('approvedBy', sql.Int, approved_by || null)
+      .input('approvedBy', sql.Int, reviewedBy)
       .input('reason', sql.NVarChar, reason || null)
       .query(`
         UPDATE ApprovalReviews
@@ -78,7 +90,7 @@ export async function PUT(request: NextRequest) {
       `);
 
     await logAudit({
-      userId: approved_by || null,
+      userId: actor.userId,
       action: `approval_review_${status}`,
       entityType: 'approval_review',
       entityId: review_id,

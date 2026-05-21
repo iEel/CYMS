@@ -6,6 +6,7 @@ import { logApprovalReview } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { upsertPortalEntityAccess, type PortalEntityAccessDb } from '@/lib/portalEntityAccess';
+import { requirePermission } from '@/lib/apiAuth';
 
 interface PortalInvoiceGrantSource {
   customer_id?: number | null;
@@ -48,6 +49,29 @@ function queueDocumentLifecycle(event: Parameters<typeof logDocumentLifecycle>[0
       console.error('⚠️ Document lifecycle log failed:', error);
     });
   }, 0);
+}
+
+function invoiceMutationPermission(action: unknown, documentType: string) {
+  if (!action) {
+    return documentType === 'credit_note' ? 'billing.credit_note.create' : 'billing.invoice.create';
+  }
+
+  switch (action) {
+    case 'issue':
+      return 'billing.invoice.create';
+    case 'pay':
+      return 'billing.payment.receive';
+    case 'cancel':
+      return 'billing.invoice.cancel';
+    case 'credit_note':
+      return 'billing.credit_note.create';
+    case 'hold':
+      return 'billing.payment.receive';
+    case 'release':
+      return 'yard.hold.release';
+    default:
+      return null;
+  }
 }
 
 // GET — ดึง Invoices
@@ -141,12 +165,20 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const bodyDocumentType = body.document_type === 'credit_note' ? 'credit_note' : 'invoice';
+    const actor = await requirePermission(
+      request,
+      db,
+      invoiceMutationPermission(null, bodyDocumentType) || 'billing.invoice.create',
+      'คุณไม่มีสิทธิ์สร้างเอกสาร Billing ประเภทนี้'
+    );
+    if (actor instanceof NextResponse) return actor;
 
     const invNumber = await nextDocumentNumber({
       db,
       yardId: body.yard_id,
-      documentType: body.document_type === 'credit_note' ? 'credit_note' : 'invoice',
-      prefix: body.document_type === 'credit_note' ? 'CN' : 'INV',
+      documentType: bodyDocumentType,
+      prefix: bodyDocumentType === 'credit_note' ? 'CN' : 'INV',
     });
 
     const vatRate = 0.07;
@@ -188,14 +220,14 @@ export async function POST(request: NextRequest) {
     const inv = result.recordset[0];
     await grantInvoicePortalAccess(db, inv);
     await logAudit({
-      userId: body.user_id, yardId: body.yard_id,
+      userId: actor.userId, yardId: body.yard_id,
       action: 'invoice_create', entityType: 'invoice', entityId: inv.invoice_id,
       details: { invoice_number: invNumber, customer_id: body.customer_id, charge_type: body.charge_type, grand_total: grandTotal, container_id: body.container_id }
     });
 
     queueDocumentLifecycle({
       db,
-      documentType: body.document_type === 'credit_note' ? 'credit_note' : 'invoice',
+      documentType: bodyDocumentType,
       documentId: inv.invoice_id,
       documentNumber: invNumber,
       status: inv.status || 'draft',
@@ -203,7 +235,7 @@ export async function POST(request: NextRequest) {
       relatedDocumentType: body.ref_invoice_id ? 'invoice' : null,
       relatedDocumentId: body.ref_invoice_id || body.replaces_invoice_id || null,
       reason: body.notes || null,
-      userId: body.user_id || null,
+      userId: actor.userId,
       yardId: body.yard_id,
       details: { customer_id: body.customer_id, charge_type: body.charge_type, grand_total: grandTotal, container_id: body.container_id || null },
     });
@@ -224,6 +256,13 @@ export async function PUT(request: NextRequest) {
     const bodyDocumentNumber = typeof body.invoice_number === 'string' ? body.invoice_number : '';
     const bodyDocumentType = body.document_type === 'credit_note' ? 'credit_note' : 'invoice';
     const bodyPreviousStatus = typeof body.previous_status === 'string' ? body.previous_status : undefined;
+    const permissionCode = invoiceMutationPermission(action, bodyDocumentType);
+    if (!permissionCode) {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
+    const actor = await requirePermission(request, db, permissionCode, 'คุณไม่มีสิทธิ์อัปเดตเอกสาร Billing ด้วย action นี้');
+    if (actor instanceof NextResponse) return actor;
+    const actorUserId = actor.userId;
 
     switch (action) {
       case 'issue':
@@ -237,7 +276,7 @@ export async function PUT(request: NextRequest) {
             documentNumber: bodyDocumentNumber,
             status: 'issued',
             eventType: 'issued',
-            userId: body.user_id || null,
+            userId: actorUserId,
             yardId: body.yard_id || null,
             details: { previous_status: bodyPreviousStatus },
           });
@@ -271,7 +310,7 @@ export async function PUT(request: NextRequest) {
             relatedDocumentType: 'receipt',
             relatedDocumentId: invoice_id,
             relatedDocumentNumber: receiptNumber,
-            userId: body.user_id || null,
+            userId: actorUserId,
             yardId: body.yard_id || paidInvoice?.yard_id || null,
             details: { previous_status: bodyPreviousStatus || paidInvoice?.status, grand_total: Number(paidInvoice?.grand_total ?? body.grand_total ?? 0) },
           });
@@ -285,7 +324,7 @@ export async function PUT(request: NextRequest) {
             relatedDocumentType: 'invoice',
             relatedDocumentId: invoice_id,
             relatedDocumentNumber: paidDocumentNumber,
-            userId: body.user_id || null,
+            userId: actorUserId,
             yardId: body.yard_id || paidInvoice?.yard_id || null,
             details: { invoice_number: paidDocumentNumber, grand_total: Number(paidInvoice?.grand_total ?? body.grand_total ?? 0) },
           });
@@ -307,7 +346,7 @@ export async function PUT(request: NextRequest) {
             status: 'cancelled',
             eventType: 'cancelled',
             reason: body.reason || body.notes || null,
-            userId: body.user_id || null,
+            userId: actorUserId,
             yardId: body.yard_id || null,
             details: { previous_status: bodyPreviousStatus },
           });
@@ -319,8 +358,8 @@ export async function PUT(request: NextRequest) {
           action: 'invoice_cancel_after_issue',
           entityType: 'invoice',
           entityId: invoice_id,
-          requestedBy: body.user_id || null,
-          approvedBy: body.approved_by || null,
+          requestedBy: actorUserId,
+          approvedBy: null,
           reason: body.reason || body.notes || null,
           details: { invoice_id, action },
         });
@@ -420,7 +459,7 @@ export async function PUT(request: NextRequest) {
           relatedDocumentId: refId,
           relatedDocumentNumber: orig.invoice_number,
           reason: reason || null,
-          userId: body.user_id || null,
+          userId: actorUserId,
           yardId: orig.yard_id,
           details: { credit_amount: creditAmt, remaining_amount: remainingAfterCredit },
         });
@@ -442,7 +481,7 @@ export async function PUT(request: NextRequest) {
             relatedDocumentId: creditNote.invoice_id,
             relatedDocumentNumber: cnNumber,
             reason: reason || null,
-            userId: body.user_id || null,
+            userId: actorUserId,
             yardId: orig.yard_id,
             details: { credit_amount: creditAmt },
           });
@@ -462,7 +501,7 @@ export async function PUT(request: NextRequest) {
             relatedDocumentId: creditNote.invoice_id,
             relatedDocumentNumber: cnNumber,
             reason: reason || null,
-            userId: body.user_id || null,
+            userId: actorUserId,
             yardId: orig.yard_id,
             details: { credit_amount: creditAmt, remaining_amount: remainingAfterCredit },
           });
@@ -539,7 +578,7 @@ export async function PUT(request: NextRequest) {
             relatedDocumentId: refId,
             relatedDocumentNumber: orig.invoice_number,
             reason: reason || null,
-            userId: body.user_id || null,
+            userId: actorUserId,
             yardId: orig.yard_id,
             details: { credit_note_number: cnNumber, replaces_invoice_id: refId, ref_credit_note_id: creditNote.invoice_id },
           });
@@ -547,7 +586,7 @@ export async function PUT(request: NextRequest) {
 
         // Audit log
         await logAudit({
-          userId: body.user_id, yardId: orig.yard_id,
+          userId: actorUserId, yardId: orig.yard_id,
           action: 'credit_note_create', entityType: 'invoice', entityId: cnResult.recordset[0].invoice_id,
           details: { cn_number: cnNumber, ref_invoice: orig.invoice_number, credit_amount: creditAmt, remaining_amount: remainingAfterCredit, revised_invoice_number: revisedNumber, reason }
         });
@@ -559,8 +598,8 @@ export async function PUT(request: NextRequest) {
           action: 'credit_note_created',
           entityType: 'invoice',
           entityId: cnResult.recordset[0].invoice_id,
-          requestedBy: body.user_id || null,
-          approvedBy: body.approved_by || null,
+          requestedBy: actorUserId,
+          approvedBy: null,
           reason: reason || null,
           details: {
             cn_number: cnNumber,
@@ -608,8 +647,8 @@ export async function PUT(request: NextRequest) {
             action: 'billing_hold_released',
             entityType: 'container',
             entityId: inv3.recordset[0].container_id,
-            requestedBy: body.user_id || null,
-            approvedBy: body.approved_by || null,
+            requestedBy: actorUserId,
+            approvedBy: null,
             reason: body.reason || body.notes || null,
             details: { invoice_id },
           });
@@ -619,7 +658,7 @@ export async function PUT(request: NextRequest) {
 
     // Audit log
     await logAudit({
-      userId: body.user_id, yardId: body.yard_id,
+      userId: actorUserId, yardId: body.yard_id,
       action: `invoice_${action}`, entityType: 'invoice', entityId: invoice_id,
       details: { action, invoice_id }
     });

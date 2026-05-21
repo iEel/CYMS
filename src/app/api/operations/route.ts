@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requireAnyPermission } from '@/lib/apiAuth';
 
 // GET — ดึง Work Orders
 export async function GET(request: NextRequest) {
@@ -66,6 +67,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, ['yard.slot.move', 'yard.location.assign'], 'คุณไม่มีสิทธิ์สร้างคำสั่งงานลาน');
+    if (actor instanceof NextResponse) return actor;
 
     const result = await db.request()
       .input('yardId', sql.Int, body.yard_id)
@@ -82,23 +85,24 @@ export async function POST(request: NextRequest) {
       .input('priority', sql.Int, body.priority || 3)
       .input('notes', sql.NVarChar, body.notes || null)
       .input('assignedTo', sql.Int, body.assigned_to || null)
+      .input('createdBy', sql.Int, actor.userId)
       .query(`
         INSERT INTO WorkOrders (yard_id, order_type, container_id,
           from_zone_id, from_bay, from_row, from_tier,
           to_zone_id, to_bay, to_row, to_tier,
-          priority, notes, assigned_to, status)
+          priority, notes, assigned_to, created_by, status)
         OUTPUT INSERTED.*
         VALUES (@yardId, @orderType, @containerId,
           @fromZoneId, @fromBay, @fromRow, @fromTier,
           @toZoneId, @toBay, @toRow, @toTier,
-          @priority, @notes, @assignedTo,
+          @priority, @notes, @assignedTo, @createdBy,
           CASE WHEN @assignedTo IS NOT NULL THEN 'assigned' ELSE 'pending' END)
       `);
 
     // Audit log
     const created = result.recordset[0];
     await logAudit({
-      userId: body.user_id, yardId: body.yard_id,
+      userId: actor.userId, yardId: body.yard_id,
       action: 'wo_create', entityType: 'work_order', entityId: created.order_id,
       details: { order_type: body.order_type, container_id: body.container_id, to_zone_id: body.to_zone_id, priority: body.priority, notes: body.notes }
     });
@@ -118,6 +122,8 @@ export async function PUT(request: NextRequest) {
     // action: 'assign', 'start', 'complete', 'cancel'
 
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, ['yard.slot.move', 'yard.location.assign'], 'คุณไม่มีสิทธิ์อัปเดตคำสั่งงานลาน');
+    if (actor instanceof NextResponse) return actor;
 
     let updateQuery = '';
     const req = db.request().input('orderId', sql.Int, order_id);
@@ -192,7 +198,7 @@ export async function PUT(request: NextRequest) {
     // Audit log
     const auditAction = action === 'accept' ? 'wo_accept' : action === 'complete' ? 'wo_complete' : action === 'cancel' ? 'wo_cancel' : `wo_${action}`;
     await logAudit({
-      userId: body.user_id, yardId: body.yard_id,
+      userId: actor.userId, yardId: body.yard_id,
       action: auditAction, entityType: 'work_order', entityId: order_id,
       details: { action, order_id, ...(body.to_zone_id ? { to_zone_id: body.to_zone_id, to_bay: body.to_bay, to_row: body.to_row, to_tier: body.to_tier } : {}) }
     });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireRequestActor } from '@/lib/apiAuth';
 
 // GET — ดึง audit log
 export async function GET(request: NextRequest) {
@@ -46,11 +47,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { yard_id, action, entity_type, entity_id, details, user_id } = body;
+    const { yard_id, action, entity_type, entity_id, details } = body;
 
     const db = await getDb();
+    const actor = requireRequestActor(request);
+    if (actor instanceof NextResponse) return actor;
+
     await db.request()
-      .input('userId', sql.Int, user_id || null)
+      .input('userId', sql.Int, actor.userId)
       .input('yardId', sql.Int, yard_id || null)
       .input('action', sql.NVarChar, action)
       .input('entityType', sql.NVarChar, entity_type)

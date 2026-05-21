@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
+import { requirePermission } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -120,9 +121,7 @@ export async function POST(request: NextRequest) {
       final_amount = 0,
       reason,
       invoice_id,
-      approved_by,
       charges,
-      user_id,
     } = body;
 
     if (!yard_id || !transaction_type || !clearance_type) {
@@ -137,7 +136,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ต้องระบุเหตุผลการยกเว้นค่าใช้จ่าย' }, { status: 400 });
     }
 
+    const originalAmount = Number(original_amount || 0);
+    const finalAmount = Number(final_amount || 0);
+    const isWaiveLike = ['waived', 'no_charge'].includes(clearance_type) || finalAmount < originalAmount;
+
     const db = await getDb();
+    const actor = await requirePermission(
+      request,
+      db,
+      isWaiveLike ? 'billing.waive.request' : 'billing.payment.receive',
+      'คุณไม่มีสิทธิ์บันทึก Billing Clearance ประเภทนี้'
+    );
+    if (actor instanceof NextResponse) return actor;
 
     const result = await db.request()
       .input('yardId', sql.Int, yard_id)
@@ -150,9 +160,9 @@ export async function POST(request: NextRequest) {
       .input('finalAmount', sql.Decimal(12, 2), final_amount || 0)
       .input('reason', sql.NVarChar, reason || null)
       .input('invoiceId', sql.Int, invoice_id || null)
-      .input('approvedBy', sql.Int, approved_by || null)
+      .input('approvedBy', sql.Int, isWaiveLike ? null : actor.userId)
       .input('charges', sql.NVarChar, charges ? JSON.stringify(charges) : null)
-      .input('createdBy', sql.Int, user_id || null)
+      .input('createdBy', sql.Int, actor.userId)
       .query(`
         INSERT INTO BillingClearances (
           yard_id, transaction_type, container_id, container_number, customer_id,
@@ -169,7 +179,7 @@ export async function POST(request: NextRequest) {
 
     const clearance = result.recordset[0];
     await logAudit({
-      userId: user_id || null,
+      userId: actor.userId,
       yardId: yard_id,
       action: 'billing_clearance_create',
       entityType: 'billing_clearance',
@@ -186,9 +196,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const originalAmount = Number(original_amount || 0);
-    const finalAmount = Number(final_amount || 0);
-    const isWaiveLike = ['waived', 'no_charge'].includes(clearance_type) || finalAmount < originalAmount;
     if (isWaiveLike) {
       await logApprovalReview({
         db,
@@ -197,8 +204,8 @@ export async function POST(request: NextRequest) {
         action: clearance_type === 'no_charge' ? 'billing_no_charge_recorded' : 'billing_waive_recorded',
         entityType: 'billing_clearance',
         entityId: clearance.clearance_id,
-        requestedBy: user_id || null,
-        approvedBy: approved_by || null,
+        requestedBy: actor.userId,
+        approvedBy: null,
         reason: reason || null,
         details: {
           transaction_type,

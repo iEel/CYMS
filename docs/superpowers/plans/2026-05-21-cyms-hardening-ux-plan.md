@@ -17,29 +17,29 @@
 - Modify: high-risk API routes in `src/app/api`
 - Test: `src/app/api/__tests__/api-auth-coverage.test.ts`
 
-- [ ] **Step 1: Write failing coverage tests**
+- [x] **Step 1: Write failing coverage tests**
 
 Create a static Jest test that fails if high-risk mutation routes still use `body.user_id`, `body.approved_by`, `body.uploaded_by`, or omit an actor guard. Include `billing/clearance`, `billing/invoices`, `gate`, `mnr`, `approval-reviews`, `yard/audit-log`, and `attachments`.
 
-- [ ] **Step 2: Run test and verify RED**
+- [x] **Step 2: Run test and verify RED**
 
 Run: `npm test -- src/app/api/__tests__/api-auth-coverage.test.ts --runInBand`
 
 Expected: fail because current routes still accept actor ids from body and lack uniform guards.
 
-- [ ] **Step 3: Implement shared helpers**
+- [x] **Step 3: Implement shared helpers**
 
 Add helper functions in `apiAuth.ts`: `requireActor`, `requirePermissionOrRole`, and optional `actorIdOrNull` using proxy headers only.
 
-- [ ] **Step 4: Apply to high-risk mutation routes**
+- [x] **Step 4: Apply to high-risk mutation routes**
 
 Change each route to derive `userId` / `approvedBy` / `uploadedBy` from the authenticated actor. Keep business payload fields from body, but never trust body for the actor.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run the targeted static test, then `npm run lint`.
 
-- [ ] **Step 6: Update handoff and commit**
+- [x] **Step 6: Update handoff and commit**
 
 Document the P0 actor cleanup in `DEVELOPER_HANDOFF.md`, commit as `Harden API actor attribution`, and push.
 
@@ -163,4 +163,3 @@ Show why a portal item is visible: owner, billing, booking, invoice, or gate gra
 - [ ] **Step 5: Verification and handoff**
 
 Run lint/build/full tests, update `DEVELOPER_HANDOFF.md`, commit `Polish operator workflows`, and push.
-

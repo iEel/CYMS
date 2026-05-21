@@ -4,6 +4,7 @@ import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { z } from 'zod';
 import { nextDocumentNumber } from '@/lib/documentNumber';
+import { requirePermission } from '@/lib/apiAuth';
 
 // === Zod Schemas ===
 const createEORSchema = z.object({
@@ -18,14 +19,12 @@ const createEORSchema = z.object({
   source_eir_number: z.string().max(80).optional().nullable(),
   cedex_rate_version: z.string().max(80).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
-  user_id: z.number().int().positive().optional().nullable(),
 });
 
 const updateEORSchema = z.object({
   eor_id: z.number().int().positive(),
   action: z.enum(['submit', 'approve', 'customer_approve', 'start_repair', 'complete', 'reject']),
   actual_cost: z.number().min(0).optional(),
-  user_id: z.number().int().positive().optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
   customer_approved_by: z.string().max(200).optional().nullable(),
   customer_approved_at: z.string().optional().nullable(),
@@ -41,6 +40,11 @@ function parseDamageDetails(value: unknown) {
   if (!value) return null;
   if (typeof value !== 'string') return value;
   try { return JSON.parse(value); } catch { return value; }
+}
+
+function mnrMutationPermission(action: string) {
+  if (['approve', 'customer_approve', 'reject'].includes(action)) return 'mnr.eor.approve';
+  return 'mnr.eor.update';
 }
 
 function normalizeDamageDetails(value: unknown, cedexRateVersion: string) {
@@ -201,6 +205,8 @@ export async function POST(request: NextRequest) {
     }
     const body = parsed.data;
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'mnr.eor.create', 'คุณไม่มีสิทธิ์สร้าง EOR');
+    if (actor instanceof NextResponse) return actor;
 
     const eorNumber = await nextDocumentNumber({
       db,
@@ -226,7 +232,7 @@ export async function POST(request: NextRequest) {
       .input('sourceEirNumber', sql.NVarChar, body.source_eir_number || null)
       .input('cedexRateVersion', sql.NVarChar, cedexRateVersion)
       .input('notes', sql.NVarChar, body.notes || null)
-      .input('createdBy', sql.Int, body.user_id || null)
+      .input('createdBy', sql.Int, actor.userId)
       .query(`
         INSERT INTO RepairOrders (eor_number, container_id, yard_id, customer_id, billing_customer_id,
           damage_details, estimated_cost, repair_photos, repair_photo_evidence, source_eir_number, cedex_rate_version, notes, created_by)
@@ -243,7 +249,7 @@ export async function POST(request: NextRequest) {
     // Audit trail
     await logAudit({
       yardId: body.yard_id,
-      userId: body.user_id || undefined,
+      userId: actor.userId,
       action: 'eor_create',
       entityType: 'repair_order',
       entityId: result.recordset[0].eor_id,
@@ -276,7 +282,6 @@ export async function PUT(request: NextRequest) {
       eor_id,
       action,
       actual_cost,
-      user_id,
       customer_approved_by,
       customer_approved_at,
       customer_approval_channel,
@@ -289,6 +294,9 @@ export async function PUT(request: NextRequest) {
     } = parsed.data;
 
     const db = await getDb();
+    const actor = await requirePermission(request, db, mnrMutationPermission(action), 'คุณไม่มีสิทธิ์อัปเดต EOR ด้วย action นี้');
+    if (actor instanceof NextResponse) return actor;
+    const actorUserId = actor.userId;
 
     // Get order info for audit + container status
     const orderInfo = await db.request()
@@ -362,7 +370,7 @@ export async function PUT(request: NextRequest) {
               updated_at = GETDATE()
             WHERE container_id = @cid
           `);
-        await createMnrInvoiceIfNeeded({ db, order, actualCost: actual_cost || 0, userId: user_id });
+        await createMnrInvoiceIfNeeded({ db, order, actualCost: actual_cost || 0, userId: actorUserId });
         break;
       case 'reject':
         await req.query("UPDATE RepairOrders SET status = 'rejected' WHERE eor_id = @eorId");
@@ -375,7 +383,7 @@ export async function PUT(request: NextRequest) {
     // Audit trail for every action
     await logAudit({
       yardId: order.yard_id,
-      userId: user_id || undefined,
+      userId: actorUserId,
       action: `eor_${action}`,
       entityType: 'repair_order',
       entityId: eor_id,
