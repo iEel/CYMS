@@ -11,6 +11,7 @@ import {
   normalizeReeferPolicy,
   type ReeferPolicyInput,
 } from '@/lib/reeferMonitoring';
+import { buildReeferExceptionDraft } from '@/lib/reeferExceptions';
 
 type Db = Awaited<ReturnType<typeof getDb>>;
 
@@ -90,7 +91,12 @@ export async function GET(request: NextRequest) {
         latestCheck.photo_url AS latest_photo_url,
         latestCheck.notes AS latest_notes,
         latestCheck.checked_at AS latest_checked_at,
-        latestCheck.checked_by_user_id AS latest_checked_by_user_id
+        latestCheck.checked_by_user_id AS latest_checked_by_user_id,
+        activeException.exception_id AS active_exception_id,
+        activeException.severity AS active_exception_severity,
+        activeException.status AS active_exception_status,
+        activeException.reason AS active_exception_reason,
+        activeException.recommended_action AS active_exception_action
       FROM Containers c
       LEFT JOIN YardZones z ON z.zone_id = c.zone_id
       OUTER APPLY (
@@ -107,6 +113,16 @@ export async function GET(request: NextRequest) {
         WHERE rc.container_id = c.container_id
         ORDER BY rc.checked_at DESC, rc.check_id DESC
       ) latestCheck
+      OUTER APPLY (
+        SELECT TOP 1 e.*
+        FROM ReeferExceptions e
+        WHERE e.container_id = c.container_id
+          AND e.status IN ('open', 'in_progress')
+        ORDER BY
+          CASE e.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 ELSE 3 END,
+          e.created_at DESC,
+          e.exception_id DESC
+      ) activeException
       WHERE ${filters.join(' AND ')}
       ORDER BY
         CASE WHEN latestCheck.checked_at IS NULL THEN 0 ELSE 1 END,
@@ -208,6 +224,39 @@ export async function POST(request: NextRequest) {
       `);
 
     const check = insertResult.recordset[0];
+    const exceptionDraft = buildReeferExceptionDraft(check);
+    let exception = null;
+    if (exceptionDraft) {
+      const exceptionResult = await db.request()
+        .input('checkId', sql.Int, exceptionDraft.check_id)
+        .input('containerId', sql.Int, exceptionDraft.container_id)
+        .input('bookingId', sql.Int, exceptionDraft.booking_id)
+        .input('yardId', sql.Int, exceptionDraft.yard_id)
+        .input('customerId', sql.Int, exceptionDraft.customer_id)
+        .input('severity', sql.NVarChar(20), exceptionDraft.severity)
+        .input('status', sql.NVarChar(30), exceptionDraft.status)
+        .input('reason', sql.NVarChar(80), exceptionDraft.reason)
+        .input('recommendedAction', sql.NVarChar(500), exceptionDraft.recommended_action)
+        .query(`
+          INSERT INTO ReeferExceptions (
+            check_id, container_id, booking_id, yard_id, customer_id,
+            severity, status, reason, recommended_action
+          )
+          OUTPUT INSERTED.*
+          SELECT
+            @checkId, @containerId, @bookingId, @yardId, @customerId,
+            @severity, @status, @reason, @recommendedAction
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM ReeferExceptions
+            WHERE container_id = @containerId
+              AND status IN ('open', 'in_progress')
+              AND reason = @reason
+          )
+        `);
+      exception = exceptionResult.recordset[0] || null;
+    }
+
     await logAudit({
       userId: actor.userId,
       yardId,
@@ -223,7 +272,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, check, policy });
+    return NextResponse.json({ success: true, check, policy, exception });
   } catch (error) {
     console.error('❌ POST reefer check error:', error);
     return NextResponse.json({ error: 'ไม่สามารถบันทึกอุณหภูมิตู้เย็นได้' }, { status: 500 });

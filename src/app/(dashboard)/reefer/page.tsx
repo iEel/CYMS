@@ -47,6 +47,11 @@ interface ReeferItem {
   latest_checked_at?: string | null;
   latest_photo_url?: string | null;
   latest_notes?: string | null;
+  active_exception_id?: number | null;
+  active_exception_severity?: string | null;
+  active_exception_status?: string | null;
+  active_exception_reason?: string | null;
+  active_exception_action?: string | null;
   due_status: 'not_checked' | 'ok' | 'due' | 'overdue';
   policy: ReeferPolicy;
 }
@@ -102,6 +107,7 @@ export default function ReeferMonitoringPage() {
   const activeYardId = session?.activeYardId || session?.yardIds?.[0];
   const canRecord = hasAnyPermission(['reefer.check.record']);
   const canManagePolicy = hasPermission('reefer.policy.manage');
+  const canManageException = hasPermission('reefer.exception.manage');
   const [items, setItems] = useState<ReeferItem[]>([]);
   const [policies, setPolicies] = useState<ReeferPolicy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,6 +159,7 @@ export default function ReeferMonitoringPage() {
     overdue: items.filter(item => item.due_status === 'overdue').length,
     due: items.filter(item => item.due_status === 'due' || item.due_status === 'not_checked').length,
     outOfRange: items.filter(item => item.latest_check_status === 'out_of_range').length,
+    exceptions: items.filter(item => item.active_exception_id).length,
   }), [items]);
 
   const openRecord = (item: ReeferItem) => {
@@ -240,6 +247,27 @@ export default function ReeferMonitoringPage() {
     }
   };
 
+  const updateException = async (item: ReeferItem, action: 'acknowledge' | 'resolve' | 'ignore') => {
+    if (!item.active_exception_id) return;
+    const note = action === 'resolve'
+      ? window.prompt('บันทึกการแก้ไข exception', item.active_exception_action || '')
+      : action === 'ignore'
+        ? window.prompt('เหตุผลที่ ignore exception', '')
+        : '';
+    if ((action === 'resolve' || action === 'ignore') && note === null) return;
+
+    await fetch('/api/reefer/exceptions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        exception_id: item.active_exception_id,
+        action,
+        resolution_note: note,
+      }),
+    });
+    loadQueue();
+  };
+
   if (!activeYardId) {
     return <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">ยังไม่ได้เลือกสาขาลาน</div>;
   }
@@ -261,11 +289,12 @@ export default function ReeferMonitoringPage() {
         </button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <Metric label="RF ทั้งหมด" value={stats.total} tone="cyan" />
         <Metric label="เกินกำหนด" value={stats.overdue} tone="rose" />
         <Metric label="ถึงรอบตรวจ" value={stats.due} tone="amber" />
         <Metric label="นอกช่วงอุณหภูมิ" value={stats.outOfRange} tone="red" />
+        <Metric label="Exception เปิด" value={stats.exceptions} tone="rose" />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -311,14 +340,37 @@ export default function ReeferMonitoringPage() {
                   <div className="text-xs text-slate-500">
                     <p>รอบทุก {item.policy?.interval_hours || 4} ชม.</p>
                     <p>ช่วง {formatRange(item.policy)}</p>
+                    {item.active_exception_id && (
+                      <div className="mt-2 rounded-lg bg-red-50 p-2 text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                        <p className="font-semibold">Exception {item.active_exception_severity || 'high'}</p>
+                        <p>{item.active_exception_action || 'ต้องตรวจสอบและปิดงาน'}</p>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    onClick={() => openRecord(item)}
-                    disabled={!canRecord}
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-cyan-600 px-3 text-xs font-semibold text-white hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Thermometer size={14} /> บันทึกอุณหภูมิ
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => openRecord(item)}
+                      disabled={!canRecord}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-cyan-600 px-3 text-xs font-semibold text-white hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Thermometer size={14} /> บันทึกอุณหภูมิ
+                    </button>
+                    {item.active_exception_id && canManageException && (
+                      <div className="flex flex-wrap gap-1">
+                        {item.active_exception_status === 'open' && (
+                          <button onClick={() => updateException(item, 'acknowledge')} className="h-8 rounded-lg bg-amber-100 px-2 text-[11px] font-semibold text-amber-700 hover:bg-amber-200">
+                            รับทราบ
+                          </button>
+                        )}
+                        <button onClick={() => updateException(item, 'resolve')} className="h-8 rounded-lg bg-emerald-100 px-2 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-200">
+                          ปิดงาน
+                        </button>
+                        <button onClick={() => updateException(item, 'ignore')} className="h-8 rounded-lg bg-slate-100 px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-200">
+                          Ignore
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

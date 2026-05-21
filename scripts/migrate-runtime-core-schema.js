@@ -749,6 +749,38 @@ async function migrate() {
         CREATE INDEX IX_ReeferTemperatureChecks_Yard_Status
           ON ReeferTemperatureChecks (yard_id, status, checked_at DESC);
 
+      IF OBJECT_ID('ReeferExceptions', 'U') IS NULL
+      BEGIN
+        CREATE TABLE ReeferExceptions (
+          exception_id INT PRIMARY KEY IDENTITY(1,1),
+          check_id INT NOT NULL,
+          container_id INT NOT NULL,
+          booking_id INT NULL,
+          yard_id INT NOT NULL,
+          customer_id INT NULL,
+          severity NVARCHAR(20) NOT NULL CONSTRAINT DF_ReeferExceptions_Severity DEFAULT 'high',
+          status NVARCHAR(30) NOT NULL CONSTRAINT DF_ReeferExceptions_Status DEFAULT 'open',
+          reason NVARCHAR(80) NOT NULL,
+          recommended_action NVARCHAR(500) NULL,
+          resolution_note NVARCHAR(1000) NULL,
+          assigned_to_user_id INT NULL,
+          acknowledged_by_user_id INT NULL,
+          acknowledged_at DATETIME2 NULL,
+          resolved_by_user_id INT NULL,
+          resolved_at DATETIME2 NULL,
+          created_at DATETIME2 NOT NULL CONSTRAINT DF_ReeferExceptions_Created DEFAULT GETDATE(),
+          updated_at DATETIME2 NULL
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('ReeferExceptions') AND name = 'IX_ReeferExceptions_Yard_Status')
+        CREATE INDEX IX_ReeferExceptions_Yard_Status
+          ON ReeferExceptions (yard_id, status, severity, created_at DESC);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('ReeferExceptions') AND name = 'IX_ReeferExceptions_Container_Open')
+        CREATE INDEX IX_ReeferExceptions_Container_Open
+          ON ReeferExceptions (container_id, status, reason);
+
       IF NOT EXISTS (
         SELECT 1 FROM ReeferCheckPolicies
         WHERE scope_type = 'default' AND is_active = 1
@@ -802,6 +834,10 @@ async function migrate() {
         INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
         VALUES ('reefer.check.record', 'reefer', 'check_record', N'บันทึกผลตรวจอุณหภูมิตู้เย็นพร้อมหลักฐานรูปถ่าย', 0, NULL, NULL);
 
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'reefer.exception.manage')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('reefer.exception.manage', 'reefer', 'exception_manage', N'รับทราบ แก้ไข และปิด exception อุณหภูมิตู้เย็น', 0, NULL, 'high');
+
       IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'reefer.policy.manage')
         INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
         VALUES ('reefer.policy.manage', 'reefer', 'policy_manage', N'กำหนดรอบตรวจและช่วงอุณหภูมิตู้เย็น', 0, NULL, 'high');
@@ -823,6 +859,17 @@ async function migrate() {
       CROSS JOIN Permissions p
       WHERE r.role_code IN ('yard_manager', 'supervisor', 'surveyor')
         AND p.permission_code = 'reefer.check.record'
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code IN ('yard_manager', 'supervisor', 'surveyor')
+        AND p.permission_code = 'reefer.exception.manage'
         AND NOT EXISTS (
           SELECT 1 FROM RolePermissions rp
           WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id

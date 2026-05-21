@@ -9,8 +9,10 @@ describe('Reefer monitoring UI', () => {
 
     expect(source).toContain('/api/reefer/checks');
     expect(source).toContain('/api/reefer/policies');
+    expect(source).toContain('/api/reefer/exceptions');
     expect(source).toContain('บันทึกอุณหภูมิ');
     expect(source).toContain('กำหนดรอบตรวจ');
+    expect(source).toContain('Exception');
   });
 
   it('adds customer portal navigation and read-only reefer tracking', () => {

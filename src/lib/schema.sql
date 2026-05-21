@@ -285,6 +285,33 @@ ON ReeferTemperatureChecks (container_id, checked_at DESC);
 CREATE INDEX IX_ReeferTemperatureChecks_Yard_Status
 ON ReeferTemperatureChecks (yard_id, status, checked_at DESC);
 
+CREATE TABLE ReeferExceptions (
+    exception_id            INT PRIMARY KEY IDENTITY(1,1),
+    check_id                INT NOT NULL REFERENCES ReeferTemperatureChecks(check_id),
+    container_id            INT NOT NULL REFERENCES Containers(container_id),
+    booking_id              INT NULL,
+    yard_id                 INT NOT NULL REFERENCES Yards(yard_id),
+    customer_id             INT NULL REFERENCES Customers(customer_id),
+    severity                NVARCHAR(20) NOT NULL DEFAULT 'high',
+    status                  NVARCHAR(30) NOT NULL DEFAULT 'open',
+    reason                  NVARCHAR(80) NOT NULL,
+    recommended_action      NVARCHAR(500) NULL,
+    resolution_note         NVARCHAR(1000) NULL,
+    assigned_to_user_id     INT NULL REFERENCES Users(user_id),
+    acknowledged_by_user_id INT NULL REFERENCES Users(user_id),
+    acknowledged_at         DATETIME2 NULL,
+    resolved_by_user_id     INT NULL REFERENCES Users(user_id),
+    resolved_at             DATETIME2 NULL,
+    created_at              DATETIME2 NOT NULL DEFAULT GETDATE(),
+    updated_at              DATETIME2 NULL
+);
+
+CREATE INDEX IX_ReeferExceptions_Yard_Status
+ON ReeferExceptions (yard_id, status, severity, created_at DESC);
+
+CREATE INDEX IX_ReeferExceptions_Container_Open
+ON ReeferExceptions (container_id, status, reason);
+
 -- ===================================
 -- ตาราง: รหัสตู้มาตรฐาน ISO (ISO Container Codes)
 -- ===================================
