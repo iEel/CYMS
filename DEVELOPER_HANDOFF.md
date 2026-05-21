@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity** (~100%)
 
 ---
 
@@ -1288,7 +1288,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - `overview`: KPIs + container summary buckets ชุดเดียวกับ `/portal/containers` + ค้างชำระ/Booking active + recent gate activity
   - `containers`: customer inventory แบบ paginated + summary tiles + status/search filter + latest booking/EIR/open invoice context โดย visibility มาจาก `PortalEntityAccess` เท่านั้น
   - `invoices`: invoices + summary (outstanding/paid)
-  - `bookings`: bookings + progress (received/container_count) + ETA status + empty return instruction metadata
+  - `bookings`: bookings + progress (received/container_count), customer-created pending booking requests, ETA status + empty return instruction metadata
   - `eir`: Portal-scoped EIR JSON สำหรับ modal A5 + ผลตรวจสภาพ โดยใช้ `PortalEntityAccess`
   - `document-bundle`: ZIP download รวม `statement.json`, invoice/receipt/CN PDF links และ EIR PDF links
   - `disputes`: POST dispute request ต่อ invoice โดย verify ownership จาก `x-customer-id`
@@ -1297,7 +1297,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - Overview: 4 KPI cards + recent gate activity
   - Containers: customer inventory list แบบ mobile cards + desktop table, summary tiles, server-side search/status tabs, booking/EIR/invoice context, visibility reason, เปิด EIR A5 modal, ดูผลตรวจสภาพ 6 ด้าน และดาวน์โหลด PDF
   - Invoices: summary cards (ค้างชำระ/ชำระแล้ว) + table + pagination + Download bundle + Dispute modal
-  - Bookings: cards with progress bar + vessel info + pagination + ETA badge + empty return instruction panel
+  - Bookings: cards with progress bar + vessel info + pagination + ETA badge + create booking modal + overview/activity panel + empty return instruction panel
 - [x] **Admin — จัดการลูกค้า**:
   - API `api/settings/customers/portal/route.ts`: สร้างบัญชี Portal
   - `CustomerMaster.tsx`: ปุ่ม 🔑 (KeyRound) สร้างบัญชี → แสดง username/password ใน alert
@@ -1337,10 +1337,24 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 
 **Verify ล่าสุด:**
 - `npm test -- src/app/api/__tests__/portal-eir.test.ts --runInBand` ✅ (2 tests)
-- `npm test -- src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (1 test)
+- `npm test -- src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (2 tests)
 - `npm test -- src/app/api/__tests__/portal-containers.test.ts --runInBand` ✅ (3 tests)
 - `npm test -- src/app/api/__tests__/portal-eir.test.ts src/app/api/__tests__/portal-containers.test.ts src/app/api/__tests__/portal-overview.test.ts --runInBand` ✅ (6 tests)
-- `npm test -- --runInBand` ✅ (49 suites / 521 tests)
+- `npm test -- --runInBand` ✅ (49 suites / 524 tests)
+- `npx tsc --noEmit --pretty false` ✅
+- `npm run lint` ✅
+
+### 📋 Customer Portal Booking Requests + Activity (✅ เสร็จ — 21 พ.ค. 2569)
+- [x] **Customer-created booking request** — เพิ่ม `POST /api/portal/bookings` สำหรับ customer role โดยอ่าน `customer_id` จาก `x-customer-id` เท่านั้น ไม่รับจาก body, บังคับสถานะเริ่มต้น `pending`, และ insert ลง `Bookings` เดิมเพื่อให้พนักงานรับต่อในหน้า `/booking`
+- [x] **Portal grants ตอนสร้าง** — หลังสร้าง booking จะ upsert `PortalEntityAccess` ให้ลูกค้าเห็น booking ตัวเองทันที (`booking_customer`); ถ้ามีเลขตู้ล่วงหน้าจะสร้าง `BookingContainers` และ grant container ref แบบ `booking_customer`
+- [x] **Create booking modal** — หน้า `/portal/bookings` เพิ่มปุ่ม `สร้าง Booking` พร้อมฟอร์มเลข booking, ประเภท, จำนวน/ขนาด/ประเภทตู้, ETA, vessel/voyage, seal, container numbers และ notes โดยส่ง `yard_id` จาก active yard ใน session
+- [x] **Booking overview** — detail modal เพิ่ม `ภาพรวม Booking`: จำนวนที่ขอ, เข้าลานแล้ว, ออกลานแล้ว, คงเหลือ, ETA, progress Gate In/Gate Out และข้อความ `รอพนักงานยืนยัน` สำหรับ pending request
+- [x] **Container activity** — เปลี่ยนตารางตู้ใน booking เป็น `กิจกรรมตู้ใน Booking` แสดงสถานะตู้, รับเข้า booking, Gate In, Gate Out และลิงก์ EIR In/Out ที่ลูกค้ามีสิทธิ์ดู
+- [x] **Tests** — เพิ่ม coverage ใน `portal-bookings.test.ts` เพื่อยืนยัน pending creation + session customer scope + portal grants และ `portal-ui.test.ts` เพื่อกัน UI ถอยกลับเป็น read-only
+
+**Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/portal-bookings.test.ts src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (5 tests)
+- `npm test -- --runInBand` ✅ (49 suites / 524 tests)
 - `npx tsc --noEmit --pretty false` ✅
 - `npm run lint` ✅
 
