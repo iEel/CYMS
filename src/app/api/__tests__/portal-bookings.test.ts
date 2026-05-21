@@ -20,6 +20,8 @@ const mockedUpsertPortalEntityAccess = upsertPortalEntityAccess as jest.Mock;
 
 function makeDb() {
   const queries: string[] = [];
+  const inputValues: Record<string, unknown> = {};
+  type RequestChain = { input: jest.Mock; query: jest.Mock };
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
     if (statement.includes('COUNT(*)')) return Promise.resolve({ recordset: [{ total: 0 }] });
@@ -33,13 +35,21 @@ function makeDb() {
           yard_id: 1,
           customer_id: 42,
           container_count: 2,
+          container_type: inputValues.containerType,
         }],
       });
     }
+    if (statement.includes('INSERT INTO ReeferCheckPolicies')) {
+      return Promise.resolve({ recordset: [{ policy_id: 91, scope_type: 'booking', booking_id: 77 }] });
+    }
     return Promise.resolve({ recordset: [] });
   });
-  const input = jest.fn().mockReturnThis();
-  const request = jest.fn(() => ({ input, query }));
+  const input = jest.fn((name: string, _type: unknown, value: unknown): RequestChain => {
+    inputValues[name] = value;
+    return chain;
+  });
+  const chain: RequestChain = { input, query };
+  const request = jest.fn(() => chain);
   return { request, input, query, queries };
 }
 
@@ -155,5 +165,35 @@ describe('POST /api/portal/bookings', () => {
     expect(res.status).toBe(400);
     expect(db.query).not.toHaveBeenCalled();
     expect(mockedUpsertPortalEntityAccess).not.toHaveBeenCalled();
+  });
+
+  it('creates a booking scoped reefer policy for RF portal bookings', async () => {
+    const db = makeDb();
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await POST(makeRequest('http://localhost/api/portal/bookings', {
+      method: 'POST',
+      body: JSON.stringify({
+        booking_number: 'BK-RF-PORTAL-1',
+        booking_type: 'import',
+        yard_id: 1,
+        container_count: 2,
+        container_type: 'RF',
+      }),
+    }));
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.reefer_policy).toEqual(expect.objectContaining({
+      policy_id: 91,
+      scope_type: 'booking',
+      booking_id: 77,
+    }));
+    expect(db.queries.join('\n')).toContain('INSERT INTO ReeferCheckPolicies');
+    expect(db.input.mock.calls).toEqual(expect.arrayContaining([
+      ['bookingId', expect.anything(), 77],
+      ['scopeType', expect.anything(), 'booking'],
+      ['intervalHours', expect.anything(), 4],
+    ]));
   });
 });

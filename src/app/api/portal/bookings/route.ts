@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit';
 import { decoratePortalBooking, decoratePortalBookings } from '@/lib/portalBooking';
 import { getPortalCustomerId, portalBookingVisibilitySql, portalVisibilityReasonSql } from '@/lib/portalAccess';
 import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
+import { ensureReeferBookingPolicy } from '@/lib/reeferBookingPolicy';
 
 const BOOKING_TYPES = new Set(['import', 'export', 'empty_pickup', 'empty_return']);
 
@@ -143,6 +144,18 @@ export async function POST(request: NextRequest) {
       `);
 
     const booking = result.recordset[0];
+    const reeferPolicy = await ensureReeferBookingPolicy(db, {
+      booking_id: booking.booking_id,
+      yard_id: booking.yard_id || yardId,
+      customer_id: cid,
+      container_type: booking.container_type || body.container_type,
+    }, {
+      intervalHours: body.reefer_interval_hours,
+      warningGraceMinutes: body.reefer_warning_grace_minutes,
+      cargoProfile: cleanText(body.reefer_cargo_profile, 40),
+      minTempC: body.reefer_min_temp_c,
+      maxTempC: body.reefer_max_temp_c,
+    });
 
     await upsertPortalEntityAccess({
       db,
@@ -190,6 +203,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       booking: decoratePortalBooking(booking),
+      reefer_policy: reeferPolicy,
     });
   } catch (error: unknown) {
     console.error('❌ Portal create booking error:', error);

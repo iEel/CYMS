@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
+import { ensureReeferBookingPolicy } from '@/lib/reeferBookingPolicy';
 
 function bookingSummarySelect() {
   return `
@@ -254,6 +255,19 @@ export async function POST(request: NextRequest) {
       `);
 
     const booking = result.recordset[0];
+    const reeferPolicy = await ensureReeferBookingPolicy(db, {
+      booking_id: booking.booking_id,
+      yard_id: booking.yard_id || body.yard_id,
+      customer_id: booking.customer_id || body.customer_id || null,
+      container_type: booking.container_type || body.container_type,
+    }, {
+      intervalHours: body.reefer_interval_hours,
+      warningGraceMinutes: body.reefer_warning_grace_minutes,
+      cargoProfile: body.reefer_cargo_profile || null,
+      minTempC: body.reefer_min_temp_c,
+      maxTempC: body.reefer_max_temp_c,
+    });
+
     await upsertPortalEntityAccess({
       db,
       customerId: booking.customer_id,
@@ -288,7 +302,7 @@ export async function POST(request: NextRequest) {
 
     await logAudit({ yardId: body.yard_id, action: 'booking_create', entityType: 'booking', entityId: booking.booking_id, details: { booking_number: body.booking_number, booking_type: body.booking_type, container_count: body.container_count } });
 
-    return NextResponse.json({ success: true, booking });
+    return NextResponse.json({ success: true, booking, reefer_policy: reeferPolicy });
   } catch (error: unknown) {
     console.error('❌ POST booking error:', error);
     const msg = error instanceof Error && error.message.includes('UNIQUE')

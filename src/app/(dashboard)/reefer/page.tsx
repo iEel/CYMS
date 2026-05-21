@@ -58,6 +58,37 @@ interface ReeferItem {
   policy: ReeferPolicy;
 }
 
+interface PlugPlanSummary {
+  reefer_zones: number;
+  plug_capacity: number;
+  current_rf: number;
+  current_in_reefer_zone: number;
+  current_unplugged_risk: number;
+  upcoming_rf: number;
+  projected_required_plugs: number;
+  projected_shortage: number;
+  utilization_percent: number;
+}
+
+interface PlugPlanBooking {
+  booking_id: number;
+  booking_number: string;
+  status: string;
+  customer_name?: string | null;
+  container_count: number;
+  eta?: string | null;
+  valid_from?: string | null;
+  policy_id?: number | null;
+  interval_hours?: number | null;
+}
+
+interface PlugPlanData {
+  summary: PlugPlanSummary;
+  upcomingBookings: PlugPlanBooking[];
+  byDay: Array<{ plan_date: string; expected_rf: number }>;
+  generatedAt: string;
+}
+
 interface CheckForm {
   measured_temp_c: string;
   set_point_c: string;
@@ -113,6 +144,8 @@ export default function ReeferMonitoringPage() {
   const [items, setItems] = useState<ReeferItem[]>([]);
   const [policies, setPolicies] = useState<ReeferPolicy[]>([]);
   const [loading, setLoading] = useState(true);
+  const [plugPlan, setPlugPlan] = useState<PlugPlanData | null>(null);
+  const [plugPlanLoading, setPlugPlanLoading] = useState(false);
   const [policyLoading, setPolicyLoading] = useState(false);
   const [tab, setTab] = useState<'queue' | 'policy'>('queue');
   const [selected, setSelected] = useState<ReeferItem | null>(null);
@@ -151,6 +184,18 @@ export default function ReeferMonitoringPage() {
     }
   }, [activeYardId, canManagePolicy]);
 
+  const loadPlugPlan = useCallback(async () => {
+    if (!activeYardId) return;
+    setPlugPlanLoading(true);
+    try {
+      const res = await fetch(`/api/reefer/plug-plan?yard_id=${activeYardId}`);
+      const data = await res.json();
+      if (!data.error) setPlugPlan(data);
+    } finally {
+      setPlugPlanLoading(false);
+    }
+  }, [activeYardId]);
+
   useEffect(() => {
     loadQueue();
   }, [loadQueue]);
@@ -158,6 +203,10 @@ export default function ReeferMonitoringPage() {
   useEffect(() => {
     loadPolicies();
   }, [loadPolicies]);
+
+  useEffect(() => {
+    loadPlugPlan();
+  }, [loadPlugPlan]);
 
   const stats = useMemo(() => ({
     total: items.length,
@@ -314,10 +363,10 @@ export default function ReeferMonitoringPage() {
           <p className="mt-0.5 text-xs text-slate-400">คิวตรวจอุณหภูมิ, รูปหลักฐานหน้าจอ, และ policy รอบตรวจที่กำหนดได้เอง</p>
         </div>
         <button
-          onClick={loadQueue}
+          onClick={() => { loadQueue(); loadPlugPlan(); }}
           className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
         >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> รีเฟรช
+          <RefreshCw size={16} className={loading || plugPlanLoading ? 'animate-spin' : ''} /> รีเฟรช
         </button>
       </div>
 
@@ -328,6 +377,65 @@ export default function ReeferMonitoringPage() {
         <Metric label="นอกช่วงอุณหภูมิ" value={stats.outOfRange} tone="red" />
         <Metric label="Exception เปิด" value={stats.exceptions} tone="rose" />
       </div>
+
+      {plugPlan?.summary && (
+        <div className={`rounded-xl border p-4 ${
+          plugPlan.summary.projected_shortage > 0
+            ? 'border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-900/20'
+            : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+        }`}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-white">
+                <Thermometer size={17} className="text-cyan-600" /> Plug Planning
+              </h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Capacity โซนมีปลั๊กเทียบกับตู้ RF ในลานและ Booking RF ที่กำลังจะเข้า
+              </p>
+            </div>
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              plugPlan.summary.projected_shortage > 0
+                ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200'
+                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+            }`}>
+              Shortage {plugPlan.summary.projected_shortage.toLocaleString()} plugs
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-5">
+            <PlugMetric label="Plug capacity" value={plugPlan.summary.plug_capacity} />
+            <PlugMetric label="RF ในลาน" value={plugPlan.summary.current_rf} />
+            <PlugMetric label="Upcoming RF" value={plugPlan.summary.upcoming_rf} />
+            <PlugMetric label="Projected" value={plugPlan.summary.projected_required_plugs} />
+            <PlugMetric label="Utilization" value={`${plugPlan.summary.utilization_percent}%`} />
+          </div>
+          {plugPlan.summary.current_unplugged_risk > 0 && (
+            <div className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+              มีตู้ RF {plugPlan.summary.current_unplugged_risk.toLocaleString()} ตู้ที่ไม่ได้อยู่ในโซนมีปลั๊ก ควรตรวจพิกัด/ย้ายเข้าพื้นที่ reefer
+            </div>
+          )}
+          {plugPlan.upcomingBookings.length > 0 && (
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {plugPlan.upcomingBookings.slice(0, 6).map(booking => (
+                <div key={booking.booking_id} className="rounded-lg border border-white/70 bg-white/80 p-3 text-xs dark:border-slate-700 dark:bg-slate-900/30">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-slate-800 dark:text-white">{booking.booking_number}</p>
+                      <p className="mt-0.5 text-slate-500">{booking.customer_name || '-'} · {booking.status}</p>
+                    </div>
+                    <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[11px] font-semibold text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300">
+                      {Number(booking.container_count || 0).toLocaleString()} RF
+                    </span>
+                  </div>
+                  <p className="mt-2 text-slate-500">
+                    ETA {booking.eta ? formatDateTime(booking.eta) : booking.valid_from ? formatDateTime(booking.valid_from) : '-'}
+                    {' · '}Policy {booking.policy_id ? `ทุก ${booking.interval_hours || 4} ชม.` : 'ยังไม่มี'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <button onClick={() => setTab('queue')} className={tabClass(tab === 'queue')}>
@@ -598,6 +706,17 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: 'c
       <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${tones[tone]}`}><Thermometer size={17} /></div>
       <p className="text-2xl font-bold text-slate-800 dark:text-white">{value.toLocaleString()}</p>
       <p className="text-xs text-slate-400">{label}</p>
+    </div>
+  );
+}
+
+function PlugMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/30">
+      <p className="text-[11px] font-semibold text-slate-400">{label}</p>
+      <p className="mt-1 text-xl font-bold text-slate-800 dark:text-white">
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </p>
     </div>
   );
 }

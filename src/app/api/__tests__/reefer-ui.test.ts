@@ -10,9 +10,12 @@ describe('Reefer monitoring UI', () => {
     expect(source).toContain('/api/reefer/checks');
     expect(source).toContain('/api/reefer/policies');
     expect(source).toContain('/api/reefer/exceptions');
+    expect(source).toContain('/api/reefer/plug-plan');
     expect(source).toContain("offlineFetch('/api/reefer/checks'");
     expect(source).toContain("operation: 'reefer_check'");
     expect(source).toContain('โหมดเดินตรวจ');
+    expect(source).toContain('Plug Planning');
+    expect(source).toContain('projected_shortage');
     expect(source).toContain('บันทึกอุณหภูมิ');
     expect(source).toContain('กำหนดรอบตรวจ');
     expect(source).toContain('Exception');
