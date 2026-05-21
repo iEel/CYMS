@@ -29,6 +29,21 @@ jest.mock('@/lib/db', () => ({
   getDb: jest.fn().mockResolvedValue(mockDb),
 }));
 
+jest.mock('@/lib/apiAuth', () => ({
+  requireRequestActor: jest.fn((request: NextRequest) => {
+    const userId = Number(request.headers.get('x-user-id'));
+    const role = request.headers.get('x-user-role');
+    if (!userId || !role) {
+      return Response.json({ error: 'unauthorized' }, { status: 401 });
+    }
+    return { userId, role };
+  }),
+}));
+
+jest.mock('@/lib/audit', () => ({
+  logAudit: jest.fn().mockResolvedValue(undefined),
+}));
+
 function q(recordset: unknown[]): { recordset: unknown[] } { return { recordset }; }
 function qErr(msg: string): Error { return new Error(msg); }
 
@@ -169,5 +184,73 @@ describe('GET /api/reports/mnr', () => {
     queryQueue = [qErr('Timeout')];
     const res = await GET(makeRequest('http://localhost/api/reports/mnr?yard_id=1'));
     expect(res.status).toBe(500);
+  });
+});
+
+// ── Reconciliation Action Center ───────────────────────────────────
+describe('GET/PATCH /api/reports/reconciliation', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const route = require('../reports/reconciliation/route') as typeof import('../reports/reconciliation/route');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryQueue = [];
+    mockDb.request.mockImplementation(makeChain);
+  });
+
+  it('returns actionable reconciliation rows with deep links and SLA aging', async () => {
+    queryQueue = [
+      q([{ entity_id: 7, reference: 'Gate #7', created_at: '2026-05-18T00:00:00.000Z' }]),
+      q([]),
+      q([]),
+      q([]),
+      q([]),
+      q([]),
+      q([]),
+      q([]),
+      q([]),
+    ];
+
+    const res = await route.GET(makeRequest('http://localhost/api/reports/reconciliation?yard_id=1'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const issue = body.issues.find((item: { code: string }) => item.code === 'gate_missing_eir');
+
+    expect(issue.rows[0]).toMatchObject({
+      entity_id: 7,
+      action_status: 'open',
+      deep_link: '/gate?transaction_id=7',
+    });
+    expect(issue.rows[0].sla_age_days).toBeGreaterThanOrEqual(0);
+  });
+
+  it('records a reconciliation action update', async () => {
+    queryQueue = [
+      q([{ action_id: 44 }]),
+      q([]),
+    ];
+
+    const req = new NextRequest('http://localhost/api/reports/reconciliation', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': '5',
+        'x-user-role': 'yard_manager',
+      },
+      body: JSON.stringify({
+        yard_id: 1,
+        issue_code: 'invoice_open_overdue',
+        entity_id: 9,
+        entity_ref: 'INV-9',
+        status: 'ignored',
+        reason: 'Duplicate test invoice',
+        assigned_to: 'Billing',
+      }),
+    });
+
+    const res = await route.PATCH(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ success: true, action_id: 44, status: 'ignored' });
   });
 });

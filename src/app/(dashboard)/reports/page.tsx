@@ -8,7 +8,7 @@ import {
   Loader2, BarChart3, Wrench, Package,
   FileSpreadsheet, TrendingDown, TrendingUp,
   AlertTriangle, CheckCircle2, Clock, RefreshCw,
-  FileCheck2,
+  FileCheck2, ExternalLink, Ban,
 } from 'lucide-react';
 
 // ── Types ──
@@ -55,6 +55,8 @@ interface ReconciliationIssue {
   owner_role: string;
   recommended_action: string;
   count: number;
+  raw_count?: number;
+  closed_count?: number;
   rows: Array<Record<string, unknown>>;
   unavailable?: boolean;
   error?: string;
@@ -106,6 +108,10 @@ const labelClass = 'block text-xs font-medium text-slate-500 dark:text-slate-400
 
 function formatCurrency(n: number) {
   return `฿${(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function issueRowKey(issueCode: string, row: Record<string, unknown>) {
+  return `${issueCode}:${String(row.entity_id ?? row.reference ?? 'unknown')}`;
 }
 
 // ── KPI Card ──
@@ -545,6 +551,8 @@ function MnRReportTab({ yardId }: { yardId: number }) {
 function ReconciliationReportTab({ yardId }: { yardId: number }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ReconciliationData | null>(null);
+  const [actionDrafts, setActionDrafts] = useState<Record<string, string>>({});
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchReport = useCallback(async () => {
@@ -570,6 +578,45 @@ function ReconciliationReportTab({ yardId }: { yardId: number }) {
   };
 
   const visibleIssues = data?.issues?.filter(issue => issue.count > 0 || issue.unavailable) || [];
+
+  const updateIssueStatus = async (
+    issue: ReconciliationIssue,
+    row: Record<string, unknown>,
+    status: 'resolved' | 'ignored'
+  ) => {
+    const key = issueRowKey(issue.code, row);
+    const reason = (actionDrafts[key] || '').trim();
+    if (status === 'ignored' && !reason) {
+      toast('error', 'กรุณาระบุเหตุผลก่อน ignore');
+      return;
+    }
+
+    setActionLoading(`${key}:${status}`);
+    try {
+      const res = await fetch('/api/reports/reconciliation', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yard_id: yardId,
+          issue_code: issue.code,
+          entity_id: row.entity_id ?? null,
+          entity_ref: row.reference ?? null,
+          status,
+          reason: reason || (status === 'resolved' ? 'ตรวจสอบและแก้ไขแล้ว' : ''),
+          assigned_to: issue.owner_role,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok || body.error) throw new Error(body.error || 'Update failed');
+      toast('success', status === 'resolved' ? 'ปิดประเด็นแล้ว' : 'Ignore พร้อมเหตุผลแล้ว');
+      setActionDrafts(prev => ({ ...prev, [key]: '' }));
+      await fetchReport();
+    } catch {
+      toast('error', 'อัปเดตสถานะไม่สำเร็จ');
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -614,6 +661,9 @@ function ReconciliationReportTab({ yardId }: { yardId: number }) {
                 </div>
                 <h3 className="font-semibold mt-1">{issue.title}</h3>
                 <p className="text-xs mt-1 opacity-80">ผู้รับผิดชอบ: {issue.owner_role} · แนะนำ: {issue.recommended_action}</p>
+                {typeof issue.closed_count === 'number' && issue.closed_count > 0 && (
+                  <p className="text-[11px] mt-1 opacity-70">ซ่อนรายการที่ resolved/ignored แล้ว {issue.closed_count} รายการ</p>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold">{issue.unavailable ? '-' : issue.count}</p>
@@ -630,19 +680,60 @@ function ReconciliationReportTab({ yardId }: { yardId: number }) {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-slate-200/60 dark:border-slate-700/60">
-                      {Object.keys(issue.rows[0]).slice(0, 6).map(key => (
+                      {Object.keys(issue.rows[0]).filter(key => !key.startsWith('action_') && !['deep_link', 'sla_age_days'].includes(key)).slice(0, 5).map(key => (
                         <th key={key} className="px-3 py-2 text-left font-semibold">{key}</th>
                       ))}
+                      <th className="px-3 py-2 text-left font-semibold">SLA</th>
+                      <th className="px-3 py-2 text-left font-semibold">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200/50 dark:divide-slate-700/50">
                     {issue.rows.slice(0, 8).map((row, idx) => (
                       <tr key={idx}>
-                        {Object.keys(issue.rows[0]).slice(0, 6).map(key => (
+                        {Object.keys(issue.rows[0]).filter(key => !key.startsWith('action_') && !['deep_link', 'sla_age_days'].includes(key)).slice(0, 5).map(key => (
                           <td key={key} className="px-3 py-2 whitespace-nowrap">
                             {row[key] === null || row[key] === undefined ? '-' : String(row[key])}
                           </td>
                         ))}
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                            Number(row.sla_age_days || 0) >= 7
+                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                              : Number(row.sla_age_days || 0) >= 3
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                          }`}>
+                            {String(row.sla_age_days ?? 0)} วัน
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 min-w-[360px]">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <a href={String(row.deep_link || '/reports')}
+                              className="h-8 px-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-blue-300 text-xs font-semibold flex items-center gap-1.5">
+                              <ExternalLink size={12} /> เปิด
+                            </a>
+                            <input
+                              value={actionDrafts[issueRowKey(issue.code, row)] || ''}
+                              onChange={(e) => setActionDrafts(prev => ({ ...prev, [issueRowKey(issue.code, row)]: e.target.value }))}
+                              className="h-8 min-w-[150px] flex-1 px-2 rounded-lg border border-white/70 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-xs outline-none focus:border-blue-400"
+                              placeholder="เหตุผล / audit note"
+                            />
+                            <button
+                              onClick={() => updateIssueStatus(issue, row, 'resolved')}
+                              disabled={actionLoading === `${issueRowKey(issue.code, row)}:resolved`}
+                              className="h-8 px-2.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5">
+                              {actionLoading === `${issueRowKey(issue.code, row)}:resolved` ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                              Resolve
+                            </button>
+                            <button
+                              onClick={() => updateIssueStatus(issue, row, 'ignored')}
+                              disabled={actionLoading === `${issueRowKey(issue.code, row)}:ignored`}
+                              className="h-8 px-2.5 rounded-lg bg-slate-700 text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-50 flex items-center gap-1.5">
+                              {actionLoading === `${issueRowKey(issue.code, row)}:ignored` ? <Loader2 size={12} className="animate-spin" /> : <Ban size={12} />}
+                              Ignore
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

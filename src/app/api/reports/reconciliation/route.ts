@@ -3,6 +3,9 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { ensureCustomerCreditColumns } from '@/lib/customerCredit';
 import { getDataQualityRule } from '@/lib/dataQualityRules';
+import { applyReconciliationActions, type ReconciliationActionRecord, type ReconciliationIssueRow } from '@/lib/reconciliationActions';
+import { requireRequestActor } from '@/lib/apiAuth';
+import { logAudit } from '@/lib/audit';
 
 type Severity = 'info' | 'warning' | 'critical';
 
@@ -49,6 +52,30 @@ async function runIssue(db: sql.ConnectionPool, yardId: number, limit: number, d
       unavailable: true,
       error: message,
     };
+  }
+}
+
+async function loadActionRecords(db: sql.ConnectionPool, yardId: number): Promise<ReconciliationActionRecord[]> {
+  try {
+    const result = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .query(`
+        SELECT
+          action_id,
+          issue_code,
+          entity_id,
+          entity_ref,
+          status,
+          reason,
+          assigned_to,
+          updated_at
+        FROM ReconciliationActions
+        WHERE yard_id = @yardId
+      `);
+
+    return result.recordset as ReconciliationActionRecord[];
+  } catch {
+    return [];
   }
 }
 
@@ -239,6 +266,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const yardId = Number(searchParams.get('yard_id') || 1);
     const limit = Math.min(Math.max(Number(searchParams.get('limit') || 50), 1), 200);
+    const includeClosed = searchParams.get('include_closed') === '1';
     const db = await getDb();
     await ensureCustomerCreditColumns(db);
 
@@ -246,8 +274,26 @@ export async function GET(request: NextRequest) {
     for (const definition of ISSUE_DEFINITIONS) {
       issues.push(await runIssue(db, yardId, limit, definition));
     }
+    const actions = await loadActionRecords(db, yardId);
+    const enrichedIssues = issues.map((issue) => {
+      if (issue.unavailable) return issue;
+      const rawRows = issue.rows as ReconciliationIssueRow[];
+      const rows = applyReconciliationActions({
+        issueCode: issue.code,
+        rows: rawRows,
+        actions,
+        includeClosed,
+      });
+      return {
+        ...issue,
+        raw_count: rawRows.length,
+        closed_count: rawRows.length - rows.length,
+        count: rows.length,
+        rows,
+      };
+    });
 
-    const availableIssues = issues.filter((issue) => !issue.unavailable);
+    const availableIssues = enrichedIssues.filter((issue) => !issue.unavailable);
     const summary = {
       total_open: availableIssues.reduce((sum, issue) => sum + issue.count, 0),
       critical: availableIssues.filter((issue) => issue.severity === 'critical').reduce((sum, issue) => sum + issue.count, 0),
@@ -260,10 +306,90 @@ export async function GET(request: NextRequest) {
       yard_id: yardId,
       generated_at: new Date().toISOString(),
       summary,
-      issues,
+      issues: enrichedIssues,
     });
   } catch (error) {
     console.error('GET reconciliation report error:', error);
     return NextResponse.json({ error: 'ไม่สามารถดึงรายงาน reconciliation ได้' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const actor = requireRequestActor(request);
+  if (actor instanceof NextResponse) return actor;
+
+  try {
+    const body = await request.json();
+    const yardId = Number(body.yard_id || 1);
+    const issueCode = typeof body.issue_code === 'string' ? body.issue_code.trim() : '';
+    const entityId = Number.isInteger(Number(body.entity_id)) ? Number(body.entity_id) : null;
+    const entityRef = typeof body.entity_ref === 'string' ? body.entity_ref.trim() : null;
+    const status = typeof body.status === 'string' ? body.status : '';
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : null;
+    const assignedTo = typeof body.assigned_to === 'string' ? body.assigned_to.trim() : null;
+
+    if (!issueCode || !['open', 'resolved', 'ignored'].includes(status)) {
+      return NextResponse.json({ error: 'issue_code หรือ status ไม่ถูกต้อง' }, { status: 400 });
+    }
+    if (!entityId && !entityRef) {
+      return NextResponse.json({ error: 'ต้องระบุ entity_id หรือ entity_ref' }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const result = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .input('issueCode', sql.NVarChar(80), issueCode)
+      .input('entityId', sql.Int, entityId)
+      .input('entityRef', sql.NVarChar(150), entityRef)
+      .input('status', sql.NVarChar(20), status)
+      .input('reason', sql.NVarChar(500), reason)
+      .input('assignedTo', sql.NVarChar(100), assignedTo)
+      .input('actorId', sql.Int, actor.userId)
+      .query(`
+        MERGE ReconciliationActions WITH (HOLDLOCK) AS target
+        USING (
+          SELECT
+            @yardId AS yard_id,
+            @issueCode AS issue_code,
+            @entityId AS entity_id,
+            @entityRef AS entity_ref
+        ) AS source
+        ON target.yard_id = source.yard_id
+          AND target.issue_code = source.issue_code
+          AND ISNULL(target.entity_id, -1) = ISNULL(source.entity_id, -1)
+          AND ISNULL(target.entity_ref, '') = ISNULL(source.entity_ref, '')
+        WHEN MATCHED THEN
+          UPDATE SET
+            status = @status,
+            reason = @reason,
+            assigned_to = @assignedTo,
+            updated_by = @actorId,
+            updated_at = GETDATE()
+        WHEN NOT MATCHED THEN
+          INSERT (
+            yard_id, issue_code, entity_id, entity_ref, status,
+            reason, assigned_to, created_by, updated_by, created_at, updated_at
+          )
+          VALUES (
+            @yardId, @issueCode, @entityId, @entityRef, @status,
+            @reason, @assignedTo, @actorId, @actorId, GETDATE(), GETDATE()
+          )
+        OUTPUT INSERTED.action_id;
+      `);
+
+    const actionId = result.recordset[0]?.action_id || null;
+    await logAudit({
+      userId: actor.userId,
+      yardId,
+      action: `reconciliation_${status}`,
+      entityType: 'reconciliation_issue',
+      entityId: actionId,
+      details: { issue_code: issueCode, entity_id: entityId, entity_ref: entityRef, reason, assigned_to: assignedTo },
+    });
+
+    return NextResponse.json({ success: true, action_id: actionId, status });
+  } catch (error) {
+    console.error('PATCH reconciliation action error:', error);
+    return NextResponse.json({ error: 'ไม่สามารถอัปเดตสถานะ reconciliation ได้' }, { status: 500 });
   }
 }

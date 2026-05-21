@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel** (~100%)
 
 ---
 
@@ -249,12 +249,13 @@ container-yard-system/
 │   │       │   └── demurrage/route.ts      # **GET/POST/PUT demurrage** — overview, single calc, rates CRUD
 │   │       ├── reports/
 │   │       │   ├── dwell/route.ts           # **📊 GET Container Dwell Report** — by shipping line (avg/max/min dwell) + overdue list (>${overdueDays}d) + distribution buckets (7/14/30d)
-│   │       │   └── mnr/route.ts             # **📊 GET M&R Report** — EOR summary KPIs + by status + 6-month trend + full EOR list with date range filter
+│   │       │   ├── mnr/route.ts             # **📊 GET M&R Report** — EOR summary KPIs + by status + 6-month trend + full EOR list with date range filter
+│   │       │   └── reconciliation/route.ts  # **Action Center** — issue checks + row deep links/SLA + PATCH resolve/ignore
 │   │       ├── search/route.ts              # **GET global search** — containers + gate history + invoices + bookings for Topbar quick jump
 │   │       ├── __tests__/                   # **🧪 API Integration Tests** — covers containers, mnr, reports, gate, billing, auth/2FA, no-runtime-DDL, portal, search
 │   │       │   ├── containers.test.ts       # GET (list, position check, filters) + POST (create, UNIQUE)
 │   │       │   ├── mnr.test.ts              # GET + POST (create EOR) + PUT (approve/reject/complete/404)
-│   │       │   ├── reports.test.ts          # GET /reports/dwell + GET /reports/mnr — structure + error handling
+│   │       │   ├── reports.test.ts          # GET /reports/dwell + GET /reports/mnr + reconciliation action-center GET/PATCH
 │   │       │   ├── gate.test.ts             # GET (list, date/search filter)
 │   │       │   ├── billing.test.ts          # GET (list+stats) + POST (VAT calc) + PUT (pay/issue/cancel)
 │   │       │   ├── auth-login.test.ts       # Login 2FA challenge + valid TOTP session creation
@@ -317,6 +318,7 @@ container-yard-system/
 │       ├── deviceBinding.ts      # Trusted browser device policy + id validation (uses legacy bound_device_mac column)
 │       ├── promptPay.ts          # PromptPay EMV QR payload builder + CRC16 validation
 │       ├── gateWorkflow.ts       # Gate-In/Out workflow step + exception model used by guided UI
+│       ├── reconciliationActions.ts # Reports action-center row decoration, deep links, SLA aging, resolved/ignored filtering
 │       ├── utils.ts              # formatDateTime, formatTime, **calcDwellDays** (Calendar Days +1), etc.
 │       ├── containerValidation.ts # **ISO 6346 check digit** validation + size/type parser + **`extractContainerNumber()` (4-strategy OCR smart extraction)** + `extractTruckPlate()`
 │       ├── offlineQueue.ts       # NFR1: IndexedDB offline queue + auto-sync
@@ -336,6 +338,7 @@ container-yard-system/
 │           ├── deviceBinding.test.ts       # policy role matching + device id validation
 │           ├── promptPay.test.ts           # PromptPay payload format + fixed amount + CRC
 │           ├── gateWorkflow.test.ts        # Gate guided workflow status + exception rules
+│           ├── reconciliationActions.test.ts # Reconciliation action row keys + deep links + status overlay
 │           └── rateLimit.test.ts            # store clearing + stats + client IP extraction (14 tests)
 │
 ├── src/proxy.ts                  # **🔐 Next.js 16 Proxy** (เดิมคือ middleware.ts) — JWT enforcement ทุก /api/ + page guard + cookie→x-cyms-token forwarding
@@ -1037,6 +1040,15 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - เข้าถึงที่: หน้า Gate → แท็บ "รายงาน"
 - ไฟล์: `api/reports/gate/route.ts`, `gate/GateReportTab.tsx`, เพิ่มใน `lib/pdfExport.ts`
 
+### 🧭 Reports Action Center (✅ เสร็จ — 21 พ.ค. 2569)
+- [x] **Reconciliation จาก dashboard เป็น workflow** — หน้า `/reports` แท็บ Reconciliation แสดง exception row พร้อม deep link กลับไปหน้าแก้จริง (`/gate`, `/billing`, `/booking`, `/mnr`, `/edi`)
+- [x] **Resolve / Ignore with reason** — แต่ละ row มีช่อง audit note, ปุ่ม Resolve และ Ignore; Ignore บังคับกรอกเหตุผล
+- [x] **SLA aging** — คำนวณ `sla_age_days` จาก `created_at` แล้วทำ badge สีเขียว/เหลือง/แดงตามอายุรายการ
+- [x] **Persistent action state** — เพิ่มตาราง `ReconciliationActions` ใน `scripts/migrate-runtime-core-schema.js`; API `PATCH /api/reports/reconciliation` upsert status `open/resolved/ignored`
+- [x] **Default view ซ่อนรายการปิดแล้ว** — GET overlay action state และนับเฉพาะ open rows ใน summary; มี `closed_count` เพื่อบอกว่าซ่อน resolved/ignored ไปกี่รายการ
+- [x] **Audit trail** — PATCH เขียน `AuditLog` action `reconciliation_resolved` / `reconciliation_ignored`
+- [x] **Tests** — `src/lib/__tests__/reconciliationActions.test.ts` + `src/app/api/__tests__/reports.test.ts` ครอบคลุม deep link, SLA, resolved/ignored filtering, และ PATCH action update
+
 ### 🛡️ Security Hardening (✅ เสร็จ)
 - [x] **[P0] JWT Fail-Fast** — `proxy.ts` + `auth/me` ใช้ `getJwtSecret()` — throw ทันทีถ้าไม่ตั้งค่า `JWT_SECRET` (ไม่มี fallback `cyms-default-secret` อีกต่อไป)
 - [x] **[P0] Users API RBAC** — `api/settings/users` เฉพาะ `yard_manager` (403 สำหรับ role อื่น) + audit actor จาก JWT token ไม่ใช่จาก body (ปลอมไม่ได้)
@@ -1088,7 +1100,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **ย้าย direct request-time DDL ออกจาก core API routes** — ลบ schema guard ที่ `ALTER TABLE` / `CREATE TABLE` / `COL_LENGTH` จาก `api/gate`, `api/billing/invoices`, `api/mnr`, `api/customers/360`, `api/settings/customers`
 - [x] **Migration script กลาง** — เพิ่ม `scripts/migrate-runtime-core-schema.js` สำหรับเติม columns/tables ที่ core routes เคยสร้างเอง ได้แก่ `Containers.container_grade`, `BillingClearances`, invoice document columns, M&R extended columns, customer role/credit/branch columns, `CustomerBranches`, และ owner/billing columns บน `GateTransactions`
 - [x] **Batch 2 source-wide cleanup** — ย้าย DDL ที่เหลือออกจาก `src/app/api` และ `src/lib` รวม shared helpers (`documentLifecycle`, `documentNumber`, `customerCredit`, `attachmentCenter`, `approvalReview`, `integrationLog`) และ routes ที่เคย auto-migrate เช่น `containers`, `billing/clearance`, `billing/reports`, `edi/codeco`, `edi/templates`, `mnr/cedex`, `mnr/eor-pdf`, `settings/*`
-- [x] **Migration script ขยายครบ** — `scripts/migrate-runtime-core-schema.js` ตอนนี้ครอบคลุม DocumentSequences, DocumentLifecycle, EntityAttachments, ApprovalReviews, IntegrationLogs, EDITemplates, CEDEXCodes, StorageRateTiers, PrefixMapping, SystemSettings, Company/Yard branch fields และ granular RBAC permission columns
+- [x] **Migration script ขยายครบ** — `scripts/migrate-runtime-core-schema.js` ตอนนี้ครอบคลุม DocumentSequences, DocumentLifecycle, EntityAttachments, ApprovalReviews, IntegrationLogs, ReconciliationActions, EDITemplates, CEDEXCodes, StorageRateTiers, PrefixMapping, SystemSettings, Company/Yard branch fields และ granular RBAC permission columns
 - [x] **Static regression test** — `src/app/api/__tests__/no-runtime-ddl.test.ts` ตรวจ production source ทั้ง `src/app/api` และ `src/lib` ไม่ให้มี `CREATE TABLE` / `ALTER TABLE` ใน runtime path อีก
 - [x] **Deploy note** — production/staging ต้องรัน `node scripts/migrate-runtime-core-schema.js` ก่อน deploy version นี้ หาก DB เก่ายังไม่มี schema เหล่านี้
 
@@ -1365,7 +1377,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 378/378; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 385/385; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Reports action center tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1407,7 +1419,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 378/378 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 385/385 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)

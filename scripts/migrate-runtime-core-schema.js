@@ -327,6 +327,28 @@ async function migrate() {
         ALTER TABLE IntegrationLogs ADD record_count INT NOT NULL DEFAULT 0;
       IF COL_LENGTH('IntegrationLogs', 'request_id') IS NULL
         ALTER TABLE IntegrationLogs ADD request_id NVARCHAR(100) NULL;
+
+      IF OBJECT_ID('ReconciliationActions', 'U') IS NULL
+      BEGIN
+        CREATE TABLE ReconciliationActions (
+          action_id INT PRIMARY KEY IDENTITY(1,1),
+          yard_id INT NOT NULL,
+          issue_code NVARCHAR(80) NOT NULL,
+          entity_id INT NULL,
+          entity_ref NVARCHAR(150) NULL,
+          status NVARCHAR(20) NOT NULL DEFAULT 'open',
+          reason NVARCHAR(500) NULL,
+          assigned_to NVARCHAR(100) NULL,
+          created_by INT NULL,
+          updated_by INT NULL,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          updated_at DATETIME2 NOT NULL DEFAULT GETDATE()
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('ReconciliationActions') AND name = 'IX_ReconciliationActions_IssueEntity')
+        CREATE INDEX IX_ReconciliationActions_IssueEntity
+          ON ReconciliationActions (yard_id, issue_code, entity_id, entity_ref, status);
     `);
 
     await runStep(pool, 'EDI, CEDEX, and tariff helper schema', `
