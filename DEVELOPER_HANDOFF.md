@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher** (~100%)
 
 ---
 
@@ -78,6 +78,9 @@ PORT=3005
 NEXT_PUBLIC_APP_NAME=CYMS
 NEXT_PUBLIC_APP_TITLE=ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ
 NEXT_PUBLIC_DEFAULT_YARD_ID=1
+
+# Payment QR (optional; ตั้งผ่านหน้า Billing → Payment QR ได้เช่นกัน)
+PROMPTPAY_ID=<phone-or-tax-id>
 
 # File Storage
 UPLOAD_DIR=./uploads
@@ -172,7 +175,7 @@ container-yard-system/
 │   │   │   ├── edi/page.tsx      # หน้า EDI (4 tabs: Bookings/นำเข้า/ตรวจซีล/CODECO)
 │   │   │   ├── mnr/page.tsx      # หน้า M&R (3 tabs: EOR/สร้าง EOR/รหัสความเสียหาย) + **actual_cost modal + notes field + user_id tracking**
 │   │   │   ├── billing/
-│   │   │   │   ├── page.tsx          # หน้าบัญชี (8 tabs: ใบแจ้งหนี้/สร้างบิล/Tariff/Hold/เอกสาร/ERP/รายงาน/**Demurrage**)
+│   │   │   │   ├── page.tsx          # หน้าบัญชี (tabs: ใบแจ้งหนี้/Clearance/สร้างบิล/Tariff/Hold/AR/Credit/Payment QR/เอกสาร/ERP/รายงาน/Demurrage)
 │   │   │   │   └── DemurrageTab.tsx  # **Demurrage Calculator** — overview + risk cards + editable rates + per-container calculator + timeline
 │   │   │   └── settings/
 │   │   │       ├── page.tsx              # หน้าตั้งค่า (12 tabs, รวม Rate Limit)
@@ -237,6 +240,8 @@ container-yard-system/
 │   │       │   ├── gate-check/route.ts     # POST Gate-Out billing — tiered per-size rates + fallback Tariff
 │   │       │   ├── gate-in-check/route.ts  # **POST Gate-In billing** — per-container charges (LOLO, gate fee) + prefix→customer credit check
 │   │       │   ├── clearance/route.ts      # **POST Billing Clearance** — paid/credit/no_charge/waived evidence before EIR
+│   │       │   ├── payment-qr/route.ts     # **GET PromptPay QR** — fixed-amount EMV QR payload per invoice
+│   │       │   ├── payment-settings/route.ts # **GET/PUT PromptPay settings** — SystemSettings `payment_promptpay`
 │   │       │   ├── auto-calculate/route.ts # POST auto-billing (dwell time + tariff)
 │   │       │   ├── erp-export/route.ts     # GET ERP export (CSV/JSON debit-credit) — **fixed: getDb() + date format DD/MM/YYYY HH:mm + customer credit/branch data**
 │   │       │   ├── reports/route.ts         # **GET billing reports** — daily/monthly KPIs, charge breakdowns, top customers
@@ -254,6 +259,7 @@ container-yard-system/
 │   │       │   ├── billing.test.ts          # GET (list+stats) + POST (VAT calc) + PUT (pay/issue/cancel)
 │   │       │   ├── auth-login.test.ts       # Login 2FA challenge + valid TOTP session creation
 │   │       │   ├── auth-device-binding.test.ts # Login trusted-device auto-bind + mismatch rejection
+│   │       │   ├── payment-qr.test.ts       # PromptPay QR endpoint + missing config guard
 │   │       │   ├── settings-users-device-binding.test.ts # Admin reset trusted-device binding action
 │   │       │   ├── auth-2fa.test.ts         # 2FA status/setup/verify validation
 │   │       │   └── search.test.ts           # GET global search aggregation + yard filter + short query guard
@@ -308,6 +314,7 @@ container-yard-system/
 │       ├── auth.ts               # JWT create/verify functions
 │       ├── totp.ts               # RFC 6238 TOTP helper (secret generation, verify window, otpauth URI)
 │       ├── deviceBinding.ts      # Trusted browser device policy + id validation (uses legacy bound_device_mac column)
+│       ├── promptPay.ts          # PromptPay EMV QR payload builder + CRC16 validation
 │       ├── utils.ts              # formatDateTime, formatTime, **calcDwellDays** (Calendar Days +1), etc.
 │       ├── containerValidation.ts # **ISO 6346 check digit** validation + size/type parser + **`extractContainerNumber()` (4-strategy OCR smart extraction)** + `extractTruckPlate()`
 │       ├── offlineQueue.ts       # NFR1: IndexedDB offline queue + auto-sync
@@ -325,6 +332,7 @@ container-yard-system/
 │           ├── auth.test.ts                # JWT round-trip + tamper detection + role labels (16 tests)
 │           ├── totp.test.ts                # RFC 6238 compatibility + verify window + otpauth URI
 │           ├── deviceBinding.test.ts       # policy role matching + device id validation
+│           ├── promptPay.test.ts           # PromptPay payload format + fixed amount + CRC
 │           └── rateLimit.test.ts            # store clearing + stats + client IP extraction (14 tests)
 │
 ├── src/proxy.ts                  # **🔐 Next.js 16 Proxy** (เดิมคือ middleware.ts) — JWT enforcement ทุก /api/ + page guard + cookie→x-cyms-token forwarding
@@ -464,6 +472,8 @@ container-yard-system/
 | POST | `/api/billing/gate-in-check` | **Gate-In billing check** — ค่าบริการ per-container (LOLO, gate fee ฯลฯ) + ค้นลูกค้าจาก prefix→PrefixMapping → เช็ค credit_term |
 | POST | `/api/billing/clearance` | **Billing Clearance ก่อนออก EIR** — บันทึกหลักฐาน `paid` / `credit` / `no_charge` / `waived`, ยอดเดิม/ยอดสุทธิ, invoice_id, reason, approved_by และ charge breakdown |
 | GET/POST/PUT | `/api/billing/invoices` | CRUD ใบแจ้งหนี้ — supports `invoice_id` filter, stores charge breakdown in `notes` JSON |
+| GET | `/api/billing/payment-qr?invoice_id=X` | สร้าง PromptPay fixed-amount QR payload สำหรับ invoice ที่ยังไม่ชำระ |
+| GET/PUT | `/api/billing/payment-settings` | ตั้งค่า PromptPay ID + merchant name สำหรับแสดง QR บน invoice print |
 | GET/POST/PUT | `/api/billing/tariffs` | อัตราค่าบริการ (LOLO, gate, washing, etc.) |
 | GET | `/api/billing/erp-export` | ERP export (CSV/JSON debit-credit) — **date: DD/MM/YYYY HH:mm, includes customer credit_term/branch/address/due_date** |
 | GET | `/api/billing/reports` | **Billing reports** — `?type=daily|monthly&date=YYYY-MM-DD&yard_id=X` → KPIs, charge breakdown, invoice list / top customers |
@@ -907,6 +917,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - Customer info (ชื่อ + สาขา + ที่อยู่ + เลขภาษี)
   - **Itemized charges table** (แจกแจงทุกรายการจาก JSON notes)
   - VAT breakdown + จำนวนเงินเป็นตัวอักษรไทย
+  - **PromptPay QR** สำหรับ invoice ที่ยังไม่ชำระ: ตั้งค่าได้ที่ Billing → Payment QR, QR เป็น fixed amount ตามยอด `grand_total`
   - ช่องลายเซ็น: **ผู้จ่าย / Paid by** (ซ้าย) + **ผู้รับเงิน / Received by** (ขวา) + auto-print
   - Receipt: หัวเอกสาร **"Receipt"** (ไม่มี Tax Invoice) + แสตมป์ "✅ ชำระเงินแล้ว"
 - [x] Billing Statement + Receipt + Print Template
@@ -1074,7 +1085,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Document number mock alignment** — `billing.test.ts` และ `mnr.test.ts` mock `@/lib/documentNumber.nextDocumentNumber` โดยตรง หลัง production route เปลี่ยนมาใช้ `DocumentSequences`
 - [x] **ลบ query queue เก่า** — test ไม่จำลอง `COUNT(*)` เพื่อออกเลขเอกสารใน route แล้ว จึงไม่ consume mock result ผิดลำดับ
 - [x] **Assertion เพิ่มเติม** — billing ตรวจ `grand_total` จาก VAT 7% และ M&R ตรวจ `order.eor_id` เพื่อให้จับ regression ของ insert output ได้จริง
-- [x] **Full suite กลับมาเขียว** — ล่าสุด `npm test -- --runInBand` ผ่าน 366/366 tests ทั้ง 23 suites
+- [x] **Full suite กลับมาเขียว** — ล่าสุด `npm test -- --runInBand` ผ่าน 374/374 tests ทั้ง 25 suites
 
 ### 🧪 Automated Testing (✅ เสร็จ)
 - [x] **Jest + ts-jest** — ติดตั้งและตั้งค่า Jest สำหรับ Next.js + TypeScript (path alias `@/*`, jose ESM handling)
@@ -1343,7 +1354,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 366/366; เพิ่ม global search + TOTP 2FA + trusted device binding tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 374/374; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -1351,7 +1362,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Device Binding** | ✅ **มีแล้ว** — enforce ผ่าน trusted browser device id ตาม policy/role, auto-bind อุปกรณ์แรกได้, admin ล้าง binding ได้จาก UsersSettings (`bound_device_mac` เป็นชื่อ legacy ไม่ใช่ MAC จริง) |
 | **Password Policy** | ✅ **มีแล้ว** — configurable min_length, uppercase, lowercase, number, special char + strength meter UI |
 | **Account Lockout** | ✅ **มีแล้ว** — lock after N failed attempts, auto-unlock after duration, Admin unlock UI |
-| **Payment Gateway** | ยังไม่มี QR Code / payment integration |
+| **Payment Gateway** | ✅ **มี PromptPay QR แล้ว** — เป็น manual-payment QR บน invoice print + Billing → Payment QR settings; ยังไม่ใช่ automatic settlement/provider webhook |
 | **Audit Trail** | ~~UI placeholder~~ → แก้แล้ว มี Audit Log API + UI |
 | **CSS lint warnings** | `@variant`, `@theme` = Tailwind v4 directives ปกติ (IDE lint ไม่รู้จัก แต่ build สำเร็จ) |
 | **Timezone (แก้แล้ว)** | ~~EIR วันที่เลื่อน 7 ชม.~~ → แก้แล้วโดยใส่ `useUTC: false` ใน `db.ts` (ป้องกัน mssql driver ตีความ DATETIME2 เป็น UTC ซ้ำซ้อน) |
@@ -1385,7 +1396,7 @@ node scripts/migrate-edi-endpoints.js
 # สร้างตาราง DemurrageRates + default rates
 node scripts/migrate-demurrage.js
 
-# 🧪 รัน Tests ทั้งหมด (ล่าสุด 366/366 tests ผ่าน)
+# 🧪 รัน Tests ทั้งหมด (ล่าสุด 374/374 tests ผ่าน)
 npm test
 
 # Watch mode (re-run เมื่อแก้โค้ด)

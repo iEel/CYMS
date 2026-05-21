@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface InvoiceData {
   invoice_id: number; invoice_number: string; customer_name: string;
@@ -38,6 +39,15 @@ interface DocumentLifecycleRow {
   related_document_number?: string | null;
   user_name?: string | null;
   created_at: string;
+}
+
+interface PaymentQrData {
+  success: boolean;
+  provider: 'promptpay';
+  invoice_number: string;
+  amount: number;
+  qr_payload: string;
+  merchant_name?: string | null;
 }
 
 interface CompanyData {
@@ -93,6 +103,7 @@ export default function PrintInvoicePage() {
   const [chargeLines, setChargeLines] = useState<{ description: string; quantity: number; unit_price: number; subtotal: number }[]>([]);
   const [invoiceNotes, setInvoiceNotes] = useState<InvoiceNotes | null>(null);
   const [lifecycle, setLifecycle] = useState<DocumentLifecycleRow[]>([]);
+  const [paymentQr, setPaymentQr] = useState<PaymentQrData | null>(null);
 
   useEffect(() => {
     if (!invoiceId) return;
@@ -149,6 +160,17 @@ export default function PrintInvoicePage() {
           // Final fallback: single line
           if (!parsed) {
             setChargeLines([{ description: inv.description || inv.charge_type, quantity: inv.quantity, unit_price: inv.unit_price, subtotal: inv.total_amount }]);
+          }
+
+          if (!['paid', 'cancelled', 'credit_note'].includes(inv.status) && !String(inv.invoice_number || '').startsWith('CN-')) {
+            try {
+              const qrRes = await fetch(`/api/billing/payment-qr?invoice_id=${invoiceId}`, { headers: authHeaders });
+              if (qrRes.ok) {
+                setPaymentQr(await qrRes.json());
+              }
+            } catch {
+              setPaymentQr(null);
+            }
           }
         }
 
@@ -358,6 +380,20 @@ export default function PrintInvoicePage() {
           <span className="text-slate-500">จำนวนเงิน (ตัวอักษร): </span>
           <strong>{numberToThaiText(invoice.grand_total || 0)}</strong>
         </div>
+
+        {paymentQr?.qr_payload && !isReceipt && !isCreditNote && (
+          <div className="mb-6 p-4 border border-blue-200 bg-blue-50 rounded-lg flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-blue-800">ชำระผ่าน PromptPay QR</p>
+              <p className="text-xs text-blue-600 mt-1">ยอดชำระ ฿{paymentQr.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              {paymentQr.merchant_name && <p className="text-xs text-blue-500 mt-0.5">ผู้รับเงิน: {paymentQr.merchant_name}</p>}
+              <p className="text-[10px] text-blue-500 mt-2">โปรดตรวจสอบชื่อผู้รับเงินและยอดในแอปธนาคารก่อนยืนยัน</p>
+            </div>
+            <div className="p-2 bg-white rounded-lg border border-blue-100">
+              <QRCodeSVG value={paymentQr.qr_payload} size={120} />
+            </div>
+          </div>
+        )}
 
         {/* Document Status */}
         <div className="p-4 rounded-lg text-center mb-6" style={{ border: `2px solid ${statusLabel.border}`, background: statusLabel.bg }}>

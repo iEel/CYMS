@@ -8,7 +8,7 @@ import {
   Loader2, Calculator, Receipt, CreditCard, FileText, Plus, Search,
   CheckCircle2, XCircle, Clock, RotateCcw, DollarSign, TrendingUp,
   AlertTriangle, Lock, Unlock, Ban, ArrowDownToLine,
-  Printer, FileDown, FileSpreadsheet, BarChart3, ChevronLeft, ChevronRight, Users, Eye,
+  Printer, FileDown, FileSpreadsheet, BarChart3, ChevronLeft, ChevronRight, Users, Eye, QrCode,
 } from 'lucide-react';
 import DemurrageTab from './DemurrageTab';
 
@@ -81,6 +81,12 @@ interface CreditCustomer {
   has_overdue: boolean;
 }
 
+interface PaymentPromptPayConfig {
+  enabled: boolean;
+  promptpay_id: string;
+  merchant_name: string;
+}
+
 const CHARGE_LABELS: Record<string, string> = {
   storage: '📦 ค่าฝากตู้', lolo: '🏗️ ค่ายก LOLO', mnr: '🔧 ค่าซ่อม M&R',
   washing: '🫧 ค่าล้างตู้', pti: '🔌 ค่า PTI', reefer: '❄️ ค่าปลั๊กเย็น', other: '📋 อื่นๆ',
@@ -92,7 +98,7 @@ const UNIT_LABELS: Record<string, string> = {
 export default function BillingPage() {
   const { session, hasPermission } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'invoices' | 'clearance' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging' | 'credit_control'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'clearance' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging' | 'credit_control' | 'payment_settings'>('invoices');
 
   // Credit Note Modal
   const [cnModal, setCnModal] = useState<{ open: boolean; invoice: InvoiceRow | null }>({ open: false, invoice: null });
@@ -126,7 +132,7 @@ export default function BillingPage() {
     const params = new URLSearchParams(window.location.search);
     const queryTab = params.get('tab');
     const querySearch = params.get('search') || params.get('invoice_id') || '';
-    if (queryTab && ['invoices', 'clearance', 'create', 'tariffs', 'hold', 'documents', 'export', 'reports', 'demurrage', 'ar_aging', 'credit_control'].includes(queryTab)) {
+    if (queryTab && ['invoices', 'clearance', 'create', 'tariffs', 'hold', 'documents', 'export', 'reports', 'demurrage', 'ar_aging', 'credit_control', 'payment_settings'].includes(queryTab)) {
       setActiveTab(queryTab as typeof activeTab);
     }
     if (querySearch) {
@@ -158,6 +164,9 @@ export default function BillingPage() {
   const [clearanceLoading, setClearanceLoading] = useState(false);
   const [creditCustomers, setCreditCustomers] = useState<CreditCustomer[]>([]);
   const [creditLoading, setCreditLoading] = useState(false);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentPromptPayConfig>({ enabled: false, promptpay_id: '', merchant_name: '' });
+  const [paymentConfigLoading, setPaymentConfigLoading] = useState(false);
+  const [paymentConfigSaving, setPaymentConfigSaving] = useState(false);
 
   // Tariff create
   const [tariffForm, setTariffForm] = useState({
@@ -208,18 +217,55 @@ export default function BillingPage() {
     finally { setCreditLoading(false); }
   }, [yardId]);
 
+  const fetchPaymentConfig = useCallback(async () => {
+    setPaymentConfigLoading(true);
+    try {
+      const res = await fetch('/api/billing/payment-settings');
+      const data = await res.json();
+      if (data.config) setPaymentConfig(data.config);
+    } catch (err) { console.error(err); }
+    finally { setPaymentConfigLoading(false); }
+  }, []);
+
+  const savePaymentConfig = async () => {
+    if (!canManageSettings) {
+      toast('error', 'คุณไม่มีสิทธิ์ตั้งค่าการรับชำระเงิน');
+      return;
+    }
+    setPaymentConfigSaving(true);
+    try {
+      const res = await fetch('/api/billing/payment-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: paymentConfig, user_id: session?.userId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPaymentConfig(data.config);
+        toast('success', 'บันทึก PromptPay QR เรียบร้อย');
+      } else {
+        toast('error', data.error || 'ไม่สามารถบันทึกได้');
+      }
+    } catch {
+      toast('error', 'เกิดข้อผิดพลาด');
+    } finally {
+      setPaymentConfigSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'invoices' || activeTab === 'hold' || activeTab === 'documents' || activeTab === 'reports') fetchInvoices();
     if (activeTab === 'invoices') fetchClearances();
     if (activeTab === 'clearance' || activeTab === 'documents' || activeTab === 'reports') fetchClearances();
     if (activeTab === 'credit_control') fetchCreditControl();
+    if (activeTab === 'payment_settings') fetchPaymentConfig();
     if (activeTab === 'tariffs') fetchTariffs();
     if (activeTab === 'create' && customers.length === 0) {
       fetch('/api/settings/customers').then(r => r.json()).then(d => {
         if (Array.isArray(d)) setCustomers(d.filter((c: { is_active: boolean }) => c.is_active));
       }).catch(() => {});
     }
-  }, [activeTab, fetchInvoices, fetchTariffs, fetchClearances, fetchCreditControl, customers.length]);
+  }, [activeTab, fetchInvoices, fetchTariffs, fetchClearances, fetchCreditControl, fetchPaymentConfig, customers.length]);
 
   const updateInvoice = async (id: number, action: string) => {
     const invoice = invoices.find(inv => inv.invoice_id === id);
@@ -381,6 +427,7 @@ export default function BillingPage() {
           { id: 'hold' as const, label: 'Hold', icon: <Lock size={14} /> },
           { id: 'ar_aging' as const, label: 'AR Aging', icon: <Users size={14} /> },
           { id: 'credit_control' as const, label: 'Credit Control', icon: <CreditCard size={14} /> },
+          { id: 'payment_settings' as const, label: 'Payment QR', icon: <QrCode size={14} /> },
           { id: 'documents' as const, label: 'เอกสาร', icon: <Printer size={14} /> },
           { id: 'export' as const, label: 'ERP', icon: <FileDown size={14} /> },
           { id: 'reports' as const, label: 'รายงาน', icon: <BarChart3 size={14} /> },
@@ -919,6 +966,60 @@ export default function BillingPage() {
       {/* =================== DEMURRAGE TAB =================== */}
       {activeTab === 'demurrage' && (
         <DemurrageTab yardId={yardId} />
+      )}
+
+      {/* =================== PAYMENT SETTINGS TAB =================== */}
+      {activeTab === 'payment_settings' && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600"><QrCode size={20} /></div>
+              <div>
+                <h3 className="font-semibold text-slate-800 dark:text-white">PromptPay QR</h3>
+                <p className="text-xs text-slate-400">แสดง QR ชำระเงินบนใบแจ้งหนี้ที่ยังไม่ชำระ</p>
+              </div>
+            </div>
+            <button onClick={savePaymentConfig} disabled={paymentConfigSaving || paymentConfigLoading || !canManageSettings}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
+              {paymentConfigSaving ? <Loader2 size={14} className="animate-spin" /> : <QrCode size={14} />}
+              บันทึก
+            </button>
+          </div>
+          {paymentConfigLoading ? (
+            <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
+          ) : (
+            <div className="p-5 space-y-4 max-w-2xl">
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">
+                <input type="checkbox" checked={paymentConfig.enabled}
+                  onChange={e => setPaymentConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                <span>
+                  <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">เปิดใช้ PromptPay QR บนใบแจ้งหนี้</span>
+                  <span className="block text-xs text-slate-400 mt-0.5">ระบบสร้าง QR แบบ fixed amount ตามยอด `grand_total` ของ invoice</span>
+                </span>
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>PromptPay ID</label>
+                  <input value={paymentConfig.promptpay_id}
+                    onChange={e => setPaymentConfig(prev => ({ ...prev, promptpay_id: e.target.value }))}
+                    placeholder="เบอร์โทร / เลขภาษี / e-Wallet ID"
+                    className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>ชื่อผู้รับเงิน</label>
+                  <input value={paymentConfig.merchant_name || ''}
+                    onChange={e => setPaymentConfig(prev => ({ ...prev, merchant_name: e.target.value }))}
+                    placeholder="ชื่อที่ต้องการแสดงใต้ QR"
+                    className={inputClass} />
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/30 text-xs text-emerald-700 dark:text-emerald-400">
+                QR นี้ช่วยให้ลูกค้าสแกนจ่ายได้สะดวก แต่ยังเป็น manual payment: หลังรับเงินแล้วให้กด “ชำระ” ที่ invoice เพื่อออกใบเสร็จในระบบ
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* =================== CREDIT NOTE MODAL =================== */}
