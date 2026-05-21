@@ -186,7 +186,7 @@ export async function PUT(request: NextRequest) {
       }
       const salt = await bcrypt.genSalt(10);
       const hash = await bcrypt.hash(body.password, salt);
-      query += `, password_hash = @passwordHash, password_changed_at = GETDATE()`;
+      query += `, password_hash = @passwordHash, password_changed_at = GETDATE(), failed_login_count = 0, locked_at = NULL`;
       req.input('passwordHash', sql.NVarChar, hash);
     }
 

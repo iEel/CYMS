@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX** (~100%)
 
 ---
 
@@ -1370,6 +1370,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - `src/app/api/auth/2fa/route.ts` — 2FA status/setup/verify/disable สำหรับ user ปัจจุบัน
 - `src/app/api/settings/users/route.ts` — password validation on create/update, unlock action, reset device binding
 - `src/app/(dashboard)/settings/SecuritySettings.tsx` — Admin UI แท็บ "ความปลอดภัย"
+- `src/app/(dashboard)/settings/UsersSettings.tsx` — User CRUD + password policy hints/validation + password reset unlock behavior
 - `src/app/login/page.tsx` — lockout feedback (remaining time, attempts warning) + TOTP challenge input
 - `scripts/migrate-password-policy.js` — DB migration
 - `scripts/migrate-runtime-core-schema.js` — เติม `two_fa_*` + `bound_device_mac` columns ใน Users table
@@ -1381,12 +1382,14 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] บังคับตัวเลข (0-9) — toggle
 - [x] บังคับอักขระพิเศษ (!@#$%...) — toggle
 - [x] Real-time password strength meter (4 ระดับ: อ่อนมาก/อ่อน/ปานกลาง/แข็งแรง)
+- [x] UsersSettings แสดง policy ที่ใช้จริง, ตัวอย่างรหัสผ่าน, show/hide password, client-side validation และ error รายข้อจาก backend
 
 **Account Lockout:**
 - [x] นับ failed login attempts ต่อ user
 - [x] ล็อคอัตโนมัติเมื่อถึง max (default 5 ครั้ง, configurable 3-20)
 - [x] Auto-unlock หลังหมดเวลา (default 30 นาที, configurable 5-1440)
 - [x] Admin ปลดล็อคได้จาก 2 ที่: SecuritySettings tab + UsersSettings inline button
+- [x] Admin reset password จาก UsersSettings แล้ว reset `failed_login_count` + `locked_at` อัตโนมัติ เพื่อให้ user ลอง login ใหม่ได้ทันที
 - [x] Login page แสดง countdown + remaining attempts warning (≤ 3 ครั้ง)
 - [x] Reset counter เป็น 0 เมื่อ login สำเร็จ
 - [x] `locked_at` พร้อม lockout badge 🔒 ใน Users table
@@ -1429,6 +1432,12 @@ notif_last_read_at  DATETIME2 NULL         -- เวลาที่อ่าน�
   "lockout_duration_min": 30
 }
 ```
+
+**Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/settings-users-device-binding.test.ts --runInBand` ✅ (2 tests)
+- `npm test -- --runInBand` ✅ (46 suites / 514 tests)
+- `npx tsc --noEmit --pretty false` ✅
+- `npm run lint` ✅
 
 ### 🚚 Inter-Yard Transfer Hardening (✅ เสร็จ)
 

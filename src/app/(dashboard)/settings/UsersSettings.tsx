@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/providers/ToastProvider';
-import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Trash2, Search, ChevronLeft, ChevronRight, Lock, Unlock, Key } from 'lucide-react';
-import { getPasswordStrength } from '@/lib/passwordStrength';
+import { Users, Plus, Pencil, Save, Loader2, X, Shield, MapPin, Trash2, Search, ChevronLeft, ChevronRight, Lock, Unlock, Key, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { getPasswordStrength, validatePasswordClient, type PasswordPolicyConfig } from '@/lib/passwordStrength';
 import PermissionsMatrix from './PermissionsMatrix';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -53,6 +53,16 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   resign: { label: 'ลาออก', color: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
 };
 
+const DEFAULT_PASSWORD_POLICY: PasswordPolicyConfig = {
+  min_length: 8,
+  require_uppercase: true,
+  require_lowercase: true,
+  require_number: true,
+  require_special: true,
+  max_login_attempts: 5,
+  lockout_duration_min: 30,
+};
+
 export default function UsersSettings() {
   const { toast } = useToast();
   const [users, setUsers] = useState<UserData[]>([]);
@@ -72,6 +82,8 @@ export default function UsersSettings() {
     role_code: 'gate_clerk', status: 'active', yard_ids: [1] as number[],
     customer_id: null as number | null,
   });
+  const [passwordPolicy, setPasswordPolicy] = useState<PasswordPolicyConfig>(DEFAULT_PASSWORD_POLICY);
+  const [showPassword, setShowPassword] = useState(false);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [yards, setYards] = useState<YardOption[]>([]);
 
@@ -91,6 +103,14 @@ export default function UsersSettings() {
     } catch { /* ignore */ }
   }, []);
 
+  const fetchPasswordPolicy = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/security');
+      const data = await res.json();
+      if (data.policy) setPasswordPolicy({ ...DEFAULT_PASSWORD_POLICY, ...data.policy });
+    } catch { /* ignore */ }
+  }, []);
+
   const fetchUsers = useCallback(async () => {
     try {
       const res = await fetch('/api/settings/users');
@@ -100,11 +120,12 @@ export default function UsersSettings() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchUsers(); fetchCustomers(); fetchYards(); }, [fetchUsers, fetchCustomers, fetchYards]);
+  useEffect(() => { fetchUsers(); fetchCustomers(); fetchYards(); fetchPasswordPolicy(); }, [fetchUsers, fetchCustomers, fetchYards, fetchPasswordPolicy]);
 
   const openAdd = () => {
     setEditingUser(null);
     setForm({ username: '', password: '', full_name: '', email: '', phone: '', role_code: 'gate_clerk', status: 'active', yard_ids: [1], customer_id: null });
+    setShowPassword(false);
     setShowForm(true);
   };
 
@@ -121,13 +142,26 @@ export default function UsersSettings() {
       yard_ids: user.yard_ids ? user.yard_ids.split(',').map(Number) : [],
       customer_id: user.customer_id || null,
     });
+    setShowPassword(false);
     setShowForm(true);
   };
 
   const handleSave = async () => {
+    const isEdit = !!editingUser;
+    if (!isEdit && !form.password) {
+      toast('warning', 'กรุณาระบุรหัสผ่าน', passwordPolicySummary(passwordPolicy));
+      return;
+    }
+    if (form.password) {
+      const validation = validatePasswordClient(form.password, passwordPolicy);
+      if (!validation.valid) {
+        toast('error', 'รหัสผ่านไม่ผ่านเกณฑ์', validation.errors.join(' • '));
+        return;
+      }
+    }
+
     setSaving(true);
     try {
-      const isEdit = !!editingUser;
       const body = isEdit
         ? { ...form, user_id: editingUser.user_id }
         : form;
@@ -140,12 +174,14 @@ export default function UsersSettings() {
 
       const json = await res.json();
       if (json.success || json.userId) {
+        toast('success', isEdit ? 'บันทึกผู้ใช้เรียบร้อย' : 'เพิ่มผู้ใช้เรียบร้อย');
         setShowForm(false);
         fetchUsers();
       } else {
-        toast('error', json.error || 'เกิดข้อผิดพลาด');
+        const passwordErrors = Array.isArray(json.password_errors) ? json.password_errors.join(' • ') : undefined;
+        toast('error', json.error || 'เกิดข้อผิดพลาด', passwordErrors);
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); toast('error', 'เกิดข้อผิดพลาด'); }
     finally { setSaving(false); }
   };
 
@@ -198,6 +234,9 @@ export default function UsersSettings() {
       </div>
     );
   }
+
+  const passwordValidation = form.password ? validatePasswordClient(form.password, passwordPolicy) : null;
+  const passwordRules = passwordPolicyRules(passwordPolicy);
 
   return (
     <div className="space-y-4">
@@ -255,9 +294,26 @@ export default function UsersSettings() {
                   <label className="block text-xs text-slate-500 mb-1.5">
                     {editingUser ? 'รหัสผ่านใหม่' : <span>รหัสผ่าน <span className="text-rose-400">*</span></span>}
                   </label>
-                  <input type="password" value={form.password}
-                    onChange={e => setForm({...form, password: e.target.value})} placeholder={editingUser ? 'เว้นว่างถ้าไม่เปลี่ยน' : '••••••••'}
-                    className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                  <div className="relative">
+                    <input type={showPassword ? 'text' : 'password'} value={form.password}
+                      onChange={e => setForm({...form, password: e.target.value})} placeholder={editingUser ? 'เว้นว่างถ้าไม่เปลี่ยน' : 'เช่น Temp@1234'}
+                      autoComplete={editingUser ? 'new-password' : 'new-password'}
+                      className="h-11 w-full pl-4 pr-11 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                    <button type="button" onClick={() => setShowPassword(prev => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-violet-600 transition-colors"
+                      title={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}>
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <div className="mt-2 rounded-lg border border-violet-100 dark:border-violet-900/40 bg-violet-50/70 dark:bg-violet-900/10 p-2.5">
+                    <p className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">
+                      {editingUser ? 'ใส่เฉพาะเมื่อต้องการเปลี่ยนรหัสผ่าน' : 'รหัสผ่านต้องผ่านกฎนี้'}
+                    </p>
+                    <ul className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-violet-600 dark:text-violet-300">
+                      {passwordRules.map(rule => <li key={rule}>• {rule}</li>)}
+                    </ul>
+                    <p className="mt-1 text-[10px] text-slate-400">ตัวอย่างที่ผ่านกฎเริ่มต้น: Temp@1234</p>
+                  </div>
                   {/* Password Strength Meter */}
                   {form.password && (() => {
                     const strength = getPasswordStrength(form.password);
@@ -273,6 +329,12 @@ export default function UsersSettings() {
                       </div>
                     );
                   })()}
+                  {passwordValidation && !passwordValidation.valid && (
+                    <div className="mt-2 flex items-start gap-1.5 text-[10px] text-rose-500">
+                      <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                      <span>{passwordValidation.errors.join(' • ')}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -390,7 +452,7 @@ export default function UsersSettings() {
               ยกเลิก
             </button>
             <button onClick={handleSave}
-              disabled={saving || !form.full_name || (!editingUser && (!form.username || !form.password))}
+              disabled={saving || !form.full_name || (!editingUser && (!form.username || !form.password)) || Boolean(passwordValidation && !passwordValidation.valid)}
               className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 active:scale-[0.98] transition-all shadow-sm shadow-violet-600/25">
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               {editingUser ? 'บันทึกการแก้ไข' : 'เพิ่มผู้ใช้'}
@@ -587,4 +649,17 @@ export default function UsersSettings() {
         onConfirm={confirmDlg.action} onCancel={() => setConfirmDlg(prev => ({ ...prev, open: false }))} />
     </div>
   );
+}
+
+function passwordPolicyRules(policy: PasswordPolicyConfig) {
+  const rules = [`อย่างน้อย ${policy.min_length} ตัวอักษร`];
+  if (policy.require_uppercase) rules.push('มีตัวพิมพ์ใหญ่ A-Z');
+  if (policy.require_lowercase) rules.push('มีตัวพิมพ์เล็ก a-z');
+  if (policy.require_number) rules.push('มีตัวเลข 0-9');
+  if (policy.require_special) rules.push('มีอักขระพิเศษ เช่น !@#$');
+  return rules;
+}
+
+function passwordPolicySummary(policy: PasswordPolicyConfig) {
+  return passwordPolicyRules(policy).join(' • ');
 }
