@@ -10,7 +10,7 @@ interface AuthContextType {
   permissionsLoading: boolean;
   hasPermission: (permissionCode: string) => boolean;
   hasAnyPermission: (permissionCodes: string[]) => boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string; locked?: boolean; remaining_minutes?: number; remaining_attempts?: number }>;
+  login: (username: string, password: string, totpCode?: string) => Promise<{ success: boolean; error?: string; locked?: boolean; remaining_minutes?: number; remaining_attempts?: number; requires_2fa?: boolean }>;
   logout: () => void;
   switchYard: (yardId: number) => void;
 }
@@ -124,15 +124,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [hasPermission]);
 
 
-  const login = useCallback(async (username: string, password: string): Promise<{ success: boolean; error?: string; locked?: boolean; remaining_minutes?: number; remaining_attempts?: number }> => {
+  const login = useCallback(async (username: string, password: string, totpCode?: string): Promise<{ success: boolean; error?: string; locked?: boolean; remaining_minutes?: number; remaining_attempts?: number; requires_2fa?: boolean }> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, ...(totpCode ? { totp_code: totpCode } : {}) }),
       });
 
       const data = await res.json();
+
+      if (data.requires_2fa) {
+        return {
+          success: false,
+          requires_2fa: true,
+          error: data.error || 'กรุณากรอกรหัสยืนยัน 2FA',
+        };
+      }
 
       if (!res.ok || !data.success) {
         return {

@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { createToken } from '@/lib/auth';
 import { rateLimitLogin, getClientIP } from '@/lib/rateLimit';
 import { getPasswordPolicy } from '@/lib/passwordPolicy';
+import { verifyTotpCode } from '@/lib/totp';
 import bcrypt from 'bcryptjs';
 import sql from 'mssql';
 
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { username, password } = await request.json();
+    const { username, password, totp_code } = await request.json();
 
     if (!username || !password) {
       return NextResponse.json(
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
       .input('username', sql.NVarChar, username)
       .query(`
         SELECT u.user_id, u.username, u.password_hash, u.full_name, u.status,
-               u.failed_login_count, u.locked_at,
+               u.failed_login_count, u.locked_at, u.two_fa_enabled, u.two_fa_secret,
                r.role_code
         FROM Users u
         JOIN Roles r ON u.role_id = r.role_id
@@ -122,6 +123,34 @@ export async function POST(request: NextRequest) {
         },
         { status: 401 }
       );
+    }
+
+    // ===== TWO-FACTOR AUTH CHECK =====
+    if (user.two_fa_enabled) {
+      const code = String(totp_code || '').trim();
+      if (!user.two_fa_secret) {
+        return NextResponse.json(
+          { error: 'บัญชีนี้เปิด 2FA แต่ยังไม่มี secret กรุณาติดต่อผู้ดูแลระบบ' },
+          { status: 500 }
+        );
+      }
+      if (!code) {
+        return NextResponse.json({
+          success: false,
+          requires_2fa: true,
+          error: 'กรุณากรอกรหัสยืนยัน 2FA',
+        });
+      }
+      if (!verifyTotpCode(user.two_fa_secret, code)) {
+        return NextResponse.json(
+          {
+            success: false,
+            requires_2fa: true,
+            error: 'รหัสยืนยัน 2FA ไม่ถูกต้อง',
+          },
+          { status: 401 }
+        );
+      }
     }
 
     // ===== LOGIN SUCCESS — RESET COUNTER =====

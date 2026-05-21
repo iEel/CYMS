@@ -141,6 +141,8 @@ async function run() {
           avatar_url      NVARCHAR(500),
           status          NVARCHAR(20) DEFAULT 'active',
           two_fa_enabled  BIT DEFAULT 0,
+          two_fa_secret   NVARCHAR(128) NULL,
+          two_fa_confirmed_at DATETIME2 NULL,
           bound_device_mac NVARCHAR(50),
           created_at      DATETIME2 DEFAULT GETDATE(),
           updated_at      DATETIME2 DEFAULT GETDATE()

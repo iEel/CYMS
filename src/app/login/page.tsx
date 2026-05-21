@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { Container, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
+import { Container, Eye, EyeOff, LogIn, AlertCircle, Shield } from 'lucide-react';
 
 export default function LoginPage() {
   return (
@@ -21,6 +21,8 @@ function LoginForm() {
   const [lockoutMinutes, setLockoutMinutes] = useState(0);
   const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
   const { login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -36,9 +38,13 @@ function LoginForm() {
       setError('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
       return;
     }
+    if (requiresTwoFactor && !totpCode.trim()) {
+      setError('กรุณากรอกรหัสยืนยัน 2FA');
+      return;
+    }
 
     setIsLoggingIn(true);
-    const result = await login(username, password);
+    const result = await login(username, password, requiresTwoFactor ? totpCode : undefined);
     
     if (result.success) {
       // Redirect กลับไปหน้าที่ต้องการ (จาก ?from=) หรือ default ตาม role
@@ -46,6 +52,12 @@ function LoginForm() {
       const defaultPath = session.role === 'customer' ? '/portal' : '/dashboard';
       router.push(fromPath || defaultPath);
     } else {
+      if (result.requires_2fa) {
+        setRequiresTwoFactor(true);
+        setError(result.error || 'กรุณากรอกรหัสยืนยัน 2FA');
+        setIsLoggingIn(false);
+        return;
+      }
       // Parse lockout / remaining attempts info from error response
       if (result.remaining_minutes) {
         setLockoutMinutes(result.remaining_minutes);
@@ -131,7 +143,7 @@ function LoginForm() {
               <input
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => { setUsername(e.target.value); setRequiresTwoFactor(false); setTotpCode(''); }}
                 placeholder="กรอกชื่อผู้ใช้"
                 className="w-full h-12 px-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500
                   focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20 outline-none transition-all duration-200"
@@ -149,7 +161,7 @@ function LoginForm() {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => { setPassword(e.target.value); setRequiresTwoFactor(false); setTotpCode(''); }}
                   placeholder="กรอกรหัสผ่าน"
                   className="w-full h-12 px-4 pr-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500
                     focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20 outline-none transition-all duration-200"
@@ -164,6 +176,30 @@ function LoginForm() {
                 </button>
               </div>
             </div>
+
+            {requiresTwoFactor && (
+              <div>
+                <label className="block text-slate-400 text-sm font-medium mb-2">
+                  รหัสยืนยัน 2FA
+                </label>
+                <div className="relative">
+                  <Shield size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="กรอกรหัส 6 หลัก"
+                    className="w-full h-12 pl-12 pr-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500
+                      focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20 outline-none transition-all duration-200 font-mono text-center"
+                    autoComplete="one-time-code"
+                    autoFocus
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Submit */}
             <button
@@ -182,7 +218,7 @@ function LoginForm() {
               ) : (
                 <>
                   <LogIn size={18} />
-                  เข้าสู่ระบบ
+                  {requiresTwoFactor ? 'ยืนยันและเข้าสู่ระบบ' : 'เข้าสู่ระบบ'}
                 </>
               )}
             </button>

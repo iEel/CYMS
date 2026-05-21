@@ -170,6 +170,15 @@ async function migrate() {
         ALTER TABLE GateTransactions ADD container_owner_id INT NULL;
     `);
 
+    await runStep(pool, 'User two-factor authentication columns', `
+      IF COL_LENGTH('Users', 'two_fa_enabled') IS NULL
+        ALTER TABLE Users ADD two_fa_enabled BIT NOT NULL CONSTRAINT DF_Users_TwoFA DEFAULT 0;
+      IF COL_LENGTH('Users', 'two_fa_secret') IS NULL
+        ALTER TABLE Users ADD two_fa_secret NVARCHAR(128) NULL;
+      IF COL_LENGTH('Users', 'two_fa_confirmed_at') IS NULL
+        ALTER TABLE Users ADD two_fa_confirmed_at DATETIME2 NULL;
+    `);
+
     await runStep(pool, 'Document numbering and lifecycle tables', `
       IF OBJECT_ID('DocumentSequences', 'U') IS NULL
       BEGIN

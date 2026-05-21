@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useToast } from '@/components/providers/ToastProvider';
 import {
   Shield, Lock, Unlock, Save, Loader2, CheckCircle2, AlertTriangle,
-  Key, Hash, Type, AtSign, Clock, Users, RefreshCw,
+  Key, Hash, Type, AtSign, Users, RefreshCw,
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -28,6 +29,16 @@ interface LockedUser {
   role_name: string;
 }
 
+interface TwoFactorStatus {
+  enabled: boolean;
+  has_secret: boolean;
+}
+
+interface TwoFactorSetup {
+  secret: string;
+  otpauth_uri: string;
+}
+
 const DEFAULT_POLICY: PolicyConfig = {
   min_length: 8,
   require_uppercase: true,
@@ -45,6 +56,10 @@ export default function SecuritySettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [twoFactor, setTwoFactor] = useState<TwoFactorStatus>({ enabled: false, has_secret: false });
+  const [twoFactorSetup, setTwoFactorSetup] = useState<TwoFactorSetup | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [twoFactorBusy, setTwoFactorBusy] = useState(false);
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
   const fetchData = useCallback(async () => {
@@ -54,6 +69,14 @@ export default function SecuritySettings() {
       const data = await res.json();
       if (data.policy) setPolicy(data.policy);
       setLockedUsers(data.locked_users || []);
+      const twoFactorRes = await fetch('/api/auth/2fa');
+      if (twoFactorRes.ok) {
+        const twoFactorData = await twoFactorRes.json();
+        setTwoFactor({
+          enabled: !!twoFactorData.enabled,
+          has_secret: !!twoFactorData.has_secret,
+        });
+      }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []);
@@ -107,6 +130,85 @@ export default function SecuritySettings() {
 
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
+
+  const beginTwoFactorSetup = async () => {
+    setTwoFactorBusy(true);
+    try {
+      const res = await fetch('/api/auth/2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setup' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTwoFactorSetup({ secret: data.secret, otpauth_uri: data.otpauth_uri });
+        setTwoFactorCode('');
+        toast('success', 'สร้าง secret สำหรับ 2FA แล้ว กรุณาสแกน QR และยืนยันรหัส');
+      } else {
+        toast('error', data.error || 'ไม่สามารถเริ่มตั้งค่า 2FA ได้');
+      }
+    } catch {
+      toast('error', 'เกิดข้อผิดพลาด');
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const verifyTwoFactorSetup = async () => {
+    if (twoFactorCode.length !== 6) {
+      toast('warning', 'กรุณากรอกรหัส 2FA 6 หลัก');
+      return;
+    }
+    setTwoFactorBusy(true);
+    try {
+      const res = await fetch('/api/auth/2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify', code: twoFactorCode }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTwoFactor({ enabled: true, has_secret: true });
+        setTwoFactorSetup(null);
+        setTwoFactorCode('');
+        toast('success', 'เปิดใช้งาน 2FA เรียบร้อย');
+      } else {
+        toast('error', data.error || 'รหัส 2FA ไม่ถูกต้อง');
+      }
+    } catch {
+      toast('error', 'เกิดข้อผิดพลาด');
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const disableTwoFactor = async () => {
+    if (twoFactor.enabled && twoFactorCode.length !== 6) {
+      toast('warning', 'กรุณากรอกรหัส 2FA 6 หลักก่อนปิดใช้งาน');
+      return;
+    }
+    setTwoFactorBusy(true);
+    try {
+      const res = await fetch('/api/auth/2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disable', code: twoFactorCode }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTwoFactor({ enabled: false, has_secret: false });
+        setTwoFactorSetup(null);
+        setTwoFactorCode('');
+        toast('success', 'ปิดใช้งาน 2FA เรียบร้อย');
+      } else {
+        toast('error', data.error || 'ไม่สามารถปิด 2FA ได้');
+      }
+    } catch {
+      toast('error', 'เกิดข้อผิดพลาด');
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
 
   const fmtDate = (d: string) => {
     if (!d) return '-';
@@ -184,6 +286,102 @@ export default function SecuritySettings() {
               {policy.require_special && <li>• ต้องมีอักขระพิเศษ (!@#$%...) อย่างน้อย 1 ตัว</li>}
             </ul>
           </div>
+        </div>
+      </div>
+
+      {/* ===== TWO-FACTOR AUTH ===== */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              twoFactor.enabled
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600'
+                : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600'
+            }`}>
+              <Shield size={20} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-white">Two-Factor Authentication</h3>
+              <p className="text-xs text-slate-400">เพิ่มรหัส 6 หลักจาก Authenticator app ก่อนเข้าสู่ระบบ</p>
+            </div>
+          </div>
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+            twoFactor.enabled
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+              : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
+          }`}>
+            {twoFactor.enabled ? 'เปิดใช้งานแล้ว' : 'ยังไม่เปิด'}
+          </span>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {!twoFactor.enabled && !twoFactorSetup && (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                ใช้ Google Authenticator, Microsoft Authenticator, 1Password หรือแอป TOTP อื่น ๆ ได้
+              </div>
+              <button onClick={beginTwoFactorSetup} disabled={twoFactorBusy}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all">
+                {twoFactorBusy ? <Loader2 size={14} className="animate-spin" /> : <Key size={14} />}
+                เริ่มตั้งค่า 2FA
+              </button>
+            </div>
+          )}
+
+          {twoFactorSetup && (
+            <div className="grid grid-cols-1 md:grid-cols-[160px_1fr] gap-5">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-3 w-fit">
+                <QRCodeSVG value={twoFactorSetup.otpauth_uri} size={136} />
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className={labelClass}>Secret Key</label>
+                  <div className="rounded-lg bg-slate-50 dark:bg-slate-700 px-3 py-2 font-mono text-xs text-slate-700 dark:text-slate-200 break-all">
+                    {twoFactorSetup.secret}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClass}>รหัส 6 หลักจากแอป</label>
+                  <input value={twoFactorCode}
+                    onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
+                    maxLength={6}
+                    className={`${inputClass} font-mono tracking-[0.25em] max-w-[220px]`}
+                    placeholder="000000" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={verifyTwoFactorSetup} disabled={twoFactorBusy}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
+                    {twoFactorBusy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                    ยืนยันและเปิดใช้
+                  </button>
+                  <button onClick={() => { setTwoFactorSetup(null); setTwoFactorCode(''); }}
+                    className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-200 dark:hover:bg-slate-600 transition-all">
+                    ยกเลิก
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {twoFactor.enabled && (
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className={labelClass}>รหัส 2FA เพื่อปิดใช้งาน</label>
+                <input value={twoFactorCode}
+                  onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  inputMode="numeric"
+                  maxLength={6}
+                  className={`${inputClass} font-mono tracking-[0.25em] w-[220px]`}
+                  placeholder="000000" />
+              </div>
+              <button onClick={disableTwoFactor} disabled={twoFactorBusy}
+                className="flex items-center gap-2 h-10 px-4 rounded-lg bg-rose-50 text-rose-600 text-sm font-medium hover:bg-rose-100 disabled:opacity-50 transition-all">
+                {twoFactorBusy ? <Loader2 size={14} className="animate-spin" /> : <Unlock size={14} />}
+                ปิด 2FA
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

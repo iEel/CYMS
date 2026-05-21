@@ -103,6 +103,8 @@ CREATE TABLE Users (
     avatar_url      NVARCHAR(500),
     status          NVARCHAR(20) DEFAULT 'active',  -- 'active','suspend','resign'
     two_fa_enabled  BIT DEFAULT 0,
+    two_fa_secret   NVARCHAR(128) NULL, -- TOTP secret (base32)
+    two_fa_confirmed_at DATETIME2 NULL, -- เวลาเปิดใช้งาน 2FA สำเร็จ
     bound_device_mac NVARCHAR(50),     -- Device Binding สำหรับคนขับรถยก
     failed_login_count INT DEFAULT 0,  -- จำนวน login ผิดติดต่อกัน
     locked_at       DATETIME2 NULL,    -- เวลาที่ถูกล็อค (NULL = ไม่ถูกล็อค)
