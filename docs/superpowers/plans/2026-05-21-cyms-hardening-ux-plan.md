@@ -50,19 +50,19 @@ Document the P0 actor cleanup in `DEVELOPER_HANDOFF.md`, commit as `Harden API a
 - Modify: yard-scoped routes in `src/app/api`
 - Test: `src/app/api/__tests__/yard-access-guard.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add tests for `requireYardAccess` behavior: allowed yard returns actor; unauthorized yard returns 403; missing yard returns 400 for routes that require an explicit yard.
 
-- [ ] **Step 2: Implement guard**
+- [x] **Step 2: Implement guard**
 
 Add `requireYardAccess(request, db, yardId)` that checks `UserYardAccess` unless actor is `yard_manager`.
 
-- [ ] **Step 3: Replace unsafe default yard flows**
+- [x] **Step 3: Replace unsafe default yard flows**
 
 Remove server-side mutation reliance on `yard_id || 1` from critical routes. Require explicit yard or actor default only after checking the user has access.
 
-- [ ] **Step 4: Verify, document, commit**
+- [x] **Step 4: Verify, document, commit**
 
 Run targeted tests, lint, and update handoff. Commit as `Enforce API yard access`.
 

@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { getPromptPayTargetType, sanitizePromptPayId } from '@/lib/promptPay';
+import { requirePermission } from '@/lib/apiAuth';
 
 const SETTING_KEY = 'payment_promptpay';
 
@@ -46,6 +47,8 @@ export async function PUT(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไขการตั้งค่าการชำระเงิน');
+    if (actor instanceof NextResponse) return actor;
     await db.request()
       .input('key', sql.NVarChar, SETTING_KEY)
       .input('value', sql.NVarChar, JSON.stringify(config))
@@ -58,7 +61,7 @@ export async function PUT(request: NextRequest) {
       `);
 
     await logAudit({
-      userId: body.user_id || null,
+      userId: actor.userId,
       action: 'payment_promptpay_settings_update',
       entityType: 'system_settings',
       details: {

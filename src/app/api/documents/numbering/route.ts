@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { ensureDocumentSequences, nextDocumentNumber } from '@/lib/documentNumber';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = Number(searchParams.get('yard_id') || 1);
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = Number(rawYardId);
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, rawYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     await ensureDocumentSequences(db);
 
     const result = await db.request()
@@ -29,7 +33,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const yardId = Number(body.yard_id || 1);
+    const yardId = Number(body.yard_id);
     const documentType = String(body.document_type || '').trim();
     const prefix = String(body.prefix || '').trim().toUpperCase();
     const year = body.year ? Number(body.year) : new Date().getFullYear();
@@ -41,6 +45,8 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const documentNumber = await nextDocumentNumber({ db, yardId, documentType, prefix, year, month, padding });
     return NextResponse.json({ document_number: documentNumber });
   } catch (error) {
@@ -52,7 +58,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const yardId = Number(body.yard_id || 1);
+    const yardId = Number(body.yard_id);
     const documentType = String(body.document_type || '').trim();
     const prefix = String(body.prefix || '').trim().toUpperCase();
     const year = body.sequence_year ? Number(body.sequence_year) : new Date().getFullYear();
@@ -65,6 +71,8 @@ export async function PUT(request: NextRequest) {
     }
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     await ensureDocumentSequences(db);
     const result = await db.request()
       .input('yardId', sql.Int, yardId)

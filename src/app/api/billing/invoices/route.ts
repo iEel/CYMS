@@ -6,7 +6,7 @@ import { logApprovalReview } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { upsertPortalEntityAccess, type PortalEntityAccessDb } from '@/lib/portalEntityAccess';
-import { requirePermission } from '@/lib/apiAuth';
+import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 interface PortalInvoiceGrantSource {
   customer_id?: number | null;
@@ -166,6 +166,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const db = await getDb();
     const bodyDocumentType = body.document_type === 'credit_note' ? 'credit_note' : 'invoice';
+    const yardAccess = await requireYardAccess(request, db, body.yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const actor = await requirePermission(
       request,
       db,
@@ -253,6 +255,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { invoice_id, action } = body;
     const db = await getDb();
+    if (!invoice_id) {
+      return NextResponse.json({ error: 'invoice_id required' }, { status: 400 });
+    }
     const bodyDocumentNumber = typeof body.invoice_number === 'string' ? body.invoice_number : '';
     const bodyDocumentType = body.document_type === 'credit_note' ? 'credit_note' : 'invoice';
     const bodyPreviousStatus = typeof body.previous_status === 'string' ? body.previous_status : undefined;
@@ -263,6 +268,12 @@ export async function PUT(request: NextRequest) {
     const actor = await requirePermission(request, db, permissionCode, 'คุณไม่มีสิทธิ์อัปเดตเอกสาร Billing ด้วย action นี้');
     if (actor instanceof NextResponse) return actor;
     const actorUserId = actor.userId;
+    const scopeResult = await db.request()
+      .input('scopeInvoiceId', sql.Int, invoice_id)
+      .query('SELECT yard_id FROM Invoices WHERE invoice_id = @scopeInvoiceId');
+    const scopeYardId = scopeResult.recordset[0]?.yard_id || body.yard_id;
+    const yardAccess = await requireYardAccess(request, db, scopeYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     switch (action) {
       case 'issue':
@@ -658,7 +669,7 @@ export async function PUT(request: NextRequest) {
 
     // Audit log
     await logAudit({
-      userId: actorUserId, yardId: body.yard_id,
+      userId: actorUserId, yardId: scopeYardId,
       action: `invoice_${action}`, entityType: 'invoice', entityId: invoice_id,
       details: { action, invoice_id }
     });

@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = parseInt(searchParams.get('yard_id') || '1');
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = Number(rawYardId);
     const overdueDays = parseInt(searchParams.get('overdue_days') || '30');
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, rawYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     // ─── By Shipping Line ───
     const byShippingLine = await db.request()

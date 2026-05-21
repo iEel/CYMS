@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { z } from 'zod';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 // ─── Query param schema ───
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const rawType = searchParams.get('type') || 'daily_in';
-    const rawYardId = searchParams.get('yard_id') || '1';
+    const rawYardId = searchParams.get('yard_id');
     const rawDate = searchParams.get('date');
     const rawDateFrom = searchParams.get('date_from');
     const rawDateTo = searchParams.get('date_to');
@@ -63,6 +64,8 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     // ─────────────── DAILY IN / OUT ───────────────
     if (type === 'daily_in' || type === 'daily_out') {

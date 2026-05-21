@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = parseInt(searchParams.get('yard_id') || '1');
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = Number(rawYardId);
     const dateFrom = searchParams.get('date_from') || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     const dateTo = searchParams.get('date_to') || new Date().toISOString().slice(0, 10);
     const status = searchParams.get('status') || ''; // '' = all
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, rawYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     const statusFilter = status ? `AND r.status = @status` : '';
 

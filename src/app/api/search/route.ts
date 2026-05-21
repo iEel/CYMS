@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 type SearchKind = 'container' | 'gate' | 'invoice' | 'booking';
 
@@ -59,6 +60,8 @@ export async function GET(request: NextRequest) {
     const yardFilter = yardId ? 'AND {alias}.yard_id = @yardId' : '';
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     const containerReq = applyCommonInputs(db.request(), query, perEntityLimit, yardId);
     const containerResult = await containerReq.query(`

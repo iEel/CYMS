@@ -8,6 +8,7 @@ import {
   type CODECOTransaction,
   type EDITemplate,
 } from '@/lib/ediFormatter';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 // CODECO — Container Departure/Arrival Message (Outbound EDI)
 // Generate CODECO messages from gate transactions for shipping lines
@@ -15,7 +16,8 @@ import {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = parseInt(searchParams.get('yard_id') || '1');
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = Number(rawYardId);
     const dateFrom = searchParams.get('date_from');
     const dateTo = searchParams.get('date_to');
     const transactionType = searchParams.get('type'); // gate_in | gate_out | all
@@ -24,6 +26,8 @@ export async function GET(request: NextRequest) {
     const templateId = searchParams.get('template_id'); // NEW: optional template_id
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, rawYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const req = db.request().input('yardId', sql.Int, yardId);
 
     let query = `

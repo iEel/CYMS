@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 21 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Yard Planning Heatmap & Forecast + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard** (~100%)
 
 ---
 
@@ -1481,6 +1481,26 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 - `npm test -- src/app/api/__tests__/api-auth-coverage.test.ts --runInBand` ✅
 - `npm test -- src/lib/__tests__/apiAuth.test.ts src/app/api/__tests__/api-auth-coverage.test.ts --runInBand` ✅
 - `npm run lint` ✅
+
+### 🧭 API Yard Access Guard (✅ เสร็จ — 21 พ.ค. 2569)
+
+**ไฟล์ที่เกี่ยวข้อง:**
+- `src/lib/apiAuth.ts` — เพิ่ม `requireYardAccess()` ตรวจ `UserYardAccess` โดย `yard_manager` bypass ได้
+- `src/lib/__tests__/apiAuth.test.ts` — unit test helper สำหรับ missing/allowed/denied yard
+- `src/app/api/__tests__/yard-access-guard.test.ts` — static coverage กัน route yard-scoped ลืม guard และกัน `yard_id || 1`
+- Route หลักที่ครอบคลุม: Gate, Inter-Yard Transfer, Billing invoices/clearance/reports/AR/demurrage/export, M&R, Operations/SSE, Dashboard, Global Search, Notifications, Documents Numbering, CODECO/EDI Schedule, Storage Rates, Reconciliation, Yard Audit
+
+**สิ่งที่แก้แล้ว:**
+- [x] API ที่อ่าน/เขียนข้อมูลตาม `yard_id` ต้องตรวจสิทธิ์ลานจาก server ก่อน query/mutate
+- [x] ตัด default `yard_id || 1` ใน request handlers และ runtime scheduler path ที่เสี่ยงอ่าน/เขียนผิดลาน
+- [x] Global Search/Dashboard/Reports/Billing export ต้องมี explicit `yard_id` และ actor มีสิทธิ์ในลานนั้น
+- [x] Inter-Yard Transfer ตรวจสิทธิ์ทั้งลานต้นทางและปลายทาง พร้อม audit ด้วย actor จาก server
+- [x] Notifications เลิกใช้ `user_id` จาก query เพื่ออ่าน `last_read_at`; ใช้ actor จาก header แทน
+
+**Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/api-auth-coverage.test.ts src/app/api/__tests__/yard-access-guard.test.ts src/lib/__tests__/apiAuth.test.ts src/app/api/__tests__/search.test.ts --runInBand` ✅ (66 tests)
+- `npm run lint` ✅
+- `npx tsc --noEmit --pretty false` ยัง fail จาก test type drift เดิมใน `portal-features.test.ts` และ `customerBranches.test.ts` (ไม่ใช่ไฟล์ที่แก้ในหัวข้อนี้)
 
 ---
 

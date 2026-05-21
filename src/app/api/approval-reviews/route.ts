@@ -3,7 +3,7 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { ensureApprovalReviews } from '@/lib/approvalReview';
-import { requireAnyPermission } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +14,16 @@ export async function GET(request: NextRequest) {
 
     const db = await getDb();
     await ensureApprovalReviews(db);
+    if (yardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    } else {
+      const actor = await requireAnyPermission(request, db, ['permissions.manage'], 'ต้องระบุ yard_id เพื่อดูรายการ review');
+      if (actor instanceof NextResponse) return actor;
+      if (actor.role !== 'yard_manager') {
+        return NextResponse.json({ error: 'ต้องระบุ yard_id เพื่อดูรายการ review' }, { status: 400 });
+      }
+    }
 
     const req = db.request();
     const conditions: string[] = [];
@@ -63,6 +73,17 @@ export async function PUT(request: NextRequest) {
 
     const db = await getDb();
     await ensureApprovalReviews(db);
+    const reviewScope = await db.request()
+      .input('reviewId', sql.Int, review_id)
+      .query('SELECT yard_id FROM ApprovalReviews WHERE review_id = @reviewId');
+    if (!reviewScope.recordset[0]) {
+      return NextResponse.json({ error: 'ไม่พบรายการ review' }, { status: 404 });
+    }
+    const reviewYardId = reviewScope.recordset[0].yard_id;
+    if (reviewYardId) {
+      const yardAccess = await requireYardAccess(request, db, reviewYardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
     const actor = await requireAnyPermission(request, db, [
       'billing.waive.approve',
       'billing.credit_note.approve',

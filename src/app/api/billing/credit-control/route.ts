@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { ensureCustomerCreditColumns, getCustomerCreditSnapshot } from '@/lib/customerCredit';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customer_id');
-    const yardId = Number(searchParams.get('yard_id') || 1);
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = Number(rawYardId);
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, rawYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     await ensureCustomerCreditColumns(db);
 
     if (customerId) {

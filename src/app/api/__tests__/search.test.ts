@@ -6,6 +6,11 @@
 import { NextRequest } from 'next/server';
 
 jest.mock('@/lib/db', () => ({ getDb: jest.fn() }));
+jest.mock('@/lib/auth', () => ({ verifyToken: jest.fn() }));
+jest.mock('@/lib/rateLimit', () => ({
+  getClientIP: jest.fn().mockReturnValue('127.0.0.1'),
+  rateLimitAPI: jest.fn().mockResolvedValue({ success: true, retryAfterMs: 0 }),
+}));
 
 import { GET } from '../search/route';
 import { getDb } from '@/lib/db';
@@ -40,7 +45,13 @@ function q(recordset: unknown[]) {
 }
 
 function makeRequest(url: string): NextRequest {
-  return new NextRequest(url, { method: 'GET' });
+  return new NextRequest(url, {
+    method: 'GET',
+    headers: {
+      'x-user-id': '1',
+      'x-user-role': 'yard_manager',
+    },
+  });
 }
 
 describe('GET /api/search', () => {

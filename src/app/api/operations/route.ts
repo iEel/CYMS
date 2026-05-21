@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
-import { requireAnyPermission } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 // GET — ดึง Work Orders
 export async function GET(request: NextRequest) {
@@ -67,6 +67,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, body.yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const actor = await requireAnyPermission(request, db, ['yard.slot.move', 'yard.location.assign'], 'คุณไม่มีสิทธิ์สร้างคำสั่งงานลาน');
     if (actor instanceof NextResponse) return actor;
 
@@ -124,6 +126,15 @@ export async function PUT(request: NextRequest) {
     const db = await getDb();
     const actor = await requireAnyPermission(request, db, ['yard.slot.move', 'yard.location.assign'], 'คุณไม่มีสิทธิ์อัปเดตคำสั่งงานลาน');
     if (actor instanceof NextResponse) return actor;
+    const scopeResult = await db.request()
+      .input('scopeOrderId', sql.Int, order_id)
+      .query('SELECT yard_id FROM WorkOrders WHERE order_id = @scopeOrderId');
+    const scopeYardId = scopeResult.recordset[0]?.yard_id;
+    if (!scopeYardId) {
+      return NextResponse.json({ error: 'ไม่พบคำสั่งงาน' }, { status: 404 });
+    }
+    const yardAccess = await requireYardAccess(request, db, scopeYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     let updateQuery = '';
     const req = db.request().input('orderId', sql.Int, order_id);
@@ -198,7 +209,7 @@ export async function PUT(request: NextRequest) {
     // Audit log
     const auditAction = action === 'accept' ? 'wo_accept' : action === 'complete' ? 'wo_complete' : action === 'cancel' ? 'wo_cancel' : `wo_${action}`;
     await logAudit({
-      userId: actor.userId, yardId: body.yard_id,
+      userId: actor.userId, yardId: scopeYardId,
       action: auditAction, entityType: 'work_order', entityId: order_id,
       details: { action, order_id, ...(body.to_zone_id ? { to_zone_id: body.to_zone_id, to_bay: body.to_bay, to_row: body.to_row, to_tier: body.to_tier } : {}) }
     });

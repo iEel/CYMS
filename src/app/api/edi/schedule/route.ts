@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 // GET — Get scheduler status for all endpoints
 export async function GET() {
@@ -37,11 +38,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, schedule_yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     await db.request()
       .input('epId', sql.Int, endpoint_id)
       .input('enabled', sql.Bit, schedule_enabled ? 1 : 0)
       .input('cronExpr', sql.NVarChar, schedule_cron || '0 18 * * *')
-      .input('yardId', sql.Int, schedule_yard_id || 1)
+      .input('yardId', sql.Int, schedule_yard_id)
       .query(`
         UPDATE EDIEndpoints SET
           schedule_enabled = @enabled,

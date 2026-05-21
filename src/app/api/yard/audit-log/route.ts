@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { requireRequestActor } from '@/lib/apiAuth';
+import { requireRequestActor, requireYardAccess } from '@/lib/apiAuth';
 
 // GET — ดึง audit log
 export async function GET(request: NextRequest) {
@@ -12,6 +12,10 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
 
     const db = await getDb();
+    if (yardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
     const req = db.request();
     const conditions: string[] = [];
 
@@ -52,6 +56,10 @@ export async function POST(request: NextRequest) {
     const db = await getDb();
     const actor = requireRequestActor(request);
     if (actor instanceof NextResponse) return actor;
+    if (yard_id) {
+      const yardAccess = await requireYardAccess(request, db, yard_id);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
 
     await db.request()
       .input('userId', sql.Int, actor.userId)

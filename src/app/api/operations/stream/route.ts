@@ -1,6 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 /**
  * GET /api/operations/stream?yard_id=X
@@ -9,7 +10,10 @@ import sql from 'mssql';
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const yardId = searchParams.get('yard_id') || '1';
+  const yardId = searchParams.get('yard_id');
+  const db = await getDb();
+  const yardAccess = await requireYardAccess(request, db, yardId);
+  if (yardAccess instanceof NextResponse) return yardAccess;
 
   const encoder = new TextEncoder();
   let lastHash = '';
@@ -23,9 +27,8 @@ export async function GET(request: NextRequest) {
       const poll = async () => {
         while (isActive) {
           try {
-            const db = await getDb();
             const result = await db.request()
-              .input('yardId', sql.Int, parseInt(yardId))
+              .input('yardId', sql.Int, Number(yardId))
               .query(`
                 SELECT w.*,
                   c.container_number, c.size, c.type, c.shipping_line,

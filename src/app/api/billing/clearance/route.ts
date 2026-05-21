@@ -3,12 +3,13 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
-import { requirePermission } from '@/lib/apiAuth';
+import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = parseInt(searchParams.get('yard_id') || '1');
+    const yardIdParam = searchParams.get('yard_id');
+    const yardId = Number(yardIdParam);
     const clearanceType = searchParams.get('clearance_type');
     const transactionType = searchParams.get('transaction_type');
     const dateFrom = searchParams.get('date_from');
@@ -16,6 +17,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yardIdParam);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     const req = db.request().input('yardId', sql.Int, yardId);
     const statsReq = db.request().input('yardId', sql.Int, yardId);
@@ -141,6 +144,8 @@ export async function POST(request: NextRequest) {
     const isWaiveLike = ['waived', 'no_charge'].includes(clearance_type) || finalAmount < originalAmount;
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const actor = await requirePermission(
       request,
       db,

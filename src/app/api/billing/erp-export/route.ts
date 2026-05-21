@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { writeIntegrationLog } from '@/lib/integrationLog';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 // FR6.5 — ERP Integration: Export invoices as debit/credit entries
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const yardId = searchParams.get('yard_id') || '1';
+  const yardId = searchParams.get('yard_id');
   const format = searchParams.get('format') || 'json'; // json, csv
   const dateFrom = searchParams.get('date_from');
   const dateTo = searchParams.get('date_to');
@@ -13,6 +14,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const pool = await getDb();
+    const yardAccess = await requireYardAccess(req, pool, yardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     let query = `
       SELECT i.invoice_id, i.invoice_number, i.charge_type, i.description,
              i.quantity, i.unit_price, i.total_amount, i.vat_amount, i.grand_total,
@@ -25,7 +28,7 @@ export async function GET(req: NextRequest) {
       WHERE i.yard_id = @yard_id
     `;
 
-    const request = pool.request().input('yard_id', parseInt(yardId));
+    const request = pool.request().input('yard_id', Number(yardId));
     
     if (status) {
       query += ` AND i.status = @status`;
@@ -78,7 +81,7 @@ export async function GET(req: NextRequest) {
     }));
 
     await writeIntegrationLog({
-      yardId: parseInt(yardId),
+      yardId: Number(yardId),
       system: 'ERP',
       direction: 'outbound',
       messageType: 'INVOICE_EXPORT',
@@ -115,7 +118,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       export_date: new Date().toISOString(),
-      yard_id: parseInt(yardId),
+      yard_id: Number(yardId),
       total_entries: entries.length,
       total_debit: entries.filter((e: Record<string, unknown>) => e.entry_type === 'debit').reduce((s: number, e: Record<string, unknown>) => s + ((e.grand_total as number) || 0), 0),
       total_credit: entries.filter((e: Record<string, unknown>) => e.entry_type === 'credit').reduce((s: number, e: Record<string, unknown>) => s + ((e.grand_total as number) || 0), 0),
@@ -125,7 +128,7 @@ export async function GET(req: NextRequest) {
     console.error(err);
     try {
       await writeIntegrationLog({
-        yardId: parseInt(yardId),
+        yardId: Number(yardId),
         system: 'ERP',
         direction: 'outbound',
         messageType: 'INVOICE_EXPORT',

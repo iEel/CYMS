@@ -11,6 +11,7 @@ jest.mock('@/lib/rateLimit', () => ({
 
 import {
   getRequestActor,
+  requireYardAccess,
   requirePermission,
   requireRequestActor,
   requireRole,
@@ -96,6 +97,57 @@ describe('API request actor helpers', () => {
       makeRequest({ 'x-user-id': '9', 'x-user-role': 'gate_clerk' }),
       db,
       'permissions.manage'
+    );
+
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(403);
+  });
+
+  it('rejects yard-scoped requests without a valid yard id', async () => {
+    const db = makeDb([]);
+    const result = await requireYardAccess(
+      makeRequest({ 'x-user-id': '10', 'x-user-role': 'gate_clerk' }),
+      db,
+      null
+    );
+
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(400);
+    expect(db.request).not.toHaveBeenCalled();
+  });
+
+  it('allows yard_manager yard access checks without querying UserYardAccess', async () => {
+    const db = makeDb([]);
+    const result = await requireYardAccess(
+      makeRequest({ 'x-user-id': '11', 'x-user-role': 'yard_manager' }),
+      db,
+      2
+    );
+
+    expect(result).toEqual({ userId: 11, role: 'yard_manager' });
+    expect(db.request).not.toHaveBeenCalled();
+  });
+
+  it('allows non-yard-manager users assigned to the yard', async () => {
+    const db = makeDb([{ allowed: 1 }]);
+    const result = await requireYardAccess(
+      makeRequest({ 'x-user-id': '12', 'x-user-role': 'gate_clerk' }),
+      db,
+      3
+    );
+
+    expect(result).toEqual({ userId: 12, role: 'gate_clerk' });
+    expect(db.input).toHaveBeenCalledWith('userId', expect.anything(), 12);
+    expect(db.input).toHaveBeenCalledWith('yardId', expect.anything(), 3);
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('UserYardAccess'));
+  });
+
+  it('denies non-yard-manager users outside the requested yard', async () => {
+    const db = makeDb([]);
+    const result = await requireYardAccess(
+      makeRequest({ 'x-user-id': '13', 'x-user-role': 'gate_clerk' }),
+      db,
+      99
     );
 
     expect(result).toBeInstanceOf(NextResponse);

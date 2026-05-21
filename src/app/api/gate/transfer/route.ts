@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 // POST — Inter-Yard Transfer
 export async function POST(request: NextRequest) {
@@ -17,6 +18,12 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
+    const fromYardAccess = await requireYardAccess(request, db, from_yard_id);
+    if (fromYardAccess instanceof NextResponse) return fromYardAccess;
+    const toYardAccess = await requireYardAccess(request, db, to_yard_id);
+    if (toYardAccess instanceof NextResponse) return toYardAccess;
+    const actor = await requireAnyPermission(request, db, ['gate.out', 'yard.slot.move'], 'คุณไม่มีสิทธิ์ย้ายตู้ข้ามลาน');
+    if (actor instanceof NextResponse) return actor;
 
     // Check container exists and in yard
     const containerResult = await db.request()
@@ -74,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     // 3. Audit log (including user_id)
     await db.request()
-      .input('userId', sql.Int, body.user_id || null)
+      .input('userId', sql.Int, actor.userId)
       .input('fromYard', sql.Int, from_yard_id)
       .input('containerId', sql.Int, container_id)
       .input('details', sql.NVarChar, JSON.stringify({

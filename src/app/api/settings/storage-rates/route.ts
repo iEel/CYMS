@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 type StorageRateTier = {
   customer_id: number | null;
@@ -56,11 +57,14 @@ function chooseTierSet<T extends StorageRateTier>(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = parseInt(searchParams.get('yard_id') || '1');
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = Number(rawYardId);
     const customerId = searchParams.get('customer_id') ? parseInt(searchParams.get('customer_id')!) : null;
     const cargoStatus = normalizeCargoStatus(searchParams.get('cargo_status')); // any/laden/empty
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, rawYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     let query = `
       SELECT tier_id, yard_id, tier_name, from_day, to_day,
@@ -121,6 +125,8 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const selectedCargoStatus = normalizeCargoStatus(cargo_status);
 
     // Soft-delete only this yard + customer + cargo status combination.

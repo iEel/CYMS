@@ -7,7 +7,7 @@ import { logApprovalReview } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
-import { requirePermission } from '@/lib/apiAuth';
+import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 async function validateBillingClearance(
   db: sql.ConnectionPool,
@@ -222,6 +222,8 @@ export async function POST(request: NextRequest) {
     } = body;
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const actor = await requirePermission(
       request,
       db,

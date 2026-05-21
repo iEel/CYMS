@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { logApprovalReview } from '@/lib/approvalReview';
-import { requireAnyPermission, requirePermission } from '@/lib/apiAuth';
+import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 // GET — ดึง containers ตาม yard_id + filter, หรือ check_position (conflict detection)
 export async function GET(request: NextRequest) {
@@ -84,6 +84,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, body.yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const actor = await requireAnyPermission(request, db, ['gate.in', 'yard.location.assign'], 'คุณไม่มีสิทธิ์เพิ่มตู้เข้าลาน');
     if (actor instanceof NextResponse) return actor;
 
@@ -151,8 +153,10 @@ export async function PUT(request: NextRequest) {
 
     const currentResult = await db.request()
       .input('containerId', sql.Int, body.container_id)
-      .query('SELECT container_grade, hold_status, status FROM Containers WHERE container_id = @containerId');
+      .query('SELECT container_grade, hold_status, status, yard_id FROM Containers WHERE container_id = @containerId');
     const currentContainer = currentResult.recordset[0] || null;
+    const yardAccess = await requireYardAccess(request, db, body.yard_id || currentContainer?.yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     // Build dynamic SET clauses — only update fields that are provided
     const setClauses: string[] = ['updated_at = GETDATE()'];

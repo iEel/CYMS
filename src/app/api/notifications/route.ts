@@ -1,31 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireRequestActor, requireYardAccess } from '@/lib/apiAuth';
 
 // GET — ดึงกิจกรรมล่าสุด (เป็น notifications) + last_read_at ของ user
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = searchParams.get('yard_id') || '1';
+    const yardId = searchParams.get('yard_id');
     const limit = searchParams.get('limit') || '20';
-    const userId = searchParams.get('user_id');
+    const actor = requireRequestActor(request);
+    if (actor instanceof NextResponse) return actor;
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     // ดึง last_read_at ของ user จาก DB (ถ้ามี user_id)
     let lastReadAt: string | null = null;
-    if (userId) {
-      const userRes = await db.request()
-        .input('userId', sql.Int, parseInt(userId))
-        .query('SELECT notif_last_read_at FROM Users WHERE user_id = @userId');
-      if (userRes.recordset.length > 0 && userRes.recordset[0].notif_last_read_at) {
-        lastReadAt = new Date(userRes.recordset[0].notif_last_read_at).toISOString();
-      }
+    const userRes = await db.request()
+      .input('userId', sql.Int, actor.userId)
+      .query('SELECT notif_last_read_at FROM Users WHERE user_id = @userId');
+    if (userRes.recordset.length > 0 && userRes.recordset[0].notif_last_read_at) {
+      lastReadAt = new Date(userRes.recordset[0].notif_last_read_at).toISOString();
     }
 
     // 1. Recent Gate Transactions (gate_in / gate_out)
     const gateRes = await db.request()
-      .input('yardId', sql.Int, parseInt(yardId))
+      .input('yardId', sql.Int, Number(yardId))
       .input('limit', sql.Int, parseInt(limit))
       .query(`
         SELECT TOP (@limit)
@@ -45,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Recent Work Order updates
     const woRes = await db.request()
-      .input('yardId', sql.Int, parseInt(yardId))
+      .input('yardId', sql.Int, Number(yardId))
       .input('limit', sql.Int, parseInt(limit))
       .query(`
         SELECT TOP (@limit)
@@ -149,4 +151,3 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'ไม่สามารถอัปเดตสถานะการอ่านได้' }, { status: 500 });
   }
 }
-

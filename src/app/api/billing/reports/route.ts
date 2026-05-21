@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 function getPeriod(date: string | null, type: string) {
   if (type === 'monthly') {
@@ -18,11 +19,14 @@ function getPeriod(date: string | null, type: string) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = parseInt(searchParams.get('yard_id') || '1');
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = Number(rawYardId);
     const type = searchParams.get('type') || 'daily'; // 'daily' | 'monthly' | 'control'
     const date = searchParams.get('date'); // YYYY-MM-DD for daily, YYYY-MM for monthly
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, rawYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     if (type === 'control') {
       const periodType = searchParams.get('period') || (date?.length === 7 ? 'monthly' : 'daily');

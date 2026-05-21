@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requireYardAccess } from '@/lib/apiAuth';
 
 /**
  * GET /api/billing/demurrage?yard_id=X
@@ -16,10 +17,13 @@ import { logAudit } from '@/lib/audit';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = parseInt(searchParams.get('yard_id') || '1');
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = Number(rawYardId);
     const containerId = searchParams.get('container_id');
     const mode = searchParams.get('mode');
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, rawYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     // Mode: overview — list containers approaching demurrage
     if (mode === 'overview') {
@@ -163,6 +167,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, body.yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     const result = await db.request()
       .input('yardId', sql.Int, body.yard_id)
@@ -194,6 +200,11 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const scopeResult = await db.request()
+      .input('id', sql.Int, body.demurrage_id)
+      .query('SELECT yard_id FROM DemurrageRates WHERE demurrage_id = @id');
+    const yardAccess = await requireYardAccess(request, db, scopeResult.recordset[0]?.yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     if (body.action === 'delete') {
       await db.request()

@@ -157,6 +157,39 @@ export async function requireAnyPermission(
   return actor;
 }
 
+export async function requireYardAccess(
+  request: NextRequest,
+  db: PermissionDb,
+  yardId: number | string | null | undefined,
+  message = 'คุณไม่มีสิทธิ์เข้าถึงข้อมูลลานนี้'
+): Promise<RequestActor | NextResponse> {
+  const actor = requireRequestActor(request);
+  if (actor instanceof NextResponse) return actor;
+
+  const parsedYardId = typeof yardId === 'number' ? yardId : Number(yardId);
+  if (!Number.isInteger(parsedYardId) || parsedYardId <= 0) {
+    return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+  }
+
+  if (actor.role === 'yard_manager') return actor;
+
+  const result = await db.request()
+    .input('userId', sql.Int, actor.userId)
+    .input('yardId', sql.Int, parsedYardId)
+    .query(`
+      SELECT TOP 1 1 AS allowed
+      FROM UserYardAccess
+      WHERE user_id = @userId
+        AND yard_id = @yardId
+    `);
+
+  if (result.recordset.length === 0) {
+    return NextResponse.json({ error: message }, { status: 403 });
+  }
+
+  return actor;
+}
+
 /**
  * Wrap an API handler with authentication + rate limiting
  * 

@@ -4,7 +4,7 @@ import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { z } from 'zod';
 import { nextDocumentNumber } from '@/lib/documentNumber';
-import { requirePermission } from '@/lib/apiAuth';
+import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 // === Zod Schemas ===
 const createEORSchema = z.object({
@@ -205,6 +205,8 @@ export async function POST(request: NextRequest) {
     }
     const body = parsed.data;
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, body.yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const actor = await requirePermission(request, db, 'mnr.eor.create', 'คุณไม่มีสิทธิ์สร้าง EOR');
     if (actor instanceof NextResponse) return actor;
 
@@ -311,6 +313,8 @@ export async function PUT(request: NextRequest) {
     if (!order) {
       return NextResponse.json({ error: 'ไม่พบ EOR' }, { status: 404 });
     }
+    const yardAccess = await requireYardAccess(request, db, order.yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     const req = db.request().input('eorId', sql.Int, eor_id);
 

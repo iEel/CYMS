@@ -19,6 +19,11 @@ async function executeEdiSend(ep: ScheduledEndpoint): Promise<void> {
   console.log(`⏰ [EDI Scheduler] Sending CODECO for "${ep.name}" (endpoint_id=${ep.endpoint_id})...`);
 
   try {
+    if (!ep.schedule_yard_id) {
+      console.warn(`  ⚠️ [EDI Scheduler] ${ep.name}: missing schedule_yard_id, skipping`);
+      return;
+    }
+
     const { getDb } = await import('@/lib/db');
     const db = await getDb();
 
@@ -29,7 +34,7 @@ async function executeEdiSend(ep: ScheduledEndpoint): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         endpoint_id: ep.endpoint_id,
-        yard_id: ep.schedule_yard_id || 1,
+        yard_id: ep.schedule_yard_id,
         date_from: today,
         date_to: today,
         type: 'all',
@@ -49,7 +54,7 @@ async function executeEdiSend(ep: ScheduledEndpoint): Promise<void> {
     const { logAudit } = await import('@/lib/audit');
     await logAudit({
       userId: null,
-      yardId: ep.schedule_yard_id || 1,
+      yardId: ep.schedule_yard_id,
       action: data.success ? 'edi_auto_send_success' : 'edi_auto_send_failed',
       entityType: 'edi_endpoint',
       entityId: ep.endpoint_id,
@@ -78,7 +83,7 @@ async function executeEdiSend(ep: ScheduledEndpoint): Promise<void> {
       const { logAudit } = await import('@/lib/audit');
       await logAudit({
         userId: null,
-        yardId: ep.schedule_yard_id || 1,
+        yardId: ep.schedule_yard_id || null,
         action: 'edi_auto_send_error',
         entityType: 'edi_endpoint',
         entityId: ep.endpoint_id,

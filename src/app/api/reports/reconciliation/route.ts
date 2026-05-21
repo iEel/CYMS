@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db';
 import { ensureCustomerCreditColumns } from '@/lib/customerCredit';
 import { getDataQualityRule } from '@/lib/dataQualityRules';
 import { applyReconciliationActions, type ReconciliationActionRecord, type ReconciliationIssueRow } from '@/lib/reconciliationActions';
-import { requireRequestActor } from '@/lib/apiAuth';
+import { requireRequestActor, requireYardAccess } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/audit';
 
 type Severity = 'info' | 'warning' | 'critical';
@@ -264,10 +264,13 @@ const ISSUE_DEFINITIONS: IssueDefinition[] = [
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = Number(searchParams.get('yard_id') || 1);
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = Number(rawYardId);
     const limit = Math.min(Math.max(Number(searchParams.get('limit') || 50), 1), 200);
     const includeClosed = searchParams.get('include_closed') === '1';
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, rawYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     await ensureCustomerCreditColumns(db);
 
     const issues = [];
@@ -320,7 +323,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const yardId = Number(body.yard_id || 1);
+    const yardId = Number(body.yard_id);
     const issueCode = typeof body.issue_code === 'string' ? body.issue_code.trim() : '';
     const entityId = Number.isInteger(Number(body.entity_id)) ? Number(body.entity_id) : null;
     const entityRef = typeof body.entity_ref === 'string' ? body.entity_ref.trim() : null;
@@ -336,6 +339,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const result = await db.request()
       .input('yardId', sql.Int, yardId)
       .input('issueCode', sql.NVarChar(80), issueCode)

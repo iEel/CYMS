@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 // POST — Receive an in-transit container at destination yard
 export async function POST(request: NextRequest) {
@@ -14,6 +15,10 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requireAnyPermission(request, db, ['gate.in', 'yard.location.assign'], 'คุณไม่มีสิทธิ์รับตู้เข้าลานนี้');
+    if (actor instanceof NextResponse) return actor;
 
     // 1. Check container is in_transit
     const containerResult = await db.request()
@@ -138,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     // 7. Audit log
     await logAudit({
-      userId: null,
+      userId: actor.userId,
       yardId: yard_id,
       action: 'transfer_in',
       entityType: 'container',
@@ -180,6 +185,8 @@ export async function GET(request: NextRequest) {
     const yardId = searchParams.get('yard_id');
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
     const req = db.request();
 
     // Filter by destination yard using to_yard_id column
