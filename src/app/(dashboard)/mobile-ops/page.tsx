@@ -84,37 +84,53 @@ export default function MobileOpsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
-      <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900">
-          <Smartphone size={22} />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-slate-800 dark:text-white">โหมดมือถือ</h1>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Mobile Ops สำหรับงานหน้าลานที่ต้องแตะเร็วและเห็นสถานะชัด</p>
+      <div className="hidden md:block rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900">
+            <Smartphone size={22} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800 dark:text-white">PWA Quick Start</h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              หน้านี้ออกแบบสำหรับมือถือ/PWA เท่านั้น บน desktop ให้ใช้เมนูหลัก Gate, Yard, Reefer, M&R หรือ Booking ทาง Sidebar เพื่อไม่ให้ workflow ซ้ำกัน
+            </p>
+          </div>
         </div>
       </div>
 
-      {visibleActions.length === 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-700">
-          ยังไม่มีสิทธิ์ใช้งาน Mobile Ops
-        </div>
-      ) : (
-        <>
-          <div className="grid gap-3">
-            {primaryActions.map(action => (
-              <MobileActionButton key={action.title} action={action} large />
-            ))}
+      <div className="md:hidden space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900">
+            <Smartphone size={22} />
           </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800 dark:text-white">โหมดมือถือ</h1>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">PWA Quick Start สำหรับงานหน้าลานที่ต้องแตะเร็วและเห็นสถานะชัด</p>
+          </div>
+        </div>
 
-          {secondaryActions.length > 0 && (
-            <div className="grid grid-cols-2 gap-3">
-              {secondaryActions.map(action => (
-                <MobileActionButton key={action.title} action={action} />
+        {visibleActions.length === 0 ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-700">
+            ยังไม่มีสิทธิ์ใช้งาน PWA Quick Start
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-3">
+              {primaryActions.map(action => (
+                <MobileActionButton key={action.title} action={action} large />
               ))}
             </div>
-          )}
-        </>
-      )}
+
+            {secondaryActions.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                {secondaryActions.map(action => (
+                  <MobileActionButton key={action.title} action={action} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

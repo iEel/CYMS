@@ -694,8 +694,8 @@ container-yard-system/
 - Unit test: `src/lib/__tests__/gateOperationalGuardrails.test.ts` ครอบคลุม QR payload, duplicate alert, seal/photo gap, exit photo recommendation
 
 #### Operational Mobile Mode (✅ เสร็จ — 22 พ.ค. 2569)
-- เพิ่มหน้า `/mobile-ops` แบบ mobile-first สำหรับพนักงานหน้าลาน: ปุ่มใหญ่ไป `Gate`, `Yard`, `Reefer`, `M&R`, `Booking`, `ค้นหาตู้` โดย filter ตาม permission
-- เพิ่มเมนู `Mobile Ops` ใน Sidebar สำหรับ role ปฏิบัติการ และใช้ permission เช่น `gate.in`, `yard.slot.move`, `reefer.check.record`, `mnr.eor.create`
+- ปรับ `/mobile-ops` เป็น **PWA Quick Start** เท่านั้น ไม่ใช่ desktop module: บนมือถือ/PWA แสดงปุ่มใหญ่ไป `Gate`, `Yard`, `Reefer`, `M&R`, `Booking`, `ค้นหาตู้` โดย filter ตาม permission
+- เอา `Mobile Ops` ออกจาก desktop Sidebar แล้ว; ถ้าเปิด `/mobile-ops` บน desktop จะแสดง notice ให้ใช้เมนูหลักแทน เพื่อลดความสับสนกับ module เดิม
 - Verify: `npm test -- src/app/api/__tests__/mobile-ops-ui.test.ts --runInBand` ✅ (2 tests)
 
 #### แท็บ "Gate-In (รับเข้า)"

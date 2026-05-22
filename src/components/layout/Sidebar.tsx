@@ -19,7 +19,6 @@ import {
   LogOut,
   BarChart3,
   Thermometer,
-  Smartphone,
 } from 'lucide-react';
 import type { UserRole } from '@/types';
 
@@ -51,13 +50,6 @@ const menuItems: MenuItem[] = [
     icon: <DoorOpen size={20} />,
     roles: ['yard_manager', 'supervisor', 'gate_clerk', 'surveyor'],
     permissions: ['gate.in', 'gate.out', 'gate.eir.print'],
-  },
-  {
-    label: 'Mobile Ops',
-    href: '/mobile-ops',
-    icon: <Smartphone size={20} />,
-    roles: ['yard_manager', 'supervisor', 'gate_clerk', 'surveyor', 'yard_planner', 'rs_driver'],
-    permissions: ['gate.in', 'gate.out', 'yard.location.assign', 'yard.slot.move', 'reefer.check.record', 'mnr.eor.create'],
   },
   {
     label: 'Booking',
