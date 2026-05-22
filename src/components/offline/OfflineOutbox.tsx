@@ -9,7 +9,6 @@ import {
   Loader2,
   RefreshCcw,
   Trash2,
-  Wifi,
   X,
 } from 'lucide-react';
 import {
@@ -128,6 +127,8 @@ export default function OfflineOutbox() {
   const activeCount = counts.queued + counts.conflict;
   const badgeTone = counts.conflict > 0 ? 'bg-amber-500' : 'bg-blue-500';
 
+  if (!open && activeCount === 0) return null;
+
   const setItemBusy = (id: number, busy: boolean) => {
     setBusyIds(prev => {
       const next = new Set(prev);
@@ -179,13 +180,9 @@ export default function OfflineOutbox() {
         onClick={() => setOpen(!open)}
         title="Offline Outbox"
         aria-label="เปิด Offline Outbox"
-        className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
-          activeCount > 0
-            ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300'
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-        }`}
+        className="relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300"
       >
-        {activeCount > 0 ? <CloudOff size={18} /> : <Wifi size={18} />}
+        <CloudOff size={18} />
         {activeCount > 0 && (
           <span className={`absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full ${badgeTone} text-white text-[10px] font-bold flex items-center justify-center px-1`}>
             {Math.min(activeCount, 99)}
