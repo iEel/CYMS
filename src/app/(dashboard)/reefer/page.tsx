@@ -42,6 +42,9 @@ interface ReeferItem {
   container_status?: string;
   is_laden?: boolean;
   zone_name?: string;
+  bay?: number | null;
+  row?: number | null;
+  tier?: number | null;
   booking_id?: number | null;
   booking_number?: string | null;
   customer_id?: number | null;
@@ -258,6 +261,7 @@ export default function ReeferMonitoringPage() {
         item.booking_number,
         item.shipping_line,
         item.zone_name,
+        formatYardPosition(item),
       ].filter(Boolean).join(' ').toUpperCase();
       const matchesSearch = !term || text.includes(term);
       const matchesFilter = queueFilter === 'all'
@@ -574,6 +578,9 @@ export default function ReeferMonitoringPage() {
                     <p className="mt-1 text-xs text-slate-400">
                       {[item.size ? `${item.size}'` : '', item.type, item.shipping_line, item.zone_name].filter(Boolean).join(' · ') || '-'}
                     </p>
+                    <p className="mt-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
+                      ตำแหน่งปัจจุบัน: {formatYardPosition(item)}
+                    </p>
                     {item.booking_number && <p className="mt-1 text-[11px] text-blue-600">Booking {item.booking_number}</p>}
                   </div>
                   <div className="text-xs text-slate-500">
@@ -721,7 +728,7 @@ export default function ReeferMonitoringPage() {
                 </h2>
                 <p className="mt-1 text-xs text-slate-400">
                   {historySelected.booking_number ? `Booking ${historySelected.booking_number} · ` : ''}
-                  รอบทุก {historySelected.policy?.interval_hours || 4} ชั่วโมง · {formatRange(historySelected.policy)}
+                  ตำแหน่งปัจจุบัน: {formatYardPosition(historySelected)} · รอบทุก {historySelected.policy?.interval_hours || 4} ชั่วโมง · {formatRange(historySelected.policy)}
                 </p>
               </div>
               <button type="button" onClick={() => setHistorySelected(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">
@@ -816,6 +823,7 @@ export default function ReeferMonitoringPage() {
                   <Thermometer size={18} className="text-cyan-600" /> บันทึกอุณหภูมิ {selected.container_number}
                 </h2>
                 <p className="mt-1 text-xs text-slate-400">รอบตรวจทุก {selected.policy?.interval_hours || 4} ชั่วโมง · {formatRange(selected.policy)}</p>
+                <p className="mt-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300">ตำแหน่งปัจจุบัน: {formatYardPosition(selected)}</p>
               </div>
               <button type="button" onClick={() => setSelected(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">
                 <X size={18} />
@@ -966,6 +974,18 @@ function formatTemp(value?: number | null) {
 function formatRange(policy?: ReeferPolicy | null) {
   if (!policy || (policy.min_temp_c == null && policy.max_temp_c == null)) return 'ไม่กำหนดช่วง';
   return `${policy.min_temp_c ?? '-∞'} ถึง ${policy.max_temp_c ?? '+∞'}°C`;
+}
+
+function formatYardPosition(item: Pick<ReeferItem, 'zone_name' | 'bay' | 'row' | 'tier'>) {
+  const zone = item.zone_name ? `Zone ${item.zone_name}` : 'ยังไม่ระบุ Zone';
+  if (item.bay == null || item.row == null || item.tier == null) {
+    return `${zone} · ยังไม่ระบุ slot`;
+  }
+  return `${zone} · Bay ${padSlot(item.bay)} · Row ${padSlot(item.row)} · Tier ${padSlot(item.tier)}`;
+}
+
+function padSlot(value: number) {
+  return String(value).padStart(2, '0');
 }
 
 function policyLabel(policy: ReeferPolicy) {

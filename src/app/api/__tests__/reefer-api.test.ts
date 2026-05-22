@@ -154,6 +154,9 @@ describe('reefer monitoring API', () => {
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain("c.type = 'RF'");
     expect(combinedSql).toContain('ReeferTemperatureChecks');
+    expect(combinedSql).toContain('c.bay');
+    expect(combinedSql).toContain('c.[row]');
+    expect(combinedSql).toContain('c.tier');
     expect(mockedRequireYardAccess).toHaveBeenCalledWith(expect.anything(), db, 1);
   });
 

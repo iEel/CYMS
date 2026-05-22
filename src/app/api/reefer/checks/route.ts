@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
       SELECT TOP (@limit)
         c.container_id, c.container_number, c.size, c.type, c.shipping_line,
         c.status AS container_status, c.is_laden, c.yard_id, c.zone_id,
+        c.bay, c.[row] AS [row], c.tier,
         z.zone_name,
         latestBooking.booking_id, latestBooking.booking_number, latestBooking.customer_id,
         latestCheck.check_id AS latest_check_id,
