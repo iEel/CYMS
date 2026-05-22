@@ -696,7 +696,8 @@ container-yard-system/
 #### Operational Mobile Mode (✅ เสร็จ — 22 พ.ค. 2569)
 - ปรับ `/mobile-ops` เป็น **PWA Quick Start** เท่านั้น ไม่ใช่ desktop module: บนมือถือ/PWA แสดงปุ่มใหญ่ไป `Gate`, `Yard`, `Reefer`, `M&R`, `Booking`, `ค้นหาตู้` โดย filter ตาม permission
 - เอา `Mobile Ops` ออกจาก desktop Sidebar แล้ว; ถ้าเปิด `/mobile-ops` บน desktop จะแสดง notice ให้ใช้เมนูหลักแทน เพื่อลดความสับสนกับ module เดิม
-- Verify: `npm test -- src/app/api/__tests__/mobile-ops-ui.test.ts --runInBand` ✅ (2 tests)
+- เพิ่ม **PWA Quick Actions** ใน `manifest.json`: `Gate In`, `Gate Out`, `Reefer Walk`, `Yard Search` และหน้า `/mobile-ops` แสดง quick tiles พร้อม `สถานะซิงค์`/`ติดตั้ง PWA` สำหรับมือถือ
+- Verify: `npm test -- src/app/api/__tests__/mobile-ops-ui.test.ts --runInBand` ✅ (3 tests)
 
 #### แท็บ "Gate-In (รับเข้า)"
 - ฟอร์มกรอกข้อมูลตู้ (เลขตู้, ขนาด, ประเภท, สายเรือ, ซีล) + คนขับ/ทะเบียนรถ + Booking Ref

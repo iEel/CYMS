@@ -20,5 +20,35 @@
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Gate In",
+      "short_name": "Gate In",
+      "description": "เปิดงานรับตู้เข้าลาน",
+      "url": "/gate?action=gate-in",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Gate Out",
+      "short_name": "Gate Out",
+      "description": "เปิดงานปล่อยตู้และ EIR Out",
+      "url": "/gate?action=gate-out",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Reefer Walk",
+      "short_name": "Reefer",
+      "description": "เปิดคิวเดินตรวจอุณหภูมิตู้เย็น",
+      "url": "/reefer?mode=walk",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Yard Search",
+      "short_name": "Yard",
+      "description": "ค้นเลขตู้และตำแหน่งลาน",
+      "url": "/yard?mode=search",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    }
   ]
 }

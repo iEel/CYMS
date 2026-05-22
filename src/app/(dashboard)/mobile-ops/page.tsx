@@ -1,13 +1,19 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
   ClipboardList,
+  CloudOff,
   DoorOpen,
   MapPinned,
   PackageSearch,
+  Search,
   Smartphone,
   Thermometer,
+  Wifi,
   Wrench,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -76,11 +82,65 @@ const actions: MobileAction[] = [
   },
 ];
 
+const quickActions: MobileAction[] = [
+  {
+    title: 'Gate In',
+    subtitle: 'รับตู้เข้าลานพร้อมรูป/EIR',
+    href: '/gate?action=gate-in',
+    icon: <ArrowDownToLine size={22} />,
+    tone: 'bg-blue-600 text-white',
+    permissions: ['gate.in'],
+    primary: true,
+  },
+  {
+    title: 'Gate Out',
+    subtitle: 'ปล่อยตู้และออก EIR Out',
+    href: '/gate?action=gate-out',
+    icon: <ArrowUpFromLine size={22} />,
+    tone: 'bg-emerald-600 text-white',
+    permissions: ['gate.out'],
+    primary: true,
+  },
+  {
+    title: 'Reefer Walk',
+    subtitle: 'คิวเดินตรวจอุณหภูมิ RF',
+    href: '/reefer?mode=walk',
+    icon: <Thermometer size={22} />,
+    tone: 'bg-cyan-600 text-white',
+    permissions: ['reefer.check.record', 'reefer.check.read'],
+    primary: true,
+  },
+  {
+    title: 'Yard Search',
+    subtitle: 'ค้นเลขตู้/ตำแหน่งเร็ว',
+    href: '/yard?mode=search',
+    icon: <Search size={22} />,
+    tone: 'bg-slate-700 text-white',
+    permissions: ['yard.location.assign', 'yard.slot.move', 'survey.inspect'],
+    primary: true,
+  },
+];
+
 export default function MobileOpsPage() {
   const { hasAnyPermission, permissionsLoading } = useAuth();
   const visibleActions = actions.filter(action => permissionsLoading || hasAnyPermission(action.permissions));
+  const visibleQuickActions = quickActions.filter(action => permissionsLoading || hasAnyPermission(action.permissions));
   const primaryActions = visibleActions.filter(action => action.primary);
   const secondaryActions = visibleActions.filter(action => !action.primary);
+  const [online, setOnline] = useState(true);
+  const [standalone, setStandalone] = useState(false);
+
+  useEffect(() => {
+    const updateStatus = () => setOnline(navigator.onLine);
+    updateStatus();
+    setStandalone(window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+    window.addEventListener('online', updateStatus);
+    window.addEventListener('offline', updateStatus);
+    return () => {
+      window.removeEventListener('online', updateStatus);
+      window.removeEventListener('offline', updateStatus);
+    };
+  }, []);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
@@ -109,12 +169,38 @@ export default function MobileOpsPage() {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <StatusTile
+            title="สถานะซิงค์"
+            value={online ? 'Online' : 'Offline Queue'}
+            icon={online ? <Wifi size={16} /> : <CloudOff size={16} />}
+            tone={online ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'}
+          />
+          <StatusTile
+            title="ติดตั้ง PWA"
+            value={standalone ? 'Installed' : 'Add to Home Screen'}
+            icon={<Smartphone size={16} />}
+            tone="text-slate-700 bg-slate-100"
+          />
+        </div>
+
         {visibleActions.length === 0 ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-700">
             ยังไม่มีสิทธิ์ใช้งาน PWA Quick Start
           </div>
         ) : (
           <>
+            {visibleQuickActions.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase text-slate-400">Quick Actions</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {visibleQuickActions.map(action => (
+                    <MobileActionButton key={action.title} action={action} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-3">
               {primaryActions.map(action => (
                 <MobileActionButton key={action.title} action={action} large />
@@ -131,6 +217,18 @@ export default function MobileOpsPage() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function StatusTile({ title, value, icon, tone }: { title: string; value: string; icon: React.ReactNode; tone: string }) {
+  return (
+    <div className={`rounded-xl p-3 ${tone}`}>
+      <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold opacity-80">
+        {icon}
+        {title}
+      </div>
+      <p className="text-sm font-bold">{value}</p>
     </div>
   );
 }
