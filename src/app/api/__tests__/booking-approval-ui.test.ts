@@ -7,7 +7,9 @@ describe('Booking approval inbox UI', () => {
 
     expect(source).toContain('/api/edi/bookings/approval');
     expect(source).toContain('/api/edi/bookings/amendments');
+    expect(source).toContain('/api/edi/bookings/documents');
     expect(source).toContain('Amendment Requests');
+    expect(source).toContain('Customer Documents');
     expect(source).toContain('Booking Approval');
     expect(source).toContain('รอพนักงานยืนยัน');
     expect(source).toContain('อนุมัติ');

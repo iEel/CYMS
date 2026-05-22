@@ -73,13 +73,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse base64
-    const matches = data.match(/^data:image\/(jpeg|png|jpg|webp|gif);base64,(.+)$/);
+    const matches = data.match(/^data:(image\/(jpeg|png|jpg|webp|gif)|application\/pdf);base64,(.+)$/);
     if (!matches) {
-      return NextResponse.json({ error: 'รูปแบบไม่ถูกต้อง รองรับ: jpeg, png, webp, gif' }, { status: 400 });
+      return NextResponse.json({ error: 'รูปแบบไม่ถูกต้อง รองรับ: jpeg, png, webp, gif, pdf' }, { status: 400 });
     }
 
-    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
-    const buffer = Buffer.from(matches[2], 'base64');
+    const mimeType = matches[1];
+    const ext = mimeType === 'application/pdf'
+      ? 'pdf'
+      : matches[2] === 'jpeg'
+        ? 'jpg'
+        : matches[2];
+    const buffer = Buffer.from(matches[3], 'base64');
 
     // [Security] จำกัดขนาดไฟล์ — อ่านจาก MAX_FILE_SIZE env (bytes) หรือ UPLOAD_MAX_SIZE_MB (MB)
     const maxFileSizeBytes = getMaxFileSizeBytes();

@@ -49,4 +49,12 @@ describe('Customer Portal UI', () => {
     expect(source).toContain('ขอแก้ไข Booking');
     expect(source).toContain('ขอยกเลิก Booking');
   });
+
+  it('lets customers upload booking documents from booking detail', () => {
+    const source = portalBookingsSource();
+
+    expect(source).toContain('/api/portal/bookings/documents');
+    expect(source).toContain('อัปโหลดเอกสาร');
+    expect(source).toContain('เอกสารที่ส่งแล้ว');
+  });
 });

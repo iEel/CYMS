@@ -173,9 +173,21 @@ interface BookingAmendmentRow {
   created_at?: string | null;
 }
 
+interface CustomerDocumentRow {
+  attachment_id: number;
+  booking_id: number;
+  booking_number: string;
+  customer_name?: string | null;
+  category: string;
+  file_url: string;
+  file_name?: string | null;
+  created_at?: string | null;
+}
+
 function BookingApprovalInbox({ yardId }: { yardId: number }) {
   const [bookings, setBookings] = useState<BookingApprovalRow[]>([]);
   const [amendments, setAmendments] = useState<BookingAmendmentRow[]>([]);
+  const [documents, setDocuments] = useState<CustomerDocumentRow[]>([]);
   const [summary, setSummary] = useState({ total_pending: 0, rf_pending: 0 });
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
@@ -184,18 +196,23 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
   const loadInbox = useCallback(async () => {
     setLoading(true);
     try {
-      const [approvalRes, amendmentRes] = await Promise.all([
+      const [approvalRes, amendmentRes, documentRes] = await Promise.all([
         fetch(`/api/edi/bookings/approval?yard_id=${yardId}`),
         fetch(`/api/edi/bookings/amendments?yard_id=${yardId}`),
+        fetch(`/api/edi/bookings/documents?yard_id=${yardId}`),
       ]);
       const data = await approvalRes.json();
       const amendmentData = await amendmentRes.json();
+      const documentData = await documentRes.json();
       if (!data.error) {
         setBookings(data.bookings || []);
         setSummary(data.summary || { total_pending: 0, rf_pending: 0 });
       }
       if (!amendmentData.error) {
         setAmendments(amendmentData.amendments || []);
+      }
+      if (!documentData.error) {
+        setDocuments(documentData.documents || []);
       }
     } finally {
       setLoading(false);
@@ -328,6 +345,42 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="border-b border-slate-100 p-4 dark:border-slate-700">
           <h3 className="flex items-center gap-2 font-semibold text-slate-800 dark:text-white">
+            <FileText size={17} className="text-sky-600" /> Customer Documents
+          </h3>
+          <p className="mt-1 text-xs text-slate-400">เอกสารที่ลูกค้าแนบมากับ Booking เพื่อประกอบการตรวจสอบก่อนอนุมัติ</p>
+        </div>
+        {loading ? (
+          <div className="p-8 text-center"><Loader2 size={24} className="mx-auto animate-spin text-slate-400" /></div>
+        ) : documents.length === 0 ? (
+          <p className="p-8 text-center text-sm text-slate-400">ยังไม่มีเอกสารจากลูกค้า</p>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-700">
+            {documents.slice(0, 8).map(doc => (
+              <a
+                key={doc.attachment_id}
+                href={doc.file_url}
+                target="_blank"
+                rel="noreferrer"
+                className="grid gap-2 p-4 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/20 md:grid-cols-[1fr_auto]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-white">{doc.file_name || doc.file_url}</p>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {doc.booking_number} · {doc.customer_name || 'ไม่ระบุลูกค้า'} · {documentCategoryLabel(doc.category)} · {fmtDate(doc.created_at)}
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
+                  <FileDown size={13} /> เปิดเอกสาร
+                </span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        <div className="border-b border-slate-100 p-4 dark:border-slate-700">
+          <h3 className="flex items-center gap-2 font-semibold text-slate-800 dark:text-white">
             <FileText size={17} className="text-indigo-600" /> Amendment Requests
           </h3>
           <p className="mt-1 text-xs text-slate-400">คำขอแก้ไขหรือยกเลิก Booking จาก Customer Portal ต้องผ่านพนักงานก่อนมีผลกับ Booking จริง</p>
@@ -395,6 +448,17 @@ function summarizeAmendmentChanges(value: string) {
   } catch {
     return value;
   }
+}
+
+function documentCategoryLabel(value?: string | null) {
+  const labels: Record<string, string> = {
+    shipping_instruction: 'Shipping Instruction',
+    delivery_order: 'Delivery Order',
+    invoice_support: 'Invoice Support',
+    power_of_attorney: 'Power of Attorney',
+    other: 'Other',
+  };
+  return labels[value || ''] || 'Document';
 }
 
 interface IntegrationLogRow {

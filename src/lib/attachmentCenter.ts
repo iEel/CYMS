@@ -36,7 +36,7 @@ export async function logAttachment({
 }) {
   const pool = db || await getDb();
   await ensureAttachmentCenter(pool);
-  await pool.request()
+  const result = await pool.request()
     .input('entityType', sql.NVarChar(40), entityType)
     .input('entityId', sql.Int, entityId || null)
     .input('entityNumber', sql.NVarChar(80), entityNumber || null)
@@ -53,9 +53,11 @@ export async function logAttachment({
         entity_type, entity_id, entity_number, category, file_url, file_name,
         mime_type, source, uploaded_by, yard_id, metadata
       )
+      OUTPUT INSERTED.*
       VALUES (
         @entityType, @entityId, @entityNumber, @category, @fileUrl, @fileName,
         @mimeType, @source, @uploadedBy, @yardId, @metadata
       )
     `);
+  return result.recordset[0] || null;
 }

@@ -9,12 +9,14 @@ import {
   ClipboardList,
   Clock,
   Download,
+  FileText,
   Filter,
   Loader2,
   Package,
   Plus,
   Send,
   Ship,
+  Upload,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -54,6 +56,15 @@ interface TimelineEvent {
   reference_number?: string | null;
   status?: string | null;
   detail?: string | null;
+}
+
+interface BookingDocument {
+  attachment_id: number;
+  category: string;
+  file_url: string;
+  file_name?: string | null;
+  mime_type?: string | null;
+  created_at?: string | null;
 }
 
 interface CreateBookingForm {
@@ -131,6 +142,7 @@ export default function PortalBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [detail, setDetail] = useState<BookingDetail | null>(null);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
+  const [documents, setDocuments] = useState<BookingDocument[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -145,6 +157,9 @@ export default function PortalBookings() {
   const [amendmentForm, setAmendmentForm] = useState<AmendmentForm>(initialAmendmentForm);
   const [amendmentSaving, setAmendmentSaving] = useState(false);
   const [amendmentError, setAmendmentError] = useState('');
+  const [documentCategory, setDocumentCategory] = useState('shipping_instruction');
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const [documentError, setDocumentError] = useState('');
   const detailStats = detail ? bookingStats(detail.booking) : null;
 
   const loadData = useCallback((p = 1, status = statusFilter) => {
@@ -168,12 +183,16 @@ export default function PortalBookings() {
   const openDetail = (bookingId: number) => {
     setDetailLoading(true);
     setTimeline([]);
+    setDocuments([]);
+    setDocumentError('');
     Promise.all([
       fetch(`/api/portal/bookings/detail?booking_id=${bookingId}`).then(r => r.json()),
       fetch(`/api/portal/timeline?booking_id=${bookingId}`).then(r => r.json()),
-    ]).then(([d, t]) => {
+      fetch(`/api/portal/bookings/documents?booking_id=${bookingId}`).then(r => r.json()),
+    ]).then(([d, t, docs]) => {
       if (!d.error) setDetail({ booking: d.booking, containers: d.containers || [] });
       setTimeline(Array.isArray(t.timeline) ? t.timeline : []);
+      setDocuments(Array.isArray(docs.documents) ? docs.documents : []);
       setDetailLoading(false);
     }).catch(() => setDetailLoading(false));
   };
@@ -271,6 +290,56 @@ export default function PortalBookings() {
       setAmendmentError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
     } finally {
       setAmendmentSaving(false);
+    }
+  };
+
+  const uploadBookingDocument = async (file: File | null) => {
+    if (!detail || !file) return;
+    if (!session?.token) {
+      setDocumentError('ไม่พบ session สำหรับอัปโหลดไฟล์');
+      return;
+    }
+    setDocumentUploading(true);
+    setDocumentError('');
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const uploadRes = await fetch('/api/uploads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({
+          data: dataUrl,
+          folder: 'documents',
+          filename_prefix: 'booking_document',
+        }),
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || !uploadData.success) {
+        setDocumentError(uploadData.error || 'อัปโหลดไฟล์ไม่สำเร็จ');
+        return;
+      }
+
+      const res = await fetch('/api/portal/bookings/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: detail.booking.booking_id,
+          file_url: uploadData.url,
+          file_name: file.name,
+          mime_type: file.type,
+          category: documentCategory,
+        }),
+      });
+      const saved = await res.json();
+      if (!res.ok || !saved.success) {
+        setDocumentError(saved.error || 'บันทึกเอกสารไม่สำเร็จ');
+        return;
+      }
+      const refreshed = await fetch(`/api/portal/bookings/documents?booking_id=${detail.booking.booking_id}`).then(r => r.json());
+      setDocuments(Array.isArray(refreshed.documents) ? refreshed.documents : []);
+    } catch {
+      setDocumentError('ไม่สามารถอัปโหลดเอกสารได้');
+    } finally {
+      setDocumentUploading(false);
     }
   };
 
@@ -500,6 +569,65 @@ export default function PortalBookings() {
                     <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
                       {detail.containers.map(c => (
                         <ContainerActivity key={c.id} container={c} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-50 dark:bg-slate-700/30 text-xs font-semibold text-slate-600 dark:text-slate-300 flex flex-wrap items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-2"><FileText size={14} /> เอกสารที่ส่งแล้ว</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={documentCategory}
+                        onChange={e => setDocumentCategory(e.target.value)}
+                        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      >
+                        <option value="shipping_instruction">Shipping Instruction</option>
+                        <option value="delivery_order">Delivery Order</option>
+                        <option value="invoice_support">Invoice Support</option>
+                        <option value="power_of_attorney">Power of Attorney</option>
+                        <option value="other">Other</option>
+                      </select>
+                      <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-[11px] font-semibold text-white hover:bg-blue-700">
+                        {documentUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                        อัปโหลดเอกสาร
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          className="hidden"
+                          disabled={documentUploading}
+                          onChange={e => {
+                            uploadBookingDocument(e.target.files?.[0] || null);
+                            e.currentTarget.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  {documentError && (
+                    <div className="border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-300">
+                      {documentError}
+                    </div>
+                  )}
+                  {documents.length === 0 ? (
+                    <p className="p-6 text-center text-sm text-slate-400">ยังไม่มีเอกสารที่ส่งจากลูกค้า</p>
+                  ) : (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                      {documents.map(doc => (
+                        <a
+                          key={doc.attachment_id}
+                          href={doc.file_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/20"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold text-slate-700 dark:text-slate-100">{doc.file_name || doc.file_url}</span>
+                            <span className="text-[10px] text-slate-400">{documentCategoryLabel(doc.category)} · {formatDate(doc.created_at)}</span>
+                          </span>
+                          <Download size={14} className="text-slate-400" />
+                        </a>
                       ))}
                     </div>
                   )}
@@ -952,6 +1080,26 @@ function toDateInput(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return date.toISOString().slice(0, 10);
+}
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function documentCategoryLabel(value?: string | null) {
+  const labels: Record<string, string> = {
+    shipping_instruction: 'Shipping Instruction',
+    delivery_order: 'Delivery Order',
+    invoice_support: 'Invoice Support',
+    power_of_attorney: 'Power of Attorney',
+    other: 'Other',
+  };
+  return labels[value || ''] || 'Document';
 }
 
 function formatDateTime(value?: string | null) {

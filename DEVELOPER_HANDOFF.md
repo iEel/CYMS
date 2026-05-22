@@ -1370,9 +1370,11 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **EDI approval tab** — หน้า `/edi` เพิ่ม tab `Booking Approval` แสดง pending/RF pending, รายละเอียดลูกค้า/ETA/จำนวนตู้ และ action `อนุมัติ`, `ขอข้อมูล`, `ปฏิเสธ`
 - [x] **Customer booking amendment workflow** — เพิ่ม `PortalBookingAmendments`, `POST/GET /api/portal/bookings/amendments` และ `GET/PATCH /api/edi/bookings/amendments`; ลูกค้าขอแก้ไข/ยกเลิกได้เฉพาะ booking ที่มี `PortalEntityAccess`, สถานะเริ่ม `pending`, และ backend พนักงานเท่านั้นที่ apply change เข้า `Bookings` พร้อม audit `booking_amendment_*`
 - [x] **Portal amendment UI + staff inbox** — หน้า `/portal/bookings` detail เพิ่มปุ่ม `ขอแก้ไข Booking` / `ขอยกเลิก Booking`; หน้า `/edi` เพิ่ม panel `Amendment Requests` ให้พนักงาน approve/reject ก่อนข้อมูลจริงเปลี่ยน
+- [x] **Customer booking document upload** — เพิ่ม `GET/POST /api/portal/bookings/documents` ให้ลูกค้าแนบเอกสารกับ booking ที่ตนมี grant เท่านั้น โดยบันทึกลง `EntityAttachments` ด้วย `source='portal'`; หน้า `/portal/bookings` detail เพิ่ม `เอกสารที่ส่งแล้ว` + upload image/PDF และหน้า `/edi` เพิ่ม `Customer Documents` ให้พนักงานเปิดดูประกอบการอนุมัติ
 - [x] **Tests** — เพิ่ม coverage ใน `portal-bookings.test.ts` เพื่อยืนยัน pending creation + session customer scope + portal grants และ `portal-ui.test.ts` เพื่อกัน UI ถอยกลับเป็น read-only
 
 **Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/portal-booking-documents.test.ts src/app/api/__tests__/portal-ui.test.ts src/app/api/__tests__/booking-approval-ui.test.ts --runInBand` ✅ (9 tests)
 - `npm test -- src/app/api/__tests__/portal-booking-amendments.test.ts src/app/api/__tests__/portal-ui.test.ts src/app/api/__tests__/booking-approval-ui.test.ts --runInBand` ✅
 - `npm test -- src/app/api/__tests__/portal-timeline.test.ts src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (6 tests)
 - `npm test -- src/app/api/__tests__/booking-approval-inbox.test.ts src/app/api/__tests__/booking-approval-ui.test.ts --runInBand` ✅ (3 tests)
