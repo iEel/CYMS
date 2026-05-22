@@ -1360,11 +1360,13 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Create booking modal** — หน้า `/portal/bookings` เพิ่มปุ่ม `สร้าง Booking` พร้อมฟอร์มเลข booking, ประเภท, จำนวน/ขนาด/ประเภทตู้, ETA, vessel/voyage, seal, container numbers และ notes โดยส่ง `yard_id` จาก active yard ใน session
 - [x] **Booking overview** — detail modal เพิ่ม `ภาพรวม Booking`: จำนวนที่ขอ, เข้าลานแล้ว, ออกลานแล้ว, คงเหลือ, ETA, progress Gate In/Gate Out และข้อความ `รอพนักงานยืนยัน` สำหรับ pending request
 - [x] **Container activity** — เปลี่ยนตารางตู้ใน booking เป็น `กิจกรรมตู้ใน Booking` แสดงสถานะตู้, รับเข้า booking, Gate In, Gate Out และลิงก์ EIR In/Out ที่ลูกค้ามีสิทธิ์ดู
+- [x] **Customer read-only audit trail** — เพิ่ม `GET /api/portal/timeline` สำหรับ booking/container timeline โดยใช้ `PortalEntityAccess` ตรวจสิทธิ์ก่อนทุกครั้ง และหน้า `/portal/bookings` detail แสดง panel `Audit Trail` แบบ read-only รวม gate events, reefer checks และ reefer exceptions
 - [x] **Staff booking approval inbox** — เพิ่ม `GET/PATCH /api/edi/bookings/approval` สำหรับพนักงานที่มี `booking.manage` เท่านั้น: list pending booking ที่ลูกค้าสร้าง, approve → `confirmed`, reject → `cancelled`, request info → คง `pending` พร้อม note; บังคับ `requireYardAccess()` และ audit `booking_approval_*`
 - [x] **EDI approval tab** — หน้า `/edi` เพิ่ม tab `Booking Approval` แสดง pending/RF pending, รายละเอียดลูกค้า/ETA/จำนวนตู้ และ action `อนุมัติ`, `ขอข้อมูล`, `ปฏิเสธ`
 - [x] **Tests** — เพิ่ม coverage ใน `portal-bookings.test.ts` เพื่อยืนยัน pending creation + session customer scope + portal grants และ `portal-ui.test.ts` เพื่อกัน UI ถอยกลับเป็น read-only
 
 **Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/portal-timeline.test.ts src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (6 tests)
 - `npm test -- src/app/api/__tests__/booking-approval-inbox.test.ts src/app/api/__tests__/booking-approval-ui.test.ts --runInBand` ✅ (3 tests)
 - `npm test -- src/app/api/__tests__/portal-bookings.test.ts src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (5 tests)
 - `npm test -- --runInBand` ✅ (49 suites / 524 tests)

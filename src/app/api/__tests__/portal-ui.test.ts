@@ -33,4 +33,12 @@ describe('Customer Portal UI', () => {
     expect(source).toContain('reefer_exception');
     expect(source).toContain('/portal/reefer?container_id=');
   });
+
+  it('shows a read-only customer audit trail on booking detail', () => {
+    const source = portalBookingsSource();
+
+    expect(source).toContain('/api/portal/timeline');
+    expect(source).toContain('Audit Trail');
+    expect(source).toContain('read-only');
+  });
 });

@@ -46,6 +46,16 @@ interface BookingDetail {
   containers: BookingContainer[];
 }
 
+interface TimelineEvent {
+  event_type: string;
+  title: string;
+  event_time: string;
+  container_number?: string | null;
+  reference_number?: string | null;
+  status?: string | null;
+  detail?: string | null;
+}
+
 interface CreateBookingForm {
   booking_number: string;
   booking_type: string;
@@ -96,6 +106,7 @@ export default function PortalBookings() {
   const { session } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [detail, setDetail] = useState<BookingDetail | null>(null);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -128,8 +139,13 @@ export default function PortalBookings() {
 
   const openDetail = (bookingId: number) => {
     setDetailLoading(true);
-    fetch(`/api/portal/bookings/detail?booking_id=${bookingId}`).then(r => r.json()).then(d => {
+    setTimeline([]);
+    Promise.all([
+      fetch(`/api/portal/bookings/detail?booking_id=${bookingId}`).then(r => r.json()),
+      fetch(`/api/portal/timeline?booking_id=${bookingId}`).then(r => r.json()),
+    ]).then(([d, t]) => {
       if (!d.error) setDetail({ booking: d.booking, containers: d.containers || [] });
+      setTimeline(Array.isArray(t.timeline) ? t.timeline : []);
       setDetailLoading(false);
     }).catch(() => setDetailLoading(false));
   };
@@ -294,7 +310,7 @@ export default function PortalBookings() {
                   </p>
                 )}
               </div>
-              <button onClick={() => setDetail(null)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400">
+              <button onClick={() => { setDetail(null); setTimeline([]); }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400">
                 <X size={18} />
               </button>
             </div>
@@ -381,6 +397,33 @@ export default function PortalBookings() {
                     <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
                       {detail.containers.map(c => (
                         <ContainerActivity key={c.id} container={c} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-50 dark:bg-slate-700/30 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                    <span>Audit Trail</span>
+                    <span className="text-[10px] text-slate-400">read-only</span>
+                  </div>
+                  {timeline.length === 0 ? (
+                    <p className="p-6 text-center text-sm text-slate-400">ยังไม่มี audit trail</p>
+                  ) : (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                      {timeline.map((event, index) => (
+                        <div key={`${event.event_type}-${event.event_time}-${index}`} className="grid gap-2 p-3 md:grid-cols-[140px_1fr]">
+                          <p className="text-[11px] font-semibold text-slate-400">{formatDateTime(event.event_time)}</p>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-800 dark:text-white">{event.title}</p>
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">{event.event_type}</span>
+                            </div>
+                            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                              {[event.container_number, event.reference_number, event.status, event.detail].filter(Boolean).join(' · ') || '-'}
+                            </p>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -702,6 +745,11 @@ function ContainerActivity({ container }: { container: BookingContainer }) {
 function formatDate(value?: string | null) {
   if (!value) return '';
   return new Date(value).toLocaleDateString('th-TH');
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 function EtaBadge({ status }: { status: { code: string; label: string; tone: string; days: number | null } }) {
