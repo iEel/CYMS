@@ -349,6 +349,35 @@ async function migrate() {
       IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('ReconciliationActions') AND name = 'IX_ReconciliationActions_IssueEntity')
         CREATE INDEX IX_ReconciliationActions_IssueEntity
           ON ReconciliationActions (yard_id, issue_code, entity_id, entity_ref, status);
+
+      IF OBJECT_ID('PaymentReconciliationRows', 'U') IS NULL
+      BEGIN
+        CREATE TABLE PaymentReconciliationRows (
+          reconciliation_id BIGINT PRIMARY KEY IDENTITY(1,1),
+          yard_id INT NOT NULL,
+          statement_ref NVARCHAR(120) NOT NULL,
+          paid_at DATETIME2 NULL,
+          payer_name NVARCHAR(255) NULL,
+          amount DECIMAL(12,2) NOT NULL,
+          invoice_number_hint NVARCHAR(80) NULL,
+          source_file NVARCHAR(255) NULL,
+          status NVARCHAR(30) NOT NULL CONSTRAINT DF_PaymentReconciliationRows_Status DEFAULT 'pending',
+          invoice_id INT NULL,
+          note NVARCHAR(1000) NULL,
+          matched_by_user_id INT NULL,
+          matched_at DATETIME2 NULL,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          updated_at DATETIME2 NULL
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PaymentReconciliationRows') AND name = 'IX_PaymentReconciliationRows_Yard_Status')
+        CREATE INDEX IX_PaymentReconciliationRows_Yard_Status
+          ON PaymentReconciliationRows (yard_id, status, created_at);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PaymentReconciliationRows') AND name = 'IX_PaymentReconciliationRows_Invoice')
+        CREATE INDEX IX_PaymentReconciliationRows_Invoice
+          ON PaymentReconciliationRows (invoice_id, status);
     `);
 
     await runStep(pool, 'EDI, CEDEX, and tariff helper schema', `

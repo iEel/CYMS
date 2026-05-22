@@ -16,6 +16,7 @@ import BillingReports from './BillingReports';
 import CreditControlTab from './CreditControlTab';
 import ARAgingTab from './ARAgingTab';
 import TariffSimulatorPanel from './TariffSimulatorPanel';
+import PaymentReconciliationTab from './PaymentReconciliationTab';
 import type { ClearanceRow, ClearanceStats, CreditCustomer } from './billingTypes';
 
 interface TariffRow {
@@ -52,11 +53,13 @@ const CHARGE_LABELS: Record<string, string> = {
 const UNIT_LABELS: Record<string, string> = {
   per_day: '/ วัน', per_move: '/ ครั้ง', per_container: '/ ตู้', fixed: 'คงที่',
 };
+const PAYMENT_RECONCILIATION_ENDPOINT = '/api/billing/payment-reconciliation';
+const PAYMENT_RECONCILIATION_LABELS = { importTitle: 'นำเข้า Statement', matchLabel: 'Match Invoice' };
 
 export default function BillingPage() {
   const { session, hasPermission } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'invoices' | 'clearance' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging' | 'credit_control' | 'payment_settings'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'clearance' | 'create' | 'tariffs' | 'hold' | 'documents' | 'export' | 'reports' | 'demurrage' | 'ar_aging' | 'credit_control' | 'payment_settings' | 'payment_reconciliation'>('invoices');
 
   // Credit Note Modal
   const [cnModal, setCnModal] = useState<{ open: boolean; invoice: InvoiceRow | null }>({ open: false, invoice: null });
@@ -90,7 +93,7 @@ export default function BillingPage() {
     const params = new URLSearchParams(window.location.search);
     const queryTab = params.get('tab');
     const querySearch = params.get('search') || params.get('invoice_id') || '';
-    if (queryTab && ['invoices', 'clearance', 'create', 'tariffs', 'hold', 'documents', 'export', 'reports', 'demurrage', 'ar_aging', 'credit_control', 'payment_settings'].includes(queryTab)) {
+    if (queryTab && ['invoices', 'clearance', 'create', 'tariffs', 'hold', 'documents', 'export', 'reports', 'demurrage', 'ar_aging', 'credit_control', 'payment_settings', 'payment_reconciliation'].includes(queryTab)) {
       setActiveTab(queryTab as typeof activeTab);
     }
     if (querySearch) {
@@ -386,6 +389,7 @@ export default function BillingPage() {
           { id: 'ar_aging' as const, label: 'AR Aging', icon: <Users size={14} /> },
           { id: 'credit_control' as const, label: 'Credit Control', icon: <CreditCard size={14} /> },
           { id: 'payment_settings' as const, label: 'Payment QR', icon: <QrCode size={14} /> },
+          { id: 'payment_reconciliation' as const, label: 'Payment Reconciliation', icon: <FileSpreadsheet size={14} /> },
           { id: 'documents' as const, label: 'เอกสาร', icon: <Printer size={14} /> },
           { id: 'export' as const, label: 'ERP', icon: <FileDown size={14} /> },
           { id: 'reports' as const, label: 'รายงาน', icon: <BarChart3 size={14} /> },
@@ -930,6 +934,11 @@ export default function BillingPage() {
       {/* =================== DEMURRAGE TAB =================== */}
       {activeTab === 'demurrage' && (
         <DemurrageTab yardId={yardId} />
+      )}
+
+      {/* =================== PAYMENT RECONCILIATION TAB =================== */}
+      {activeTab === 'payment_reconciliation' && (
+        <PaymentReconciliationTab yardId={yardId} endpoint={PAYMENT_RECONCILIATION_ENDPOINT} labels={PAYMENT_RECONCILIATION_LABELS} />
       )}
 
       {/* =================== PAYMENT SETTINGS TAB =================== */}

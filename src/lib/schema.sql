@@ -283,6 +283,33 @@ CREATE INDEX IX_PortalNotificationPreferences_Customer
 ON PortalNotificationPreferences (customer_id, enabled);
 
 -- ===================================
+-- ตาราง: Payment Reconciliation Rows (รายการรับเงินจาก Statement)
+-- ===================================
+CREATE TABLE PaymentReconciliationRows (
+    reconciliation_id   BIGINT PRIMARY KEY IDENTITY(1,1),
+    yard_id             INT NOT NULL REFERENCES Yards(yard_id),
+    statement_ref       NVARCHAR(120) NOT NULL,
+    paid_at             DATETIME2 NULL,
+    payer_name          NVARCHAR(255) NULL,
+    amount              DECIMAL(12,2) NOT NULL,
+    invoice_number_hint NVARCHAR(80) NULL,
+    source_file         NVARCHAR(255) NULL,
+    status              NVARCHAR(30) NOT NULL DEFAULT 'pending',
+    invoice_id          INT NULL REFERENCES Invoices(invoice_id),
+    note                NVARCHAR(1000) NULL,
+    matched_by_user_id  INT NULL REFERENCES Users(user_id),
+    matched_at          DATETIME2 NULL,
+    created_at          DATETIME2 DEFAULT GETDATE(),
+    updated_at          DATETIME2 NULL
+);
+
+CREATE INDEX IX_PaymentReconciliationRows_Yard_Status
+ON PaymentReconciliationRows (yard_id, status, created_at);
+
+CREATE INDEX IX_PaymentReconciliationRows_Invoice
+ON PaymentReconciliationRows (invoice_id, status);
+
+-- ===================================
 -- ตาราง: Reefer Monitoring Policies + Checks
 -- ===================================
 CREATE TABLE ReeferCheckPolicies (

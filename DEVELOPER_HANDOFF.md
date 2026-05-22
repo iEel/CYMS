@@ -1025,6 +1025,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - รายวัน: KPIs, สรุปสถานะ, gate activity, แจกแจงตามประเภทค่าบริการ, รายการ invoice
   - รายเดือน: KPIs, top customers, daily breakdown table
 - [x] **AR Dunning Action Center** (✅ เสร็จ — 21 พ.ค. 2569) — เพิ่ม `src/lib/arDunning.ts` และ `ARDunningPanel.tsx` ใน AR Aging เพื่อจัด stage `friendly_reminder` / `second_notice` / `credit_hold_review` / `final_notice`, สรุป exposure, เรียงลำดับลูกค้าที่ต้องตาม, copy reminder draft และบันทึก contact attempt / promise-to-pay ผ่าน `POST /api/billing/dunning-actions` ลง audit log
+- [x] **Payment Reconciliation** (✅ เสร็จ — 22 พ.ค. 2569) — เพิ่ม `PaymentReconciliationRows`, `GET/POST/PATCH /api/billing/payment-reconciliation` และแท็บ Billing → `Payment Reconciliation`: นำเข้า statement rows เป็น `pending`, match กับ invoice เพื่อ mark `paid` + `balance_amount=0`, หรือ ignore พร้อม note; บังคับ `billing.payment.receive` + yard access และ audit `payment_reconciliation_*`
 - [x] **📄 PDF Export** (ใหม่) — client-side PDF ผ่าน jsPDF + jspdf-autotable
   - `src/lib/pdfExport.ts` — 3 ฟังก์ชั่นสำเร็จรูป:
     - `generateBillingReportPDF()` — รายงานประจำวัน/เดือน (KPIs, ตารางบิล, gate activity, ยอดรายวัน, top ลูกค้า)
