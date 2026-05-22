@@ -84,6 +84,48 @@ describe('gate workflow helpers', () => {
     expect(workflow.nextAction).toBe('Resolve booking mismatch');
   });
 
+  it('treats missing gate-out booking as optional when there is no mismatch', () => {
+    const workflow = buildGateOutWorkflow({
+      containerSelected: true,
+      customerResolved: true,
+      bookingSelected: false,
+      bookingWarnings: [],
+      billingRequired: false,
+      billingCleared: false,
+      releaseRequested: false,
+      readyToRelease: false,
+      exitPhotosCount: 0,
+      submitted: false,
+      canSubmit: true,
+    });
+
+    expect(workflow.steps.find((step) => step.id === 'booking')).toMatchObject({
+      detail: 'Booking optional',
+      status: 'done',
+    });
+    expect(workflow.exceptions.map((item) => item.code)).not.toContain('booking_required');
+    expect(workflow.nextAction).toBe('Request pickup move');
+
+    const signals = buildGateDecisionSignals({
+      mode: 'gate_out',
+      workflow,
+      billingRequired: false,
+      billingCleared: false,
+      bookingSelected: false,
+      bookingWarnings: [],
+      evidenceComplete: true,
+      photoCompleted: 0,
+      photoRequired: 0,
+      canSubmit: true,
+    });
+
+    expect(signals.items.find(item => item.key === 'booking')).toMatchObject({
+      value: 'Optional',
+      status: 'pending',
+    });
+    expect(signals.canProceed).toBe(true);
+  });
+
   it('builds sticky decision signals for gate-out operators', () => {
     const workflow = buildGateOutWorkflow({
       containerSelected: true,

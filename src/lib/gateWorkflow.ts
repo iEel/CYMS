@@ -205,7 +205,6 @@ export function buildGateOutWorkflow(input: GateOutWorkflowInput): GateWorkflowS
   const pickupDone = input.releaseRequested || input.readyToRelease;
   const readyForRelease = input.containerSelected
     && input.customerResolved
-    && input.bookingSelected
     && !hasBookingMismatch
     && billingDone
     && input.readyToRelease
@@ -263,8 +262,8 @@ export function buildGateOutWorkflow(input: GateOutWorkflowInput): GateWorkflowS
     {
       id: 'booking',
       label: 'Match booking',
-      detail: input.bookingSelected ? 'Booking selected' : 'Select release booking',
-      status: hasBookingMismatch ? 'blocked' : input.bookingSelected ? 'done' : input.containerSelected ? 'active' : 'pending',
+      detail: input.bookingSelected ? 'Booking selected' : 'Booking optional',
+      status: hasBookingMismatch ? 'blocked' : input.containerSelected ? 'done' : 'pending',
     },
     {
       id: 'billing',
@@ -288,7 +287,6 @@ export function buildGateOutWorkflow(input: GateOutWorkflowInput): GateWorkflowS
 
   const nextAction =
     !input.containerSelected ? 'Search and select a yard container' :
-    !input.bookingSelected ? 'Select release booking' :
     hasBookingMismatch ? 'Resolve booking mismatch' :
     input.billingRequired && !input.billingCleared ? 'Clear billing before Gate-Out' :
     !pickupDone ? 'Request pickup move' :
@@ -331,7 +329,7 @@ export function buildGateDecisionSignals(input: GateDecisionInput): GateDecision
       ? signal('booking', 'Booking', 'Mismatch', bookingWarnings.join(' | '), 'blocked')
       : input.bookingSelected
         ? signal('booking', 'Booking', 'Matched', 'Release booking is selected', 'ok')
-        : signal('booking', 'Booking', 'ต้องเลือก', 'Select a release booking before Gate-Out', 'active');
+        : signal('booking', 'Booking', 'Optional', 'Gate-Out can continue without a booking reference', 'pending');
 
   const evidenceValue = photoRequired > 0 ? `${Math.min(photoCompleted, photoRequired)}/${photoRequired}` : (input.evidenceComplete ? 'ครบ' : 'รอตรวจ');
   const evidence = input.evidenceComplete

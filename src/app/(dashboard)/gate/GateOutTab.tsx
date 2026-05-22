@@ -619,11 +619,11 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
             <div className={`rounded-xl border overflow-hidden ${
               selectedBooking
                 ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/10'
-                : 'border-amber-200 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-900/10'
+                : 'border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/20'
             }`}>
               <div className="p-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className={`text-xs font-semibold mb-1 ${selectedBooking ? 'text-indigo-600' : 'text-amber-600'}`}>Booking</p>
+                  <p className={`text-xs font-semibold mb-1 ${selectedBooking ? 'text-indigo-600' : 'text-slate-500'}`}>Booking (ถ้ามี)</p>
                   {selectedBooking ? (
                     <>
                       <p className="font-mono font-bold text-slate-800 dark:text-white">{selectedBooking.booking_number}</p>
@@ -639,9 +639,9 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                     </>
                   ) : (
                     <>
-                      <p className="font-semibold text-amber-700 dark:text-amber-300">ยังไม่ได้ผูก Booking</p>
-                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">เลือก Booking เพื่อคุมการปล่อยตู้และอัปเดตสถานะ received/released</p>
-                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">ระบบจะกัน Booking ที่ลูกค้า/ขนาด/ประเภทไม่ตรง หรือมีรายการตู้แต่ไม่มีตู้ใบนี้</p>
+                      <p className="font-semibold text-slate-700 dark:text-slate-200">ไม่ระบุ Booking</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">ไม่มี Booking ก็ปล่อยได้ตาม workflow ปกติ</p>
+                      <p className="text-[10px] text-slate-400 mt-1">ถ้าเลือกหรือกรอก Booking ระบบจะตรวจลูกค้า/ขนาด/ประเภท และอัปเดต received/released ให้</p>
                     </>
                   )}
                   {bookingWarning && <p className="text-xs text-red-500 mt-2">{bookingWarning}</p>}
@@ -1077,7 +1077,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                       </div>
                     </div>
                     <div>
-                      <label className={labelClass}>Booking Ref</label>
+                      <label className={labelClass}>Booking Ref (ถ้ามี)</label>
                       <input type="text" value={gateOutForm.booking_ref}
                         onChange={e => setGateOutForm({ ...gateOutForm, booking_ref: e.target.value })}
                         onBlur={e => loadBookingByNumber(e.target.value)}
