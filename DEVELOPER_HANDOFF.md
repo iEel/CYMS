@@ -827,6 +827,11 @@ container-yard-system/
 - **Notification Center** (✅ เสร็จ — 22 พ.ค. 2569): เพิ่มหน้า `/notifications` สำหรับดู notification แบบเต็ม, filter `all/gate/work_order`, toggle `Unread only`, deep-link ไปหน้าที่เกี่ยวข้อง และ Topbar มีลิงก์ `ดูทั้งหมด`
 - รีเฟรชอัตโนมัติทุก 30 วินาที
 
+### E2E Smoke Tests (✅ เสร็จ — 22 พ.ค. 2569)
+- เพิ่ม `scripts/e2e-smoke.mjs` และ npm script `test:e2e:smoke` แบบไม่พึ่ง dependency เพิ่ม โดยใช้ `CYMS_E2E_BASE_URL` หรือ default `http://localhost:3005`
+- Smoke ครอบ public/protected/auth boundary: `/login`, `/manifest.json`, `/api/auth/me`, `/dashboard`
+- Verify ล่าสุด: `npm run test:e2e:smoke` ✅ (`/login 200`, `/manifest.json 200`, `/api/auth/me 401`, `/dashboard 307`)
+
 ### 7.8 ปฏิบัติการ (Operations)
 
 3 แท็บ:
