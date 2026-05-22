@@ -512,7 +512,7 @@ container-yard-system/
 
 | Method | Endpoint | คำอธิบาย |
 |--------|----------|---------|
-| GET | `/api/notifications?yard_id=X&limit=20&user_id=Y` | ดึง activity feed — รวม Gate Transactions + Work Order updates, เรียงตามเวลาล่าสุด + ส่ง `last_read_at` ของ user กลับมา (ดึงจาก DB — ซิงค์ข้าม browser/device) |
+| GET | `/api/notifications?yard_id=X&limit=20&source=all` | ดึง activity feed — รวม Gate Transactions + Work Order updates, เรียงตามเวลาล่าสุด + ส่ง `last_read_at`, `unread_count`, `source_counts`, `href` ของแต่ละ notification กลับมา (ดึงจาก DB — ซิงค์ข้าม browser/device) |
 | PATCH | `/api/notifications` | บันทึก read timestamp ลง DB — `{ user_id }` → `UPDATE Users SET notif_last_read_at = GETDATE()` → ส่ง `last_read_at` กลับมา |
 
 ### Operations
@@ -824,6 +824,7 @@ container-yard-system/
 - **Cross-Browser/Device Sync** (**แก้ไข 31 มี.ค. 2569**): สถานะ "อ่านแล้ว" เก็บใน `Users.notif_last_read_at` บน DB — เปิดหลาย tab/browser/device ไม่ flash badge ซ้ำ
 - **Per-user read state**: แต่ละ user มี read timestamp แยกกันใน DB — ไม่ข้ามไปใช้ของ user อื่น
 - `GET /api/notifications?user_id=Y` ส่ง `last_read_at` กลับมาพร้อมข้อมูล — frontend ใช้ค่านี้เปรียบเทียบ (ไม่ต้องพึ่ง localStorage อีกต่อไป)
+- **Notification Center** (✅ เสร็จ — 22 พ.ค. 2569): เพิ่มหน้า `/notifications` สำหรับดู notification แบบเต็ม, filter `all/gate/work_order`, toggle `Unread only`, deep-link ไปหน้าที่เกี่ยวข้อง และ Topbar มีลิงก์ `ดูทั้งหมด`
 - รีเฟรชอัตโนมัติทุก 30 วินาที
 
 ### 7.8 ปฏิบัติการ (Operations)

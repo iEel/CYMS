@@ -59,7 +59,7 @@ export default function Topbar() {
   const notifRef = useRef<HTMLDivElement>(null);
 
   // Notifications
-  interface NotifItem { id: string; source: string; type: string; title: string; detail: string; time: string; }
+  interface NotifItem { id: string; source: string; type: string; title: string; detail: string; time: string; href?: string; unread?: boolean; }
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [lastReadTime, setLastReadTime] = useState<string>('');
@@ -455,26 +455,31 @@ export default function Topbar() {
 
           {notifOpen && (
             <div className="absolute top-full right-0 mt-2 w-96 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50">
-              <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-700 dark:text-white flex items-center gap-2">
-                  <Bell size={14} /> การแจ้งเตือน
-                </h3>
-                <button onClick={async () => {
-                  const uid = session?.userId;
-                  if (!uid) return;
-                  try {
-                    const res = await fetch('/api/notifications', {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ user_id: uid }),
-                    });
-                    const data = await res.json();
-                    if (data.last_read_at) setLastReadTime(data.last_read_at);
-                  } catch (err) { console.error(err); }
-                }} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">
-                  อ่านทั้งหมดแล้ว
-                </button>
-              </div>
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-white flex items-center gap-2">
+                      <Bell size={14} /> การแจ้งเตือน
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      <Link href="/notifications" onClick={() => setNotifOpen(false)} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">
+                        ดูทั้งหมด
+                      </Link>
+                      <button onClick={async () => {
+                        const uid = session?.userId;
+                        if (!uid) return;
+                        try {
+                          const res = await fetch('/api/notifications', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_id: uid }),
+                          });
+                          const data = await res.json();
+                          if (data.last_read_at) setLastReadTime(data.last_read_at);
+                        } catch (err) { console.error(err); }
+                      }} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">
+                        อ่านทั้งหมดแล้ว
+                      </button>
+                    </div>
+                  </div>
               <div className="max-h-80 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/50">
                 {notifications.length === 0 ? (
                   <div className="p-6 text-center text-sm text-slate-400">ไม่มีการแจ้งเตือน</div>
@@ -483,9 +488,9 @@ export default function Topbar() {
                     const isUnread = !lastReadTime || new Date(n.time) > new Date(lastReadTime);
                     const ago = getRelativeTime(n.time);
                     return (
-                      <div key={n.id} className={`px-4 py-3 transition-colors ${
-                        isUnread ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/20'
-                      }`}>
+                          <Link key={n.id} href={n.href || '/notifications'} onClick={() => setNotifOpen(false)} className={`block px-4 py-3 transition-colors ${
+                            isUnread ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/20'
+                          }`}>
                         <div className="flex items-start gap-3">
                           <div className={`mt-0.5 w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
                             n.source === 'gate'
@@ -511,9 +516,9 @@ export default function Topbar() {
                             <span className="text-[10px] text-slate-400 whitespace-nowrap">{ago}</span>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })
+                          </Link>
+                        );
+                      })
                 )}
               </div>
             </div>

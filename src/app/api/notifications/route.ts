@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const yardId = searchParams.get('yard_id');
     const limit = searchParams.get('limit') || '20';
+    const sourceFilter = searchParams.get('source') || 'all';
     const actor = requireRequestActor(request);
     if (actor instanceof NextResponse) return actor;
 
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
           : `📤 ตู้ออกลาน ${g.container_number}`,
         detail: `${g.size}'${g.type}${g.driver_name ? ` • คนขับ: ${g.driver_name}` : ''}${g.eir_number ? ` • EIR: ${g.eir_number}` : ''}`,
         time: g.event_time,
+        href: `/gate?container=${encodeURIComponent(String(g.container_number || ''))}`,
       })),
       ...woRes.recordset.map((w: Record<string, unknown>) => {
         const statusText: Record<string, string> = {
@@ -93,13 +95,31 @@ export async function GET(request: NextRequest) {
           title: `${statusText[w.status as string] || '📋 งาน'} ${w.container_number || ''}`,
           detail: `${w.event_type}${w.to_zone_name ? ` → Zone ${w.to_zone_name} B${w.to_bay}-R${w.to_row}-T${w.to_tier}` : ''}`,
           time: w.event_time,
+          href: `/operations?tab=queue&search=${encodeURIComponent(String(w.container_number || ''))}`,
         };
       }),
     ]
+      .filter(item => sourceFilter === 'all' || item.source === sourceFilter)
       .sort((a, b) => new Date(b.time as string).getTime() - new Date(a.time as string).getTime())
-      .slice(0, parseInt(limit));
+      .slice(0, parseInt(limit))
+      .map(item => ({
+        ...item,
+        time: new Date(item.time as string).toISOString(),
+        unread: !lastReadAt || new Date(item.time as string) > new Date(lastReadAt),
+      }));
 
-    return NextResponse.json({ notifications, last_read_at: lastReadAt });
+    const sourceCounts = notifications.reduce<Record<string, number>>((acc, item) => {
+      acc[item.source] = (acc[item.source] || 0) + 1;
+      return acc;
+    }, {});
+    const unreadCount = notifications.filter(item => item.unread).length;
+
+    return NextResponse.json({
+      notifications,
+      last_read_at: lastReadAt,
+      unread_count: unreadCount,
+      source_counts: sourceCounts,
+    });
   } catch (error) {
     console.error('❌ GET notifications error:', error);
     return NextResponse.json({ notifications: [], last_read_at: null });
