@@ -336,7 +336,7 @@ container-yard-system/
 │   │   ├── portal/
 │   │   │   └── PortalInspectionModal.tsx # Customer Portal read-only inspection: 6-side SVG, damage points, photo evidence
 │   │   └── gate/
-│   │       ├── EIRDocument.tsx         # EIR A5 print (Portal, QR, condition, grade, signatures)
+│   │       ├── EIRDocument.tsx         # EIR A5 landscape print (physical 202×140mm area, readable print text, Portal, QR, condition, grade, signatures)
 │   │       ├── ContainerInspection.tsx  # 6-side SVG damage marking + photo + grade
 │   │       ├── GateWorkflowPanel.tsx    # Guided checklist/exception panel for Gate-In and Gate-Out
 │   │       ├── GateDecisionBar.tsx      # Sticky billing/booking/evidence/supervisor decision summary
@@ -783,7 +783,7 @@ container-yard-system/
 - แสดงวันที่+เวลา + จำนวนรายการ
 
 ### 7.6 EIR (Equipment Interchange Receipt) — A5 Print
-- **A5 Landscape** print layout พร้อมปุ่ม "พิมพ์ A5"
+- **A5 Landscape** print layout พร้อมปุ่ม "พิมพ์ A5"; print CSS บังคับพื้นที่จริง `202mm × 139mm` บนกระดาษ A5 landscape margin 4mm และขยาย label/value เป็น 9–13px เพื่อไม่ให้ตัวหนังสือเล็ก/เหลือพื้นที่ครึ่งหน้า โดยไม่ตั้ง `body` เป็นขนาดเต็ม A5 เพื่อป้องกันหน้าเปล่าหน้า 2
 - **React Portal**: render เป็น direct child ของ `<body>` — ป้องกัน print ซ้ำหลายหน้า
 - เลข EIR ออกอัตโนมัติ (EIR-IN-YYYY-XXXXXX / EIR-OUT-YYYY-XXXXXX)
 - ข้อมูลครบ: ตู้, คนขับ, รถ, ซีล, ลาน, พิกัด, ผู้ดำเนินการ

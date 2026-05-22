@@ -71,11 +71,77 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
   const isGateIn = data.transaction_type === 'gate_in';
   const gradeInfo = GRADE_INFO[data.container_grade] || GRADE_INFO['A'];
   const hasDamage = data.container_condition === 'damage';
+  const printStyles = `
+    @media print {
+      @page { size: A5 landscape; margin: 4mm; }
+      html, body {
+        width: auto !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+      }
+      #eir-overlay {
+        width: 202mm !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 auto !important;
+        page-break-after: avoid !important;
+        break-after: avoid-page !important;
+      }
+      #eir-print-area {
+        width: 202mm !important;
+        height: 139mm !important;
+        margin: 0 auto !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        font-size: 12px !important;
+        line-height: 1.25 !important;
+      }
+      #eir-print-area .eir-header {
+        padding: 3mm 4mm !important;
+      }
+      #eir-print-area .eir-body {
+        padding: 3mm 4mm !important;
+      }
+      #eir-print-area .eir-company {
+        font-size: 15px !important;
+        line-height: 1.2 !important;
+      }
+      #eir-print-area .eir-doc-title {
+        font-size: 14px !important;
+      }
+      #eir-print-area .eir-section-title {
+        font-size: 10.5px !important;
+        letter-spacing: 0.03em !important;
+      }
+      #eir-print-area .eir-label {
+        font-size: 9px !important;
+        line-height: 1.15 !important;
+      }
+      #eir-print-area .eir-value {
+        font-size: 12px !important;
+        line-height: 1.25 !important;
+      }
+      #eir-print-area .eir-value-strong {
+        font-size: 13px !important;
+      }
+      #eir-print-area .eir-sign-line {
+        height: 12mm !important;
+      }
+      #eir-print-area svg {
+        width: 18mm !important;
+        height: 18mm !important;
+      }
+    }
+  `;
 
   const content = (
     <div id="eir-overlay" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm overflow-y-auto p-4">
-      {/* Override @page to A5 landscape for EIR printing */}
-      <style>{`@media print { @page { size: A5 landscape; margin: 3mm; } }`}</style>
+      <style>{printStyles}</style>
       {/* Print & Close Controls — hidden on print */}
       <div className="max-w-[1100px] mx-auto mb-3 flex items-center justify-between no-print">
         <div className="flex items-center gap-3">
@@ -91,11 +157,11 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
       </div>
 
       {/* A5 Document */}
-      <div id="eir-print-area" className="max-w-[600px] mx-auto bg-white text-slate-800 rounded-xl shadow-2xl print:shadow-none print:rounded-none print:max-w-none overflow-hidden text-[11px]"
+      <div id="eir-print-area" className="max-w-[900px] mx-auto bg-white text-slate-800 rounded-xl shadow-2xl print:shadow-none print:rounded-none print:max-w-none overflow-hidden text-[12px]"
         style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
 
         {/* === HEADER === */}
-        <div className="border-b-2 border-blue-600 px-4 py-2 flex items-center justify-between">
+        <div className="eir-header border-b-2 border-blue-600 px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {data.company?.logo_url ? (
               <RawImage src={data.company.logo_url} alt="Logo" className="w-8 h-8 rounded-lg object-contain" />
@@ -105,7 +171,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
               </div>
             )}
             <div>
-              <h1 className="text-sm font-bold text-slate-800">
+              <h1 className="eir-company text-base font-bold text-slate-800">
                 {data.company?.company_name || 'CYMS'}{' '}
                 <span className="text-[9px] font-medium text-slate-500">(สำนักงานใหญ่)</span>
               </h1>
@@ -122,7 +188,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
             </div>
           </div>
           <div className="text-right">
-            <h2 className="text-xs font-bold text-blue-700">Equipment Interchange Receipt</h2>
+            <h2 className="eir-doc-title text-sm font-bold text-blue-700">Equipment Interchange Receipt</h2>
             <div className="flex items-center gap-1 justify-end mt-0.5">
               <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white ${isGateIn ? 'bg-emerald-500' : 'bg-blue-500'}`}>
                 {isGateIn ? '📥 GATE-IN' : '📤 GATE-OUT'}
@@ -132,7 +198,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
         </div>
 
         {/* === MAIN BODY === */}
-        <div className="px-4 py-2 space-y-2">
+        <div className="eir-body px-5 py-3 space-y-2">
 
           {/* Row 1: EIR Info */}
           <div className="grid grid-cols-4 gap-2">
@@ -145,7 +211,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
           {/* Row 2: Container Info */}
           <div className="border border-slate-200 rounded-xl overflow-hidden">
             <div className="bg-slate-50 px-3 py-1 border-b border-slate-200">
-              <h3 className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">📦 ข้อมูลตู้ (Container Information)</h3>
+              <h3 className="eir-section-title text-[10px] font-bold text-slate-500 uppercase tracking-wider">📦 ข้อมูลตู้ (Container Information)</h3>
             </div>
             <div className="grid grid-cols-5 gap-0 divide-x divide-slate-200">
               <InfoCell label="เลขตู้" value={data.container_number} mono bold className="p-2" />
@@ -161,7 +227,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
 
               {/* สภาพตู้ */}
               <div className="p-2">
-                <p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">สภาพตู้ (Condition)</p>
+                <p className="eir-label text-[10px] text-slate-400 uppercase font-semibold mb-1">สภาพตู้ (Condition)</p>
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold ${hasDamage ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
                     {hasDamage ? '⚠️ Damage' : '✅ Sound'}
@@ -171,13 +237,13 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
 
               {/* เกรดตู้ */}
               <div className="p-2">
-                <p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">เกรดตู้ (Grade)</p>
+                <p className="eir-label text-[10px] text-slate-400 uppercase font-semibold mb-1">เกรดตู้ (Grade)</p>
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-white text-sm font-black"
                     style={{ backgroundColor: gradeInfo.color }}>
                     {data.container_grade}
                   </span>
-                  <span className="text-xs text-slate-600">{gradeInfo.desc}</span>
+                  <span className="eir-value text-xs text-slate-600">{gradeInfo.desc}</span>
                 </div>
               </div>
             </div>
@@ -188,7 +254,7 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
             {/* Driver Info */}
             <div className="col-span-3 border border-slate-200 rounded-lg overflow-hidden">
               <div className="bg-slate-50 px-3 py-1 border-b border-slate-200">
-                <h3 className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">🚛 คนขับ / รถ</h3>
+                <h3 className="eir-section-title text-[10px] font-bold text-slate-500 uppercase tracking-wider">🚛 คนขับ / รถ</h3>
               </div>
               <div className="grid grid-cols-3 divide-x divide-slate-200">
                 <InfoCell label="ชื่อคนขับ" value={data.driver_name || '-'} className="p-2" />
@@ -222,18 +288,18 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
 
           {/* Row 5: Signatures */}
           <div className="grid grid-cols-3 gap-3 pt-1">
-            {[
-              { label: 'ผู้ตรวจสภาพตู้', sub: data.processed_by || '' },
-              { label: 'คนขับรถ', sub: data.driver_name || '' },
-              { label: 'ผู้อนุมัติ', sub: '' },
-            ].map((sig, i) => (
-              <div key={i} className="text-center">
-                <div className="h-8 border-b border-slate-300 mb-1" />
-                <p className="text-[9px] font-semibold text-slate-600">{sig.label}</p>
-                {sig.sub && <p className="text-[8px] text-slate-400">({sig.sub})</p>}
-                <p className="text-[8px] text-slate-400">วันที่ ......../......../........</p>
-              </div>
-            ))}
+                {[
+                  { label: 'ผู้ตรวจสภาพตู้', sub: data.processed_by || '' },
+                  { label: 'คนขับรถ', sub: data.driver_name || '' },
+                  { label: 'ผู้อนุมัติ', sub: '' },
+                ].map((sig, i) => (
+                  <div key={i} className="text-center">
+                    <div className="eir-sign-line h-10 border-b border-slate-300 mb-1" />
+                    <p className="eir-value text-[10px] font-semibold text-slate-600">{sig.label}</p>
+                    {sig.sub && <p className="eir-label text-[9px] text-slate-400">({sig.sub})</p>}
+                    <p className="eir-label text-[9px] text-slate-400">วันที่ ......../......../........</p>
+                  </div>
+                ))}
           </div>
 
           {/* Footer */}
@@ -259,8 +325,8 @@ function InfoCell({ label, value, mono, bold, className }: {
 }) {
   return (
     <div className={className || 'p-1'}>
-      <p className="text-[8px] text-slate-400 uppercase font-semibold mb-0">{label}</p>
-      <p className={`text-slate-800 ${mono ? 'font-mono' : ''} ${bold ? 'font-bold' : 'font-medium'} text-[10px]`}>
+      <p className="eir-label text-[9px] text-slate-400 uppercase font-semibold mb-0">{label}</p>
+      <p className={`eir-value text-slate-800 ${mono ? 'font-mono' : ''} ${bold ? 'font-bold eir-value-strong' : 'font-medium'} text-[11px]`}>
         {value != null && value !== '' ? String(value) : '-'}
       </p>
     </div>
