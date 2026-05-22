@@ -1382,8 +1382,10 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **RF booking policy + plug planning** — เพิ่ม `ensureReeferBookingPolicy()` ให้ portal/staff booking ที่ `container_type=RF` auto-create `ReeferCheckPolicies` scope `booking` แบบ idempotent; เพิ่ม `GET /api/reefer/plug-plan` สำหรับ plug capacity/current RF/upcoming RF/projected shortage และหน้า `/reefer` แสดง panel `Plug Planning`
 - [x] **Customer portal notifications** — เพิ่ม `GET /api/portal/notifications` ที่ใช้ `PortalEntityAccess`/portal visibility เดิมเท่านั้น เพื่อแจ้งลูกค้าเรื่อง open reefer exception และ booking status ล่าสุด; หน้า `/portal` เพิ่ม panel `การแจ้งเตือนล่าสุด` พร้อม deep-link ไป `/portal/reefer` หรือ `/portal/bookings`
 - [x] **Escalation rule** — เพิ่ม `deriveReeferEscalation()` แบบ server-side policy โดยไม่เพิ่ม schema: `critical` breach หลัง 30 นาที, `high` 120 นาที, `medium` 240 นาที, `low` 480 นาที; `GET /api/reefer/exceptions` และคิวหน้า `/reefer` ส่ง/แสดง `escalation_level`, `breached`, due/age minutes เพื่อให้ supervisor เห็นงานที่ต้องเร่งทันที
+- [x] **Customer notification preferences** — เพิ่ม `PortalNotificationPreferences` + `GET/PUT /api/portal/notification-preferences`; ใช้ customer id จาก portal session/header เท่านั้น, default เปิดทุกประเภท และ `GET /api/portal/notifications` filter ฝั่ง server ตาม preference พร้อม fallback default ถ้ายังไม่ได้ migrate
 
 **Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/portal-notification-preferences.test.ts src/app/api/__tests__/portal-notifications.test.ts src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (8 tests)
 - `npm test -- src/lib/__tests__/reeferEscalation.test.ts src/app/api/__tests__/reefer-exceptions.test.ts src/app/api/__tests__/reefer-ui.test.ts --runInBand` ✅ (8 tests)
 - `npm test -- src/app/api/__tests__/reefer-ui.test.ts --runInBand` ✅ (2 tests)
 - `npm test -- src/app/api/__tests__/reefer-reports.test.ts src/app/api/__tests__/yard-access-guard.test.ts --runInBand` ✅ (35 tests)

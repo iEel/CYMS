@@ -43,6 +43,7 @@ describe('GET /api/portal/notifications', () => {
 
   it('returns customer-scoped reefer and booking notifications', async () => {
     queryQueue = [
+      q([]),
       q([{
         exception_id: 7,
         container_id: 11,
@@ -78,6 +79,36 @@ describe('GET /api/portal/notifications', () => {
     }));
     expect(queries.join('\n')).toContain('PortalEntityAccess');
     expect(queries.join('\n')).toContain("pea.customer_id = @cid");
+  });
+
+  it('filters notifications by customer preferences', async () => {
+    queryQueue = [
+      q([{ notification_type: 'reefer_exception', enabled: false }]),
+      q([{
+        exception_id: 7,
+        container_id: 11,
+        container_number: 'RFU1234567',
+        severity: 'critical',
+        reason: 'out_of_range',
+        measured_temp_c: -5,
+        set_point_c: -18,
+        event_time: '2026-05-21T09:00:00.000Z',
+      }]),
+      q([{
+        booking_id: 77,
+        booking_number: 'BK-RF-1',
+        status: 'confirmed',
+        eta: '2026-05-22T00:00:00.000Z',
+        event_time: '2026-05-21T08:00:00.000Z',
+      }]),
+    ];
+
+    const res = await route.GET(makeRequest('http://localhost/api/portal/notifications?limit=5'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.notifications).toHaveLength(1);
+    expect(body.notifications[0]).toEqual(expect.objectContaining({ type: 'booking_status' }));
   });
 
   it('requires a portal customer session', async () => {

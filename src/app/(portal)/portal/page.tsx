@@ -36,6 +36,22 @@ interface PortalNotification {
   deep_link: string;
 }
 
+type PortalNotificationPreferences = Record<'reefer_exception' | 'booking_status' | 'invoice' | 'gate_activity', boolean>;
+
+const defaultNotificationPreferences: PortalNotificationPreferences = {
+  reefer_exception: true,
+  booking_status: true,
+  invoice: true,
+  gate_activity: true,
+};
+
+const notificationPreferenceLabels: Array<{ key: keyof PortalNotificationPreferences; label: string }> = [
+  { key: 'reefer_exception', label: 'ตู้เย็นผิดปกติ' },
+  { key: 'booking_status', label: 'สถานะ Booking' },
+  { key: 'invoice', label: 'เอกสาร/Invoice' },
+  { key: 'gate_activity', label: 'กิจกรรม Gate' },
+];
+
 function notificationLink(notification: PortalNotification) {
   if (notification.deep_link) return notification.deep_link;
   return notification.type === 'reefer_exception' ? '/portal/reefer?container_id=' : '/portal/bookings';
@@ -44,6 +60,8 @@ function notificationLink(notification: PortalNotification) {
 export default function PortalOverview() {
   const [data, setData] = useState<Overview | null>(null);
   const [notifications, setNotifications] = useState<PortalNotification[]>([]);
+  const [notificationPreferences, setNotificationPreferences] = useState<PortalNotificationPreferences>(defaultNotificationPreferences);
+  const [savingPreferences, setSavingPreferences] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -54,6 +72,9 @@ export default function PortalOverview() {
     fetch('/api/portal/notifications?limit=6').then(r => r.json()).then(d => {
       setNotifications(Array.isArray(d.notifications) ? d.notifications : []);
     }).catch(() => setNotifications([]));
+    fetch('/api/portal/notification-preferences').then(r => r.json()).then(d => {
+      setNotificationPreferences({ ...defaultNotificationPreferences, ...(d.preferences || {}) });
+    }).catch(() => setNotificationPreferences(defaultNotificationPreferences));
   }, []);
 
   useEffect(() => {
@@ -88,6 +109,22 @@ export default function PortalOverview() {
     amber: 'from-amber-500 to-amber-600',
     emerald: 'from-emerald-500 to-emerald-700',
     purple: 'from-purple-500 to-purple-700',
+  };
+
+  const updateNotificationPreference = async (key: keyof PortalNotificationPreferences, enabled: boolean) => {
+    const next = { ...notificationPreferences, [key]: enabled };
+    setNotificationPreferences(next);
+    setSavingPreferences(true);
+    try {
+      await fetch('/api/portal/notification-preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferences: next }),
+      });
+      fetchData();
+    } finally {
+      setSavingPreferences(false);
+    }
   };
 
   return (
@@ -133,6 +170,28 @@ export default function PortalOverview() {
               {notifications.length} รายการ
             </span>
           )}
+        </div>
+        <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700/50">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">ตั้งค่าการแจ้งเตือน</p>
+            {savingPreferences && <Loader2 size={13} className="animate-spin text-blue-500" />}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {notificationPreferenceLabels.map(item => (
+              <label
+                key={item.key}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300"
+              >
+                <input
+                  type="checkbox"
+                  checked={notificationPreferences[item.key]}
+                  onChange={event => updateNotificationPreference(item.key, event.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                {item.label}
+              </label>
+            ))}
+          </div>
         </div>
         {notifications.length === 0 ? (
           <p className="p-6 text-center text-slate-400 text-sm">ยังไม่มีการแจ้งเตือนใหม่</p>

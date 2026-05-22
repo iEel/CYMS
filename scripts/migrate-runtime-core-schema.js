@@ -694,6 +694,25 @@ async function migrate() {
       END;
     `);
 
+    await runStep(pool, 'Customer portal notification preferences', `
+      IF OBJECT_ID('PortalNotificationPreferences', 'U') IS NULL
+      BEGIN
+        CREATE TABLE PortalNotificationPreferences (
+          preference_id INT PRIMARY KEY IDENTITY(1,1),
+          customer_id INT NOT NULL,
+          notification_type NVARCHAR(40) NOT NULL,
+          enabled BIT NOT NULL CONSTRAINT DF_PortalNotificationPreferences_Enabled DEFAULT 1,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          updated_at DATETIME2 NULL,
+          CONSTRAINT UQ_PortalNotificationPreferences UNIQUE (customer_id, notification_type)
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalNotificationPreferences') AND name = 'IX_PortalNotificationPreferences_Customer')
+        CREATE INDEX IX_PortalNotificationPreferences_Customer
+          ON PortalNotificationPreferences (customer_id, enabled);
+    `);
+
     await runStep(pool, 'Reefer monitoring tables', `
       IF OBJECT_ID('ReeferCheckPolicies', 'U') IS NULL
       BEGIN

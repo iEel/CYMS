@@ -6,6 +6,10 @@ import {
   portalBookingVisibilitySql,
   portalContainerVisibilitySql,
 } from '@/lib/portalAccess';
+import {
+  filterNotificationsByPreferences,
+  getPortalNotificationPreferences,
+} from '@/lib/portalNotificationPreferences';
 
 function parseLimit(value: string | null) {
   const parsed = Number(value);
@@ -27,6 +31,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = parseLimit(searchParams.get('limit'));
     const db = await getDb();
+    const preferences = await getPortalNotificationPreferences(db, cid);
 
     const reeferExceptions = await db.request()
       .input('cid', sql.Int, cid)
@@ -69,7 +74,7 @@ export async function GET(request: NextRequest) {
         ORDER BY b.created_at DESC
       `);
 
-    const notifications = [
+    const notifications = filterNotificationsByPreferences([
       ...reeferExceptions.recordset.map((row: Record<string, unknown>) => ({
         id: `reefer-${row.exception_id}`,
         type: 'reefer_exception',
@@ -88,7 +93,7 @@ export async function GET(request: NextRequest) {
         time: row.event_time,
         deep_link: '/portal/bookings',
       })),
-    ]
+    ], preferences)
       .sort((a, b) => new Date(b.time as string).getTime() - new Date(a.time as string).getTime())
       .slice(0, limit);
 

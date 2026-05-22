@@ -238,6 +238,22 @@ CREATE INDEX IX_PortalEntityAccess_EntityRef
 ON PortalEntityAccess (entity_type, entity_ref, customer_id, is_active);
 
 -- ===================================
+-- ตาราง: Portal Notification Preferences
+-- ===================================
+CREATE TABLE PortalNotificationPreferences (
+    preference_id       INT PRIMARY KEY IDENTITY(1,1),
+    customer_id         INT NOT NULL REFERENCES Customers(customer_id),
+    notification_type   NVARCHAR(40) NOT NULL,        -- reefer_exception, booking_status, invoice, gate_activity
+    enabled             BIT NOT NULL DEFAULT 1,
+    created_at          DATETIME2 DEFAULT GETDATE(),
+    updated_at          DATETIME2 NULL,
+    CONSTRAINT UQ_PortalNotificationPreferences UNIQUE (customer_id, notification_type)
+);
+
+CREATE INDEX IX_PortalNotificationPreferences_Customer
+ON PortalNotificationPreferences (customer_id, enabled);
+
+-- ===================================
 -- ตาราง: Reefer Monitoring Policies + Checks
 -- ===================================
 CREATE TABLE ReeferCheckPolicies (
