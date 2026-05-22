@@ -6,7 +6,7 @@ import { logApprovalReview, requireApprovalForAction } from '@/lib/approvalRevie
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { upsertPortalEntityAccess, type PortalEntityAccessDb } from '@/lib/portalEntityAccess';
-import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 interface PortalInvoiceGrantSource {
   customer_id?: number | null;
@@ -84,6 +84,19 @@ export async function GET(request: NextRequest) {
     const invoiceId = searchParams.get('invoice_id');
 
     const db = await getDb();
+    const readActor = await requireAnyPermission(
+      request,
+      db,
+      ['billing.invoice.create', 'billing.payment.receive', 'reports.view'],
+      'คุณไม่มีสิทธิ์ดูข้อมูล Billing'
+    );
+    if (readActor instanceof Response) return readActor;
+
+    if (yardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof Response) return yardAccess;
+    }
+
     const req = db.request();
     const conditions: string[] = [];
 
@@ -310,6 +323,12 @@ export async function PUT(request: NextRequest) {
             prefix: 'RCPT',
           })
           : '';
+        if (receiptNumber) {
+          await db.request()
+            .input('idReceipt', sql.Int, invoice_id)
+            .input('receiptNumber', sql.NVarChar(80), receiptNumber)
+            .query('UPDATE Invoices SET receipt_number = @receiptNumber, balance_amount = 0 WHERE invoice_id = @idReceipt');
+        }
         if (paidDocumentNumber) {
           queueDocumentLifecycle({
             db,

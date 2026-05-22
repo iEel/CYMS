@@ -441,7 +441,11 @@ container-yard-system/
 | `Tariffs` | charge_type, rate, unit, free_days | อัตราค่าบริการ (LOLO, gate, etc.) |
 | `StorageRateTiers` | tier_name, from_day, to_day, rate_20, rate_40, rate_45, sort_order, **customer_id** (FK→Customers, NULL=ค่าเริ่มต้น), **cargo_status** ('laden'/'empty'/'any') | อัตราค่าฝากตู้ขั้นบันได — **รองรับ rate เฉพาะลูกค้า + แยก Laden/Empty** |
 | `DemurrageRates` | yard_id, customer_id, charge_type, free_days, rate_20/40/45, description, is_active | **อัตราค่า Demurrage/Detention** (แยกจาก Storage — ค่าปรับสายเรือ) |
-| `Invoices` | invoice_number, customer_id, charge_type, grand_total, status, **notes (JSON charges)** | ใบแจ้งหนี้ |
+| `Invoices` | invoice_number, customer_id, charge_type, grand_total, status, **notes (JSON charges)**, **balance_amount, receipt_number** | ใบแจ้งหนี้ + ยอดคงเหลือหลังรับชำระ/ลดหนี้ + เลขใบเสร็จเมื่อ paid |
+| `BillingStatements` | statement_number, yard_id, customer_id, period_from/to, due_date, total/vat/grand_total, status, issued_by_user_id | เอกสารวางบิลรวมแบบ batch สำหรับลูกค้าเครดิต |
+| `BillingStatementLines` | statement_id, invoice_id, line_number, line_total | รายการ invoice ที่ถูก lock เข้า statement |
+| `BillingPayments` | payment_number, receipt_number, yard_id, customer_id, amount, payment_method/ref, status, received_by_user_id | เอกสารรับชำระเงิน + เลขใบเสร็จ |
+| `BillingPaymentAllocations` | payment_id, invoice_id, allocated_amount, balance_after | กระจายยอดรับชำระเข้า invoice รองรับจ่ายบางส่วน/หลายใบ |
 | `BillingClearances` | yard_id, transaction_type, container_id/container_number, customer_id, **clearance_type** (`paid`/`credit`/`no_charge`/`waived`), original_amount, final_amount, reason, invoice_id, approved_by, charges | หลักฐานว่า Gate In/Out เคลียร์ billing แล้วก่อนออก EIR |
 | `AuditLog` | user_id, action, details, timestamp | บันทึกการใช้งาน |
 | `PrefixMapping` | **prefix_code** (4 chars), **customer_id** (FK→Customers), **is_primary** (BIT), notes, UNIQUE(prefix_code, customer_id) | จับคู่ BIC prefix กับลูกค้า — **1:N (Halt Rule popup เมื่อ prefix มีหลายเจ้าของ)** |
@@ -545,12 +549,14 @@ container-yard-system/
 | POST | `/api/billing/gate-in-check` | **Gate-In billing check** — ค่าบริการ per-container (LOLO, gate fee ฯลฯ) + ค้นลูกค้าจาก prefix→PrefixMapping → เช็ค credit_term |
 | POST | `/api/billing/clearance` | **Billing Clearance ก่อนออก EIR** — บันทึกหลักฐาน `paid` / `credit` / `no_charge` / `waived`, ยอดเดิม/ยอดสุทธิ, invoice_id, reason, approved_by และ charge breakdown |
 | GET/POST/PUT | `/api/billing/invoices` | CRUD ใบแจ้งหนี้ — supports `invoice_id` filter, stores charge breakdown in `notes` JSON |
+| GET/POST | `/api/billing/statements` | **Billing Statement batch** — ออกเอกสารวางบิลรวมจาก invoice ค้างชำระ, lock รายการผ่าน `BillingStatementLines`, list/history สำหรับดูย้อนหลัง และพิมพ์ได้ที่ `/billing/print/statement?id=X&yard_id=Y` |
+| GET/POST | `/api/billing/payments` | **Payment Allocation** — บันทึกรับชำระ, สร้าง payment/receipt number, กระจายยอดเข้า invoice และรองรับ partial payment ผ่าน `balance_amount` |
 | GET | `/api/billing/payment-qr?invoice_id=X` | สร้าง PromptPay fixed-amount QR payload สำหรับ invoice ที่ยังไม่ชำระ |
 | GET/PUT | `/api/billing/payment-settings` | ตั้งค่า PromptPay ID + merchant name สำหรับแสดง QR บน invoice print |
 | GET/POST/PUT | `/api/billing/tariffs` | อัตราค่าบริการ (LOLO, gate, washing, etc.) |
-| GET | `/api/billing/erp-export` | ERP export (CSV/JSON debit-credit) — **date: DD/MM/YYYY HH:mm, includes customer credit_term/branch/address/due_date** |
-| GET | `/api/billing/reports` | **Billing reports** — `?type=daily|monthly&date=YYYY-MM-DD&yard_id=X` → KPIs, charge breakdown, invoice list / top customers |
-| GET | `/api/billing/ar-aging` | **AR Aging report** — `?yard_id=X` → ยอดค้างชำระแยกตามอายุหนี้ (current/30/60/90+ วัน) + แยกตามลูกค้า |
+| GET | `/api/billing/erp-export` | ERP export (CSV/JSON debit-credit) — **date: DD/MM/YYYY HH:mm, includes customer credit_term/branch/address/due_date; requires billing/report permission + yard access** |
+| GET | `/api/billing/reports` | **Billing reports** — `?type=daily|monthly&date=YYYY-MM-DD&yard_id=X` → KPIs, charge breakdown, invoice list / top customers; requires billing/report permission |
+| GET | `/api/billing/ar-aging` | **AR Aging report** — `?yard_id=X` → ยอดค้างชำระแยกตามอายุหนี้ (current/30/60/90+ วัน) + แยกตามลูกค้า; requires billing/report permission |
 | GET | `/api/billing/demurrage?yard_id=X&mode=overview` | **Demurrage overview** — containers approaching/exceeding free days + risk levels (exceeded/warning/safe) |
 | GET | `/api/billing/demurrage?yard_id=X&container_id=Y` | **Demurrage calculation** — single container charges (demurrage + detention) |
 | GET | `/api/billing/demurrage?yard_id=X` | **Demurrage rates config** — ดึง rate ทั้งหมด |
@@ -1023,15 +1029,17 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - VAT breakdown + จำนวนเงินเป็นตัวอักษรไทย
   - **PromptPay QR** สำหรับ invoice ที่ยังไม่ชำระ: ตั้งค่าได้ที่ Billing → Payment QR, QR เป็น fixed amount ตามยอด `grand_total`
   - ช่องลายเซ็น: **ผู้จ่าย / Paid by** (ซ้าย) + **ผู้รับเงิน / Received by** (ขวา) + auto-print
-  - Receipt: หัวเอกสาร **"Receipt"** (ไม่มี Tax Invoice) + แสตมป์ "✅ ชำระเงินแล้ว"
-- [x] Billing Statement + Receipt + Print Template
+  - Receipt: หัวเอกสาร **"Receipt"** (ไม่มี Tax Invoice) + แสตมป์ "✅ ชำระเงินแล้ว" + ใช้ `receipt_number` แยกจาก `invoice_number` เมื่อชำระครบ
+- [x] **Billing Statement batch** (✅ เสร็จ — 22 พ.ค. 2569) — เพิ่ม `GET/POST /api/billing/statements`, ตาราง `BillingStatements/BillingStatementLines`, ปุ่ม “ออกเอกสารวางบิลรวม” ที่ Billing → เอกสาร, กล่อง “ประวัติใบวางบิลรวม” สำหรับเปิด/พิมพ์ซ้ำย้อนหลัง และหน้า `/billing/print/statement` สำหรับ A4 statement โดย lock invoice ที่อยู่ใน statement แล้วไม่ให้วางบิลซ้ำ
+- [x] **Payment Allocation** (✅ เสร็จ — 22 พ.ค. 2569) — เพิ่ม `GET/POST /api/billing/payments`, ตาราง `BillingPayments/BillingPaymentAllocations`, รับชำระแบบ partial/multi-invoice ผ่าน `balance_amount`, และ Payment Reconciliation สร้าง payment allocation แทนการ set paid ตรง ๆ
+- [x] **Billing API read permission hardening** (✅ เสร็จ — 22 พ.ค. 2569) — `GET /api/billing/invoices`, `ar-aging`, `reports`, `credit-control`, `erp-export`, `statements`, `payments` require billing/report permission + yard access ฝั่ง server
 - [x] ERP Export (CSV/JSON debit-credit entries) — **แก้ไข: getDb() fix, date format DD/MM/YYYY HH:mm, เพิ่ม customer credit_term/branch/address/due_date**
 - [x] **Billing Reports** (ใหม่): รายงานประจำวัน + ประจำเดือน
   - แท็บ "รายงาน" ในหน้าบัญชี + หน้าพิมพ์ A4 แยก (`/billing/print/report`)
   - รายวัน: KPIs, สรุปสถานะ, gate activity, แจกแจงตามประเภทค่าบริการ, รายการ invoice
   - รายเดือน: KPIs, top customers, daily breakdown table
 - [x] **AR Dunning Action Center** (✅ เสร็จ — 21 พ.ค. 2569) — เพิ่ม `src/lib/arDunning.ts` และ `ARDunningPanel.tsx` ใน AR Aging เพื่อจัด stage `friendly_reminder` / `second_notice` / `credit_hold_review` / `final_notice`, สรุป exposure, เรียงลำดับลูกค้าที่ต้องตาม, copy reminder draft และบันทึก contact attempt / promise-to-pay ผ่าน `POST /api/billing/dunning-actions` ลง audit log
-- [x] **Payment Reconciliation** (✅ เสร็จ — 22 พ.ค. 2569) — เพิ่ม `PaymentReconciliationRows`, `GET/POST/PATCH /api/billing/payment-reconciliation` และแท็บ Billing → `Payment Reconciliation`: นำเข้า statement rows เป็น `pending`, match กับ invoice เพื่อ mark `paid` + `balance_amount=0`, หรือ ignore พร้อม note; บังคับ `billing.payment.receive` + yard access และ audit `payment_reconciliation_*`
+- [x] **Payment Reconciliation** (✅ เสร็จ — 22 พ.ค. 2569) — เพิ่ม `PaymentReconciliationRows`, `GET/POST/PATCH /api/billing/payment-reconciliation` และแท็บ Billing → `Payment Reconciliation`: นำเข้า statement rows เป็น `pending`, match กับ invoice แล้วสร้าง `BillingPayments/BillingPaymentAllocations`, ปรับ `balance_amount` และ set paid เฉพาะเมื่อยอดเหลือ 0, หรือ ignore พร้อม note; บังคับ `billing.payment.receive` + yard access และ audit `payment_reconciliation_*`
 - [x] **📄 PDF Export** (ใหม่) — client-side PDF ผ่าน jsPDF + jspdf-autotable
   - `src/lib/pdfExport.ts` — 3 ฟังก์ชั่นสำเร็จรูป:
     - `generateBillingReportPDF()` — รายงานประจำวัน/เดือน (KPIs, ตารางบิล, gate activity, ยอดรายวัน, top ลูกค้า)

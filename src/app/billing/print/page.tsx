@@ -19,6 +19,7 @@ interface InvoiceData {
   ref_invoice_number?: string;
   replaces_invoice_number?: string;
   balance_amount?: number | null;
+  receipt_number?: string | null;
 }
 
 interface InvoiceNotes {
@@ -203,6 +204,7 @@ export default function PrintInvoicePage() {
   const isReceipt = !isCreditNote && invoice.status === 'paid';
   const documentTitle = isCreditNote ? 'ใบลดหนี้' : isReceipt ? 'ใบเสร็จรับเงิน' : 'ใบแจ้งหนี้';
   const documentSubtitle = isCreditNote ? 'Credit Note' : isReceipt ? 'Receipt' : 'Invoice';
+  const displayDocumentNumber = isReceipt && invoice.receipt_number ? invoice.receipt_number : invoice.invoice_number;
   const referenceNumber = invoice.ref_invoice_number || invoiceNotes?.ref_invoice_number;
   const replacementNumber = invoice.replaces_invoice_number;
   const statusLabel = (() => {
@@ -293,7 +295,10 @@ export default function PrintInvoicePage() {
             </h1>
             <p className="text-sm text-slate-500 mt-1">{documentSubtitle}</p>
             <div className="mt-3 text-sm">
-              <p><span className="text-slate-500">เลขที่:</span> <strong className="font-mono">{invoice.invoice_number}</strong></p>
+              <p><span className="text-slate-500">เลขที่:</span> <strong className="font-mono">{displayDocumentNumber}</strong></p>
+              {isReceipt && invoice.receipt_number && (
+                <p><span className="text-slate-500">ใบแจ้งหนี้:</span> <strong className="font-mono">{invoice.invoice_number}</strong></p>
+              )}
               <p><span className="text-slate-500">วันที่:</span> {formatDate(invoice.created_at)}</p>
               {referenceNumber && (
                 <p><span className="text-slate-500">อ้างอิง:</span> <strong className="font-mono">{referenceNumber}</strong></p>

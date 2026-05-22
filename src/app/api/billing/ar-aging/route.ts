@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 // GET — AR Aging Report (ยอดค้างชำระแยกตามอายุหนี้)
 export async function GET(request: NextRequest) {
@@ -11,8 +11,15 @@ export async function GET(request: NextRequest) {
     const yardId = Number(rawYardId);
 
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      ['billing.invoice.create', 'billing.payment.receive', 'reports.view'],
+      'คุณไม่มีสิทธิ์ดูรายงานลูกหนี้'
+    );
+    if (actor instanceof Response) return actor;
     const yardAccess = await requireYardAccess(request, db, rawYardId);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    if (yardAccess instanceof Response) return yardAccess;
 
     // Get all outstanding invoices (issued or overdue) with age calculation
     const result = await db.request()

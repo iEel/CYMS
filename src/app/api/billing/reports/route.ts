@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 function getPeriod(date: string | null, type: string) {
   if (type === 'monthly') {
@@ -25,8 +25,15 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get('date'); // YYYY-MM-DD for daily, YYYY-MM for monthly
 
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      ['billing.invoice.create', 'billing.payment.receive', 'reports.view'],
+      'คุณไม่มีสิทธิ์ดูรายงาน Billing'
+    );
+    if (actor instanceof Response) return actor;
     const yardAccess = await requireYardAccess(request, db, rawYardId);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    if (yardAccess instanceof Response) return yardAccess;
 
     if (type === 'control') {
       const periodType = searchParams.get('period') || (date?.length === 7 ? 'monthly' : 'daily');

@@ -25,7 +25,7 @@ interface TariffRow {
 }
 
 interface InvoiceRow {
-  invoice_id: number; invoice_number: string; customer_name: string;
+  invoice_id: number; invoice_number: string; customer_name: string; customer_id?: number;
   container_number: string; container_status: string; charge_type: string; description: string;
   quantity: number; unit_price: number; total_amount: number;
   vat_amount: number; grand_total: number; status: string;
@@ -38,6 +38,21 @@ interface InvoiceRow {
 
 interface Stats {
   total_outstanding: number; total_paid: number; total_overdue: number; pending_count: number;
+}
+
+interface BillingStatementRow {
+  statement_id: number;
+  statement_number: string;
+  customer_name?: string;
+  customer_id?: number;
+  period_from?: string | null;
+  period_to?: string | null;
+  due_date?: string | null;
+  grand_total: number;
+  status: string;
+  line_count: number;
+  issued_at?: string | null;
+  created_at?: string | null;
 }
 
 interface PaymentPromptPayConfig {
@@ -118,6 +133,9 @@ export default function BillingPage() {
   const [custSearch, setCustSearch] = useState('');
   const [custOpen, setCustOpen] = useState(false);
   const [selectedCust, setSelectedCust] = useState<{ customer_id: number; customer_name: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean; tax_id?: string } | null>(null);
+  const [statementBusyKey, setStatementBusyKey] = useState<string | null>(null);
+  const [statements, setStatements] = useState<BillingStatementRow[]>([]);
+  const [statementsLoading, setStatementsLoading] = useState(false);
 
   // Billing clearance audit
   const [clearances, setClearances] = useState<ClearanceRow[]>([]);
@@ -188,6 +206,16 @@ export default function BillingPage() {
     finally { setPaymentConfigLoading(false); }
   }, []);
 
+  const fetchStatements = useCallback(async () => {
+    setStatementsLoading(true);
+    try {
+      const res = await fetch(`/api/billing/statements?yard_id=${yardId}`);
+      const data = await res.json();
+      setStatements(data.statements || []);
+    } catch (err) { console.error(err); }
+    finally { setStatementsLoading(false); }
+  }, [yardId]);
+
   const savePaymentConfig = async () => {
     if (!canManageSettings) {
       toast('error', 'คุณไม่มีสิทธิ์ตั้งค่าการรับชำระเงิน');
@@ -218,6 +246,7 @@ export default function BillingPage() {
     if (activeTab === 'invoices' || activeTab === 'hold' || activeTab === 'documents' || activeTab === 'reports') fetchInvoices();
     if (activeTab === 'invoices') fetchClearances();
     if (activeTab === 'clearance' || activeTab === 'documents' || activeTab === 'reports') fetchClearances();
+    if (activeTab === 'documents') fetchStatements();
     if (activeTab === 'credit_control') fetchCreditControl();
     if (activeTab === 'payment_settings') fetchPaymentConfig();
     if (activeTab === 'tariffs') fetchTariffs();
@@ -226,7 +255,7 @@ export default function BillingPage() {
         if (Array.isArray(d)) setCustomers(d.filter((c: { is_active: boolean }) => c.is_active));
       }).catch(() => {});
     }
-  }, [activeTab, fetchInvoices, fetchTariffs, fetchClearances, fetchCreditControl, fetchPaymentConfig, customers.length]);
+  }, [activeTab, fetchInvoices, fetchTariffs, fetchClearances, fetchCreditControl, fetchPaymentConfig, fetchStatements, customers.length]);
 
   const updateInvoice = async (id: number, action: string) => {
     const invoice = invoices.find(inv => inv.invoice_id === id);
@@ -356,6 +385,85 @@ export default function BillingPage() {
     setCnRevisedUnitPrice(Number(suggestedUnitPrice.toFixed(2)));
   };
 
+  const issueBillingStatement = async (group: { key: string; customer_id?: number; customer: string; invoices: InvoiceRow[]; total: number }) => {
+    if (!canCreateInvoice || !group.customer_id) {
+      toast('error', 'ไม่สามารถออกเอกสารวางบิลได้', 'ต้องมีสิทธิ์ออกบิลและข้อมูล customer_id');
+      return;
+    }
+    setStatementBusyKey(group.key);
+    try {
+      const res = await fetch('/api/billing/statements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yard_id: yardId,
+          customer_id: group.customer_id,
+          invoice_ids: group.invoices.map(inv => inv.invoice_id),
+          period_from: group.invoices.reduce((min, inv) => !min || inv.created_at < min ? inv.created_at : min, ''),
+          period_to: group.invoices.reduce((max, inv) => !max || inv.created_at > max ? inv.created_at : max, ''),
+          due_date: group.invoices.find(inv => inv.due_date)?.due_date || null,
+          notes: `ออกจากหน้า Billing Documents จำนวน ${group.invoices.length} ใบ`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast('error', data.error || 'ออกเอกสารวางบิลไม่สำเร็จ');
+        return;
+      }
+      toast('success', 'ออกเอกสารวางบิลรวมแล้ว', data.statement?.statement_number || group.customer);
+      fetchInvoices();
+      fetchStatements();
+      if (data.statement?.statement_id) {
+        window.open(`/billing/print/statement?id=${data.statement.statement_id}&yard_id=${yardId}`, '_blank');
+      }
+    } catch (error) {
+      console.error(error);
+      toast('error', 'ออกเอกสารวางบิลไม่สำเร็จ');
+    } finally {
+      setStatementBusyKey(null);
+    }
+  };
+
+  const receiveInvoicePayment = async (invoice: InvoiceRow) => {
+    if (!canReceivePayment) {
+      toast('error', 'คุณไม่มีสิทธิ์รับชำระเงิน');
+      return;
+    }
+    const balance = Number(invoice.balance_amount ?? invoice.grand_total ?? 0);
+    const amountText = window.prompt('ยอดรับชำระ', String(balance));
+    if (amountText === null) return;
+    const amount = Number(amountText);
+    if (!Number.isFinite(amount) || amount <= 0 || amount - balance > 0.01) {
+      toast('error', 'ยอดรับชำระไม่ถูกต้อง');
+      return;
+    }
+    const paymentRef = window.prompt('เลขอ้างอิงการชำระเงิน / หมายเหตุ', '') || '';
+    try {
+      const res = await fetch('/api/billing/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yard_id: invoice.yard_id || yardId,
+          customer_id: invoice.customer_id,
+          amount,
+          payment_method: 'manual',
+          payment_ref: paymentRef,
+          allocations: [{ invoice_id: invoice.invoice_id, amount }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast('error', data.error || 'รับชำระเงินไม่สำเร็จ');
+        return;
+      }
+      toast('success', 'บันทึกรับชำระเงินแล้ว', data.payment?.receipt_number || invoice.invoice_number);
+      fetchInvoices();
+    } catch (error) {
+      console.error(error);
+      toast('error', 'รับชำระเงินไม่สำเร็จ');
+    }
+  };
+
   return (
     <div data-page="billing" className="min-w-0 space-y-4">
       <div>
@@ -473,7 +581,7 @@ export default function BillingPage() {
                             className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed">แจ้งหนี้</button>
                         )}
                         {inv.status === 'issued' && (
-                          <button onClick={() => updateInvoice(inv.invoice_id, 'pay')}
+                          <button onClick={() => receiveInvoicePayment(inv)}
                             disabled={!canReceivePayment}
                             className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><CreditCard size={10} /> ชำระ</button>
                         )}
@@ -768,7 +876,7 @@ export default function BillingPage() {
                       <button onClick={() => updateInvoice(inv.invoice_id, 'release')}
                         disabled={!canReleaseHold}
                         className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-medium hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Unlock size={10} /> Release</button>
-                      <button onClick={() => updateInvoice(inv.invoice_id, 'pay')}
+                      <button onClick={() => receiveInvoicePayment(inv)}
                         disabled={!canReceivePayment}
                         className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><CreditCard size={10} /> ชำระ</button>
                     </div>
@@ -791,34 +899,97 @@ export default function BillingPage() {
             </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-700">
               {(() => {
-                const grouped: Record<string, { customer: string; invoices: InvoiceRow[]; total: number }> = {};
+                const grouped: Record<string, { key: string; customer_id?: number; customer: string; invoices: InvoiceRow[]; total: number }> = {};
                 invoices.filter(i => ['issued', 'overdue'].includes(i.status)).forEach(inv => {
-                  const key = inv.customer_name || 'ไม่ระบุลูกค้า';
-                  if (!grouped[key]) grouped[key] = { customer: key, invoices: [], total: 0 };
+                  const key = inv.customer_id ? String(inv.customer_id) : inv.customer_name || 'ไม่ระบุลูกค้า';
+                  if (!grouped[key]) grouped[key] = { key, customer_id: inv.customer_id, customer: inv.customer_name || 'ไม่ระบุลูกค้า', invoices: [], total: 0 };
                   grouped[key].invoices.push(inv);
-                  grouped[key].total += inv.grand_total;
+                  grouped[key].total += Number(inv.balance_amount ?? inv.grand_total ?? 0);
                 });
                 const entries = Object.values(grouped);
                 if (entries.length === 0) return <div className="p-8 text-center text-sm text-slate-400">ไม่มีบิลค้างชำระ</div>;
                 return entries.map(g => (
                   <div key={g.customer} className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-sm text-slate-800 dark:text-white">{g.customer}</span>
-                      <span className="font-bold text-blue-600">฿{g.total.toLocaleString()}</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                      <div>
+                        <span className="font-semibold text-sm text-slate-800 dark:text-white">{g.customer}</span>
+                        <p className="text-[10px] text-slate-400">{g.invoices.length} ใบแจ้งหนี้ค้างชำระ</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-blue-600">฿{g.total.toLocaleString()}</span>
+                        <button
+                          onClick={() => issueBillingStatement(g)}
+                          disabled={!canCreateInvoice || !g.customer_id || statementBusyKey === g.key}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {statementBusyKey === g.key ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+                          ออกเอกสารวางบิลรวม
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-1">
                       {g.invoices.map(inv => (
                         <div key={inv.invoice_id} className="flex items-center justify-between text-xs text-slate-500">
                           <span className="font-mono">{inv.invoice_number} — {inv.description}</span>
-                          <span>฿{inv.grand_total.toLocaleString()}</span>
+                          <span>฿{Number(inv.balance_amount ?? inv.grand_total ?? 0).toLocaleString()}</span>
                         </div>
                       ))}
                     </div>
-                    <button onClick={() => window.print()} className="mt-2 text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"><Printer size={10} /> พิมพ์ Statement</button>
+                    <button onClick={() => window.print()} className="mt-2 text-xs text-slate-500 hover:text-blue-700 flex items-center gap-1"><Printer size={10} /> พิมพ์สรุปบนหน้าจอนี้</button>
                   </div>
                 ));
               })()}
             </div>
+          </div>
+
+          {/* Billing Statement History */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><FileText size={16} /> ประวัติใบวางบิลรวม</h3>
+                <p className="text-xs text-slate-400 mt-0.5">เอกสารที่ออกแล้วสามารถเปิดดูหรือพิมพ์ซ้ำได้</p>
+              </div>
+              <button onClick={fetchStatements} className="h-8 justify-center text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1">
+                <RotateCcw size={12} /> รีเฟรช
+              </button>
+            </div>
+            {statementsLoading ? (
+              <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
+            ) : statements.length === 0 ? (
+              <div className="p-8 text-center text-sm text-slate-400">ยังไม่มีประวัติใบวางบิลรวม</div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                {statements.map(statement => (
+                  <div key={statement.statement_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">{statement.statement_number}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                            statement.status === 'issued' ? 'bg-blue-50 text-blue-600' :
+                            statement.status === 'paid' ? 'bg-emerald-50 text-emerald-600' :
+                            statement.status === 'cancelled' ? 'bg-slate-100 text-slate-400' :
+                            'bg-amber-50 text-amber-600'
+                          }`}>{statement.status}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          {statement.customer_name || 'ไม่ระบุลูกค้า'} • {statement.line_count || 0} ใบแจ้งหนี้ • ออกเมื่อ {formatDateTime(statement.issued_at || statement.created_at || new Date().toISOString())}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-blue-600">฿{Number(statement.grand_total || 0).toLocaleString()}</span>
+                        <button
+                          onClick={() => window.open(`/billing/print/statement?id=${statement.statement_id}&yard_id=${yardId}`, '_blank')}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100"
+                        >
+                          <Printer size={12} /> เปิด/พิมพ์ซ้ำ
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Receipt */}

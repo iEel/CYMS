@@ -5,6 +5,9 @@ import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 jest.mock('@/lib/db', () => ({ getDb: jest.fn() }));
 jest.mock('@/lib/audit', () => ({ logAudit: jest.fn() }));
+jest.mock('@/lib/documentNumber', () => ({
+  nextDocumentNumber: jest.fn(async ({ prefix }: { prefix: string }) => `${prefix}-202605-000001`),
+}));
 jest.mock('@/lib/apiAuth', () => ({
   requirePermission: jest.fn(),
   requireYardAccess: jest.fn(),
@@ -24,7 +27,13 @@ function makeDb() {
       return Promise.resolve({ recordset: [{ reconciliation_id: 10, yard_id: 1, amount: 1070, status: 'pending', statement_ref: 'BANK-1' }] });
     }
     if (statement.includes('SELECT TOP 1') && statement.includes('FROM Invoices')) {
-      return Promise.resolve({ recordset: [{ invoice_id: 77, invoice_number: 'INV-1', yard_id: 1, status: 'issued', balance_amount: 1070, grand_total: 1070 }] });
+      return Promise.resolve({ recordset: [{ invoice_id: 77, invoice_number: 'INV-1', yard_id: 1, customer_id: 10, status: 'issued', balance_amount: 1070, grand_total: 1070 }] });
+    }
+    if (statement.includes('INSERT INTO BillingPayments')) {
+      return Promise.resolve({ recordset: [{ payment_id: 20, payment_number: 'PAY-1', receipt_number: 'RCPT-1' }] });
+    }
+    if (statement.includes('INSERT INTO BillingPaymentAllocations')) {
+      return Promise.resolve({ recordset: [{ allocation_id: 21 }] });
     }
     if (statement.includes('INSERT INTO PaymentReconciliationRows')) {
       return Promise.resolve({ recordset: [{ reconciliation_id: 10, status: 'pending' }] });

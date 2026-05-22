@@ -85,8 +85,79 @@ async function migrate() {
         ALTER TABLE Invoices ADD document_type NVARCHAR(30) NULL;
       IF COL_LENGTH('Invoices', 'balance_amount') IS NULL
         ALTER TABLE Invoices ADD balance_amount DECIMAL(12,2) NULL;
+      IF COL_LENGTH('Invoices', 'receipt_number') IS NULL
+        ALTER TABLE Invoices ADD receipt_number NVARCHAR(80) NULL;
     `;
     console.log('✅ Invoice document relationship columns checked/added');
+
+    await sql.query`
+      IF OBJECT_ID('BillingStatements', 'U') IS NULL
+      BEGIN
+        CREATE TABLE BillingStatements (
+          statement_id       INT PRIMARY KEY IDENTITY(1,1),
+          statement_number   NVARCHAR(80) UNIQUE NOT NULL,
+          yard_id            INT NOT NULL REFERENCES Yards(yard_id),
+          customer_id        INT NOT NULL REFERENCES Customers(customer_id),
+          period_from        DATETIME2 NULL,
+          period_to          DATETIME2 NULL,
+          due_date           DATETIME2 NULL,
+          total_amount       DECIMAL(12,2) NOT NULL DEFAULT 0,
+          vat_amount         DECIMAL(12,2) NOT NULL DEFAULT 0,
+          grand_total        DECIMAL(12,2) NOT NULL DEFAULT 0,
+          status             NVARCHAR(30) NOT NULL DEFAULT 'draft',
+          notes              NVARCHAR(1000) NULL,
+          issued_by_user_id  INT NULL REFERENCES Users(user_id),
+          issued_at          DATETIME2 NULL,
+          created_at         DATETIME2 DEFAULT GETDATE(),
+          updated_at         DATETIME2 NULL
+        );
+      END
+
+      IF OBJECT_ID('BillingStatementLines', 'U') IS NULL
+      BEGIN
+        CREATE TABLE BillingStatementLines (
+          line_id       INT PRIMARY KEY IDENTITY(1,1),
+          statement_id  INT NOT NULL REFERENCES BillingStatements(statement_id),
+          invoice_id    INT NOT NULL REFERENCES Invoices(invoice_id),
+          line_number   INT NOT NULL,
+          line_total    DECIMAL(12,2) NOT NULL DEFAULT 0,
+          created_at    DATETIME2 DEFAULT GETDATE(),
+          CONSTRAINT UQ_BillingStatementLines_Statement_Invoice UNIQUE (statement_id, invoice_id)
+        );
+      END
+
+      IF OBJECT_ID('BillingPayments', 'U') IS NULL
+      BEGIN
+        CREATE TABLE BillingPayments (
+          payment_id          INT PRIMARY KEY IDENTITY(1,1),
+          payment_number      NVARCHAR(80) UNIQUE NOT NULL,
+          receipt_number      NVARCHAR(80) NULL,
+          yard_id             INT NOT NULL REFERENCES Yards(yard_id),
+          customer_id         INT NULL REFERENCES Customers(customer_id),
+          amount              DECIMAL(12,2) NOT NULL,
+          payment_method      NVARCHAR(30) NOT NULL,
+          payment_ref         NVARCHAR(120) NULL,
+          status              NVARCHAR(30) NOT NULL DEFAULT 'posted',
+          received_by_user_id INT NULL REFERENCES Users(user_id),
+          received_at         DATETIME2 NULL,
+          notes               NVARCHAR(1000) NULL,
+          created_at          DATETIME2 DEFAULT GETDATE()
+        );
+      END
+
+      IF OBJECT_ID('BillingPaymentAllocations', 'U') IS NULL
+      BEGIN
+        CREATE TABLE BillingPaymentAllocations (
+          allocation_id    INT PRIMARY KEY IDENTITY(1,1),
+          payment_id       INT NOT NULL REFERENCES BillingPayments(payment_id),
+          invoice_id       INT NOT NULL REFERENCES Invoices(invoice_id),
+          allocated_amount DECIMAL(12,2) NOT NULL,
+          balance_after    DECIMAL(12,2) NOT NULL,
+          created_at       DATETIME2 DEFAULT GETDATE()
+        );
+      END
+    `;
+    console.log('✅ Billing statement/payment allocation tables checked/created');
 
     // === Add hold_status to Containers if not exists ===
     try {

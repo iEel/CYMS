@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { writeIntegrationLog } from '@/lib/integrationLog';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 // FR6.5 — ERP Integration: Export invoices as debit/credit entries
 export async function GET(req: NextRequest) {
@@ -14,8 +14,15 @@ export async function GET(req: NextRequest) {
 
   try {
     const pool = await getDb();
+    const actor = await requireAnyPermission(
+      req,
+      pool,
+      ['billing.invoice.create', 'billing.payment.receive', 'reports.view'],
+      'คุณไม่มีสิทธิ์ส่งออกข้อมูล Billing'
+    );
+    if (actor instanceof Response) return actor;
     const yardAccess = await requireYardAccess(req, pool, yardId);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    if (yardAccess instanceof Response) return yardAccess;
     let query = `
       SELECT i.invoice_id, i.invoice_number, i.charge_type, i.description,
              i.quantity, i.unit_price, i.total_amount, i.vat_amount, i.grand_total,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { ensureCustomerCreditColumns, getCustomerCreditSnapshot } from '@/lib/customerCredit';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,8 +11,15 @@ export async function GET(request: NextRequest) {
     const rawYardId = searchParams.get('yard_id');
     const yardId = Number(rawYardId);
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      ['billing.invoice.create', 'billing.payment.receive', 'reports.view'],
+      'คุณไม่มีสิทธิ์ดูข้อมูล Credit Control'
+    );
+    if (actor instanceof Response) return actor;
     const yardAccess = await requireYardAccess(request, db, rawYardId);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    if (yardAccess instanceof Response) return yardAccess;
     await ensureCustomerCreditColumns(db);
 
     if (customerId) {

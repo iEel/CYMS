@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
+import { nextDocumentNumber } from '@/lib/documentNumber';
 
 function positiveInt(value: unknown) {
   const parsed = Number(value);
@@ -178,7 +179,7 @@ export async function PATCH(request: NextRequest) {
         .input('invoiceId', sql.Int, invoiceId)
         .query(`
           SELECT TOP 1 invoice_id, invoice_number, yard_id, status,
-            ISNULL(balance_amount, grand_total) AS balance_amount, grand_total
+            customer_id, ISNULL(balance_amount, grand_total) AS balance_amount, grand_total
           FROM Invoices
           WHERE invoice_id = @invoiceId
         `);
@@ -188,15 +189,72 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'invoice อยู่คนละ yard' }, { status: 409 });
       }
 
+      const currentBalance = Number(invoice.balance_amount || invoice.grand_total || 0);
+      const newBalance = Number(Math.max(currentBalance - Number(row.amount || 0), 0).toFixed(2));
+      const nextStatus = newBalance <= 0.01 ? 'paid' : invoice.status === 'overdue' ? 'overdue' : 'issued';
+      const paymentNumber = await nextDocumentNumber({
+        db,
+        yardId: row.yard_id,
+        documentType: 'billing_payment',
+        prefix: 'PAY',
+      });
+      const receiptNumber = nextStatus === 'paid'
+        ? await nextDocumentNumber({
+          db,
+          yardId: row.yard_id,
+          documentType: 'receipt',
+          prefix: 'RCPT',
+        })
+        : null;
+      const paymentResult = await db.request()
+        .input('paymentNumber', sql.NVarChar(80), paymentNumber)
+        .input('receiptNumber', sql.NVarChar(80), receiptNumber)
+        .input('yardId', sql.Int, row.yard_id)
+        .input('customerId', sql.Int, invoice.customer_id || null)
+        .input('amount', sql.Decimal(12, 2), row.amount)
+        .input('paymentMethod', sql.NVarChar(30), 'bank_reconciliation')
+        .input('paymentRef', sql.NVarChar(120), row.statement_ref)
+        .input('actorUserId', sql.Int, actor?.userId || null)
+        .input('note', sql.NVarChar(1000), cleanText(body.note, 1000))
+        .query(`
+          INSERT INTO BillingPayments (
+            payment_number, receipt_number, yard_id, customer_id, amount,
+            payment_method, payment_ref, status, received_by_user_id,
+            received_at, notes
+          )
+          OUTPUT INSERTED.*
+          VALUES (
+            @paymentNumber, @receiptNumber, @yardId, @customerId, @amount,
+            @paymentMethod, @paymentRef, 'posted', @actorUserId,
+            GETDATE(), @note
+          )
+        `);
+      const paymentId = paymentResult.recordset[0]?.payment_id || null;
+
+      if (paymentId) {
+        await db.request()
+          .input('paymentId', sql.Int, paymentId)
+          .input('invoiceId', sql.Int, invoiceId)
+          .input('allocatedAmount', sql.Decimal(12, 2), row.amount)
+          .input('newBalance', sql.Decimal(12, 2), newBalance)
+          .query(`
+            INSERT INTO BillingPaymentAllocations (payment_id, invoice_id, allocated_amount, balance_after)
+            VALUES (@paymentId, @invoiceId, @allocatedAmount, @newBalance)
+          `);
+      }
+
       await db.request()
         .input('invoiceId', sql.Int, invoiceId)
-        .input('invoiceStatus', sql.NVarChar(30), 'paid')
+        .input('invoiceStatus', sql.NVarChar(30), nextStatus)
         .input('paidAmount', sql.Decimal(12, 2), row.amount)
+        .input('newBalance', sql.Decimal(12, 2), newBalance)
+        .input('receiptNumber', sql.NVarChar(80), receiptNumber)
         .query(`
           UPDATE Invoices
           SET status = @invoiceStatus,
-              paid_at = GETDATE(),
-              balance_amount = 0,
+              paid_at = CASE WHEN @invoiceStatus = 'paid' THEN GETDATE() ELSE paid_at END,
+              balance_amount = @newBalance,
+              receipt_number = CASE WHEN @invoiceStatus = 'paid' THEN @receiptNumber ELSE receipt_number END,
               notes = CASE
                 WHEN notes IS NULL OR notes = '' THEN CONCAT('[Payment reconciliation] ', @paidAmount)
                 ELSE CONCAT(notes, CHAR(10), '[Payment reconciliation] ', @paidAmount)

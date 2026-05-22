@@ -14,6 +14,7 @@ jest.mock('@/lib/db', () => ({ getDb: jest.fn() }));
 jest.mock('@/lib/audit', () => ({ logAudit: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('@/lib/apiAuth', () => ({
   requireRequestActor: jest.fn().mockReturnValue({ userId: 1, role: 'yard_manager' }),
+  requireAnyPermission: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
   requirePermission: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
   requireYardAccess: jest.fn().mockResolvedValue({ userId: 1, role: 'yard_manager' }),
 }));
