@@ -6,6 +6,8 @@ import {
   Camera,
   CheckCircle2,
   Clock,
+  ExternalLink,
+  History,
   Loader2,
   RefreshCw,
   Save,
@@ -63,6 +65,27 @@ interface ReeferItem {
   escalation_action?: string | null;
   due_status: 'not_checked' | 'ok' | 'due' | 'overdue';
   policy: ReeferPolicy;
+}
+
+interface ReeferCheckHistory {
+  check_id: number;
+  container_id: number;
+  booking_id?: number | null;
+  measured_temp_c?: number | null;
+  set_point_c?: number | null;
+  supply_temp_c?: number | null;
+  return_temp_c?: number | null;
+  status: string;
+  photo_url?: string | null;
+  notes?: string | null;
+  checked_by_user_id?: number | null;
+  checked_by_name?: string | null;
+  checked_at?: string | null;
+  exception_id?: number | null;
+  exception_severity?: string | null;
+  exception_status?: string | null;
+  exception_reason?: string | null;
+  exception_action?: string | null;
 }
 
 interface PlugPlanSummary {
@@ -156,6 +179,10 @@ export default function ReeferMonitoringPage() {
   const [policyLoading, setPolicyLoading] = useState(false);
   const [tab, setTab] = useState<'queue' | 'policy'>('queue');
   const [selected, setSelected] = useState<ReeferItem | null>(null);
+  const [historySelected, setHistorySelected] = useState<ReeferItem | null>(null);
+  const [history, setHistory] = useState<ReeferCheckHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   const [checkForm, setCheckForm] = useState<CheckForm>(initialCheckForm);
   const [savingCheck, setSavingCheck] = useState(false);
   const [checkError, setCheckError] = useState('');
@@ -240,6 +267,13 @@ export default function ReeferMonitoringPage() {
     });
   }, [items, quickSearch, queueFilter]);
 
+  const historyStats = useMemo(() => ({
+    total: history.length,
+    abnormal: history.filter(check => check.status && check.status !== 'normal').length,
+    withPhoto: history.filter(check => Boolean(check.photo_url)).length,
+    latest: history[0],
+  }), [history]);
+
   const openRecord = (item: ReeferItem) => {
     setSelected(item);
     setCheckError('');
@@ -255,9 +289,31 @@ export default function ReeferMonitoringPage() {
     });
   };
 
+  const openHistory = async (item: ReeferItem) => {
+    if (!activeYardId) return;
+    setHistorySelected(item);
+    setHistory([]);
+    setHistoryError('');
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/reefer/checks?yard_id=${activeYardId}&container_id=${item.container_id}&limit=1`);
+      const data = await res.json();
+      if (!res.ok) {
+        setHistoryError(data.error || 'โหลดประวัติการตรวจไม่สำเร็จ');
+        return;
+      }
+      setHistory(Array.isArray(data.history) ? data.history : []);
+    } catch {
+      setHistoryError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const submitCheck = async (event: FormEvent) => {
     event.preventDefault();
     if (!selected || !activeYardId) return;
+    const checkedContainer = selected;
     setSavingCheck(true);
     setCheckError('');
     setQueuedNotice('');
@@ -291,6 +347,9 @@ export default function ReeferMonitoringPage() {
       setSelected(null);
       setCheckForm(initialCheckForm);
       loadQueue();
+      if (historySelected?.container_id === checkedContainer.container_id) {
+        openHistory(historySelected);
+      }
     } catch {
       setCheckError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
     } finally {
@@ -540,6 +599,12 @@ export default function ReeferMonitoringPage() {
                   </div>
                   <div className="flex flex-col gap-2">
                     <button
+                      onClick={() => openHistory(item)}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                    >
+                      <History size={14} /> ประวัติ
+                    </button>
+                    <button
                       onClick={() => openRecord(item)}
                       disabled={!canRecord}
                       className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-cyan-600 px-3 text-xs font-semibold text-white hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -646,6 +711,102 @@ export default function ReeferMonitoringPage() {
         </div>
       )}
 
+      {historySelected && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
+          <div className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 dark:border-slate-700">
+              <div>
+                <h2 className="flex items-center gap-2 text-base font-bold text-slate-800 dark:text-white">
+                  <History size={18} className="text-cyan-600" /> ประวัติการตรวจ {historySelected.container_number}
+                </h2>
+                <p className="mt-1 text-xs text-slate-400">
+                  {historySelected.booking_number ? `Booking ${historySelected.booking_number} · ` : ''}
+                  รอบทุก {historySelected.policy?.interval_hours || 4} ชั่วโมง · {formatRange(historySelected.policy)}
+                </p>
+              </div>
+              <button type="button" onClick={() => setHistorySelected(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="grid gap-3 md:grid-cols-4">
+                <HistoryMetric label="จำนวนครั้งที่ตรวจ" value={historyStats.total.toLocaleString()} />
+                <HistoryMetric label="ผิดปกติ" value={historyStats.abnormal.toLocaleString()} tone={historyStats.abnormal > 0 ? 'rose' : 'slate'} />
+                <HistoryMetric label="มีรูปหลักฐาน" value={historyStats.withPhoto.toLocaleString()} />
+                <HistoryMetric label="ตรวจล่าสุด" value={historyStats.latest?.checked_at ? formatDateTime(historyStats.latest.checked_at) : '-'} />
+              </div>
+
+              {historySelected.active_exception_id && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+                  <p className="font-semibold">มี Exception เปิดอยู่: {historySelected.active_exception_reason || historySelected.active_exception_severity || 'ต้องตรวจสอบ'}</p>
+                  <p className="mt-1">{historySelected.active_exception_action || 'ตรวจสอบอุณหภูมิ/ไฟเลี้ยง และปิดงานหลังแก้ไข'}</p>
+                </div>
+              )}
+
+              {historyError && <p className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{historyError}</p>}
+
+              {historyLoading ? (
+                <div className="flex h-40 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-cyan-500" />
+                </div>
+              ) : history.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400 dark:border-slate-700">
+                  ยังไม่มีประวัติการตรวจสำหรับตู้นี้
+                </p>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="hidden gap-3 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500 dark:bg-slate-900/50 dark:text-slate-400 md:grid md:grid-cols-[1.1fr_1.4fr_1fr_1.4fr]">
+                    <span>เวลา / ผู้ตรวจ</span>
+                    <span>อุณหภูมิ</span>
+                    <span>สถานะ</span>
+                    <span>หมายเหตุ / หลักฐาน</span>
+                  </div>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                    {history.map(check => (
+                      <div key={check.check_id} className="grid gap-3 px-3 py-3 text-xs text-slate-600 dark:text-slate-300 md:grid-cols-[1.1fr_1.4fr_1fr_1.4fr]">
+                        <div>
+                          <p className="font-semibold text-slate-800 dark:text-white">{formatDateTime(check.checked_at)}</p>
+                          <p className="mt-1 text-slate-400">{check.checked_by_name || `User #${check.checked_by_user_id || '-'}`}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                          <span>Measured {formatTemp(check.measured_temp_c)}</span>
+                          <span>Set {formatTemp(check.set_point_c)}</span>
+                          <span>Supply {formatTemp(check.supply_temp_c)}</span>
+                          <span>Return {formatTemp(check.return_temp_c)}</span>
+                        </div>
+                        <div className="space-y-2">
+                          <CheckStatusBadge status={check.status} />
+                          {check.exception_id && (
+                            <p className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                              Exception {check.exception_severity || ''} {check.exception_status || ''}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="whitespace-pre-wrap text-slate-500 dark:text-slate-300">{check.notes || '-'}</p>
+                          {check.exception_action && <p className="mt-1 text-[11px] text-red-600">{check.exception_action}</p>}
+                          {check.photo_url && (
+                            <a
+                              href={check.photo_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-700 hover:text-cyan-800 dark:text-cyan-300"
+                            >
+                              <ExternalLink size={12} /> ดูรูปหลักฐาน
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {selected && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
           <form onSubmit={submitCheck} className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
@@ -733,6 +894,19 @@ function PlugMetric({ label, value }: { label: string; value: number | string })
   );
 }
 
+function HistoryMetric({ label, value, tone = 'slate' }: { label: string; value: string; tone?: 'slate' | 'rose' }) {
+  return (
+    <div className={`rounded-lg border p-3 ${
+      tone === 'rose'
+        ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-300'
+        : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/30 dark:text-slate-200'
+    }`}>
+      <p className="text-[11px] font-semibold text-slate-400">{label}</p>
+      <p className="mt-1 text-lg font-bold">{value}</p>
+    </div>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
@@ -771,6 +945,17 @@ function DueBadge({ status }: { status: ReeferItem['due_status'] }) {
 function StatusBadge({ status }: { status: string }) {
   if (status !== 'out_of_range') return null;
   return <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700"><AlertTriangle size={12} /> นอกช่วง</span>;
+}
+
+function CheckStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { label: string; cls: string }> = {
+    normal: { label: 'ปกติ', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
+    out_of_range: { label: 'นอกช่วง', cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+    unreadable: { label: 'อ่านค่าไม่ได้', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+    power_issue: { label: 'ไฟ/ปลั๊กมีปัญหา', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' },
+  };
+  const statusConfig = config[status] || { label: status || '-', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' };
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusConfig.cls}`}>{statusConfig.label}</span>;
 }
 
 function formatTemp(value?: number | null) {

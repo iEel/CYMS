@@ -155,7 +155,39 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ items, policies: policies.map(normalizeReeferPolicy) });
+    let history: Record<string, unknown>[] = [];
+    if (containerId) {
+      const historyResult = await db.request()
+        .input('yardId', sql.Int, yardId)
+        .input('containerId', sql.Int, containerId)
+        .query(`
+          SELECT TOP 100
+            rc.check_id, rc.container_id, rc.booking_id, rc.yard_id, rc.customer_id,
+            rc.measured_temp_c, rc.set_point_c, rc.supply_temp_c, rc.return_temp_c,
+            rc.status, rc.photo_url, rc.notes, rc.checked_by_user_id,
+            u.full_name AS checked_by_name,
+            rc.checked_at, rc.created_at,
+            ex.exception_id, ex.severity AS exception_severity, ex.status AS exception_status,
+            ex.reason AS exception_reason, ex.recommended_action AS exception_action
+          FROM ReeferTemperatureChecks rc
+          JOIN Containers c ON c.container_id = rc.container_id
+          LEFT JOIN Users u ON u.user_id = rc.checked_by_user_id
+          OUTER APPLY (
+            SELECT TOP 1 e.*
+            FROM ReeferExceptions e
+            WHERE e.check_id = rc.check_id
+            ORDER BY e.created_at DESC, e.exception_id DESC
+          ) ex
+          WHERE rc.container_id = @containerId
+            AND rc.yard_id = @yardId
+            AND c.yard_id = @yardId
+            AND c.type = 'RF'
+          ORDER BY rc.checked_at DESC, rc.check_id DESC
+        `);
+      history = historyResult.recordset;
+    }
+
+    return NextResponse.json({ items, policies: policies.map(normalizeReeferPolicy), history });
   } catch (error) {
     console.error('❌ GET reefer checks error:', error);
     return NextResponse.json({ error: 'ไม่สามารถโหลดรายการตรวจตู้เย็นได้' }, { status: 500 });

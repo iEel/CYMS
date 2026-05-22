@@ -21,6 +21,10 @@ describe('Reefer monitoring UI', () => {
     expect(source).toContain('Exception');
     expect(source).toContain('escalation_level');
     expect(source).toContain('Escalation');
+    expect(source).toContain('openHistory');
+    expect(source).toContain('ReeferCheckHistory');
+    expect(source).toContain('ประวัติการตรวจ');
+    expect(source).toContain('checked_by_name');
   });
 
   it('adds customer portal navigation and read-only reefer tracking', () => {

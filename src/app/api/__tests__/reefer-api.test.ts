@@ -46,6 +46,25 @@ function makeDb() {
         ],
       });
     }
+    if (statement.includes('FROM ReeferTemperatureChecks rc')) {
+      return Promise.resolve({
+        recordset: [{
+          check_id: 900,
+          container_id: 123,
+          booking_id: 77,
+          measured_temp_c: -18.2,
+          set_point_c: -18,
+          supply_temp_c: -19,
+          return_temp_c: -17.5,
+          status: 'normal',
+          photo_url: '/uploads/photos/reefer-900.jpg',
+          notes: 'Display clear',
+          checked_at: '2026-05-22T08:00:00.000Z',
+          checked_by_name: 'Survey User',
+          exception_id: null,
+        }],
+      });
+    }
     if (statement.includes('INSERT INTO ReeferTemperatureChecks')) {
       return Promise.resolve({
         recordset: [{
@@ -136,6 +155,28 @@ describe('reefer monitoring API', () => {
     expect(combinedSql).toContain("c.type = 'RF'");
     expect(combinedSql).toContain('ReeferTemperatureChecks');
     expect(mockedRequireYardAccess).toHaveBeenCalledWith(expect.anything(), db, 1);
+  });
+
+  it('returns staff-visible check history for a selected reefer container', async () => {
+    const db = makeDb();
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await getChecks(makeRequest('http://localhost/api/reefer/checks?yard_id=1&container_id=123'));
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.history).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        check_id: 900,
+        measured_temp_c: -18.2,
+        photo_url: '/uploads/photos/reefer-900.jpg',
+        checked_by_name: 'Survey User',
+      }),
+    ]));
+    const combinedSql = db.queries.join('\n');
+    expect(combinedSql).toContain('FROM ReeferTemperatureChecks rc');
+    expect(combinedSql).toContain('LEFT JOIN Users u');
+    expect(mockedRequirePermission).toHaveBeenCalledWith(expect.anything(), db, 'reefer.check.read', expect.any(String));
   });
 });
 
