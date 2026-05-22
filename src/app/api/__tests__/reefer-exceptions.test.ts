@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { PATCH } from '../reefer/exceptions/route';
+import { GET, PATCH } from '../reefer/exceptions/route';
 import { POST as postCheck } from '../reefer/checks/route';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
@@ -64,6 +64,24 @@ function makeDb() {
     }
     if (statement.includes('FROM ReeferExceptions WHERE exception_id = @exceptionId')) {
       return Promise.resolve({ recordset: [{ yard_id: 1, status: 'open' }] });
+    }
+    if (statement.includes('FROM ReeferExceptions e')) {
+      return Promise.resolve({
+        recordset: [{
+          exception_id: 901,
+          check_id: 555,
+          container_id: 123,
+          booking_id: 77,
+          yard_id: 1,
+          customer_id: 42,
+          severity: 'critical',
+          status: 'open',
+          reason: 'power_issue',
+          recommended_action: 'ตรวจแหล่งจ่ายไฟทันที',
+          created_at: '2026-05-22T07:20:00.000Z',
+          container_number: 'MSKU1234567',
+        }],
+      });
     }
     if (statement.includes('UPDATE ReeferExceptions')) {
       return Promise.resolve({ recordset: [{ exception_id: 900, status: 'resolved', resolution_note: 'ตรวจปลั๊กแล้ว' }] });
@@ -142,5 +160,25 @@ describe('reefer exception workflow', () => {
       entityType: 'reefer_exception',
       entityId: 900,
     }));
+  });
+
+  it('returns escalation metadata for active exceptions', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-05-22T08:00:00.000Z'));
+    const db = makeDb();
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await GET(makeRequest('http://localhost/api/reefer/exceptions?yard_id=1'));
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.exceptions[0]).toEqual(expect.objectContaining({
+      exception_id: 901,
+      escalation_level: 'critical',
+      escalation_breached: true,
+      escalation_due_minutes: 30,
+      escalation_age_minutes: 40,
+    }));
+
+    jest.useRealTimers();
   });
 });

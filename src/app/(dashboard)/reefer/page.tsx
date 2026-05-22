@@ -54,6 +54,13 @@ interface ReeferItem {
   active_exception_status?: string | null;
   active_exception_reason?: string | null;
   active_exception_action?: string | null;
+  active_exception_created_at?: string | null;
+  escalation_level?: 'none' | 'supervisor' | 'critical';
+  escalation_breached?: boolean;
+  escalation_due_minutes?: number | null;
+  escalation_age_minutes?: number | null;
+  escalation_label?: string | null;
+  escalation_action?: string | null;
   due_status: 'not_checked' | 'ok' | 'due' | 'overdue';
   policy: ReeferPolicy;
 }
@@ -519,12 +526,17 @@ export default function ReeferMonitoringPage() {
                   <div className="text-xs text-slate-500">
                     <p>รอบทุก {item.policy?.interval_hours || 4} ชม.</p>
                     <p>ช่วง {formatRange(item.policy)}</p>
-                    {item.active_exception_id && (
-                      <div className="mt-2 rounded-lg bg-red-50 p-2 text-red-700 dark:bg-red-900/20 dark:text-red-300">
-                        <p className="font-semibold">Exception {item.active_exception_severity || 'high'}</p>
-                        <p>{item.active_exception_action || 'ต้องตรวจสอบและปิดงาน'}</p>
-                      </div>
-                    )}
+                        {item.active_exception_id && (
+                          <div className="mt-2 rounded-lg bg-red-50 p-2 text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                            <p className="font-semibold">Exception {item.active_exception_severity || 'high'}</p>
+                            <p>{item.active_exception_action || 'ต้องตรวจสอบและปิดงาน'}</p>
+                            {item.escalation_breached && (
+                              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide">
+                                Escalation: {item.escalation_label || item.escalation_level} · {item.escalation_age_minutes} นาที
+                              </p>
+                            )}
+                          </div>
+                        )}
                   </div>
                   <div className="flex flex-col gap-2">
                     <button

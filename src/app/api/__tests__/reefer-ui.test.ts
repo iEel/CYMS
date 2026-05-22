@@ -19,6 +19,8 @@ describe('Reefer monitoring UI', () => {
     expect(source).toContain('บันทึกอุณหภูมิ');
     expect(source).toContain('กำหนดรอบตรวจ');
     expect(source).toContain('Exception');
+    expect(source).toContain('escalation_level');
+    expect(source).toContain('Escalation');
   });
 
   it('adds customer portal navigation and read-only reefer tracking', () => {

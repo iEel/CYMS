@@ -1368,7 +1368,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - `npx tsc --noEmit --pretty false` ✅
 - `npm run lint` ✅
 
-### 🌡️ Reefer Temperature Monitoring (✅ เสร็จ — 21 พ.ค. 2569)
+### 🌡️ Reefer Temperature Monitoring (✅ เสร็จ — 22 พ.ค. 2569)
 - [x] **Policy รอบตรวจที่กำหนดได้** — เพิ่ม `ReeferCheckPolicies` ใช้ priority แบบ server-side: `container > booking > customer > yard > default`; ตั้ง `interval_hours`, `warning_grace_minutes`, `min_temp_c`, `max_temp_c`
 - [x] **คิวตรวจฝั่งพนักงาน** — หน้า `/reefer` แสดงตู้ `RF` ในลาน, latest temperature, due/overdue/not checked, booking context และปุ่ม `บันทึกอุณหภูมิ`
 - [x] **บันทึกอุณหภูมิ + รูปหลักฐาน** — `POST /api/reefer/checks` อ่าน `container/customer/booking` จาก DB เท่านั้น ไม่รับ customer จาก body, บันทึก measured/set/supply/return °C, status, notes, photo_url และ policy snapshot พร้อม audit `reefer_check_record`
@@ -1381,8 +1381,10 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Reefer compliance reports** — เพิ่ม `GET /api/reports/reefer` พร้อม `reports.view` + `requireYardAccess()`: summary compliance rate, trend ตามช่วงวันที่, open exceptions, และสรุปตามลูกค้า; หน้า `/reports` เพิ่ม tab `Reefer Compliance` สำหรับ supervisor/manager ดูภาพรวมงานตู้เย็น
 - [x] **RF booking policy + plug planning** — เพิ่ม `ensureReeferBookingPolicy()` ให้ portal/staff booking ที่ `container_type=RF` auto-create `ReeferCheckPolicies` scope `booking` แบบ idempotent; เพิ่ม `GET /api/reefer/plug-plan` สำหรับ plug capacity/current RF/upcoming RF/projected shortage และหน้า `/reefer` แสดง panel `Plug Planning`
 - [x] **Customer portal notifications** — เพิ่ม `GET /api/portal/notifications` ที่ใช้ `PortalEntityAccess`/portal visibility เดิมเท่านั้น เพื่อแจ้งลูกค้าเรื่อง open reefer exception และ booking status ล่าสุด; หน้า `/portal` เพิ่ม panel `การแจ้งเตือนล่าสุด` พร้อม deep-link ไป `/portal/reefer` หรือ `/portal/bookings`
+- [x] **Escalation rule** — เพิ่ม `deriveReeferEscalation()` แบบ server-side policy โดยไม่เพิ่ม schema: `critical` breach หลัง 30 นาที, `high` 120 นาที, `medium` 240 นาที, `low` 480 นาที; `GET /api/reefer/exceptions` และคิวหน้า `/reefer` ส่ง/แสดง `escalation_level`, `breached`, due/age minutes เพื่อให้ supervisor เห็นงานที่ต้องเร่งทันที
 
 **Verify ล่าสุด:**
+- `npm test -- src/lib/__tests__/reeferEscalation.test.ts src/app/api/__tests__/reefer-exceptions.test.ts src/app/api/__tests__/reefer-ui.test.ts --runInBand` ✅ (8 tests)
 - `npm test -- src/app/api/__tests__/reefer-ui.test.ts --runInBand` ✅ (2 tests)
 - `npm test -- src/app/api/__tests__/reefer-reports.test.ts src/app/api/__tests__/yard-access-guard.test.ts --runInBand` ✅ (35 tests)
 - `npm test -- src/lib/__tests__/reeferBookingPolicy.test.ts src/app/api/__tests__/reefer-plug-plan.test.ts src/app/api/__tests__/reefer-ui.test.ts src/app/api/__tests__/portal-bookings.test.ts src/app/api/__tests__/yard-access-guard.test.ts --runInBand` ✅ (44 tests)

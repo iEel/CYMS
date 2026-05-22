@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
+import { deriveReeferEscalation } from '@/lib/reeferEscalation';
 import {
   chooseEffectiveReeferPolicy,
   deriveReeferCheckStatus,
@@ -96,7 +97,8 @@ export async function GET(request: NextRequest) {
         activeException.severity AS active_exception_severity,
         activeException.status AS active_exception_status,
         activeException.reason AS active_exception_reason,
-        activeException.recommended_action AS active_exception_action
+        activeException.recommended_action AS active_exception_action,
+        activeException.created_at AS active_exception_created_at
       FROM Containers c
       LEFT JOIN YardZones z ON z.zone_id = c.zone_id
       OUTER APPLY (
@@ -133,10 +135,23 @@ export async function GET(request: NextRequest) {
     const policies = await fetchPolicies(db, yardId);
     const items = result.recordset.map((row) => {
       const policy = effectivePolicyFor(row, policies);
+      const escalation = row.active_exception_id
+        ? deriveReeferEscalation({
+          severity: row.active_exception_severity,
+          status: row.active_exception_status,
+          created_at: row.active_exception_created_at,
+        })
+        : null;
       return {
         ...row,
         policy,
         due_status: deriveReeferDueStatus({ last_checked_at: row.latest_checked_at, policy }),
+        escalation_level: escalation?.level || 'none',
+        escalation_breached: escalation?.breached || false,
+        escalation_due_minutes: escalation?.due_minutes || null,
+        escalation_age_minutes: escalation?.age_minutes || null,
+        escalation_label: escalation?.label || null,
+        escalation_action: escalation?.recommended_action || null,
       };
     });
 

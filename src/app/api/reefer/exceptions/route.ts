@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
+import { deriveReeferEscalation } from '@/lib/reeferEscalation';
 import { nextReeferExceptionStatus } from '@/lib/reeferExceptions';
 
 function parsePositiveInt(value: unknown) {
@@ -48,7 +49,20 @@ export async function GET(request: NextRequest) {
         e.created_at DESC
     `);
 
-    return NextResponse.json({ exceptions: result.recordset });
+    const exceptions = result.recordset.map((exception) => {
+      const escalation = deriveReeferEscalation(exception);
+      return {
+        ...exception,
+        escalation_level: escalation.level,
+        escalation_breached: escalation.breached,
+        escalation_due_minutes: escalation.due_minutes,
+        escalation_age_minutes: escalation.age_minutes,
+        escalation_label: escalation.label,
+        escalation_action: escalation.recommended_action,
+      };
+    });
+
+    return NextResponse.json({ exceptions });
   } catch (error) {
     console.error('❌ GET reefer exceptions error:', error);
     return NextResponse.json({ error: 'ไม่สามารถโหลด exception ตู้เย็นได้' }, { status: 500 });
