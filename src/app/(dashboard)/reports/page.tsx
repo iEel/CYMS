@@ -117,6 +117,11 @@ interface ReeferExceptionRow {
   measured_temp_c?: number | null;
   set_point_c?: number | null;
   checked_at?: string | null;
+  escalation_level?: 'none' | 'supervisor' | 'critical';
+  escalation_breached?: boolean;
+  escalation_due_minutes?: number | null;
+  escalation_age_minutes?: number | null;
+  escalation_label?: string | null;
 }
 
 interface ReeferCustomerRow {
@@ -126,10 +131,20 @@ interface ReeferCustomerRow {
   avg_temp_c?: number | null;
 }
 
+interface ReeferSlaSummary {
+  total_open: number;
+  overdue_exceptions: number;
+  critical_breaches: number;
+  unacknowledged_open: number;
+  acknowledged_open: number;
+  avg_resolution_minutes?: number | null;
+}
+
 interface ReeferReportData {
   summary: ReeferReportSummary;
   trend: ReeferTrend[];
   openExceptions: ReeferExceptionRow[];
+  sla: ReeferSlaSummary;
   byCustomer: ReeferCustomerRow[];
   dateFrom: string;
   dateTo: string;
@@ -945,6 +960,7 @@ function ReeferComplianceTab({ yardId }: { yardId: number }) {
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
   const summary = data?.summary;
+  const sla = data?.sla;
 
   return (
     <div className="space-y-5">
@@ -971,6 +987,15 @@ function ReeferComplianceTab({ yardId }: { yardId: number }) {
           <KPICard label="ตู้ RF ในลาน" value={summary.total_rf || 0} icon={<Package size={20} />} color="blue" />
           <KPICard label="Exception เปิด" value={summary.active_exceptions || 0} icon={<AlertTriangle size={20} />} color={summary.active_exceptions > 0 ? 'rose' : 'emerald'} />
           <KPICard label="ยังไม่เคยตรวจ" value={summary.not_checked_count || 0} icon={<Clock size={20} />} color={summary.not_checked_count > 0 ? 'amber' : 'emerald'} />
+        </div>
+      )}
+
+      {sla && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KPICard label="SLA Breach" value={sla.overdue_exceptions || 0} sub={`${sla.critical_breaches || 0} critical`} icon={<AlertTriangle size={20} />} color={sla.overdue_exceptions > 0 ? 'rose' : 'emerald'} />
+          <KPICard label="Open SLA" value={sla.total_open || 0} sub="open + in progress" icon={<Clock size={20} />} color="blue" />
+          <KPICard label="ยังไม่รับทราบ" value={sla.unacknowledged_open || 0} icon={<AlertTriangle size={20} />} color={sla.unacknowledged_open > 0 ? 'amber' : 'emerald'} />
+          <KPICard label="Avg Close" value={sla.avg_resolution_minutes ? `${Math.round(sla.avg_resolution_minutes)}m` : '-'} sub="resolved/ignored" icon={<CheckCircle2 size={20} />} color="purple" />
         </div>
       )}
 
@@ -1042,6 +1067,7 @@ function ReeferComplianceTab({ yardId }: { yardId: number }) {
                   <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">สาเหตุ</th>
                   <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Temp</th>
                   <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">อายุ</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">SLA</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Action</th>
                 </tr>
               </thead>
@@ -1056,6 +1082,11 @@ function ReeferComplianceTab({ yardId }: { yardId: number }) {
                     <td className="px-4 py-2.5 text-center text-slate-700 dark:text-slate-200">{formatTemp(row.measured_temp_c)} / {formatTemp(row.set_point_c)}</td>
                     <td className="px-4 py-2.5 text-center">
                       <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">{row.age_hours || 0} ชม.</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${row.escalation_breached ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                        {row.escalation_breached ? (row.escalation_label || row.escalation_level) : `${row.escalation_age_minutes || 0}/${row.escalation_due_minutes || 0}m`}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-slate-500">{row.recommended_action || 'ตรวจสอบและปิด exception'}</td>
                   </tr>

@@ -63,6 +63,7 @@ describe('GET /api/reports/reefer', () => {
       }]),
       q([{ check_date: '2026-05-21', total_checks: 10, normal_count: 8, exception_count: 2, compliance_rate: 80 }]),
       q([{ exception_id: 4, container_number: 'RFU1234567', severity: 'critical', status: 'open', reason: 'out_of_range', age_hours: 5 }]),
+      q([{ total_open: 3, overdue_exceptions: 2, critical_breaches: 1, unacknowledged_open: 1, acknowledged_open: 2, avg_resolution_minutes: 90 }]),
       q([{ customer_name: 'ABC Foods', container_count: 3, exception_count: 1, avg_temp_c: -18.5 }]),
     ];
 
@@ -74,6 +75,11 @@ describe('GET /api/reports/reefer', () => {
     expect(body.summary.compliance_rate).toBe(66.67);
     expect(body).toHaveProperty('trend');
     expect(body).toHaveProperty('openExceptions');
+    expect(body.sla).toEqual(expect.objectContaining({
+      total_open: 3,
+      overdue_exceptions: 2,
+      critical_breaches: 1,
+    }));
     expect(body).toHaveProperty('byCustomer');
     expect(body.dateFrom).toBe('2026-05-01');
     expect(body.dateTo).toBe('2026-05-21');
@@ -94,5 +100,8 @@ describe('reports UI exposes reefer compliance', () => {
     expect(source).toContain('Reefer Compliance');
     expect(source).toContain('openExceptions');
     expect(source).toContain('compliance_rate');
+    expect(source).toContain('sla');
+    expect(source).toContain('overdue_exceptions');
+    expect(source).toContain('SLA Breach');
   });
 });

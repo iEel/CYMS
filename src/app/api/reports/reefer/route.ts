@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
+import { deriveReeferEscalation } from '@/lib/reeferEscalation';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -122,6 +123,37 @@ export async function GET(request: NextRequest) {
           e.created_at ASC
       `);
 
+    const sla = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .query(`
+        SELECT
+          COUNT(CASE WHEN e.status IN ('open', 'in_progress') THEN 1 END) AS total_open,
+          COUNT(CASE
+            WHEN e.status IN ('open', 'in_progress')
+              AND (
+                (e.severity = 'critical' AND DATEDIFF(minute, e.created_at, GETDATE()) >= 30)
+                OR (e.severity = 'high' AND DATEDIFF(minute, e.created_at, GETDATE()) >= 120)
+                OR (e.severity = 'medium' AND DATEDIFF(minute, e.created_at, GETDATE()) >= 240)
+                OR (e.severity = 'low' AND DATEDIFF(minute, e.created_at, GETDATE()) >= 480)
+              )
+            THEN 1
+          END) AS overdue_exceptions,
+          COUNT(CASE
+            WHEN e.status IN ('open', 'in_progress')
+              AND e.severity = 'critical'
+              AND DATEDIFF(minute, e.created_at, GETDATE()) >= 30
+            THEN 1
+          END) AS critical_breaches,
+          COUNT(CASE WHEN e.status = 'open' THEN 1 END) AS unacknowledged_open,
+          COUNT(CASE WHEN e.status = 'in_progress' THEN 1 END) AS acknowledged_open,
+          CAST(AVG(CASE
+            WHEN e.status IN ('resolved', 'ignored') AND e.resolved_at IS NOT NULL
+            THEN DATEDIFF(minute, e.created_at, e.resolved_at)
+          END) AS DECIMAL(10,2)) AS avg_resolution_minutes
+        FROM ReeferExceptions e
+        WHERE e.yard_id = @yardId
+      `);
+
     const byCustomer = await db.request()
       .input('yardId', sql.Int, yardId)
       .query(`
@@ -159,6 +191,18 @@ export async function GET(request: NextRequest) {
         ORDER BY exception_count DESC, container_count DESC, customer_name ASC
       `);
 
+    const enrichedOpenExceptions = openExceptions.recordset.map((exception) => {
+      const escalation = deriveReeferEscalation(exception);
+      return {
+        ...exception,
+        escalation_level: escalation.level,
+        escalation_breached: escalation.breached,
+        escalation_due_minutes: escalation.due_minutes,
+        escalation_age_minutes: escalation.age_minutes,
+        escalation_label: escalation.label,
+      };
+    });
+
     return NextResponse.json({
       summary: summary.recordset[0] || {
         total_rf: 0,
@@ -171,7 +215,15 @@ export async function GET(request: NextRequest) {
         compliance_rate: 0,
       },
       trend: trend.recordset,
-      openExceptions: openExceptions.recordset,
+      openExceptions: enrichedOpenExceptions,
+      sla: sla.recordset[0] || {
+        total_open: 0,
+        overdue_exceptions: 0,
+        critical_breaches: 0,
+        unacknowledged_open: 0,
+        acknowledged_open: 0,
+        avg_resolution_minutes: null,
+      },
       byCustomer: byCustomer.recordset,
       dateFrom,
       dateTo,
