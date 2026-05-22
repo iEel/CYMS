@@ -1354,15 +1354,18 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - `npx tsc --noEmit --pretty false` ✅
 - `npm run lint` ✅
 
-### 📋 Customer Portal Booking Requests + Activity (✅ เสร็จ — 21 พ.ค. 2569)
+### 📋 Customer Portal Booking Requests + Activity (✅ เสร็จ — 22 พ.ค. 2569)
 - [x] **Customer-created booking request** — เพิ่ม `POST /api/portal/bookings` สำหรับ customer role โดยอ่าน `customer_id` จาก `x-customer-id` เท่านั้น ไม่รับจาก body, บังคับสถานะเริ่มต้น `pending`, และ insert ลง `Bookings` เดิมเพื่อให้พนักงานรับต่อในหน้า `/booking`
 - [x] **Portal grants ตอนสร้าง** — หลังสร้าง booking จะ upsert `PortalEntityAccess` ให้ลูกค้าเห็น booking ตัวเองทันที (`booking_customer`); ถ้ามีเลขตู้ล่วงหน้าจะสร้าง `BookingContainers` และ grant container ref แบบ `booking_customer`
 - [x] **Create booking modal** — หน้า `/portal/bookings` เพิ่มปุ่ม `สร้าง Booking` พร้อมฟอร์มเลข booking, ประเภท, จำนวน/ขนาด/ประเภทตู้, ETA, vessel/voyage, seal, container numbers และ notes โดยส่ง `yard_id` จาก active yard ใน session
 - [x] **Booking overview** — detail modal เพิ่ม `ภาพรวม Booking`: จำนวนที่ขอ, เข้าลานแล้ว, ออกลานแล้ว, คงเหลือ, ETA, progress Gate In/Gate Out และข้อความ `รอพนักงานยืนยัน` สำหรับ pending request
 - [x] **Container activity** — เปลี่ยนตารางตู้ใน booking เป็น `กิจกรรมตู้ใน Booking` แสดงสถานะตู้, รับเข้า booking, Gate In, Gate Out และลิงก์ EIR In/Out ที่ลูกค้ามีสิทธิ์ดู
+- [x] **Staff booking approval inbox** — เพิ่ม `GET/PATCH /api/edi/bookings/approval` สำหรับพนักงานที่มี `booking.manage` เท่านั้น: list pending booking ที่ลูกค้าสร้าง, approve → `confirmed`, reject → `cancelled`, request info → คง `pending` พร้อม note; บังคับ `requireYardAccess()` และ audit `booking_approval_*`
+- [x] **EDI approval tab** — หน้า `/edi` เพิ่ม tab `Booking Approval` แสดง pending/RF pending, รายละเอียดลูกค้า/ETA/จำนวนตู้ และ action `อนุมัติ`, `ขอข้อมูล`, `ปฏิเสธ`
 - [x] **Tests** — เพิ่ม coverage ใน `portal-bookings.test.ts` เพื่อยืนยัน pending creation + session customer scope + portal grants และ `portal-ui.test.ts` เพื่อกัน UI ถอยกลับเป็น read-only
 
 **Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/booking-approval-inbox.test.ts src/app/api/__tests__/booking-approval-ui.test.ts --runInBand` ✅ (3 tests)
 - `npm test -- src/app/api/__tests__/portal-bookings.test.ts src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (5 tests)
 - `npm test -- --runInBand` ✅ (49 suites / 524 tests)
 - `npx tsc --noEmit --pretty false` ✅

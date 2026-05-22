@@ -7,20 +7,25 @@ import {
   Loader2, Search, FileText, ShieldCheck,
   CheckCircle2, XCircle, AlertTriangle,
   Send, FileDown, Filter, Activity, RotateCcw,
+  ClipboardCheck,
 } from 'lucide-react';
 
 interface ValidationResult {
   check: string; status: 'pass' | 'warning' | 'fail'; detail: string;
 }
 
+type EdiTab = 'approval' | 'validate' | 'codeco' | 'logs';
+
 export default function EDIPage() {
   const { session, hasPermission, hasAnyPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState<'validate' | 'codeco' | 'logs'>('validate');
+  const [activeTab, setActiveTab] = useState<EdiTab>('approval');
   const yardId = session?.activeYardId || 1;
+  const canManageBookings = hasPermission('booking.manage');
   const canSendIntegration = hasPermission('integration.send');
   const canViewIntegrationLogs = hasPermission('integration.logs.view');
   const canUseEdi = hasAnyPermission(['integration.send', 'integration.logs.view']);
   const ediTabs = [
+    { id: 'approval' as const, label: 'Booking Approval', icon: <ClipboardCheck size={14} />, allowed: canManageBookings },
     { id: 'validate' as const, label: 'ตรวจเลขซีล', icon: <ShieldCheck size={14} />, allowed: canUseEdi },
     { id: 'codeco' as const, label: 'CODECO', icon: <Send size={14} />, allowed: canSendIntegration },
     { id: 'logs' as const, label: 'Integration Log', icon: <Activity size={14} />, allowed: canViewIntegrationLogs },
@@ -69,6 +74,9 @@ export default function EDIPage() {
           </button>
         ))}
       </div>
+
+      {/* =================== BOOKING APPROVAL TAB =================== */}
+      {effectiveTab === 'approval' && canManageBookings && <BookingApprovalInbox yardId={yardId} />}
 
       {/* =================== VALIDATE TAB =================== */}
       {effectiveTab === 'validate' && canUseEdi && (
@@ -129,6 +137,154 @@ export default function EDIPage() {
           คุณไม่มีสิทธิ์ใช้งาน EDI / Integration ใน Granular RBAC
         </div>
       )}
+    </div>
+  );
+}
+
+interface BookingApprovalRow {
+  booking_id: number;
+  booking_number: string;
+  booking_type?: string | null;
+  status: string;
+  customer_name?: string | null;
+  container_count?: number | null;
+  container_size?: string | null;
+  container_type?: string | null;
+  vessel_name?: string | null;
+  voyage_number?: string | null;
+  eta?: string | null;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  seal_number?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  preadvised_containers?: number | null;
+}
+
+function BookingApprovalInbox({ yardId }: { yardId: number }) {
+  const [bookings, setBookings] = useState<BookingApprovalRow[]>([]);
+  const [summary, setSummary] = useState({ total_pending: 0, rf_pending: 0 });
+  const [loading, setLoading] = useState(false);
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
+
+  const loadInbox = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/edi/bookings/approval?yard_id=${yardId}`);
+      const data = await res.json();
+      if (!data.error) {
+        setBookings(data.bookings || []);
+        setSummary(data.summary || { total_pending: 0, rf_pending: 0 });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [yardId]);
+
+  useEffect(() => { loadInbox(); }, [loadInbox]);
+
+  const updateBooking = async (booking: BookingApprovalRow, action: 'approve' | 'reject' | 'request_info') => {
+    const note = action === 'approve'
+      ? window.prompt('หมายเหตุการอนุมัติ Booking', '')
+      : action === 'reject'
+        ? window.prompt('เหตุผลที่ปฏิเสธ Booking', '')
+        : window.prompt('ข้อมูลเพิ่มเติมที่ต้องการจากลูกค้า', '');
+    if (note === null) return;
+    setUpdatingId(booking.booking_id);
+    try {
+      await fetch('/api/edi/bookings/approval', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: booking.booking_id, action, note }),
+      });
+      loadInbox();
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const fmtDate = (value?: string | null) => {
+    if (!value) return '-';
+    return new Date(value).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+          <p className="text-xs text-slate-400">รอพนักงานยืนยัน</p>
+          <p className="mt-1 text-2xl font-bold text-slate-800 dark:text-white">{summary.total_pending}</p>
+        </div>
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 dark:border-cyan-900/50 dark:bg-cyan-900/20">
+          <p className="text-xs text-cyan-700 dark:text-cyan-300">RF Pending</p>
+          <p className="mt-1 text-2xl font-bold text-cyan-700 dark:text-cyan-200">{summary.rf_pending}</p>
+        </div>
+        <button onClick={loadInbox} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <RotateCcw size={15} className={loading ? 'animate-spin' : ''} /> รีเฟรช
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        <div className="border-b border-slate-100 p-4 dark:border-slate-700">
+          <h3 className="flex items-center gap-2 font-semibold text-slate-800 dark:text-white">
+            <ClipboardCheck size={17} className="text-blue-600" /> Booking Approval
+          </h3>
+          <p className="mt-1 text-xs text-slate-400">Booking ที่ลูกค้าสร้างจาก Portal จะเริ่มเป็น pending และต้องผ่านกล่องนี้ก่อนใช้งานจริง</p>
+        </div>
+        {loading ? (
+          <div className="p-8 text-center"><Loader2 size={24} className="mx-auto animate-spin text-slate-400" /></div>
+        ) : bookings.length === 0 ? (
+          <p className="p-8 text-center text-sm text-slate-400">ไม่มี Booking ที่รออนุมัติ</p>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-700">
+            {bookings.map(booking => (
+              <div key={booking.booking_id} className="grid gap-3 p-4 lg:grid-cols-[1fr_auto]">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-sm font-bold text-slate-800 dark:text-white">{booking.booking_number}</p>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">รอพนักงานยืนยัน</span>
+                    {booking.container_type === 'RF' && <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold text-cyan-700">RF</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {booking.customer_name || 'ไม่ระบุลูกค้า'} · {booking.booking_type || '-'} · {booking.container_count || 0} ตู้ · pre-advised {booking.preadvised_containers || 0}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    ETA {fmtDate(booking.eta)} · Valid {fmtDate(booking.valid_from)} - {fmtDate(booking.valid_to)}
+                  </p>
+                  {(booking.vessel_name || booking.voyage_number || booking.notes) && (
+                    <p className="mt-1 truncate text-xs text-slate-400">
+                      {[booking.vessel_name, booking.voyage_number, booking.notes].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <button
+                    onClick={() => updateBooking(booking, 'approve')}
+                    disabled={updatingId === booking.booking_id}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={14} /> อนุมัติ
+                  </button>
+                  <button
+                    onClick={() => updateBooking(booking, 'request_info')}
+                    disabled={updatingId === booking.booking_id}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-amber-100 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-200 disabled:opacity-50"
+                  >
+                    <AlertTriangle size={14} /> ขอข้อมูล
+                  </button>
+                  <button
+                    onClick={() => updateBooking(booking, 'reject')}
+                    disabled={updatingId === booking.booking_id}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-rose-100 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:opacity-50"
+                  >
+                    <XCircle size={14} /> ปฏิเสธ
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
