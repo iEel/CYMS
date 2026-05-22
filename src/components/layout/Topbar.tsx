@@ -17,6 +17,7 @@ import {
   X,
   SunDim,
   Loader2,
+  Menu,
   Package,
   Truck,
   Receipt,
@@ -41,7 +42,11 @@ interface SearchResult {
   href: string;
 }
 
-export default function Topbar() {
+interface TopbarProps {
+  onOpenMobileMenu?: () => void;
+}
+
+export default function Topbar({ onOpenMobileMenu }: TopbarProps) {
   const { session, switchYard } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
@@ -308,9 +313,18 @@ export default function Topbar() {
   };
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white dark:bg-[#1E293B] border-b border-slate-200 dark:border-slate-700 flex items-center px-4 gap-4">
+    <header data-layout="dashboard-topbar" className="sticky top-0 z-30 h-16 bg-white dark:bg-[#1E293B] border-b border-slate-200 dark:border-slate-700 flex items-center px-3 sm:px-4 gap-2 sm:gap-4 overflow-x-hidden">
+      <button
+        type="button"
+        onClick={onOpenMobileMenu}
+        aria-label="เปิดเมนูหลัก"
+        className="lg:hidden w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 shrink-0"
+      >
+        <Menu size={20} />
+      </button>
+
       {/* Global Search */}
-      <div ref={searchRef} className="flex-1 max-w-xl mx-auto relative">
+      <div ref={searchRef} className="min-w-0 flex-1 sm:max-w-xl sm:mx-auto relative">
         <div className="relative">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -323,7 +337,7 @@ export default function Topbar() {
               if (e.key === 'Escape') setShowSearch(false);
               if (e.key === 'Enter') openFirstSearchResult();
             }}
-            className="w-full h-10 pl-10 pr-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm
+            className="w-full h-10 pl-10 pr-8 sm:pr-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs sm:text-sm
               text-slate-700 dark:text-slate-200 placeholder:text-slate-400
               border border-transparent focus:border-[#3B82F6] focus:ring-2 focus:ring-blue-500/20
               outline-none transition-all duration-200"
@@ -385,7 +399,7 @@ export default function Topbar() {
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         <OfflineOutbox />
 
         {/* Yard Switcher */}
@@ -403,7 +417,7 @@ export default function Topbar() {
           </button>
 
           {yardDropdownOpen && (
-            <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden z-50">
+            <div className="absolute top-full right-0 mt-2 w-[calc(100vw-1rem)] max-w-[16rem] sm:w-64 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden z-50">
               <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700">
                 <p className="text-xs text-slate-400 font-medium">สลับสาขาลาน</p>
               </div>
@@ -454,7 +468,7 @@ export default function Topbar() {
           </button>
 
           {notifOpen && (
-            <div className="absolute top-full right-0 mt-2 w-96 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50">
+            <div className="absolute top-full right-0 mt-2 w-[calc(100vw-1rem)] max-w-[24rem] sm:w-96 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50">
                   <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-700 dark:text-white flex items-center gap-2">
                       <Bell size={14} /> การแจ้งเตือน

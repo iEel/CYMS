@@ -357,9 +357,9 @@ export default function BillingPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div data-page="billing" className="min-w-0 space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">บัญชี & การเงิน</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white">บัญชี & การเงิน</h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">ใบแจ้งหนี้, ตั้ง Tariff, Hold/Release, เอกสารบัญชี</p>
       </div>
 
@@ -379,7 +379,7 @@ export default function BillingPage() {
         ))}
       </div>
 
-      <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1 overflow-x-auto">
+      <div className="flex max-w-full gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1 overflow-x-auto">
         {[
           { id: 'invoices' as const, label: 'ใบแจ้งหนี้', icon: <Receipt size={14} /> },
           { id: 'clearance' as const, label: 'Clearance', icon: <CheckCircle2 size={14} /> },
@@ -396,7 +396,7 @@ export default function BillingPage() {
           { id: 'demurrage' as const, label: 'Demurrage', icon: <AlertTriangle size={14} /> },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+            className={`shrink-0 flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
               activeTab === tab.id ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}>
             {tab.icon} {tab.label}
@@ -407,25 +407,25 @@ export default function BillingPage() {
       {/* =================== INVOICES TAB =================== */}
       {activeTab === 'invoices' && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+          <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Receipt size={16} /> ใบแจ้งหนี้ ({invoices.length})</h3>
-            <div className="flex items-center gap-2">
+            <div className="grid grid-cols-1 sm:flex sm:items-center gap-2 w-full sm:w-auto">
               <input value={invSearch} onChange={e => { setInvSearch(e.target.value); setInvPage(1); }}
                 placeholder="ค้นหาเลขบิล/ลูกค้า/ตู้"
-                className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs outline-none focus:border-blue-500" />
+                className="h-8 w-full sm:w-48 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs outline-none focus:border-blue-500" />
               <select value={invChargeFilter} onChange={e => { setInvChargeFilter(e.target.value); setInvPage(1); }}
-                className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
+                className="h-8 w-full sm:w-auto px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
                 <option value="">ทุกประเภท</option>
                 {Object.entries(CHARGE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
               <select value={invFilter} onChange={e => setInvFilter(e.target.value)}
-                className="h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
+                className="h-8 w-full sm:w-auto px-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
                 <option value="">ทุกสถานะ</option>
                 <option value="draft">ร่าง</option><option value="issued">แจ้งหนี้</option>
                 <option value="paid">ชำระแล้ว</option><option value="overdue">เกินกำหนด</option>
                 <option value="cancelled">ยกเลิก</option><option value="credit_note">ใบลดหนี้</option>
               </select>
-              <button onClick={fetchInvoices} className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1"><RotateCcw size={12} /> รีเฟรช</button>
+              <button onClick={fetchInvoices} className="h-8 justify-center text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1"><RotateCcw size={12} /> รีเฟรช</button>
             </div>
           </div>
           {invLoading ? (
@@ -436,17 +436,17 @@ export default function BillingPage() {
             <div className="divide-y divide-slate-100 dark:divide-slate-700">
               {invPaginated.map(inv => (
                 <div key={inv.invoice_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
                       <DollarSign size={16} className="text-blue-500" />
-                      <div>
-                        <div className="flex items-center gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono font-semibold text-sm text-slate-800 dark:text-white">{inv.invoice_number}</span>
                           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ${statusConfig[inv.status]?.color}`}>
                             {statusConfig[inv.status]?.icon} {statusConfig[inv.status]?.label}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 text-xs text-slate-400">
                           <span>{inv.customer_name || 'ไม่ระบุ'}</span>
                           <span>• {CHARGE_LABELS[inv.charge_type] || inv.charge_type}</span>
                           {inv.container_number && <span>• 🏷️ {inv.container_number}</span>}
@@ -454,7 +454,7 @@ export default function BillingPage() {
                           <span>• {inv.charge_type === 'storage' ? 'Gate-Out/Storage' : inv.charge_type === 'gate_in' ? 'Gate-In' : 'Manual/Service'}</span>
                         </div>
                         {(inv.ref_invoice_number || inv.replaces_invoice_number || inv.balance_amount != null) && (
-                          <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[10px] text-slate-400">
                             {inv.ref_invoice_number && <span>อ้างอิง {inv.ref_invoice_number}</span>}
                             {inv.replaces_invoice_number && <span>ออกใหม่แทน {inv.replaces_invoice_number}</span>}
                             {inv.balance_amount != null && !['credit_note', 'cancelled'].includes(inv.status) && (
@@ -464,9 +464,9 @@ export default function BillingPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 lg:justify-end">
                       <span className="text-sm font-bold text-slate-800 dark:text-white">฿{(inv.grand_total || 0).toLocaleString()}</span>
-                      <div className="flex gap-1">
+                      <div className="flex flex-wrap gap-1">
                         {inv.status === 'draft' && (
                           <button onClick={() => updateInvoice(inv.invoice_id, 'issue')}
                             disabled={!canCreateInvoice}

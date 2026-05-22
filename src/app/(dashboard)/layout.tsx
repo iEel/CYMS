@@ -50,6 +50,7 @@ export default function DashboardLayout({
   const { session, isLoading } = useAuth();
   const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !session) {
@@ -72,13 +73,26 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A]">
-      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="ปิดเมนูหลัก"
+          className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
       <div
-        className="transition-all duration-300"
-        style={{ marginLeft: sidebarCollapsed ? '72px' : '260px' }}
+        data-layout="dashboard-shell"
+        className={`min-w-0 transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-[260px]'}`}
       >
-        <Topbar />
-        <main className="p-6 page-enter">
+        <Topbar onOpenMobileMenu={() => setMobileSidebarOpen(true)} />
+        <main className="min-w-0 p-3 sm:p-4 lg:p-6 page-enter">
           {children}
         </main>
       </div>

@@ -124,10 +124,12 @@ const menuItems: MenuItem[] = [
 
 interface SidebarProps {
   collapsed: boolean;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
   onToggle: () => void;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, mobileOpen = false, onMobileClose, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const { session, logout, hasAnyPermission, permissionsLoading } = useAuth();
   const userRole = session?.role;
@@ -138,8 +140,10 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <aside
-      className={`fixed top-0 left-0 h-full z-40 flex flex-col transition-all duration-300 ease-in-out
-        ${collapsed ? 'w-[72px]' : 'w-[260px]'}
+      data-layout="dashboard-sidebar"
+      className={`fixed top-0 left-0 h-full z-50 lg:z-40 flex-col transition-all duration-300 ease-in-out
+        ${mobileOpen ? 'flex' : 'hidden lg:flex'}
+        ${mobileOpen ? 'w-[260px]' : collapsed ? 'w-[72px]' : 'w-[260px]'}
       `}
       style={{ backgroundColor: '#1E293B' }}
     >
@@ -166,17 +170,18 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onMobileClose}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group
                 ${isActive
                   ? 'bg-[#3B82F6] text-white shadow-lg shadow-blue-500/20'
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
                 }
-                ${collapsed ? 'justify-center' : ''}
+                ${collapsed && !mobileOpen ? 'justify-center' : ''}
               `}
-              data-tooltip={collapsed ? item.label : undefined}
+              data-tooltip={collapsed && !mobileOpen ? item.label : undefined}
             >
               <span className="flex-shrink-0">{item.icon}</span>
-              {!collapsed && (
+              {(!collapsed || mobileOpen) && (
                 <span className="text-sm font-medium truncate">{item.label}</span>
               )}
             </Link>
@@ -187,7 +192,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Bottom Actions */}
       <div className="border-t border-white/10 p-2 space-y-1">
         {/* User Info */}
-        {!collapsed && session && (
+        {(!collapsed || mobileOpen) && session && (
           <div className="px-3 py-2 mb-1">
             <p className="text-white text-sm font-medium truncate">{session.fullName}</p>
             <p className="text-slate-400 text-xs truncate">
@@ -209,16 +214,16 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-200
             ${collapsed ? 'justify-center' : ''}
           `}
-          data-tooltip={collapsed ? 'ออกจากระบบ' : undefined}
+          data-tooltip={collapsed && !mobileOpen ? 'ออกจากระบบ' : undefined}
         >
           <LogOut size={20} />
-          {!collapsed && <span className="text-sm font-medium">ออกจากระบบ</span>}
+          {(!collapsed || mobileOpen) && <span className="text-sm font-medium">ออกจากระบบ</span>}
         </button>
 
         {/* Collapse Toggle */}
         <button
           onClick={onToggle}
-          className="flex items-center justify-center w-full py-2 text-slate-500 hover:text-white transition-colors duration-200"
+          className="hidden lg:flex items-center justify-center w-full py-2 text-slate-500 hover:text-white transition-colors duration-200"
         >
           {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
