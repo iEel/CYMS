@@ -693,6 +693,11 @@ container-yard-system/
 - Gate-Out แนะนำรูปตู้ขาออกอย่างน้อย 2 รูปก่อน confirm release เพื่อช่วยลด dispute หลังออก EIR
 - Unit test: `src/lib/__tests__/gateOperationalGuardrails.test.ts` ครอบคลุม QR payload, duplicate alert, seal/photo gap, exit photo recommendation
 
+#### Operational Mobile Mode (✅ เสร็จ — 22 พ.ค. 2569)
+- เพิ่มหน้า `/mobile-ops` แบบ mobile-first สำหรับพนักงานหน้าลาน: ปุ่มใหญ่ไป `Gate`, `Yard`, `Reefer`, `M&R`, `Booking`, `ค้นหาตู้` โดย filter ตาม permission
+- เพิ่มเมนู `Mobile Ops` ใน Sidebar สำหรับ role ปฏิบัติการ และใช้ permission เช่น `gate.in`, `yard.slot.move`, `reefer.check.record`, `mnr.eor.create`
+- Verify: `npm test -- src/app/api/__tests__/mobile-ops-ui.test.ts --runInBand` ✅ (2 tests)
+
 #### แท็บ "Gate-In (รับเข้า)"
 - ฟอร์มกรอกข้อมูลตู้ (เลขตู้, ขนาด, ประเภท, สายเรือ, ซีล) + คนขับ/ทะเบียนรถ + Booking Ref
 - กดรับตู้ → สร้าง Container + GateTransaction + **ออก EIR อัตโนมัติ**
