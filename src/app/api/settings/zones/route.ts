@@ -3,6 +3,11 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 
+function normalizePlugCapacity(value: unknown) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 // GET — ดึง zones ตาม yard_id
 export async function GET(request: NextRequest) {
   try {
@@ -32,6 +37,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const plugCapacity = normalizePlugCapacity(body.plug_capacity);
 
     const result = await db.request()
       .input('yardId', sql.Int, body.yard_id)
@@ -43,10 +49,11 @@ export async function POST(request: NextRequest) {
       .input('maxWeightKg', sql.Int, body.max_weight_kg || null)
       .input('sizeRestriction', sql.NVarChar, body.size_restriction || 'any')
       .input('hasReeferPlugs', sql.Bit, body.has_reefer_plugs || false)
+      .input('plugCapacity', sql.Int, plugCapacity)
       .query(`
-        INSERT INTO YardZones (yard_id, zone_name, zone_type, max_tier, max_bay, max_row, max_weight_kg, size_restriction, has_reefer_plugs)
+        INSERT INTO YardZones (yard_id, zone_name, zone_type, max_tier, max_bay, max_row, max_weight_kg, size_restriction, has_reefer_plugs, plug_capacity)
         OUTPUT INSERTED.*
-        VALUES (@yardId, @zoneName, @zoneType, @maxTier, @maxBay, @maxRow, @maxWeightKg, @sizeRestriction, @hasReeferPlugs)
+        VALUES (@yardId, @zoneName, @zoneType, @maxTier, @maxBay, @maxRow, @maxWeightKg, @sizeRestriction, @hasReeferPlugs, @plugCapacity)
       `);
 
     const created = result.recordset[0];
@@ -63,6 +70,7 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const plugCapacity = normalizePlugCapacity(body.plug_capacity);
 
     await db.request()
       .input('zoneId', sql.Int, body.zone_id)
@@ -74,12 +82,14 @@ export async function PUT(request: NextRequest) {
       .input('maxWeightKg', sql.Int, body.max_weight_kg || null)
       .input('sizeRestriction', sql.NVarChar, body.size_restriction || 'any')
       .input('hasReeferPlugs', sql.Bit, body.has_reefer_plugs || false)
+      .input('plugCapacity', sql.Int, plugCapacity)
       .input('isActive', sql.Bit, body.is_active ?? true)
       .query(`
         UPDATE YardZones SET
           zone_name = @zoneName, zone_type = @zoneType, max_tier = @maxTier,
           max_bay = @maxBay, max_row = @maxRow, max_weight_kg = @maxWeightKg,
           size_restriction = @sizeRestriction, has_reefer_plugs = @hasReeferPlugs,
+          plug_capacity = @plugCapacity,
           is_active = @isActive
         WHERE zone_id = @zoneId
       `);

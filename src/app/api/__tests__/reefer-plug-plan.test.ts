@@ -56,7 +56,10 @@ describe('GET /api/reefer/plug-plan', () => {
     const res = await route.GET(makeRequest('http://localhost/api/reefer/plug-plan?yard_id=1&date_from=2026-05-21&date_to=2026-05-28'));
     expect(res.status).toBe(200);
     const body = await res.json();
+    const capacityQuery = mockDb.request.mock.results[0].value.query.mock.calls[0][0] as string;
 
+    expect(capacityQuery).toContain('COALESCE(NULLIF(plug_capacity, 0)');
+    expect(capacityQuery).toContain('ISNULL(max_bay, 0) * ISNULL(max_row, 0)');
     expect(body.summary.plug_capacity).toBe(10);
     expect(body.summary.upcoming_rf).toBe(5);
     expect(body.summary.projected_required_plugs).toBe(12);

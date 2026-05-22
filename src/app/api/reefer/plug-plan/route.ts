@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       .query(`
         SELECT
           (SELECT COUNT(*) FROM YardZones WHERE yard_id = @yardId AND is_active = 1 AND has_reefer_plugs = 1) AS reefer_zones,
-          (SELECT ISNULL(SUM(ISNULL(max_bay, 0) * ISNULL(max_row, 0)), 0)
+          (SELECT ISNULL(SUM(COALESCE(NULLIF(plug_capacity, 0), ISNULL(max_bay, 0) * ISNULL(max_row, 0))), 0)
              FROM YardZones
              WHERE yard_id = @yardId AND is_active = 1 AND has_reefer_plugs = 1) AS plug_capacity,
           (SELECT COUNT(*) FROM Containers

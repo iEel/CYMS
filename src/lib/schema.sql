@@ -54,6 +54,7 @@ CREATE TABLE YardZones (
     max_weight_kg       INT,                       -- ขีดจำกัดน้ำหนัก
     size_restriction    NVARCHAR(10) DEFAULT 'any', -- '20','40','45','any'
     has_reefer_plugs    BIT DEFAULT 0,
+    plug_capacity       INT NULL,                  -- จำนวนปลั๊ก reefer จริง; NULL = fallback max_bay × max_row
     is_active           BIT DEFAULT 1,
     created_at          DATETIME2 DEFAULT GETDATE()
 );

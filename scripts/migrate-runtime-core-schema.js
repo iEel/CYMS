@@ -184,6 +184,12 @@ async function migrate() {
         ALTER TABLE Users ADD bound_device_mac NVARCHAR(128) NULL;
     `);
 
+    await runStep(pool, 'Yard zone reefer plug capacity', `
+      IF OBJECT_ID('YardZones', 'U') IS NOT NULL
+        AND COL_LENGTH('YardZones', 'plug_capacity') IS NULL
+        ALTER TABLE YardZones ADD plug_capacity INT NULL;
+    `);
+
     await runStep(pool, 'Document numbering and lifecycle tables', `
       IF OBJECT_ID('DocumentSequences', 'U') IS NULL
       BEGIN

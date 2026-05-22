@@ -418,7 +418,7 @@ container-yard-system/
 |-------|------------|--------|
 | `CompanyProfile` | name, address, tax_id, logo_url (MAX), **branch_type, branch_number** | ข้อมูลบริษัท |
 | `Yards` | yard_name, address, lat/lng, status, **branch_type, branch_number** | สาขาลาน |
-| `YardZones` | zone_name, zone_type, max_bay/row/tier | โซนในลาน |
+| `YardZones` | zone_name, zone_type, max_bay/row/tier, **plug_capacity** | โซนในลาน + จำนวนปลั๊ก reefer จริงต่อ zone |
 | `Roles` | role_name, description | บทบาท (6 roles) |
 | `Permissions` | module, action, description | สิทธิ์ (รวม reefer.check.read / reefer.check.record / reefer.policy.manage) |
 | `RolePermissions` | role_id, permission_id | Permission matrix |
@@ -455,7 +455,7 @@ container-yard-system/
 | Type | ตัวอย่าง | ข้อจำกัด |
 |------|---------|----------|
 | `dry` | Zone A, B, C | ตู้ทั่วไป, max tier 4-5 |
-| `reefer` | Zone R1 | ตู้เย็นเท่านั้น, มีปลั๊ก |
+| `reefer` | Zone R1 | ตู้เย็นเท่านั้น, มีปลั๊ก และตั้ง `plug_capacity` เป็นจำนวนปลั๊กจริงได้ |
 | `hazmat` | Zone H | ตู้อันตราย, max tier 2 |
 | `empty` | Zone E | ตู้เปล่า, max tier 6 |
 | `repair` | Zone M | ตู้ซ่อม, max tier 2 |
@@ -1404,11 +1404,16 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Reefer compliance reports** — เพิ่ม `GET /api/reports/reefer` พร้อม `reports.view` + `requireYardAccess()`: summary compliance rate, trend ตามช่วงวันที่, open exceptions, และสรุปตามลูกค้า; หน้า `/reports` เพิ่ม tab `Reefer Compliance` สำหรับ supervisor/manager ดูภาพรวมงานตู้เย็น
 - [x] **Reefer check SLA dashboard** — `GET /api/reports/reefer` เพิ่ม `sla` summary (`total_open`, `overdue_exceptions`, `critical_breaches`, `unacknowledged_open`, `avg_resolution_minutes`) และ enrich `openExceptions` ด้วย escalation metadata; หน้า `/reports` แสดง KPI `SLA Breach`, `Open SLA`, `ยังไม่รับทราบ`, `Avg Close` พร้อม column SLA ต่อ exception
 - [x] **RF booking policy + plug planning** — เพิ่ม `ensureReeferBookingPolicy()` ให้ portal/staff booking ที่ `container_type=RF` auto-create `ReeferCheckPolicies` scope `booking` แบบ idempotent; เพิ่ม `GET /api/reefer/plug-plan` สำหรับ plug capacity/current RF/upcoming RF/projected shortage และหน้า `/reefer` แสดง panel `Plug Planning`
+- [x] **Actual reefer plug capacity** — เพิ่ม `YardZones.plug_capacity` และช่อง `จำนวนปลั๊กจริง` ใน Settings > สาขาลานและโซน; plug plan ใช้ค่านี้เป็น source of truth ถ้าตั้งไว้ และ fallback เป็น `max_bay × max_row` สำหรับ zone เก่า/ยังไม่กรอก
 - [x] **Customer portal notifications** — เพิ่ม `GET /api/portal/notifications` ที่ใช้ `PortalEntityAccess`/portal visibility เดิมเท่านั้น เพื่อแจ้งลูกค้าเรื่อง open reefer exception และ booking status ล่าสุด; หน้า `/portal` เพิ่ม panel `การแจ้งเตือนล่าสุด` พร้อม deep-link ไป `/portal/reefer` หรือ `/portal/bookings`
 - [x] **Escalation rule** — เพิ่ม `deriveReeferEscalation()` แบบ server-side policy โดยไม่เพิ่ม schema: `critical` breach หลัง 30 นาที, `high` 120 นาที, `medium` 240 นาที, `low` 480 นาที; `GET /api/reefer/exceptions` และคิวหน้า `/reefer` ส่ง/แสดง `escalation_level`, `breached`, due/age minutes เพื่อให้ supervisor เห็นงานที่ต้องเร่งทันที
 - [x] **Customer notification preferences** — เพิ่ม `PortalNotificationPreferences` + `GET/PUT /api/portal/notification-preferences`; ใช้ customer id จาก portal session/header เท่านั้น, default เปิดทุกประเภท และ `GET /api/portal/notifications` filter ฝั่ง server ตาม preference พร้อม fallback default ถ้ายังไม่ได้ migrate
 
 **Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/reefer-plug-plan.test.ts src/app/api/__tests__/yard-zone-plug-capacity.test.ts --runInBand --cacheDirectory ./.next/jest-cache` ✅ (3 tests)
+- `node scripts/migrate-runtime-core-schema.js` ✅ (เพิ่ม `YardZones.plug_capacity` และ rerun schema guards)
+- `npx tsc --noEmit --pretty false` ✅
+- `npm run lint` ✅
 - `npm test -- src/app/api/__tests__/reefer-reports.test.ts --runInBand` ✅ (3 tests)
 - `npm test -- src/app/api/__tests__/portal-notification-preferences.test.ts src/app/api/__tests__/portal-notifications.test.ts src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (8 tests)
 - `npm test -- src/lib/__tests__/reeferEscalation.test.ts src/app/api/__tests__/reefer-exceptions.test.ts src/app/api/__tests__/reefer-ui.test.ts --runInBand` ✅ (8 tests)

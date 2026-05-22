@@ -28,6 +28,7 @@ interface Zone {
   max_row: number;
   size_restriction: string;
   has_reefer_plugs: boolean;
+  plug_capacity: number | null;
   is_active: boolean;
 }
 
@@ -40,6 +41,12 @@ const ZONE_TYPES = [
   { value: 'wash', label: 'ล้างตู้ (Wash)' },
 ];
 
+function effectivePlugCapacity(zone: Zone) {
+  const explicitCapacity = Number(zone.plug_capacity);
+  if (Number.isFinite(explicitCapacity) && explicitCapacity > 0) return explicitCapacity;
+  return (Number(zone.max_bay) || 0) * (Number(zone.max_row) || 0);
+}
+
 export default function YardsSettings() {
   const [yards, setYards] = useState<Yard[]>([]);
   const [zones, setZones] = useState<Record<number, Zone[]>>({});
@@ -51,13 +58,13 @@ export default function YardsSettings() {
 
   // Form states
   const [yardForm, setYardForm] = useState({ yard_name: '', yard_code: '', address: '', geofence_radius: 500, branch_type: 'head_office', branch_number: '00000' });
-  const [zoneForm, setZoneForm] = useState({ zone_name: '', zone_type: 'dry', max_tier: 5, max_bay: 20, max_row: 10, size_restriction: 'any', has_reefer_plugs: false });
+  const [zoneForm, setZoneForm] = useState({ zone_name: '', zone_type: 'dry', max_tier: 5, max_bay: 20, max_row: 10, size_restriction: 'any', has_reefer_plugs: false, plug_capacity: 0 });
 
   // Edit states
   const [editingYardId, setEditingYardId] = useState<number | null>(null);
   const [editYardForm, setEditYardForm] = useState({ yard_name: '', yard_code: '', address: '', branch_type: 'head_office', branch_number: '00000' });
   const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
-  const [editZoneForm, setEditZoneForm] = useState({ zone_name: '', zone_type: 'dry', max_tier: 5, max_bay: 20, max_row: 10, size_restriction: 'any', has_reefer_plugs: false });
+  const [editZoneForm, setEditZoneForm] = useState({ zone_name: '', zone_type: 'dry', max_tier: 5, max_bay: 20, max_row: 10, size_restriction: 'any', has_reefer_plugs: false, plug_capacity: 0 });
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; message: string; action: () => void }>({ open: false, message: '', action: () => {} });
 
@@ -118,7 +125,7 @@ export default function YardsSettings() {
       const json = await res.json();
       if (json.success) {
         setShowAddZone(null);
-        setZoneForm({ zone_name: '', zone_type: 'dry', max_tier: 5, max_bay: 20, max_row: 10, size_restriction: 'any', has_reefer_plugs: false });
+        setZoneForm({ zone_name: '', zone_type: 'dry', max_tier: 5, max_bay: 20, max_row: 10, size_restriction: 'any', has_reefer_plugs: false, plug_capacity: 0 });
         fetchZones(yardId);
         fetchYards(); // อัปเดต zone_count
       }
@@ -391,12 +398,18 @@ export default function YardsSettings() {
                         <option value="45">45 ฟุต เท่านั้น</option>
                       </select>
                     </div>
-                    <div className="col-span-2 flex items-end pb-1.5">
+                    <div>
                       <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 cursor-pointer">
-                        <input type="checkbox" checked={zoneForm.has_reefer_plugs} onChange={e => setZoneForm({...zoneForm, has_reefer_plugs: e.target.checked})}
+                        <input type="checkbox" checked={zoneForm.has_reefer_plugs} onChange={e => setZoneForm({...zoneForm, has_reefer_plugs: e.target.checked, plug_capacity: e.target.checked ? zoneForm.plug_capacity : 0})}
                           className="w-4 h-4 rounded border-slate-300 text-[#3B82F6] focus:ring-blue-500" />
                         มีปลั๊กตู้เย็น (Reefer Plugs)
                       </label>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">จำนวนปลั๊กจริง</label>
+                      <input type="number" min={0} max={10000} disabled={!zoneForm.has_reefer_plugs} value={zoneForm.plug_capacity} onChange={e => setZoneForm({...zoneForm, plug_capacity: e.target.value === '' ? 0 : parseInt(e.target.value, 10)})}
+                        className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm outline-none text-slate-800 dark:text-white font-mono focus:border-blue-500 disabled:opacity-50" />
+                      <p className="mt-1 text-[10px] text-slate-400">0 = ใช้ Bay×Row</p>
                     </div>
                   </div>
                   <div className="flex justify-end gap-2">
@@ -420,7 +433,7 @@ export default function YardsSettings() {
                         <th className="pb-2 pr-4">ประเภท</th>
                         <th className="pb-2 pr-4">พิกัด (Bay×Row×Tier)</th>
                         <th className="pb-2 pr-4">ขนาดตู้</th>
-                        <th className="pb-2 pr-4">Reefer</th>
+                        <th className="pb-2 pr-4">Reefer / ปลั๊ก</th>
                         <th className="pb-2 pr-4">สถานะ</th>
                         <th className="pb-2">จัดการ</th>
                       </tr>
@@ -461,8 +474,12 @@ export default function YardsSettings() {
                               </select>
                             </td>
                             <td className="py-2.5 pr-2">
-                              <input type="checkbox" checked={editZoneForm.has_reefer_plugs} onChange={e => setEditZoneForm({...editZoneForm, has_reefer_plugs: e.target.checked})}
-                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                              <div className="flex items-center gap-2">
+                                <input type="checkbox" checked={editZoneForm.has_reefer_plugs} onChange={e => setEditZoneForm({...editZoneForm, has_reefer_plugs: e.target.checked, plug_capacity: e.target.checked ? editZoneForm.plug_capacity : 0})}
+                                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                                <input type="number" min={0} max={10000} disabled={!editZoneForm.has_reefer_plugs} value={editZoneForm.plug_capacity} onChange={e => setEditZoneForm({...editZoneForm, plug_capacity: parseInt(e.target.value, 10) || 0})}
+                                  className="h-8 w-20 px-2 text-center rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-xs font-mono text-slate-800 dark:text-white outline-none disabled:opacity-50" title="จำนวนปลั๊กจริง" />
+                              </div>
                             </td>
                             <td className="py-2.5 pr-2">
                               <span className={`w-2 h-2 rounded-full inline-block ${zone.is_active ? 'bg-[#10B981]' : 'bg-slate-300'}`} />
@@ -498,13 +515,15 @@ export default function YardsSettings() {
                             {zone.max_bay}×{zone.max_row}×{zone.max_tier}
                           </td>
                           <td className="py-2.5 pr-4 text-slate-500">{zone.size_restriction === 'any' ? 'ทุกขนาด' : `${zone.size_restriction} ฟุต`}</td>
-                          <td className="py-2.5 pr-4">{zone.has_reefer_plugs ? '⚡' : '—'}</td>
+                          <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">
+                            {zone.has_reefer_plugs ? `⚡ ${effectivePlugCapacity(zone)} ช่อง` : '—'}
+                          </td>
                           <td className="py-2.5 pr-4">
                             <span className={`w-2 h-2 rounded-full inline-block ${zone.is_active ? 'bg-[#10B981]' : 'bg-slate-300'}`} />
                           </td>
                           <td className="py-2.5">
                             <div className="flex items-center gap-1">
-                              <button onClick={() => { setEditingZoneId(zone.zone_id); setEditZoneForm({ zone_name: zone.zone_name, zone_type: zone.zone_type, max_tier: zone.max_tier, max_bay: zone.max_bay, max_row: zone.max_row, size_restriction: zone.size_restriction, has_reefer_plugs: zone.has_reefer_plugs }); }}
+                              <button onClick={() => { setEditingZoneId(zone.zone_id); setEditZoneForm({ zone_name: zone.zone_name, zone_type: zone.zone_type, max_tier: zone.max_tier, max_bay: zone.max_bay, max_row: zone.max_row, size_restriction: zone.size_restriction, has_reefer_plugs: zone.has_reefer_plugs, plug_capacity: zone.plug_capacity || 0 }); }}
                                 className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center hover:bg-blue-50 hover:text-blue-500 transition-colors" title="แก้ไข">
                                 <Pencil size={10} />
                               </button>
