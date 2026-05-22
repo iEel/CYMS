@@ -506,6 +506,40 @@ async function migrate() {
           ON PortalDisputes (invoice_id, created_at);
     `);
 
+    await runStep(pool, 'Customer portal booking amendment workflow', `
+      IF OBJECT_ID('PortalBookingAmendments', 'U') IS NULL
+      BEGIN
+        CREATE TABLE PortalBookingAmendments (
+          amendment_id BIGINT PRIMARY KEY IDENTITY(1,1),
+          booking_id INT NOT NULL,
+          booking_number NVARCHAR(100) NULL,
+          customer_id INT NOT NULL,
+          yard_id INT NULL,
+          request_type NVARCHAR(20) NOT NULL,
+          requested_changes NVARCHAR(MAX) NULL,
+          reason NVARCHAR(1000) NULL,
+          status NVARCHAR(30) NOT NULL CONSTRAINT DF_PortalBookingAmendments_Status DEFAULT 'pending',
+          review_note NVARCHAR(1000) NULL,
+          reviewed_by_user_id INT NULL,
+          reviewed_at DATETIME2 NULL,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          updated_at DATETIME2 NULL
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalBookingAmendments') AND name = 'IX_PortalBookingAmendments_Customer_Status')
+        CREATE INDEX IX_PortalBookingAmendments_Customer_Status
+          ON PortalBookingAmendments (customer_id, status, created_at);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalBookingAmendments') AND name = 'IX_PortalBookingAmendments_Yard_Status')
+        CREATE INDEX IX_PortalBookingAmendments_Yard_Status
+          ON PortalBookingAmendments (yard_id, status, created_at);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalBookingAmendments') AND name = 'IX_PortalBookingAmendments_Booking_Status')
+        CREATE INDEX IX_PortalBookingAmendments_Booking_Status
+          ON PortalBookingAmendments (booking_id, status);
+    `);
+
     await runStep(pool, 'Customer portal entity access grants', `
       IF OBJECT_ID('PortalEntityAccess', 'U') IS NULL
       BEGIN

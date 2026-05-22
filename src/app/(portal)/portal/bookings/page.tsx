@@ -72,6 +72,18 @@ interface CreateBookingForm {
   notes: string;
 }
 
+interface AmendmentForm {
+  eta: string;
+  valid_from: string;
+  valid_to: string;
+  vessel_name: string;
+  voyage_number: string;
+  container_count: string;
+  seal_number: string;
+  notes: string;
+  reason: string;
+}
+
 const statusLabels: Record<string, { label: string; cls: string }> = {
   pending: { label: '⏳ รอดำเนินการ', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   confirmed: { label: '✅ ยืนยันแล้ว', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
@@ -102,6 +114,18 @@ const initialCreateForm: CreateBookingForm = {
   notes: '',
 };
 
+const initialAmendmentForm: AmendmentForm = {
+  eta: '',
+  valid_from: '',
+  valid_to: '',
+  vessel_name: '',
+  voyage_number: '',
+  container_count: '',
+  seal_number: '',
+  notes: '',
+  reason: '',
+};
+
 export default function PortalBookings() {
   const { session } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -117,6 +141,10 @@ export default function PortalBookings() {
   const [createForm, setCreateForm] = useState<CreateBookingForm>(initialCreateForm);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [amendmentOpen, setAmendmentOpen] = useState<'amend' | 'cancel' | null>(null);
+  const [amendmentForm, setAmendmentForm] = useState<AmendmentForm>(initialAmendmentForm);
+  const [amendmentSaving, setAmendmentSaving] = useState(false);
+  const [amendmentError, setAmendmentError] = useState('');
   const detailStats = detail ? bookingStats(detail.booking) : null;
 
   const loadData = useCallback((p = 1, status = statusFilter) => {
@@ -184,6 +212,65 @@ export default function PortalBookings() {
       setCreateError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const openAmendment = (type: 'amend' | 'cancel') => {
+    if (!detail) return;
+    setAmendmentError('');
+    setAmendmentOpen(type);
+    setAmendmentForm({
+      eta: toDateInput(detail.booking.eta),
+      valid_from: toDateInput(detail.booking.valid_from),
+      valid_to: toDateInput(detail.booking.valid_to),
+      vessel_name: detail.booking.vessel_name || '',
+      voyage_number: detail.booking.voyage_number || '',
+      container_count: String(detail.booking.container_count || ''),
+      seal_number: '',
+      notes: '',
+      reason: '',
+    });
+  };
+
+  const submitAmendment = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!detail || !amendmentOpen) return;
+    setAmendmentSaving(true);
+    setAmendmentError('');
+
+    const requestedChanges = amendmentOpen === 'amend' ? {
+      eta: amendmentForm.eta,
+      valid_from: amendmentForm.valid_from,
+      valid_to: amendmentForm.valid_to,
+      vessel_name: amendmentForm.vessel_name,
+      voyage_number: amendmentForm.voyage_number,
+      container_count: Number(amendmentForm.container_count || detail.booking.container_count || 0),
+      seal_number: amendmentForm.seal_number,
+      notes: amendmentForm.notes,
+    } : {};
+
+    try {
+      const res = await fetch('/api/portal/bookings/amendments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: detail.booking.booking_id,
+          request_type: amendmentOpen,
+          requested_changes: requestedChanges,
+          reason: amendmentForm.reason,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setAmendmentError(data.error || 'ไม่สามารถส่งคำขอได้');
+        return;
+      }
+      setAmendmentOpen(null);
+      setAmendmentForm(initialAmendmentForm);
+    } catch {
+      setAmendmentError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+    } finally {
+      setAmendmentSaving(false);
     }
   };
 
@@ -326,9 +413,25 @@ export default function PortalBookings() {
                     <h3 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-100">
                       <Activity size={15} className="text-blue-600" /> ภาพรวม Booking
                     </h3>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${(statusLabels[detail.booking.status] || statusLabels.pending).cls}`}>
-                      {(statusLabels[detail.booking.status] || statusLabels.pending).label}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openAmendment('amend')}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 px-3 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:border-blue-900/50 dark:hover:bg-blue-900/20"
+                      >
+                        <Send size={13} /> ขอแก้ไข Booking
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openAmendment('cancel')}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-900/20"
+                      >
+                        <X size={13} /> ขอยกเลิก Booking
+                      </button>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${(statusLabels[detail.booking.status] || statusLabels.pending).cls}`}>
+                        {(statusLabels[detail.booking.status] || statusLabels.pending).label}
+                      </span>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <Metric label="จำนวนที่ขอ" value={detailStats.expected} />
@@ -620,6 +723,103 @@ export default function PortalBookings() {
           </form>
         </div>
       )}
+
+      {detail && amendmentOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <form
+            onSubmit={submitAmendment}
+            className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 dark:border-slate-700">
+              <div>
+                <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-white">
+                  <ClipboardList size={18} className="text-blue-600" />
+                  {amendmentOpen === 'amend' ? 'ขอแก้ไข Booking' : 'ขอยกเลิก Booking'}
+                </h2>
+                <p className="mt-1 text-xs text-slate-400">{detail.booking.booking_number} · คำขอจะรอพนักงานตรวจสอบก่อนมีผล</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAmendmentOpen(null)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              {amendmentError && (
+                <div className="flex items-start gap-2 rounded-lg bg-red-50 p-3 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                  <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                  <span>{amendmentError}</span>
+                </div>
+              )}
+
+              {amendmentOpen === 'amend' && (
+                <>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Field label="ETA">
+                      <input type="date" value={amendmentForm.eta} onChange={e => setAmendmentForm({ ...amendmentForm, eta: e.target.value })} className={inputClass} />
+                    </Field>
+                    <Field label="Valid From">
+                      <input type="date" value={amendmentForm.valid_from} onChange={e => setAmendmentForm({ ...amendmentForm, valid_from: e.target.value })} className={inputClass} />
+                    </Field>
+                    <Field label="Valid To">
+                      <input type="date" value={amendmentForm.valid_to} onChange={e => setAmendmentForm({ ...amendmentForm, valid_to: e.target.value })} className={inputClass} />
+                    </Field>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Field label="เรือ">
+                      <input value={amendmentForm.vessel_name} onChange={e => setAmendmentForm({ ...amendmentForm, vessel_name: e.target.value })} className={inputClass} />
+                    </Field>
+                    <Field label="Voyage">
+                      <input value={amendmentForm.voyage_number} onChange={e => setAmendmentForm({ ...amendmentForm, voyage_number: e.target.value.toUpperCase() })} className={inputClass} />
+                    </Field>
+                    <Field label="จำนวนตู้">
+                      <input type="number" min="1" value={amendmentForm.container_count} onChange={e => setAmendmentForm({ ...amendmentForm, container_count: e.target.value })} className={inputClass} />
+                    </Field>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Seal">
+                      <input value={amendmentForm.seal_number} onChange={e => setAmendmentForm({ ...amendmentForm, seal_number: e.target.value.toUpperCase() })} className={inputClass} />
+                    </Field>
+                    <Field label="หมายเหตุเพิ่มเติม">
+                      <input value={amendmentForm.notes} onChange={e => setAmendmentForm({ ...amendmentForm, notes: e.target.value })} className={inputClass} />
+                    </Field>
+                  </div>
+                </>
+              )}
+
+              <Field label={amendmentOpen === 'amend' ? 'เหตุผลที่ขอแก้ไข' : 'เหตุผลที่ขอยกเลิก'}>
+                <textarea
+                  required
+                  value={amendmentForm.reason}
+                  onChange={e => setAmendmentForm({ ...amendmentForm, reason: e.target.value })}
+                  className={`${inputClass} min-h-24 resize-y`}
+                />
+              </Field>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 p-4 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setAmendmentOpen(null)}
+                className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={amendmentSaving}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {amendmentSaving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                ส่งคำขอ
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
@@ -745,6 +945,13 @@ function ContainerActivity({ container }: { container: BookingContainer }) {
 function formatDate(value?: string | null) {
   if (!value) return '';
   return new Date(value).toLocaleDateString('th-TH');
+}
+
+function toDateInput(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
 }
 
 function formatDateTime(value?: string | null) {

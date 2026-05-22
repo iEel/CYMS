@@ -41,4 +41,12 @@ describe('Customer Portal UI', () => {
     expect(source).toContain('Audit Trail');
     expect(source).toContain('read-only');
   });
+
+  it('lets customers request booking amendments instead of editing bookings directly', () => {
+    const source = portalBookingsSource();
+
+    expect(source).toContain('/api/portal/bookings/amendments');
+    expect(source).toContain('ขอแก้ไข Booking');
+    expect(source).toContain('ขอยกเลิก Booking');
+  });
 });

@@ -238,6 +238,35 @@ CREATE INDEX IX_PortalEntityAccess_EntityRef
 ON PortalEntityAccess (entity_type, entity_ref, customer_id, is_active);
 
 -- ===================================
+-- ตาราง: Portal Booking Amendments (คำขอแก้ไข/ยกเลิก Booking จากลูกค้า)
+-- ===================================
+CREATE TABLE PortalBookingAmendments (
+    amendment_id        BIGINT PRIMARY KEY IDENTITY(1,1),
+    booking_id          INT NOT NULL REFERENCES Bookings(booking_id),
+    booking_number      NVARCHAR(100) NULL,
+    customer_id         INT NOT NULL REFERENCES Customers(customer_id),
+    yard_id             INT NULL REFERENCES Yards(yard_id),
+    request_type        NVARCHAR(20) NOT NULL,        -- amend,cancel
+    requested_changes   NVARCHAR(MAX) NULL,           -- JSON allowlist เท่านั้น
+    reason              NVARCHAR(1000) NULL,
+    status              NVARCHAR(30) NOT NULL DEFAULT 'pending',
+    review_note         NVARCHAR(1000) NULL,
+    reviewed_by_user_id INT NULL REFERENCES Users(user_id),
+    reviewed_at         DATETIME2 NULL,
+    created_at          DATETIME2 DEFAULT GETDATE(),
+    updated_at          DATETIME2 NULL
+);
+
+CREATE INDEX IX_PortalBookingAmendments_Customer_Status
+ON PortalBookingAmendments (customer_id, status, created_at);
+
+CREATE INDEX IX_PortalBookingAmendments_Yard_Status
+ON PortalBookingAmendments (yard_id, status, created_at);
+
+CREATE INDEX IX_PortalBookingAmendments_Booking_Status
+ON PortalBookingAmendments (booking_id, status);
+
+-- ===================================
 -- ตาราง: Portal Notification Preferences
 -- ===================================
 CREATE TABLE PortalNotificationPreferences (

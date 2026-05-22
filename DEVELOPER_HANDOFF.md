@@ -1368,9 +1368,12 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Customer read-only audit trail** — เพิ่ม `GET /api/portal/timeline` สำหรับ booking/container timeline โดยใช้ `PortalEntityAccess` ตรวจสิทธิ์ก่อนทุกครั้ง และหน้า `/portal/bookings` detail แสดง panel `Audit Trail` แบบ read-only รวม gate events, reefer checks และ reefer exceptions
 - [x] **Staff booking approval inbox** — เพิ่ม `GET/PATCH /api/edi/bookings/approval` สำหรับพนักงานที่มี `booking.manage` เท่านั้น: list pending booking ที่ลูกค้าสร้าง, approve → `confirmed`, reject → `cancelled`, request info → คง `pending` พร้อม note; บังคับ `requireYardAccess()` และ audit `booking_approval_*`
 - [x] **EDI approval tab** — หน้า `/edi` เพิ่ม tab `Booking Approval` แสดง pending/RF pending, รายละเอียดลูกค้า/ETA/จำนวนตู้ และ action `อนุมัติ`, `ขอข้อมูล`, `ปฏิเสธ`
+- [x] **Customer booking amendment workflow** — เพิ่ม `PortalBookingAmendments`, `POST/GET /api/portal/bookings/amendments` และ `GET/PATCH /api/edi/bookings/amendments`; ลูกค้าขอแก้ไข/ยกเลิกได้เฉพาะ booking ที่มี `PortalEntityAccess`, สถานะเริ่ม `pending`, และ backend พนักงานเท่านั้นที่ apply change เข้า `Bookings` พร้อม audit `booking_amendment_*`
+- [x] **Portal amendment UI + staff inbox** — หน้า `/portal/bookings` detail เพิ่มปุ่ม `ขอแก้ไข Booking` / `ขอยกเลิก Booking`; หน้า `/edi` เพิ่ม panel `Amendment Requests` ให้พนักงาน approve/reject ก่อนข้อมูลจริงเปลี่ยน
 - [x] **Tests** — เพิ่ม coverage ใน `portal-bookings.test.ts` เพื่อยืนยัน pending creation + session customer scope + portal grants และ `portal-ui.test.ts` เพื่อกัน UI ถอยกลับเป็น read-only
 
 **Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/portal-booking-amendments.test.ts src/app/api/__tests__/portal-ui.test.ts src/app/api/__tests__/booking-approval-ui.test.ts --runInBand` ✅
 - `npm test -- src/app/api/__tests__/portal-timeline.test.ts src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (6 tests)
 - `npm test -- src/app/api/__tests__/booking-approval-inbox.test.ts src/app/api/__tests__/booking-approval-ui.test.ts --runInBand` ✅ (3 tests)
 - `npm test -- src/app/api/__tests__/portal-bookings.test.ts src/app/api/__tests__/portal-ui.test.ts --runInBand` ✅ (5 tests)

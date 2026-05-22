@@ -6,6 +6,8 @@ describe('Booking approval inbox UI', () => {
     const source = fs.readFileSync(path.join(process.cwd(), 'src/app/(dashboard)/edi/page.tsx'), 'utf8');
 
     expect(source).toContain('/api/edi/bookings/approval');
+    expect(source).toContain('/api/edi/bookings/amendments');
+    expect(source).toContain('Amendment Requests');
     expect(source).toContain('Booking Approval');
     expect(source).toContain('รอพนักงานยืนยัน');
     expect(source).toContain('อนุมัติ');

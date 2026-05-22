@@ -161,20 +161,41 @@ interface BookingApprovalRow {
   preadvised_containers?: number | null;
 }
 
+interface BookingAmendmentRow {
+  amendment_id: number;
+  booking_id: number;
+  booking_number: string;
+  customer_name?: string | null;
+  request_type: 'amend' | 'cancel';
+  requested_changes?: string | null;
+  reason?: string | null;
+  status: string;
+  created_at?: string | null;
+}
+
 function BookingApprovalInbox({ yardId }: { yardId: number }) {
   const [bookings, setBookings] = useState<BookingApprovalRow[]>([]);
+  const [amendments, setAmendments] = useState<BookingAmendmentRow[]>([]);
   const [summary, setSummary] = useState({ total_pending: 0, rf_pending: 0 });
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [updatingAmendmentId, setUpdatingAmendmentId] = useState<number | null>(null);
 
   const loadInbox = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/edi/bookings/approval?yard_id=${yardId}`);
-      const data = await res.json();
+      const [approvalRes, amendmentRes] = await Promise.all([
+        fetch(`/api/edi/bookings/approval?yard_id=${yardId}`),
+        fetch(`/api/edi/bookings/amendments?yard_id=${yardId}`),
+      ]);
+      const data = await approvalRes.json();
+      const amendmentData = await amendmentRes.json();
       if (!data.error) {
         setBookings(data.bookings || []);
         setSummary(data.summary || { total_pending: 0, rf_pending: 0 });
+      }
+      if (!amendmentData.error) {
+        setAmendments(amendmentData.amendments || []);
       }
     } finally {
       setLoading(false);
@@ -200,6 +221,24 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
       loadInbox();
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const updateAmendment = async (amendment: BookingAmendmentRow, action: 'approve' | 'reject') => {
+    const note = action === 'approve'
+      ? window.prompt('หมายเหตุการอนุมัติคำขอแก้ไข', '')
+      : window.prompt('เหตุผลที่ปฏิเสธคำขอแก้ไข', '');
+    if (note === null) return;
+    setUpdatingAmendmentId(amendment.amendment_id);
+    try {
+      await fetch('/api/edi/bookings/amendments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amendment_id: amendment.amendment_id, action, note }),
+      });
+      loadInbox();
+    } finally {
+      setUpdatingAmendmentId(null);
     }
   };
 
@@ -285,8 +324,77 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
           </div>
         )}
       </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        <div className="border-b border-slate-100 p-4 dark:border-slate-700">
+          <h3 className="flex items-center gap-2 font-semibold text-slate-800 dark:text-white">
+            <FileText size={17} className="text-indigo-600" /> Amendment Requests
+          </h3>
+          <p className="mt-1 text-xs text-slate-400">คำขอแก้ไขหรือยกเลิก Booking จาก Customer Portal ต้องผ่านพนักงานก่อนมีผลกับ Booking จริง</p>
+        </div>
+        {loading ? (
+          <div className="p-8 text-center"><Loader2 size={24} className="mx-auto animate-spin text-slate-400" /></div>
+        ) : amendments.length === 0 ? (
+          <p className="p-8 text-center text-sm text-slate-400">ไม่มีคำขอแก้ไข Booking ที่รอตรวจสอบ</p>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-700">
+            {amendments.map(amendment => (
+              <div key={amendment.amendment_id} className="grid gap-3 p-4 lg:grid-cols-[1fr_auto]">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-sm font-bold text-slate-800 dark:text-white">{amendment.booking_number}</p>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      amendment.request_type === 'cancel'
+                        ? 'bg-rose-100 text-rose-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {amendment.request_type === 'cancel' ? 'ขอยกเลิก' : 'ขอแก้ไข'}
+                    </span>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">pending</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {amendment.customer_name || 'ไม่ระบุลูกค้า'} · ส่งเมื่อ {fmtDate(amendment.created_at)}
+                  </p>
+                  {amendment.reason && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">เหตุผล: {amendment.reason}</p>}
+                  {amendment.requested_changes && amendment.request_type === 'amend' && (
+                    <p className="mt-1 truncate text-xs text-slate-400">{summarizeAmendmentChanges(amendment.requested_changes)}</p>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <button
+                    onClick={() => updateAmendment(amendment, 'approve')}
+                    disabled={updatingAmendmentId === amendment.amendment_id}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={14} /> อนุมัติ
+                  </button>
+                  <button
+                    onClick={() => updateAmendment(amendment, 'reject')}
+                    disabled={updatingAmendmentId === amendment.amendment_id}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-rose-100 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:opacity-50"
+                  >
+                    <XCircle size={14} /> ปฏิเสธ
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+function summarizeAmendmentChanges(value: string) {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const items = Object.entries(parsed)
+      .filter(([, raw]) => raw !== null && raw !== '')
+      .map(([key, raw]) => `${key}: ${String(raw)}`);
+    return items.length ? `แก้ไข: ${items.join(' · ')}` : 'ไม่มีรายละเอียดแก้ไข';
+  } catch {
+    return value;
+  }
 }
 
 interface IntegrationLogRow {
