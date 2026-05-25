@@ -8,11 +8,14 @@ jest.mock('@/lib/db', () => ({
 
 const mockedGetDb = getDb as jest.Mock;
 
-function makeDb(results?: Array<{ recordset: unknown[] }>) {
+function makeDb(results?: Array<{ recordset: unknown[] }>, role = 'customer_admin') {
   const queries: string[] = [];
   const queue = [...(results || [])];
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
+    if (statement.includes('FROM Users')) {
+      return Promise.resolve({ recordset: [{ customer_portal_role: role }] });
+    }
     const next = queue.shift();
     if (next) return Promise.resolve(next);
     if (statement.includes('COUNT(*)')) return Promise.resolve({ recordset: [{ total: 0 }] });
@@ -25,7 +28,7 @@ function makeDb(results?: Array<{ recordset: unknown[] }>) {
 
 function makeRequest(url = 'http://localhost/api/portal/containers') {
   return new NextRequest(url, {
-    headers: { 'x-customer-id': '42' },
+    headers: { 'x-customer-id': '42', 'x-user-id': '7' },
   });
 }
 
@@ -100,6 +103,60 @@ describe('GET /api/portal/containers', () => {
     expect(combinedSql).not.toContain('g.container_number');
     expect(db.input).toHaveBeenCalledWith('status', expect.anything(), 'in_yard');
     expect(db.input).toHaveBeenCalledWith('search', expect.anything(), '%MSKU%');
+  });
+
+  it('redacts invoice context for portal roles without invoice view', async () => {
+    const db = makeDb([
+      { recordset: [{ total: 3, in_yard: 2, released: 1, on_hold: 0, repair: 0 }] },
+      { recordset: [{ total: 1 }] },
+      {
+        recordset: [{
+          container_id: 7,
+          container_number: 'MSKU1234567',
+          status: 'in_yard',
+          open_invoice_count: 9,
+          open_invoice_amount: 9999,
+        }],
+      },
+    ], 'document_user');
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await GET(makeRequest());
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.containers[0]).toEqual(expect.objectContaining({
+      open_invoice_count: 0,
+      open_invoice_amount: 0,
+    }));
+    expect(db.queries.join('\n')).not.toContain('FROM Invoices');
+  });
+
+  it('keeps invoice context for billing portal roles', async () => {
+    const db = makeDb([
+      { recordset: [{ total: 3, in_yard: 2, released: 1, on_hold: 0, repair: 0 }] },
+      { recordset: [{ total: 1 }] },
+      {
+        recordset: [{
+          container_id: 7,
+          container_number: 'MSKU1234567',
+          status: 'in_yard',
+          open_invoice_count: 2,
+          open_invoice_amount: 5000,
+        }],
+      },
+    ], 'billing_user');
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await GET(makeRequest());
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.containers[0]).toEqual(expect.objectContaining({
+      open_invoice_count: 2,
+      open_invoice_amount: 5000,
+    }));
+    expect(db.queries.join('\n')).toContain('FROM Invoices');
   });
 
   it('maps released portal filter to released and gated-out statuses', async () => {

@@ -14,12 +14,15 @@ jest.mock('@/lib/integrationLog', () => ({
 const mockedGetDb = getDb as jest.Mock;
 const mockedWriteIntegrationLog = writeIntegrationLog as jest.Mock;
 
-function makeDb(results?: Array<{ recordset: unknown[] }>) {
+function makeDb(results?: Array<{ recordset: unknown[] }>, role = 'customer_admin') {
   const queries: string[] = [];
   const queue = [...(results || [])];
   const input = jest.fn().mockReturnThis();
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
+    if (statement.includes('FROM Users')) {
+      return Promise.resolve({ recordset: [{ customer_portal_role: role }] });
+    }
     return Promise.resolve(queue.shift() || { recordset: [] });
   });
   const request = jest.fn(() => ({ input, query }));
@@ -28,7 +31,7 @@ function makeDb(results?: Array<{ recordset: unknown[] }>) {
 
 function makeRequest() {
   return new NextRequest('http://localhost/api/portal/overview', {
-    headers: { 'x-customer-id': '42' },
+    headers: { 'x-customer-id': '42', 'x-user-id': '7' },
   });
 }
 

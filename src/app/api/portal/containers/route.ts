@@ -10,57 +10,61 @@ import {
 import { normalizePortalContainerSummary, portalContainerSummarySelect } from '@/lib/portalContainerSummary';
 import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
-const PORTAL_CONTAINER_CONTEXT_SQL = `
-  OUTER APPLY (
-    SELECT TOP 1
-      b.booking_id,
-      b.booking_number,
-      b.booking_type,
-      b.status AS booking_status
-    FROM BookingContainers bc
-    JOIN Bookings b ON b.booking_id = bc.booking_id
-    WHERE bc.container_id = c.container_id
-      OR bc.container_number = c.container_number
-    ORDER BY ISNULL(b.eta, b.created_at) DESC, b.booking_id DESC
-  ) latestBooking
-  OUTER APPLY (
-    SELECT TOP 1
-      g.transaction_id,
-      g.eir_number,
-      g.transaction_type,
-      g.created_at
-    FROM GateTransactions g
-    WHERE g.container_id = c.container_id
-    ORDER BY g.created_at DESC, g.transaction_id DESC
-  ) latestGate
-  OUTER APPLY (
-    SELECT TOP 1
-      g.eir_number,
-      g.created_at
-    FROM GateTransactions g
-    WHERE g.container_id = c.container_id
-      AND g.transaction_type = 'gate_in'
-    ORDER BY g.created_at DESC, g.transaction_id DESC
-  ) latestGateIn
-  OUTER APPLY (
-    SELECT TOP 1
-      g.eir_number,
-      g.created_at
-    FROM GateTransactions g
-    WHERE g.container_id = c.container_id
-      AND g.transaction_type = 'gate_out'
-    ORDER BY g.created_at DESC, g.transaction_id DESC
-  ) latestGateOut
-  OUTER APPLY (
-    SELECT
-      COUNT(*) AS open_invoice_count,
-      ISNULL(SUM(ISNULL(i.balance_amount, i.grand_total)), 0) AS open_invoice_amount
-    FROM Invoices i
-    WHERE i.container_id = c.container_id
-      AND i.status IN ('issued', 'overdue')
-      AND ${portalInvoiceVisibilitySql('i')}
-  ) invoiceContext
-`;
+function portalContainerContextSql(includeInvoiceContext: boolean) {
+  return `
+    OUTER APPLY (
+      SELECT TOP 1
+        b.booking_id,
+        b.booking_number,
+        b.booking_type,
+        b.status AS booking_status
+      FROM BookingContainers bc
+      JOIN Bookings b ON b.booking_id = bc.booking_id
+      WHERE bc.container_id = c.container_id
+        OR bc.container_number = c.container_number
+      ORDER BY ISNULL(b.eta, b.created_at) DESC, b.booking_id DESC
+    ) latestBooking
+    OUTER APPLY (
+      SELECT TOP 1
+        g.transaction_id,
+        g.eir_number,
+        g.transaction_type,
+        g.created_at
+      FROM GateTransactions g
+      WHERE g.container_id = c.container_id
+      ORDER BY g.created_at DESC, g.transaction_id DESC
+    ) latestGate
+    OUTER APPLY (
+      SELECT TOP 1
+        g.eir_number,
+        g.created_at
+      FROM GateTransactions g
+      WHERE g.container_id = c.container_id
+        AND g.transaction_type = 'gate_in'
+      ORDER BY g.created_at DESC, g.transaction_id DESC
+    ) latestGateIn
+    OUTER APPLY (
+      SELECT TOP 1
+        g.eir_number,
+        g.created_at
+      FROM GateTransactions g
+      WHERE g.container_id = c.container_id
+        AND g.transaction_type = 'gate_out'
+      ORDER BY g.created_at DESC, g.transaction_id DESC
+    ) latestGateOut
+    ${includeInvoiceContext ? `
+    OUTER APPLY (
+      SELECT
+        COUNT(*) AS open_invoice_count,
+        ISNULL(SUM(ISNULL(i.balance_amount, i.grand_total)), 0) AS open_invoice_amount
+      FROM Invoices i
+      WHERE i.container_id = c.container_id
+        AND i.status IN ('issued', 'overdue')
+        AND ${portalInvoiceVisibilitySql('i')}
+    ) invoiceContext
+    ` : ''}
+  `;
+}
 
 function parseBoundedPositiveInt(value: string | null, fallback: number, max: number) {
   const parsed = Number(value);
@@ -77,6 +81,8 @@ export async function GET(request: NextRequest) {
     const db = await getDb();
     const portalActor = await requirePortalAction(request, db, 'portal.container.view');
     if (portalActor instanceof NextResponse) return portalActor;
+    const canViewInvoices = portalActor.actions.has('portal.invoice.view');
+    const contextSql = portalContainerContextSql(canViewInvoices);
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status')?.trim();
@@ -125,7 +131,7 @@ export async function GET(request: NextRequest) {
     const countResult = await req.query(`
       SELECT COUNT(*) as total
       FROM Containers c
-      ${PORTAL_CONTAINER_CONTEXT_SQL}
+      ${contextSql}
       ${whereClause}
     `);
     const total = countResult.recordset[0].total;
@@ -152,21 +158,28 @@ export async function GET(request: NextRequest) {
         latestGateIn.created_at AS gate_in_eir_at,
         latestGateOut.eir_number AS gate_out_eir_number,
         latestGateOut.created_at AS gate_out_eir_at,
-        invoiceContext.open_invoice_count,
-        invoiceContext.open_invoice_amount,
+        ${canViewInvoices ? 'invoiceContext.open_invoice_count' : '0'} AS open_invoice_count,
+        ${canViewInvoices ? 'invoiceContext.open_invoice_amount' : '0'} AS open_invoice_amount,
         ${portalVisibilityReasonSql('container', 'c.container_id', 'c.container_number')} AS visibility_role,
         z.zone_name, y.yard_name
       FROM Containers c
       LEFT JOIN YardZones z ON c.zone_id = z.zone_id
       LEFT JOIN Yards y ON c.yard_id = y.yard_id
-      ${PORTAL_CONTAINER_CONTEXT_SQL}
+      ${contextSql}
       ${whereClause}
       ORDER BY c.gate_in_date DESC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
+    const containers = canViewInvoices
+      ? result.recordset
+      : result.recordset.map(row => ({
+        ...row,
+        open_invoice_count: 0,
+        open_invoice_amount: 0,
+      }));
 
     return NextResponse.json({
-      containers: result.recordset,
+      containers,
       summary,
       total,
       page,

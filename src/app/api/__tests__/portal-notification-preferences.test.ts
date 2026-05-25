@@ -11,6 +11,9 @@ function makeChain() {
   });
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
+    if (statement.includes('FROM Users')) {
+      return Promise.resolve({ recordset: [{ customer_portal_role: 'customer_admin' }] });
+    }
     const next = queryQueue.shift();
     if (!next) return Promise.resolve({ recordset: [] });
     if (next instanceof Error) return Promise.reject(next);
@@ -31,7 +34,7 @@ function q(recordset: unknown[]) { return { recordset }; }
 function request(method = 'GET', body?: unknown) {
   return new NextRequest('http://localhost/api/portal/notification-preferences', {
     method,
-    headers: { 'x-customer-id': '42', 'content-type': 'application/json' },
+    headers: { 'x-customer-id': '42', 'x-user-id': '7', 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
 }

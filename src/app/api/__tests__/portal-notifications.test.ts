@@ -7,6 +7,9 @@ function makeChain() {
   const input = jest.fn().mockReturnThis();
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
+    if (statement.includes('FROM Users')) {
+      return Promise.resolve({ recordset: [{ customer_portal_role: 'customer_admin' }] });
+    }
     const next = queryQueue.shift();
     if (!next) return Promise.resolve({ recordset: [] });
     if (next instanceof Error) return Promise.reject(next);
@@ -26,7 +29,7 @@ function q(recordset: unknown[]): { recordset: unknown[] } { return { recordset 
 function makeRequest(url = 'http://localhost/api/portal/notifications'): NextRequest {
   return new NextRequest(url, {
     method: 'GET',
-    headers: { 'x-customer-id': '42' },
+    headers: { 'x-customer-id': '42', 'x-user-id': '7' },
   });
 }
 

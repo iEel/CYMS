@@ -24,6 +24,9 @@ function makeDb() {
   type RequestChain = { input: jest.Mock; query: jest.Mock };
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
+    if (statement.includes('FROM Users')) {
+      return Promise.resolve({ recordset: [{ customer_portal_role: 'customer_admin' }] });
+    }
     if (statement.includes('COUNT(*)')) return Promise.resolve({ recordset: [{ total: 0 }] });
     if (statement.includes('INSERT INTO Bookings')) {
       return Promise.resolve({
@@ -56,6 +59,7 @@ function makeDb() {
 function makeRequest(url = 'http://localhost/api/portal/bookings', init: { method?: string; body?: BodyInit | null; headers?: HeadersInit } = {}) {
   const headers = new Headers(init.headers);
   headers.set('x-customer-id', '42');
+  headers.set('x-user-id', '7');
 
   return new NextRequest(url, {
     method: init.method,
@@ -163,7 +167,7 @@ describe('POST /api/portal/bookings', () => {
     }));
 
     expect(res.status).toBe(400);
-    expect(db.query).not.toHaveBeenCalled();
+    expect(db.queries.join('\n')).not.toContain('INSERT INTO Bookings');
     expect(mockedUpsertPortalEntityAccess).not.toHaveBeenCalled();
   });
 

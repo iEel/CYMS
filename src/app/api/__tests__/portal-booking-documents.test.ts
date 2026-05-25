@@ -23,6 +23,9 @@ function makeDb() {
   const inputs: Array<[string, unknown, unknown]> = [];
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
+    if (statement.includes('FROM Users')) {
+      return Promise.resolve({ recordset: [{ customer_portal_role: 'customer_admin' }] });
+    }
     if (statement.includes('FROM Bookings b') && statement.includes('PortalEntityAccess')) {
       return Promise.resolve({ recordset: [{ booking_id: 77, booking_number: 'BK-1', yard_id: 1, customer_id: 42 }] });
     }
@@ -46,7 +49,7 @@ function makeDb() {
 function portalReq(body?: unknown) {
   return new NextRequest('http://localhost/api/portal/bookings/documents?booking_id=77', {
     method: body ? 'POST' : 'GET',
-    headers: { 'x-customer-id': '42', 'content-type': 'application/json' },
+    headers: { 'x-customer-id': '42', 'x-user-id': '7', 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
 }
