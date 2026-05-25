@@ -87,4 +87,39 @@ describe('BoxTech container technical weights', () => {
     expect(gateOut).toContain('Max Gross');
     expect(gateOut).toContain('ไม่ใช่น้ำหนักจริง/VGM');
   });
+
+  it('surfaces BoxTech technical weights in EIR payloads and Container 360 displays', () => {
+    const eirPayload = fs.readFileSync(path.join(root, 'src/lib/eirPayload.ts'), 'utf8');
+    const eirDocument = fs.readFileSync(path.join(root, 'src/components/gate/EIRDocument.tsx'), 'utf8');
+    const containerDetail = fs.readFileSync(path.join(root, 'src/components/yard/ContainerDetailModal.tsx'), 'utf8');
+    const dashboardEirRoute = fs.readFileSync(path.join(root, 'src/app/api/gate/eir/route.ts'), 'utf8');
+    const portalEirRoute = fs.readFileSync(path.join(root, 'src/app/api/portal/eir/route.ts'), 'utf8');
+    const portalEirPdfRoute = fs.readFileSync(path.join(root, 'src/app/api/portal/eir-pdf/route.ts'), 'utf8');
+    const containerDetailRoute = fs.readFileSync(path.join(root, 'src/app/api/containers/detail/route.ts'), 'utf8');
+
+    expect(eirPayload).toContain('tare_weight_kg: number');
+    expect(eirPayload).toContain('max_gross_weight_kg: number');
+    expect(eirPayload).toContain('tare_weight_kg: asNumber(row.tare_weight_kg)');
+    expect(eirPayload).toContain('max_gross_weight_kg: asNumber(row.max_gross_weight_kg)');
+
+    expect(eirDocument).toContain('Tare Weight');
+    expect(eirDocument).toContain('Max Gross');
+    expect(eirDocument).toContain("data.tare_weight_kg ? `${data.tare_weight_kg.toLocaleString()} kg` : '-'");
+    expect(eirDocument).toContain("data.max_gross_weight_kg ? `${data.max_gross_weight_kg.toLocaleString()} kg` : '-'");
+
+    expect(dashboardEirRoute).toContain('c.tare_weight_kg, c.max_gross_weight_kg');
+    expect(dashboardEirRoute).toContain('tare_weight_kg: row.tare_weight_kg || 0');
+    expect(dashboardEirRoute).toContain('max_gross_weight_kg: row.max_gross_weight_kg || 0');
+    expect(portalEirRoute).toContain('c.tare_weight_kg, c.max_gross_weight_kg');
+    expect(portalEirPdfRoute).toContain('c.tare_weight_kg, c.max_gross_weight_kg');
+
+    expect(containerDetail).toContain('tare_weight_kg?: number | null;');
+    expect(containerDetail).toContain('max_gross_weight_kg?: number | null;');
+    expect(containerDetail).toContain('Tare Weight');
+    expect(containerDetail).toContain('Max Gross');
+    expect(containerDetail).toContain('function formatWeightKg');
+    expect(containerDetail).toContain("return value ? `${Number(value).toLocaleString()} kg` : '—';");
+    expect(containerDetailRoute).toContain('tare_weight_kg: container.tare_weight_kg');
+    expect(containerDetailRoute).toContain('max_gross_weight_kg: container.max_gross_weight_kg');
+  });
 });

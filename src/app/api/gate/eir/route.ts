@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
 
     const result = await req.query(`
       SELECT g.*, c.container_number, c.size, c.type, c.shipping_line, c.is_laden,
+        c.tare_weight_kg, c.max_gross_weight_kg,
         c.bay, c.[row], c.tier,
         u.full_name as processed_by_name,
         y.yard_name, y.yard_code,
@@ -84,6 +85,8 @@ export async function GET(request: NextRequest) {
       type: row.type,
       shipping_line: row.shipping_line,
       seal_number: row.seal_number,
+      tare_weight_kg: row.tare_weight_kg || 0,
+      max_gross_weight_kg: row.max_gross_weight_kg || 0,
       is_laden: row.is_laden,
       driver_name: row.driver_name,
       truck_plate: row.truck_plate,

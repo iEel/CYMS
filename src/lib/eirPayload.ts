@@ -50,6 +50,8 @@ export interface EIRPayload {
   type: string;
   shipping_line: string;
   seal_number: string;
+  tare_weight_kg: number;
+  max_gross_weight_kg: number;
   is_laden: boolean;
   driver_name: string;
   truck_plate: string;
@@ -132,6 +134,8 @@ export function buildEIRPayload(row: DbRow, company: EIRCompanyProfile | null): 
     type: asString(row.type),
     shipping_line: asString(row.shipping_line),
     seal_number: asString(row.seal_number),
+    tare_weight_kg: asNumber(row.tare_weight_kg),
+    max_gross_weight_kg: asNumber(row.max_gross_weight_kg),
     is_laden: asBoolean(row.is_laden),
     driver_name: asString(row.driver_name),
     truck_plate: asString(row.truck_plate),

@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       .input('cid', sql.Int, cid)
       .query(`
         SELECT g.*, c.container_number, c.size, c.type, c.shipping_line, c.is_laden,
+          c.tare_weight_kg, c.max_gross_weight_kg,
           c.bay, c.[row], c.tier,
           u.full_name as processed_by_name,
           y.yard_name, y.yard_code,

@@ -26,6 +26,8 @@ export interface EIRData {
   type: string;
   shipping_line: string;
   seal_number: string;
+  tare_weight_kg: number;
+  max_gross_weight_kg: number;
   is_laden: boolean;
   driver_name: string;
   truck_plate: string;
@@ -213,15 +215,17 @@ export default function EIRDocument({ data, onClose }: EIRDocumentProps) {
             <div className="bg-slate-50 px-3 py-1 border-b border-slate-200">
               <h3 className="eir-section-title text-[10px] font-bold text-slate-500 uppercase tracking-wider">📦 ข้อมูลตู้ (Container Information)</h3>
             </div>
-            <div className="grid grid-cols-5 gap-0 divide-x divide-slate-200">
+            <div className="grid grid-cols-6 gap-0 divide-x divide-slate-200">
               <InfoCell label="เลขตู้" value={data.container_number} mono bold className="p-2" />
               <InfoCell label="ขนาด/ประเภท" value={`${data.size}'${data.type}`} className="p-2" />
+              <InfoCell label="Tare Weight" value={data.tare_weight_kg ? `${data.tare_weight_kg.toLocaleString()} kg` : '-'} className="p-2" />
+              <InfoCell label="Max Gross" value={data.max_gross_weight_kg ? `${data.max_gross_weight_kg.toLocaleString()} kg` : '-'} className="p-2" />
               <InfoCell label="สายเรือ" value={data.shipping_line || '-'} className="p-2" />
-              <InfoCell label="ซีล" value={data.seal_number || '-'} mono className="p-2" />
               <InfoCell label="สถานะ" value={data.is_laden ? 'มีสินค้า' : 'ตู้เปล่า'} className="p-2" />
             </div>
-            <div className="grid grid-cols-5 gap-0 divide-x divide-slate-200 border-t border-slate-200">
+            <div className="grid grid-cols-6 gap-0 divide-x divide-slate-200 border-t border-slate-200">
               <InfoCell label="Booking Ref" value={data.booking_ref || '-'} className="p-2" />
+              <InfoCell label="ซีล" value={data.seal_number || '-'} mono className="p-2" />
               <InfoCell label="โซน" value={data.zone_name || '-'} className="p-2" />
               <InfoCell label="Bay/Row/Tier" value={data.zone_name ? `B${data.bay}-R${data.row}-T${data.tier}` : '-'} mono className="p-2" />
 

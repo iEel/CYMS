@@ -406,6 +406,8 @@ export async function GET(request: NextRequest) {
         type: container.type,
         status: container.status,
         shipping_line: container.shipping_line,
+        tare_weight_kg: container.tare_weight_kg,
+        max_gross_weight_kg: container.max_gross_weight_kg,
         is_laden: container.is_laden,
         yard_name: container.yard_name,
         zone_name: container.zone_name,

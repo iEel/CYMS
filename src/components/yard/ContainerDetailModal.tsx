@@ -33,6 +33,8 @@ interface ContainerDetail {
     type: string;
     status: string;
     shipping_line: string;
+    tare_weight_kg?: number | null;
+    max_gross_weight_kg?: number | null;
     is_laden: boolean;
     yard_name: string;
     zone_name: string;
@@ -280,6 +282,10 @@ const REVIEW_ACTION_LABELS: Record<string, string> = {
   billing_hold_released: 'ปลด Billing Hold',
 };
 
+function formatWeightKg(value?: number | null) {
+  return value ? `${Number(value).toLocaleString()} kg` : '—';
+}
+
 export default function ContainerDetailModal({ containerId, onClose, onRefresh, onViewEIR }: ContainerDetailModalProps) {
   const { hasPermission, hasAnyPermission } = useAuth();
   const [data, setData] = useState<ContainerDetail | null>(null);
@@ -482,6 +488,8 @@ export default function ContainerDetailModal({ containerId, onClose, onRefresh, 
               <InfoField label="ซีล" value={c.seal_number || '—'} />
               <InfoField label="สินค้า" value={c.is_laden ? '📦 มีสินค้า' : '📭 ตู้เปล่า'} />
               <InfoField label="Booking" value={c.booking_ref || '—'} />
+              <InfoField label="Tare Weight" value={formatWeightKg(c.tare_weight_kg)} />
+              <InfoField label="Max Gross" value={formatWeightKg(c.max_gross_weight_kg)} />
               <InfoField label="เกรด" value={`Grade ${c.container_grade || 'A'} · ${(GRADE_INFO[c.container_grade || 'A'] || GRADE_INFO.A).desc}`} highlight />
               <InfoField label="Hold" value={c.hold_status || '—'} highlight={Boolean(c.hold_status)} />
               <InfoField label="ลาน" value={c.yard_name || '—'} />
