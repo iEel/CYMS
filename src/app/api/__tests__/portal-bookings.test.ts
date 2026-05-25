@@ -105,6 +105,7 @@ describe('POST /api/portal/bookings', () => {
         booking_type: 'export',
         yard_id: 1,
         customer_id: 999,
+        customerId: 999,
         container_count: 2,
         container_numbers: ['msku1234567'],
       }),
@@ -121,12 +122,11 @@ describe('POST /api/portal/bookings', () => {
 
     expect(db.input.mock.calls).toEqual(expect.arrayContaining([
       ['customerId', expect.anything(), 42],
+      ['bookingCustomerId', expect.anything(), 42],
       ['status', expect.anything(), 'pending'],
       ['containerNumber', expect.anything(), 'MSKU1234567'],
     ]));
-    expect(db.input.mock.calls).not.toEqual(expect.arrayContaining([
-      ['customerId', expect.anything(), 999],
-    ]));
+    expect(db.input.mock.calls.some((call: unknown[]) => call[2] === 999)).toBe(false);
     expect(db.queries.join('\n')).toContain('INSERT INTO Bookings');
     expect(db.queries.join('\n')).toContain('INSERT INTO BookingContainers');
     expect(mockedUpsertPortalEntityAccess).toHaveBeenCalledWith(expect.objectContaining({

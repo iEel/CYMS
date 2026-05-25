@@ -14,6 +14,16 @@ function makeDb(recordsets: Array<Array<Record<string, unknown>>> = []) {
   return { request, input, query };
 }
 
+function expectedGrantBranchFor(sql: string, marker: string) {
+  const markerIndex = sql.indexOf(marker);
+  expect(markerIndex).toBeGreaterThanOrEqual(0);
+
+  const branchStart = sql.lastIndexOf('UNION ALL', markerIndex);
+  const nextBranch = sql.indexOf('UNION ALL', markerIndex);
+
+  return sql.slice(branchStart >= 0 ? branchStart : 0, nextBranch >= 0 ? nextBranch : undefined);
+}
+
 describe('portal grant reconciler', () => {
   it('builds expected grants from fixed owner, billing, booking, and invoice sources', () => {
     const sql = buildPortalExpectedGrantsSql();
@@ -75,6 +85,21 @@ describe('portal grant reconciler', () => {
     expect(sql).toContain("CAST(N'container' AS NVARCHAR(40)) AS entity_type");
     expect(sql).toMatch(/gt\.transaction_id\s+AS\s+entity_id,\s+gt\.eir_number\s+AS\s+entity_ref/i);
     expect(sql).toMatch(/gt\.container_id\s+AS\s+entity_id,\s+c\.container_number\s+AS\s+entity_ref/i);
+  });
+
+  it('keeps invoice expected grants limited to billing-safe roles', () => {
+    const sql = buildPortalExpectedGrantsSql();
+    const invoiceBranch = expectedGrantBranchFor(sql, 'FROM Invoices i');
+    const accessRoles = Array.from(invoiceBranch.matchAll(/CAST\(N'([^']+)'\s+AS\s+NVARCHAR\(40\)\)\s+AS\s+access_role/g))
+      .map((match) => match[1]);
+
+    expect(invoiceBranch).toContain("CAST(N'invoice' AS NVARCHAR(40)) AS entity_type");
+    expect(accessRoles.length).toBeGreaterThan(0);
+    expect(accessRoles.every((role) => ['invoice_customer', 'billing'].includes(role))).toBe(true);
+    expect(accessRoles).toContain('invoice_customer');
+    expect(accessRoles).not.toEqual(expect.arrayContaining(['driver', 'trucking']));
+    expect(invoiceBranch).not.toContain('driver_user_id');
+    expect(invoiceBranch).not.toContain('trucking_company_id');
   });
 
   it('previews missing and stale PortalEntityAccess grants', async () => {

@@ -56,6 +56,19 @@ describe('GET /api/portal/containers', () => {
     expect(combinedSql).not.toContain('c.customer_id');
   });
 
+  it('ignores attacker supplied customer ids in the query string', async () => {
+    const db = makeDb();
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await GET(makeRequest('http://localhost/api/portal/containers?customer_id=999&cid=999'));
+
+    expect(res.status).toBe(200);
+    const cidInputs = db.input.mock.calls.filter((call: unknown[]) => call[0] === 'cid');
+    expect(cidInputs.length).toBeGreaterThan(0);
+    expect(cidInputs.every((call: unknown[]) => call[2] === 42)).toBe(true);
+    expect(db.input.mock.calls.some((call: unknown[]) => call[2] === 999)).toBe(false);
+  });
+
   it('returns customer inventory summary and enriched container context', async () => {
     const db = makeDb([
       { recordset: [{ total: 3, in_yard: 2, released: 1, on_hold: 1, repair: 0 }] },

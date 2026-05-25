@@ -19,11 +19,14 @@ function q(recordset: unknown[]): QueryResult {
   return { recordset };
 }
 
-function makeDb(queue: QueryResult[]) {
+function makeDb(queue: QueryResult[], portalRole?: string) {
   const queries: string[] = [];
   const input = jest.fn().mockReturnThis();
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
+    if (portalRole && statement.includes('FROM Users')) {
+      return Promise.resolve(q([{ customer_portal_role: portalRole }]));
+    }
     return Promise.resolve(queue.shift() || q([]));
   });
   const request = jest.fn(() => ({ input, query }));
@@ -68,6 +71,9 @@ const eirRow = {
   processed_by_name: 'Operator',
   notes: 'Portal EIR',
   damage_report: JSON.stringify(damageReport),
+  container_grade: 'C',
+  driver_phone: '0812345678',
+  internal_note: 'Internal inspection note',
 };
 
 describe('Customer Portal EIR', () => {
@@ -171,5 +177,53 @@ describe('Customer Portal EIR', () => {
     expect(combinedSql).toContain("pea.entity_type = 'gate_transaction'");
     expect(combinedSql).toContain('DocumentLifecycle');
     expect(combinedSql).toContain('EIRAccessLog');
+  });
+
+  it('does not leak grade or internal EIR fields to portal users without grade permission', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const route = require('../portal/eir/route') as typeof import('../portal/eir/route');
+    const db = makeDb([
+      q([{
+        ...eirRow,
+        access_role: 'booking_customer',
+        permission_scope: JSON.stringify({
+          eir: { fields: { container_grade: false } },
+        }),
+      }]),
+      q([{ company_name: 'CYMS', address: 'Bangkok', phone: '02', email: 'ops@example.test', logo_url: '', tax_id: '010' }]),
+      q([{
+        lifecycle_id: 1,
+        document_type: 'eir',
+        document_number: 'EIR-IN-2026-000077',
+        status: 'issued',
+        action: 'issued',
+        event_type: 'created',
+        user_name: 'Operator',
+        yard_name: 'Main Yard',
+        created_at: '2026-05-21T08:00:00.000Z',
+        internal_note: 'private lifecycle note',
+      }]),
+      q([]),
+    ], 'document_user');
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await route.GET(portalRequest('/api/portal/eir?eir_number=EIR-IN-2026-000077'));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.eir).toEqual(expect.objectContaining({
+      eir_number: 'EIR-IN-2026-000077',
+      truck_plate: '70-****',
+    }));
+    expect(JSON.stringify(body)).not.toContain('0812345678');
+    expect(JSON.stringify(body)).not.toContain('70-1234');
+    expect(JSON.stringify(body)).not.toContain('Internal inspection note');
+    expect(body.eir).not.toHaveProperty('container_grade');
+    expect(body.eir).not.toHaveProperty('container_grade_label');
+    expect(body.eir).not.toHaveProperty('truck_company');
+    expect(body.eir).not.toHaveProperty('internal_note');
+    expect(body.eir.damage_report).not.toHaveProperty('condition_grade');
+    expect(body.eir.damage_report).not.toHaveProperty('container_grade');
+    expect(body.lifecycle[0]).not.toHaveProperty('internal_note');
   });
 });
