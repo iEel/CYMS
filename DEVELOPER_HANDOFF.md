@@ -123,6 +123,8 @@ npm run dev
 # เปิด http://localhost:3005
 ```
 
+> หมายเหตุ: `npm run dev` ใช้ Next dev server แบบ Webpack (`next dev --webpack -p 3005`) เป็นค่าเริ่มต้น เพื่อลด runtime overlay จาก Turbopack HMR cache/stale module ระหว่างพัฒนา 3D Yard; ถ้าต้องการทดสอบ Turbopack ให้ใช้ `npm run dev:turbo` แยกต่างหาก
+
 ### 3.5 บัญชีทดสอบ
 
 | Username | Password | บทบาท | สิทธิ์ |
@@ -1771,6 +1773,9 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 # รันโปรเจค (Port 3005)
 npm run dev
 # → http://localhost:3005
+
+# ทดลอง Turbopack แยกจาก default dev flow
+npm run dev:turbo
 
 # Setup DB ใหม่ (สร้าง DB + tables)
 node scripts/setup-db.js
