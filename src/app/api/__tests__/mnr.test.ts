@@ -4,6 +4,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { applyPortalGrants, buildInvoicePartyGrants } from '@/lib/portalGrantRules';
 
 // ── Mock DB ────────────────────────────────────────────────────────
 const mockQuery = jest.fn();
@@ -27,6 +28,14 @@ jest.mock('@/lib/apiAuth', () => ({
 jest.mock('@/lib/documentNumber', () => ({
   nextDocumentNumber: jest.fn(async ({ prefix }: { prefix: string }) => `${prefix}-202605-000001`),
 }));
+
+jest.mock('@/lib/portalGrantRules', () => ({
+  buildInvoicePartyGrants: jest.fn(() => [{ customerId: 88, entityType: 'invoice', entityId: 555, accessRole: 'invoice_customer' }]),
+  applyPortalGrants: jest.fn().mockResolvedValue(undefined),
+}));
+
+const mockedBuildInvoicePartyGrants = buildInvoicePartyGrants as jest.Mock;
+const mockedApplyPortalGrants = applyPortalGrants as jest.Mock;
 
 function makeRequest(method: string, url: string, body?: unknown): NextRequest {
   return new NextRequest(url, {
@@ -197,6 +206,44 @@ describe('PUT /api/mnr — status transitions', () => {
     const res = await PUT(req);
     expect(res.status).toBe(200);
     expect(mockInput).toHaveBeenCalledWith('actualCost', expect.anything(), 4200);
+  });
+
+  it('grants portal access when completion creates an M&R invoice', async () => {
+    const invoice = {
+      invoice_id: 555,
+      invoice_number: 'INV-202605-000001',
+      yard_id: 1,
+      customer_id: 88,
+      container_id: 1,
+      charge_type: 'mnr',
+      grand_total: 4494,
+    };
+    const grants = [{ customerId: 88, entityType: 'invoice', entityId: 555, accessRole: 'invoice_customer' }];
+    mockedBuildInvoicePartyGrants.mockReturnValueOnce(grants);
+    mockQuery.mockResolvedValueOnce({
+      recordset: [{
+        ...mockOrder,
+        eor_id: 1,
+        customer_id: 11,
+        billing_customer_id: 88,
+        container_customer_id: 22,
+        source_eir_number: 'EIR-1',
+      }],
+    }); // SELECT
+    mockQuery.mockResolvedValueOnce({ recordset: [] });           // UPDATE with actual_cost
+    mockQuery.mockResolvedValueOnce({ recordset: [] });           // Revert container status
+    mockQuery.mockResolvedValueOnce({ recordset: [invoice] });    // INSERT invoice
+    mockQuery.mockResolvedValueOnce({ recordset: [] });           // Link invoice to EOR
+
+    const req = makeRequest('PUT', 'http://localhost/api/mnr', {
+      eor_id: 1, action: 'complete', actual_cost: 4200, user_id: 5,
+    });
+    const res = await PUT(req);
+
+    expect(res.status).toBe(200);
+    expect(mockQuery.mock.calls.some(([statement]) => String(statement).includes('INSERT INTO Invoices'))).toBe(true);
+    expect(mockedBuildInvoicePartyGrants).toHaveBeenCalledWith(invoice);
+    expect(mockedApplyPortalGrants).toHaveBeenCalledWith(mockDb, grants);
   });
 
   it('returns 400 for invalid action', async () => {

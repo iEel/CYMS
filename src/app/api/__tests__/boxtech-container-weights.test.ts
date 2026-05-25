@@ -110,8 +110,7 @@ describe('BoxTech container technical weights', () => {
     expect(eirDocument).toContain("data.max_gross_weight_kg ? `${data.max_gross_weight_kg.toLocaleString()} kg` : '-'");
 
     expect(dashboardEirRoute).toContain('c.tare_weight_kg, c.max_gross_weight_kg');
-    expect(dashboardEirRoute).toContain('tare_weight_kg: row.tare_weight_kg || 0');
-    expect(dashboardEirRoute).toContain('max_gross_weight_kg: row.max_gross_weight_kg || 0');
+    expect(dashboardEirRoute).toContain('buildEIRPayload(row, company)');
     expect(portalEirRoute).toContain('c.tare_weight_kg, c.max_gross_weight_kg');
     expect(portalEirPdfRoute).toContain('c.tare_weight_kg, c.max_gross_weight_kg');
 

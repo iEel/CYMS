@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit';
 import { z } from 'zod';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
+import { applyPortalGrants, buildInvoicePartyGrants } from '@/lib/portalGrantRules';
 
 // === Zod Schemas ===
 const createEORSchema = z.object({
@@ -140,6 +141,8 @@ async function createMnrInvoiceIfNeeded({
     `);
 
   const invoice = invoiceResult.recordset[0];
+  await applyPortalGrants(db, buildInvoicePartyGrants(invoice));
+
   await db.request()
     .input('eorId', sql.Int, Number(order.eor_id))
     .input('invoiceId', sql.Int, invoice.invoice_id)
