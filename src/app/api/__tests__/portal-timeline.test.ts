@@ -5,12 +5,12 @@ jest.mock('@/lib/db', () => ({ getDb: jest.fn() }));
 
 const mockedGetDb = getDb as jest.Mock;
 
-function makeDb() {
+function makeDb(role = 'booking_user') {
   const queries: string[] = [];
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
     if (statement.includes('FROM Users')) {
-      return Promise.resolve({ recordset: [{ customer_portal_role: 'booking_user' }] });
+      return Promise.resolve({ recordset: [{ customer_portal_role: role }] });
     }
     if (statement.includes('FROM Bookings b')) {
       return Promise.resolve({ recordset: [{ booking_id: 77, booking_number: 'BK-1' }] });
@@ -96,5 +96,18 @@ describe('GET /api/portal/timeline', () => {
       expect.not.objectContaining({ truck_plate: 'TRK-123', driver_name: 'Somchai' })
     );
     expect(db.input).toHaveBeenCalledWith('containerId', expect.anything(), 88);
+  });
+
+  it('includes truck and driver fields for trucking coordinators', async () => {
+    const db = makeDb('trucking_coordinator');
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await route.GET(req('http://localhost/api/portal/timeline?booking_id=77'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.timeline.find((event: Record<string, unknown>) => event.event_type === 'gate_in')).toEqual(
+      expect.objectContaining({ truck_plate: 'TRK-123', driver_name: 'Somchai' })
+    );
   });
 });

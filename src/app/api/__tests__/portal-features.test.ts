@@ -13,11 +13,14 @@ function q(recordset: unknown[]): QueryResult {
   return { recordset };
 }
 
-function makeDb(queue: QueryResult[]) {
+function makeDb(queue: QueryResult[], role = 'customer_admin') {
   const queries: string[] = [];
   const input = jest.fn().mockReturnThis();
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
+    if (statement.includes('FROM Users')) {
+      return Promise.resolve(q([{ customer_portal_role: role }]));
+    }
     return Promise.resolve(queue.shift() || q([]));
   });
   const request = jest.fn(() => ({ input, query }));
@@ -31,6 +34,7 @@ function portalRequest(url: string, init: RequestInit = {}) {
     ...rest,
     headers: {
       'x-customer-id': '42',
+      'x-user-id': '7',
       ...(headers || {}),
     },
   });
@@ -69,14 +73,14 @@ describe('Customer Portal feature APIs', () => {
     expect(combinedSql).toContain('INSERT INTO PortalDisputes');
   });
 
-  it('returns a portal document bundle as a zip download', async () => {
+  it('returns invoice sections in the portal document bundle for billing users', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const route = require('../portal/document-bundle/route') as typeof import('../portal/document-bundle/route');
     const db = makeDb([
       q([{ outstanding: 1200, open_count: 1 }]),
       q([{ invoice_id: 7, invoice_number: 'INV-7', status: 'issued', grand_total: 1200 }]),
       q([{ eir_number: 'EIR-7', container_number: 'MSKU1234567', transaction_type: 'gate_in', created_at: '2026-05-21T08:00:00.000Z' }]),
-    ]);
+    ], 'billing_user');
     mockedGetDb.mockResolvedValue(db);
 
     const res = await route.GET(portalRequest('http://localhost/api/portal/document-bundle'));
@@ -86,10 +90,33 @@ describe('Customer Portal feature APIs', () => {
     expect(res.headers.get('content-disposition')).toContain('CYMS-Portal-Bundle');
     const buffer = Buffer.from(await res.arrayBuffer());
     expect(buffer.subarray(0, 4).toString('binary')).toBe('PK\u0003\u0004');
+    expect(buffer.includes(Buffer.from('statement.json'))).toBe(true);
+    expect(buffer.includes(Buffer.from('invoices.csv'))).toBe(true);
+    expect(buffer.includes(Buffer.from('/api/portal/invoice-pdf'))).toBe(true);
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('FROM Invoices');
     expect(combinedSql).toContain('FROM GateTransactions g');
     expect(combinedSql).toContain('PortalEntityAccess');
     expect(combinedSql).toContain("pea.entity_type = 'gate_transaction'");
+  });
+
+  it('omits invoice queries and bundle files for document users', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const route = require('../portal/document-bundle/route') as typeof import('../portal/document-bundle/route');
+    const db = makeDb([
+      q([{ eir_number: 'EIR-7', container_number: 'MSKU1234567', transaction_type: 'gate_in', created_at: '2026-05-21T08:00:00.000Z' }]),
+    ], 'document_user');
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await route.GET(portalRequest('http://localhost/api/portal/document-bundle'));
+
+    expect(res.status).toBe(200);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    expect(buffer.includes(Buffer.from('eir-documents.csv'))).toBe(true);
+    expect(buffer.includes(Buffer.from('statement.json'))).toBe(false);
+    expect(buffer.includes(Buffer.from('invoices.csv'))).toBe(false);
+    const combinedSql = db.queries.join('\n');
+    expect(combinedSql).not.toContain('FROM Invoices');
+    expect(combinedSql).toContain('FROM GateTransactions g');
   });
 });
