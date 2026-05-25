@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { Compass, LocateFixed, RotateCcw } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -38,6 +39,12 @@ interface Props {
 }
 
 type YardColorMode = 'shipping' | 'status';
+
+interface CameraPose {
+  position: THREE.Vector3;
+  target: THREE.Vector3;
+  span: number;
+}
 
 const STATUS_COLORS: Record<string, number> = {
   in_yard: 0x10B981,  // emerald
@@ -160,6 +167,8 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
   const hoveredRef = useRef<THREE.Object3D | null>(null);
   const animFrameRef = useRef<number>(0);
   const highlightAnimRef = useRef<number>(0);
+  const cameraTweenRef = useRef<number>(0);
+  const cameraHomeRef = useRef<CameraPose | null>(null);
   const prevHighlightRef = useRef<THREE.Object3D | null>(null);
 
   const [zones, setZones] = useState<ZoneInfo[]>([]);
@@ -167,12 +176,69 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [colorMode, setColorMode] = useState<YardColorMode>('shipping');
+  const [selectedContainerNumber, setSelectedContainerNumber] = useState<string | null>(null);
 
   const activeShippingLegend = Array.from(
     new Set(containers.map(c => c.shipping_line).filter(Boolean))
   )
     .slice(0, 5)
     .map(line => ({ label: line, color: hexColor(SHIPPING_COLORS[line] || STATUS_COLORS.in_yard) }));
+
+  const moveCameraTo = useCallback((endPosition: THREE.Vector3, endTarget: THREE.Vector3) => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+
+    cancelAnimationFrame(cameraTweenRef.current);
+    const startPosition = camera.position.clone();
+    const startTarget = controls.target.clone();
+    let progress = 0;
+
+    const animateCamera = () => {
+      progress = Math.min(progress + 0.05, 1);
+      const t = 1 - Math.pow(1 - progress, 3);
+      camera.position.lerpVectors(startPosition, endPosition, t);
+      controls.target.lerpVectors(startTarget, endTarget, t);
+      controls.update();
+      if (progress < 1) {
+        cameraTweenRef.current = requestAnimationFrame(animateCamera);
+      }
+    };
+
+    animateCamera();
+  }, []);
+
+  const resetYardCamera = useCallback(() => {
+    const home = cameraHomeRef.current;
+    if (!home) return;
+    moveCameraTo(home.position.clone(), home.target.clone());
+  }, [moveCameraTo]);
+
+  const showTopDownView = useCallback(() => {
+    const home = cameraHomeRef.current;
+    if (!home) return;
+    const height = Math.max(18, home.span * 1.15);
+    moveCameraTo(
+      new THREE.Vector3(home.target.x, height, home.target.z + 0.01),
+      home.target.clone(),
+    );
+  }, [moveCameraTo]);
+
+  const focusSelectedContainer = useCallback(() => {
+    const targetNumber = selectedContainerNumber || highlightContainerNumber;
+    if (!targetNumber) return;
+
+    const entry = Array.from(containerMeshesRef.current.values())
+      .find(item => item.data.container_number === targetNumber);
+    if (!entry) return;
+
+    const target = new THREE.Vector3();
+    entry.mesh.getWorldPosition(target);
+    moveCameraTo(
+      new THREE.Vector3(target.x + 10, target.y + 10, target.z + 10),
+      target.clone(),
+    );
+  }, [highlightContainerNumber, moveCameraTo, selectedContainerNumber]);
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -346,9 +412,12 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     containerMeshesRef.current = containerMeshes;
 
     // Center camera
-    const totalWidth = zoneOffsetX - ZONE_GAP;
-    camera.position.set(totalWidth / 2, Math.max(12, totalWidth * 0.4), totalWidth * 0.6);
-    controls.target.set(totalWidth / 2, 1, 3);
+    const totalWidth = Math.max(zoneOffsetX - ZONE_GAP, 20);
+    const homeTarget = new THREE.Vector3(totalWidth / 2, 1, 3);
+    const homePosition = new THREE.Vector3(totalWidth / 2, Math.max(12, totalWidth * 0.4), totalWidth * 0.6);
+    cameraHomeRef.current = { position: homePosition.clone(), target: homeTarget.clone(), span: totalWidth };
+    camera.position.copy(homePosition);
+    controls.target.copy(homeTarget);
     controls.update();
 
     // Animate
@@ -372,6 +441,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animFrameRef.current);
+      cancelAnimationFrame(cameraTweenRef.current);
       controls.dispose();
       renderer.dispose();
       if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement);
@@ -647,11 +717,13 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
 
     if (intersects.length > 0) {
       const entry = findContainerEntry(intersects[0].object);
-      if (entry && onSelectContainer) {
-        onSelectContainer(entry.data);
+      if (entry) {
+        setSelectedContainerNumber(entry.data.container_number);
+        onSelectContainer?.(entry.data);
       }
-    } else if (onSelectContainer) {
-      onSelectContainer(null);
+    } else {
+      setSelectedContainerNumber(null);
+      onSelectContainer?.(null);
     }
   }, [onSelectContainer, findContainerEntry]);
 
@@ -727,9 +799,41 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
         )}
       </div>
 
-      {/* Controls hint */}
-      <div className="absolute top-3 right-3 z-10 text-[10px] text-slate-500 bg-slate-900/60 backdrop-blur rounded-lg px-2.5 py-1.5 border border-slate-700/50">
-        🖱️ หมุน • ⇧+🖱️ เลื่อน • 📜 ซูม
+      {/* Camera controls */}
+      <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">
+        <div className="flex items-center gap-1 bg-slate-900/80 backdrop-blur rounded-lg p-1 border border-slate-700">
+          <button
+            type="button"
+            title="รีเซ็ตมุมกล้อง"
+            aria-label="รีเซ็ตมุมกล้อง"
+            onClick={resetYardCamera}
+            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-300 hover:bg-slate-700/80 hover:text-white transition"
+          >
+            <RotateCcw size={14} />
+          </button>
+          <button
+            type="button"
+            title="มุมมองด้านบน"
+            aria-label="มุมมองด้านบน"
+            onClick={showTopDownView}
+            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-300 hover:bg-slate-700/80 hover:text-white transition"
+          >
+            <Compass size={14} />
+          </button>
+          <button
+            type="button"
+            title="โฟกัสตู้ที่เลือก"
+            aria-label="โฟกัสตู้ที่เลือก"
+            onClick={focusSelectedContainer}
+            disabled={!selectedContainerNumber && !highlightContainerNumber}
+            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-300 hover:bg-slate-700/80 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-300 transition"
+          >
+            <LocateFixed size={14} />
+          </button>
+        </div>
+        <div className="text-[10px] text-slate-500 bg-slate-900/60 backdrop-blur rounded-lg px-2.5 py-1.5 border border-slate-700/50">
+          หมุน • Shift+ลาก • Scroll ซูม
+        </div>
       </div>
     </div>
   );

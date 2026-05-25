@@ -26,4 +26,15 @@ describe('Yard management UI', () => {
     expect(source).toContain('THREE.PCFShadowMap');
     expect(source).not.toContain('THREE.PCFSoftShadowMap');
   });
+
+  it('adds practical 3D camera controls for yard operators', () => {
+    const source = fs.readFileSync(path.join(root, 'src/components/yard/YardViewer3D.tsx'), 'utf8');
+
+    expect(source).toContain('resetYardCamera');
+    expect(source).toContain('showTopDownView');
+    expect(source).toContain('focusSelectedContainer');
+    expect(source).toContain('รีเซ็ตมุมกล้อง');
+    expect(source).toContain('มุมมองด้านบน');
+    expect(source).toContain('โฟกัสตู้ที่เลือก');
+  });
 });

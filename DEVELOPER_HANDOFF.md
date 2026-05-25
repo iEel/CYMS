@@ -651,7 +651,7 @@ container-yard-system/
 - **2D**: Zone cards + occupancy bars
 - **Yard Planning panel**: slot aging heatmap, move recommendations, daily release forecast, congestion forecast และปุ่มสร้าง Work Order จาก recommendation พร้อม target slot
 - **Bay**: (**ใหม่**) Bay Cross-Section — แสดง Row×Tier grid แยกตาม Bay + เลือก Zone + สี shipping line/status + hover tooltip + click detail + legend
-- **3D**: Three.js — ตู้สมจริง (สัดส่วนจริง 20ft/40ft/45ft), toggle สีตู้ตาม `สายเรือ/สถานะ`, legend เปลี่ยนตาม color mode จริง และ Hold/Repair ยังเด่นด้วยสีสถานะ
+- **3D**: Three.js — ตู้สมจริง (สัดส่วนจริง 20ft/40ft/45ft), toggle สีตู้ตาม `สายเรือ/สถานะ`, legend เปลี่ยนตาม color mode จริง, Hold/Repair ยังเด่นด้วยสีสถานะ และมี camera controls สำหรับ reset/top/focus selected container
 - ตารางตู้ + filter + search + **pagination** (25 ตู้/หน้า + ปุ่มเลขหน้า + รีเซ็ตอัตโนมัติเมื่อเปลี่ยน filter)
 - **คลิกแถวตู้ → Container Detail Modal** (popup ตรงกลาง)
 
