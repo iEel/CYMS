@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export type PortalEntityType = 'booking' | 'container' | 'gate_transaction' | 'invoice';
+export type PortalEntityType =
+  | 'booking'
+  | 'container'
+  | 'gate_transaction'
+  | 'eir'
+  | 'invoice'
+  | 'statement'
+  | 'document_bundle'
+  | 'reefer_check'
+  | 'reefer_exception';
 
 function parsePositiveInt(value: string | null): number | undefined {
   if (!value) return undefined;
@@ -32,6 +41,8 @@ export function portalEntityAccessSql(
     WHERE pea.customer_id = @cid
       AND pea.entity_type = '${entityType}'
       AND pea.is_active = 1
+      AND (pea.valid_from IS NULL OR pea.valid_from <= GETDATE())
+      AND (pea.valid_until IS NULL OR pea.valid_until >= GETDATE())
       AND (${clauses.join(' OR ')})
   )`;
 }
@@ -52,6 +63,8 @@ export function portalVisibilityReasonSql(
     WHERE pea.customer_id = @cid
       AND pea.entity_type = '${entityType}'
       AND pea.is_active = 1
+      AND (pea.valid_from IS NULL OR pea.valid_from <= GETDATE())
+      AND (pea.valid_until IS NULL OR pea.valid_until >= GETDATE())
       AND (${clauses.join(' OR ')})
     ORDER BY CASE pea.access_role
       WHEN 'owner' THEN 1
@@ -79,5 +92,12 @@ export function portalGateVisibilitySql(gateAlias = 'g', containerAlias = 'c') {
   return `(
     ${portalEntityAccessSql('gate_transaction', `${gateAlias}.transaction_id`, `${gateAlias}.eir_number`)}
     OR ${portalContainerVisibilitySql(containerAlias)}
+  )`;
+}
+
+export function portalEirVisibilitySql(gateAlias = 'g', containerAlias = 'c') {
+  return `(
+    ${portalEntityAccessSql('eir', `${gateAlias}.transaction_id`, `${gateAlias}.eir_number`)}
+    OR ${portalGateVisibilitySql(gateAlias, containerAlias)}
   )`;
 }

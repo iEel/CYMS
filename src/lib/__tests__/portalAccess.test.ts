@@ -3,6 +3,7 @@ import {
   getPortalCustomerId,
   portalBookingVisibilitySql,
   portalContainerVisibilitySql,
+  portalEirVisibilitySql,
   portalEntityAccessSql,
   portalGateVisibilitySql,
   portalVisibilityReasonSql,
@@ -37,6 +38,8 @@ describe('portal access policy helpers', () => {
     expect(sql).toContain('pea.entity_id = b.booking_id');
     expect(sql).toContain('pea.entity_ref = b.booking_number');
     expect(sql).toContain('pea.is_active = 1');
+    expect(sql).toContain('pea.valid_from IS NULL OR pea.valid_from <= GETDATE()');
+    expect(sql).toContain('pea.valid_until IS NULL OR pea.valid_until >= GETDATE()');
   });
 
   it('builds container visibility from explicit portal entity grants', () => {
@@ -73,6 +76,18 @@ describe('portal access policy helpers', () => {
     expect(sql).not.toContain('c.customer_id');
   });
 
+  it('builds eir visibility from active valid-window eir grants or gate policy', () => {
+    const sql = portalEirVisibilitySql('g', 'c');
+
+    expect(sql).toContain("pea.entity_type = 'eir'");
+    expect(sql).toContain('pea.entity_id = g.transaction_id');
+    expect(sql).toContain('pea.entity_ref = g.eir_number');
+    expect(sql).toContain('pea.valid_from IS NULL OR pea.valid_from <= GETDATE()');
+    expect(sql).toContain('pea.valid_until IS NULL OR pea.valid_until >= GETDATE()');
+    expect(sql).toContain("pea.entity_type = 'gate_transaction'");
+    expect(sql).toContain("pea.entity_type = 'container'");
+  });
+
   it('builds a visibility reason subquery from the active portal grant', () => {
     const sql = portalVisibilityReasonSql('container', 'c.container_id', 'c.container_number');
 
@@ -81,6 +96,8 @@ describe('portal access policy helpers', () => {
     expect(sql).toContain("pea.entity_type = 'container'");
     expect(sql).toContain('pea.entity_id = c.container_id');
     expect(sql).toContain('pea.entity_ref = c.container_number');
+    expect(sql).toContain('pea.valid_from IS NULL OR pea.valid_from <= GETDATE()');
+    expect(sql).toContain('pea.valid_until IS NULL OR pea.valid_until >= GETDATE()');
     expect(sql).toContain('ORDER BY CASE pea.access_role');
   });
 });
