@@ -18,9 +18,24 @@ const eirRow = {
   driver_phone: '0812345678',
   truck_plate: '70-1234',
   truck_company: 'ACME Trucking',
+  damage_summary: {
+    condition: 'C',
+    damage_points: 1,
+  },
   damage_report: {
     condition_grade: 'C',
-    points: [{ side: 'left', type: 'dent', severity: 'major' }],
+    inspector_notes: 'Internal handling note',
+    photo_evidence: [{ url: 'https://example.test/private.jpg' }],
+    photos: ['https://example.test/photo.jpg'],
+    points: [
+      {
+        side: 'left',
+        type: 'dent',
+        severity: 'major',
+        note: 'Panel dent',
+        photo_url: 'https://example.test/point.jpg',
+      },
+    ],
   },
   invoice_amount: 1250,
 };
@@ -42,6 +57,11 @@ describe('EIR visibility helpers', () => {
         created_at: '2026-05-21T08:00:00.000Z',
         verification_status: 'verified',
         container_number: 'MSKU1234567',
+        damage_summary: {
+          condition: 'C',
+          damage_points: 1,
+        },
+        copy_type_label: 'Public Verification Copy',
       },
     });
     expect(payload.eir).not.toHaveProperty('container_grade');
@@ -49,6 +69,43 @@ describe('EIR visibility helpers', () => {
     expect(payload.eir).not.toHaveProperty('truck_plate');
     expect(payload.eir).not.toHaveProperty('damage_report');
     expect(payload.eir).not.toHaveProperty('invoice_amount');
+  });
+
+  it('does not leak raw public damage summary fields and keeps copy label serializable', () => {
+    const payload = buildEirViewPayload(
+      {
+        ...eirRow,
+        damage_summary: { secret: 'x' },
+        damage_report: {
+          condition_grade: 'B',
+          points: [
+            { side: 'front', type: 'scratch', severity: 'minor', photo_url: 'https://example.test/private.jpg' },
+            { side: 'left', type: 'dent', severity: 'major', inspector_notes: 'private' },
+          ],
+        },
+      },
+      { viewType: 'public' },
+    );
+
+    expect(payload.eir.damage_summary).toEqual({
+      condition: 'B',
+      damage_points: 2,
+    });
+    expect(payload.eir.damage_summary).not.toHaveProperty('secret');
+    expect(JSON.stringify(payload)).toContain('Public Verification Copy');
+  });
+
+  it('sanitizes customer damage report without exposing photos or internal notes', () => {
+    const payload = buildEirViewPayload(eirRow, { viewType: 'customer' });
+
+    expect(payload.eir.damage_report).toEqual({
+      condition_grade: 'C',
+      points: [{ side: 'left', type: 'dent', severity: 'major', note: 'Panel dent' }],
+    });
+    expect(payload.eir.damage_report).not.toBe(eirRow.damage_report);
+    expect(payload.eir.damage_report).not.toHaveProperty('photo_evidence');
+    expect(payload.eir.damage_report).not.toHaveProperty('photos');
+    expect(payload.eir.damage_report).not.toHaveProperty('inspector_notes');
   });
 
   it('does not show container grade to customers by default', () => {

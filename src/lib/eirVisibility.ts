@@ -57,10 +57,13 @@ const OPERATIONAL_FIELDS = [
   'gate_name',
   'gate_time',
   'truck_company',
-  'damage_summary',
 ] as const;
 
 const GRADE_FIELDS = ['container_grade', 'container_grade_label'] as const;
+
+function isRecord(value: unknown): value is EIRRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function pickFields(source: EIRRecord, fields: readonly string[]): EIRRecord {
   return fields.reduce<EIRRecord>((payload, field) => {
@@ -97,16 +100,69 @@ function addGradeIfAllowed(payload: EIRRecord, master: EIRRecord, context: EIRVi
   }
 }
 
-function addPublicCopyMetadata(payload: EIRRecord, master: EIRRecord): EIRRecord {
-  if (Object.prototype.hasOwnProperty.call(master, 'damage_summary')) {
-    payload.damage_summary = master.damage_summary;
+function sanitizeDamagePoints(value: unknown): EIRRecord[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter(isRecord)
+    .map((point) => {
+      const sanitized: EIRRecord = {};
+
+      for (const field of ['side', 'type', 'severity', 'note']) {
+        if (Object.prototype.hasOwnProperty.call(point, field)) {
+          sanitized[field] = point[field];
+        }
+      }
+
+      return sanitized;
+    });
+}
+
+function sanitizeDamageReport(value: unknown): EIRRecord | undefined {
+  if (!isRecord(value)) return undefined;
+
+  const sanitized: EIRRecord = {};
+
+  if (Object.prototype.hasOwnProperty.call(value, 'condition_grade')) {
+    sanitized.condition_grade = value.condition_grade;
   }
 
-  Object.defineProperty(payload, 'copy_type_label', {
-    value: copyTypeLabel('public'),
-    enumerable: false,
-    configurable: true,
-  });
+  const points = sanitizeDamagePoints(value.points);
+  if (points.length > 0) {
+    sanitized.points = points;
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
+function buildSafeDamageSummary(master: EIRRecord): EIRRecord | undefined {
+  const damageReport = isRecord(master.damage_report) ? master.damage_report : undefined;
+  const rawSummary = isRecord(master.damage_summary) ? master.damage_summary : undefined;
+  const summary: EIRRecord = {};
+  const points = sanitizeDamagePoints(damageReport?.points);
+
+  if (Object.prototype.hasOwnProperty.call(damageReport ?? {}, 'condition_grade')) {
+    summary.condition = damageReport?.condition_grade;
+  } else if (Object.prototype.hasOwnProperty.call(rawSummary ?? {}, 'condition')) {
+    summary.condition = rawSummary?.condition;
+  }
+
+  if (points.length > 0) {
+    summary.damage_points = points.length;
+  } else if (typeof rawSummary?.damage_points === 'number') {
+    summary.damage_points = rawSummary.damage_points;
+  }
+
+  return Object.keys(summary).length > 0 ? summary : undefined;
+}
+
+function addPublicCopyMetadata(payload: EIRRecord, master: EIRRecord): EIRRecord {
+  const damageSummary = buildSafeDamageSummary(master);
+  if (damageSummary) {
+    payload.damage_summary = damageSummary;
+  }
+
+  payload.copy_type_label = copyTypeLabel('public');
 
   return payload;
 }
@@ -209,8 +265,9 @@ export function buildEirViewPayload(master: EIRRecord, context: EIRVisibilityCon
   if (Object.prototype.hasOwnProperty.call(master, 'truck_plate')) {
     eir.truck_plate = maskTruckPlate(master.truck_plate);
   }
-  if (Object.prototype.hasOwnProperty.call(master, 'damage_report')) {
-    eir.damage_report = master.damage_report;
+  const damageReport = sanitizeDamageReport(master.damage_report);
+  if (damageReport) {
+    eir.damage_report = damageReport;
   }
 
   addGradeIfAllowed(eir, master, context);
