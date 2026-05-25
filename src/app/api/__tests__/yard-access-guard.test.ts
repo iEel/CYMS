@@ -36,6 +36,8 @@ const yardScopedRoutes = [
   'src/app/api/search/route.ts',
   'src/app/api/settings/storage-rates/route.ts',
   'src/app/api/yard/audit-log/route.ts',
+  'src/app/api/yard/allocate/route.ts',
+  'src/app/api/yard/stats/route.ts',
 ];
 
 function read(relativePath: string) {
@@ -74,5 +76,12 @@ describe('yard-scoped API routes enforce server-side yard access', () => {
 
     roots.forEach(visit);
     expect(offenders).toEqual([]);
+  });
+
+  it('does not default auto-allocation to yard 1', () => {
+    const source = read('src/app/api/yard/allocate/route.ts');
+
+    expect(source).not.toContain('yard_id || 1');
+    expect(source).toContain('requireYardAccess');
   });
 });

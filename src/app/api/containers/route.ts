@@ -17,22 +17,28 @@ export async function GET(request: NextRequest) {
     const bay = searchParams.get('bay');
     const row = searchParams.get('row');
     const tier = searchParams.get('tier');
+    const parsedYardId = Number(yardId);
+    if (!Number.isInteger(parsedYardId) || parsedYardId <= 0) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, parsedYardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     // Position check mode — ตรวจว่ามีตู้ที่ตำแหน่งนี้ไหม
     if (checkPosition === '1' && zoneId && bay && row && tier) {
       const checkReq = db.request()
+        .input('yardId', sql.Int, parsedYardId)
         .input('zoneId', sql.Int, parseInt(zoneId))
         .input('bay', sql.Int, parseInt(bay))
         .input('row', sql.Int, parseInt(row))
         .input('tier', sql.Int, parseInt(tier));
-      if (yardId) checkReq.input('yardId', sql.Int, parseInt(yardId));
 
       const checkResult = await checkReq.query(`
         SELECT container_id, container_number FROM Containers
         WHERE zone_id = @zoneId AND bay = @bay AND [row] = @row AND tier = @tier AND status = 'in_yard'
-        ${yardId ? 'AND yard_id = @yardId' : ''}
+          AND yard_id = @yardId
       `);
 
       return NextResponse.json({
@@ -41,13 +47,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Normal listing mode
-    const conditions: string[] = [];
-    const req = db.request();
-
-    if (yardId) {
-      conditions.push('c.yard_id = @yardId');
-      req.input('yardId', sql.Int, parseInt(yardId));
-    }
+    const conditions: string[] = ['c.yard_id = @yardId'];
+    const req = db.request()
+      .input('yardId', sql.Int, parsedYardId);
     if (zoneId) {
       conditions.push('c.zone_id = @zoneId');
       req.input('zoneId', sql.Int, parseInt(zoneId));

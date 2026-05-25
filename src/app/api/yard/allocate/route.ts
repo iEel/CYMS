@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 // POST — แนะนำพิกัดวางตู้อัตโนมัติ
 // Body: { yard_id, size, type, shipping_line? }
@@ -9,12 +10,20 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { yard_id, size, type, shipping_line } = body;
+    const yardId = Number(yard_id);
+    if (!Number.isInteger(yardId) || yardId <= 0) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
 
     const db = await getDb();
+    const yardAccess = await requireYardAccess(request, db, yardId);
+    if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requireAnyPermission(request, db, ['yard.location.assign', 'yard.slot.move'], 'คุณไม่มีสิทธิ์ขอคำแนะนำพิกัดวางตู้');
+    if (actor instanceof NextResponse) return actor;
 
     // 1. ดึงโซนทั้งหมดในลาน
     const zonesResult = await db.request()
-      .input('yardId', sql.Int, yard_id || 1)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT z.zone_id, z.zone_name, z.zone_type, z.max_bay, z.max_row, z.max_tier,
           z.has_reefer_plugs, z.size_restriction
@@ -26,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     // 2. ดึงตู้ปัจจุบันในลาน (เฉพาะ in_yard)
     const containersResult = await db.request()
-      .input('yardId', sql.Int, yard_id || 1)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT zone_id, bay, [row], tier, shipping_line, size, type
         FROM Containers

@@ -93,10 +93,10 @@ describe('GET /api/containers', () => {
     expect(body).toHaveLength(0);
   });
 
-  it('returns all containers when yard_id is omitted', async () => {
+  it('rejects listing when yard_id is omitted', async () => {
     queryQueue = [q([])];
     const res = await GET(makeRequest('GET', 'http://localhost/api/containers'));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
   });
 
   it('handles check_position=1 mode (no conflict)', async () => {
