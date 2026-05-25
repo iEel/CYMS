@@ -807,9 +807,9 @@ async function migrate() {
           SELECT TOP 1 COALESCE(b.booking_customer_id, b.customer_id) AS customer_id
           FROM Bookings b
           WHERE b.booking_number = gt.booking_ref
-            AND (b.yard_id = gt.yard_id OR gt.yard_id IS NULL OR b.yard_id IS NULL)
-          ORDER BY CASE WHEN b.yard_id = gt.yard_id THEN 0 ELSE 1 END,
-            COALESCE(b.eta, b.created_at) DESC, b.booking_id DESC
+            AND gt.yard_id IS NOT NULL
+            AND b.yard_id = gt.yard_id
+          ORDER BY COALESCE(b.eta, b.created_at) DESC, b.booking_id DESC
         ) bookingGateCustomer
         CROSS APPLY (VALUES
           ('gate_transaction', gt.transaction_id, gt.eir_number),
