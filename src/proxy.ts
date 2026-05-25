@@ -30,7 +30,7 @@ const PROTECTED_PAGE_PREFIXES = [
 // Public API paths — ไม่ต้องการ token แต่ยังต้อง forward headers (รวม cookie)
 const PUBLIC_API_PATHS = [
   '/api/auth/',
-  '/api/gate/eir',
+  '/api/public/eir',
 ];
 
 // Static/public paths — ข้ามทั้งหมด

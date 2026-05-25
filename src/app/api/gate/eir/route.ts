@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { getDb } from '@/lib/db';
+import { requireAnyPermission } from '@/lib/apiAuth';
 import { ensureDocumentLifecycle } from '@/lib/documentLifecycle';
+import { buildEIRPayload, fetchCompanyProfile, fetchEIRLifecycle } from '@/lib/eirPayload';
+import { buildEirViewPayload } from '@/lib/eirVisibility';
 
-// GET — ดึงข้อมูล EIR สำหรับแสดง/พิมพ์
+// GET — ดึงข้อมูล EIR สำหรับแสดง/พิมพ์ภายในระบบ
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -14,21 +17,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'ต้องระบุ transaction_id หรือ eir_number' }, { status: 400 });
     }
 
+    let parsedTransactionId: number | null = null;
+    if (transactionId) {
+      const candidateTransactionId = Number(transactionId);
+      if (!Number.isInteger(candidateTransactionId) || candidateTransactionId <= 0) {
+        return NextResponse.json({ error: 'transaction_id ไม่ถูกต้อง' }, { status: 400 });
+      }
+      parsedTransactionId = candidateTransactionId;
+    }
+
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      ['gate.eir.print', 'gate.in', 'gate.out'],
+      'คุณไม่มีสิทธิ์ดูเอกสาร EIR ภายในระบบ',
+    );
+    if (actor instanceof NextResponse) return actor;
+
     await ensureDocumentLifecycle(db);
     const req = db.request();
 
-    if (transactionId) {
-      req.input('txId', sql.Int, parseInt(transactionId));
+    if (parsedTransactionId !== null) {
+      req.input('txId', sql.Int, parsedTransactionId);
     }
     if (eirNumber) {
-      req.input('eirNumber', sql.NVarChar, eirNumber);
+      req.input('eirNumber', sql.NVarChar(80), eirNumber);
     }
 
     const result = await req.query(`
       SELECT g.*, c.container_number, c.size, c.type, c.shipping_line, c.is_laden,
         c.tare_weight_kg, c.max_gross_weight_kg,
-        c.bay, c.[row], c.tier,
+        c.container_grade, c.bay, c.[row], c.tier,
         u.full_name as processed_by_name,
         y.yard_name, y.yard_code,
         z.zone_name
@@ -37,7 +57,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN Users u ON g.processed_by = u.user_id
       LEFT JOIN Yards y ON g.yard_id = y.yard_id
       LEFT JOIN YardZones z ON c.zone_id = z.zone_id
-      WHERE ${transactionId ? 'g.transaction_id = @txId' : 'g.eir_number = @eirNumber'}
+      WHERE ${parsedTransactionId !== null ? 'g.transaction_id = @txId' : 'g.eir_number = @eirNumber'}
     `);
 
     if (result.recordset.length === 0) {
@@ -45,82 +65,20 @@ export async function GET(request: NextRequest) {
     }
 
     const row = result.recordset[0];
-
-    // Parse damage report
-    let damageReport = null;
-    let containerCondition: 'sound' | 'damage' = 'sound';
-    let containerGrade = 'A';
-
-    if (row.damage_report) {
-      try {
-        damageReport = JSON.parse(row.damage_report);
-        // Determine condition from damage points
-        if (damageReport && Array.isArray(damageReport.points) && damageReport.points.length > 0) {
-          containerCondition = 'damage';
-        }
-        // Use grade from inspection report if available
-        if (damageReport && damageReport.condition_grade) {
-          containerGrade = damageReport.condition_grade;
-        }
-      } catch { /* ignore parse errors */ }
-    }
-
-    // Fetch company info
-    let company = null;
-    try {
-      const companyResult = await db.request().query(
-        'SELECT TOP 1 company_name, address, phone, email, logo_url, tax_id FROM CompanyProfile'
-      );
-      if (companyResult.recordset.length > 0) {
-        company = companyResult.recordset[0];
-      }
-    } catch { /* ignore if table doesn't exist */ }
-
-    const eirData = {
-      eir_number: row.eir_number,
-      transaction_type: row.transaction_type,
-      date: row.created_at,
-      container_number: row.container_number,
-      size: row.size,
-      type: row.type,
-      shipping_line: row.shipping_line,
-      seal_number: row.seal_number,
-      tare_weight_kg: row.tare_weight_kg || 0,
-      max_gross_weight_kg: row.max_gross_weight_kg || 0,
-      is_laden: row.is_laden,
-      driver_name: row.driver_name,
-      truck_plate: row.truck_plate,
-      truck_company: row.truck_company,
-      booking_ref: row.booking_ref,
-      yard_name: row.yard_name,
-      yard_code: row.yard_code,
-      zone_name: row.zone_name,
-      bay: row.bay,
-      row: row.row,
-      tier: row.tier,
-      processed_by: row.processed_by_name || 'ระบบ',
-      damage_report: damageReport,
-      notes: row.notes,
-      // New fields
-      container_condition: containerCondition,
-      container_grade: containerGrade,
-      company,
+    const company = await fetchCompanyProfile(db);
+    const master = {
+      ...buildEIRPayload(row, company),
+      created_at: row.created_at,
+      gate_datetime: row.gate_datetime ?? row.created_at,
+      document_status: row.document_status ?? row.verification_status ?? 'verified',
+      verification_status: row.verification_status ?? row.document_status ?? 'verified',
     };
+    const lifecycle = await fetchEIRLifecycle(db, Number(row.transaction_id), row.eir_number);
 
-    const lifecycleResult = await db.request()
-      .input('transactionId', sql.Int, row.transaction_id)
-      .input('eirNumber', sql.NVarChar(80), row.eir_number)
-      .query(`
-        SELECT dl.*, u.full_name as user_name, y.yard_name
-        FROM DocumentLifecycle dl
-        LEFT JOIN Users u ON dl.user_id = u.user_id
-        LEFT JOIN Yards y ON dl.yard_id = y.yard_id
-        WHERE dl.document_type = 'eir'
-          AND (dl.document_id = @transactionId OR dl.document_number = @eirNumber)
-        ORDER BY dl.created_at ASC, dl.lifecycle_id ASC
-      `);
-
-    return NextResponse.json({ eir: eirData, lifecycle: lifecycleResult.recordset });
+    return NextResponse.json({
+      ...buildEirViewPayload(master, { viewType: 'internal' }),
+      lifecycle,
+    });
   } catch (error) {
     console.error('❌ GET EIR error:', error);
     return NextResponse.json({ error: 'ไม่สามารถดึงข้อมูล EIR ได้' }, { status: 500 });
