@@ -197,6 +197,10 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [visibilityPreviewLoading, setVisibilityPreviewLoading] = useState(false);
   const [visibilityPreviewError, setVisibilityPreviewError] = useState('');
   const visibilityPreviewRequestRef = useRef(0);
+  const resolvedTruckingCompanyId = useMemo(
+    () => selectedBooking?.trucking_company_id || customerList.find(c => c.customer_name === gateInForm.truck_company)?.customer_id || null,
+    [selectedBooking, customerList, gateInForm.truck_company]
+  );
 
   const clearBookingDerivedContext = () => {
     const context = bookingDerivedContextRef.current;
@@ -396,7 +400,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         container_owner_id: containerOwnerId,
         booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || manualCustomerId,
         billing_customer_id: billingCustomerId,
-        trucking_company_id: selectedBooking?.trucking_company_id || null,
+        trucking_company_id: resolvedTruckingCompanyId || null,
         driver_user_id: null,
       }),
     })
@@ -422,7 +426,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         }
       });
     return () => controller.abort();
-  }, [gateInForm.container_number, containerValid, containerOwnerId, selectedBooking, manualCustomerId, billingCustomerId]);
+  }, [gateInForm.container_number, containerValid, containerOwnerId, selectedBooking, manualCustomerId, billingCustomerId, resolvedTruckingCompanyId]);
 
   // Fetch gate-in billing when form has valid data
   useEffect(() => {
@@ -587,7 +591,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           container_owner_id: containerOwnerId || undefined,
           booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || manualCustomerId || undefined,
           billing_customer_id: billingCustomerId || undefined,
-          trucking_company_id: selectedBooking?.trucking_company_id || customerList.find(c => c.customer_name === gateInForm.truck_company)?.customer_id || undefined,
+          trucking_company_id: resolvedTruckingCompanyId || undefined,
           driver_user_id: undefined,
           billing_clearance_id: gateInClearance?.clearance_id || undefined,
           tare_weight_kg: boxtechTareWeightKg || null,
