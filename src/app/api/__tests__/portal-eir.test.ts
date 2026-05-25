@@ -32,7 +32,7 @@ function makeDb(queue: QueryResult[]) {
 
 function portalRequest(path: string) {
   return new NextRequest(`http://localhost${path}`, {
-    headers: { 'x-customer-id': '42' },
+    headers: { 'x-customer-id': '42', 'x-user-id': '9' },
   });
 }
 
@@ -75,12 +75,14 @@ describe('Customer Portal EIR', () => {
     jest.clearAllMocks();
   });
 
-  it('downloads Portal EIR PDF with the same inspection fields as the main EIR document', async () => {
+  it('downloads Portal EIR PDF with the sanitized customer EIR fields', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const route = require('../portal/eir-pdf/route') as typeof import('../portal/eir-pdf/route');
     const db = makeDb([
-      q([eirRow]),
+      q([{ customer_portal_role: 'customer_admin' }]),
+      q([{ ...eirRow, access_role: 'booking_customer', permission_scope: null }]),
       q([{ company_name: 'CYMS', address: 'Bangkok', phone: '02', tax_id: '010' }]),
+      q([]),
     ]);
     mockedGetDb.mockResolvedValue(db);
 
@@ -90,47 +92,53 @@ describe('Customer Portal EIR', () => {
     expect(res.headers.get('content-type')).toBe('application/pdf');
     expect(mockedGenerateEIRPDF).toHaveBeenCalledWith(expect.objectContaining({
       eir_number: 'EIR-IN-2026-000077',
-      container_condition: 'damage',
-      container_grade: 'C',
       damage_report: expect.objectContaining({
         condition_grade: 'C',
         points: expect.arrayContaining([expect.objectContaining({ side: 'left', type: 'dent' })]),
-        photo_completeness: expect.objectContaining({ required: 5, completed: 4 }),
       }),
     }));
+    expect(mockedGenerateEIRPDF.mock.calls[0][0]).not.toHaveProperty('container_grade');
+    expect(mockedGenerateEIRPDF.mock.calls[0][0].damage_report).not.toHaveProperty('photo_completeness');
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('PortalEntityAccess');
+    expect(combinedSql).toContain("pea.entity_type = 'eir'");
     expect(combinedSql).toContain("pea.entity_type = 'gate_transaction'");
+    expect(combinedSql).toContain('EIRAccessLog');
   });
 
   it('returns Portal-scoped EIR JSON with parsed damage report and document lifecycle', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const route = require('../portal/eir/route') as typeof import('../portal/eir/route');
     const db = makeDb([
-      q([eirRow]),
+      q([{ customer_portal_role: 'customer_admin' }]),
+      q([{ ...eirRow, access_role: 'booking_customer', permission_scope: null }]),
       q([{ company_name: 'CYMS', address: 'Bangkok', phone: '02', email: 'ops@example.test', logo_url: '', tax_id: '010' }]),
       q([{ lifecycle_id: 1, document_type: 'eir', action: 'issued', user_name: 'Operator' }]),
+      q([]),
     ]);
     mockedGetDb.mockResolvedValue(db);
 
     const res = await route.GET(portalRequest('/api/portal/eir?eir_number=EIR-IN-2026-000077'));
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toMatchObject({
+    const body = await res.json();
+    expect(body).toMatchObject({
       eir: {
         eir_number: 'EIR-IN-2026-000077',
-        container_condition: 'damage',
-        container_grade: 'C',
         damage_report: {
           condition_grade: 'C',
-          photo_completeness: { required: 5, completed: 4 },
+          points: [{ side: 'left', type: 'dent', severity: 'major', note: 'Dent' }],
         },
       },
       lifecycle: [{ lifecycle_id: 1 }],
     });
+    expect(body.eir).not.toHaveProperty('container_grade');
+    expect(body.eir.damage_report).not.toHaveProperty('photo_completeness');
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('PortalEntityAccess');
+    expect(combinedSql).toContain("pea.entity_type = 'eir'");
     expect(combinedSql).toContain("pea.entity_type = 'gate_transaction'");
     expect(combinedSql).toContain('DocumentLifecycle');
+    expect(combinedSql).toContain('EIRAccessLog');
   });
 });

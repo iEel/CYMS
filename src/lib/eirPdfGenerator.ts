@@ -46,8 +46,12 @@ export interface EIRData {
   processed_by?: string;
   notes?: string;
   date: string;
+  copy_type_label?: string;
+  document_status?: string;
+  version_no?: number | string;
   container_condition?: 'sound' | 'damage';
   container_grade?: string;
+  container_grade_label?: string;
   damage_report?: {
     points?: Array<{
       side?: string;
@@ -120,7 +124,15 @@ export function generateEIRPDF(data: EIRData): Buffer {
   const typeLabel = isIn ? '📥 Gate-In (รับเข้า)' : '📤 Gate-Out (ปล่อยออก)';
   doc.text(typeLabel, pw / 2, y, { align: 'center' });
   doc.setFont(FONT_NAME, 'normal');
-  y += 8;
+  y += 6;
+
+  if (data.copy_type_label) {
+    doc.setFontSize(10);
+    doc.text(data.copy_type_label, pw / 2, y, { align: 'center' });
+    y += 6;
+  } else {
+    y += 2;
+  }
 
   // ─── EIR Number + Date ───
   doc.setFontSize(10);
@@ -153,15 +165,17 @@ export function generateEIRPDF(data: EIRData): Buffer {
 
   // ─── Inspection Info ───
   const hasDamage = data.container_condition === 'damage';
-  const grade = data.container_grade || data.damage_report?.condition_grade || 'A';
   const damagePoints = data.damage_report?.points || [];
   const completeness = data.damage_report?.photo_completeness;
   const inspectionInfo = [
     ['Condition', hasDamage ? 'Damage' : 'Sound'],
-    ['Grade', `Grade ${grade}`],
     ['Damage Points', damagePoints.length ? `${damagePoints.length}` : '0'],
     ['Photo Evidence', completeness ? `${completeness.completed || 0}/${completeness.required || 0}` : '-'],
   ];
+  if (data.container_grade) {
+    const gradeLabel = data.container_grade_label ? ` - ${data.container_grade_label}` : '';
+    inspectionInfo.splice(1, 0, ['Grade', `Grade ${data.container_grade}${gradeLabel}`]);
+  }
   if (completeness?.missing_categories?.length) {
     inspectionInfo.push(['Missing Photos', completeness.missing_categories.join(', ')]);
   }
