@@ -19,4 +19,14 @@ describe('BoxTech container technical weights', () => {
       expect(migration).toContain(`COL_LENGTH('Containers', '${column}')`);
     }
   });
+
+  it('normalizes BoxTech tare and max gross fields for downstream persistence', () => {
+    const source = fs.readFileSync(path.join(root, 'src/app/api/boxtech/route.ts'), 'utf8');
+
+    expect(source).toContain('response.tare_weight_kg');
+    expect(source).toContain('response.max_gross_weight_kg');
+    expect(source).toContain('response.max_gross_mass_kg');
+    expect(source).toContain('Number(containerData?.tare_kg)');
+    expect(source).toContain('Number(containerData?.max_gross_mass_kg)');
+  });
 });

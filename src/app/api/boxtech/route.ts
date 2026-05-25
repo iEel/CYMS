@@ -183,8 +183,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Extra container details
-    if (containerData?.tare_kg) response.tare_kg = containerData.tare_kg;
-    if (containerData?.max_gross_mass_kg) response.max_gross_mass_kg = containerData.max_gross_mass_kg;
+    const tareWeightKg = Number(containerData?.tare_kg);
+    const maxGrossWeightKg = Number(containerData?.max_gross_mass_kg);
+    if (Number.isFinite(tareWeightKg) && tareWeightKg > 0) {
+      response.tare_kg = tareWeightKg;
+      response.tare_weight_kg = tareWeightKg;
+    }
+    if (Number.isFinite(maxGrossWeightKg) && maxGrossWeightKg > 0) {
+      response.max_gross_mass_kg = maxGrossWeightKg;
+      response.max_gross_weight_kg = maxGrossWeightKg;
+    }
     if (containerData?.manufacture_date) response.manufacture_date = containerData.manufacture_date;
 
     // 5. Customer resolution with priority logic
