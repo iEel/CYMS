@@ -37,12 +37,28 @@ interface Props {
   highlightContainerNumber?: string;
 }
 
+type YardColorMode = 'shipping' | 'status';
+
 const STATUS_COLORS: Record<string, number> = {
   in_yard: 0x10B981,  // emerald
   hold:    0xF59E0B,  // amber
   repair:  0xEF4444,  // red
   released:0x94A3B8,  // slate
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  in_yard: 'ในลาน',
+  hold: 'ค้างจ่าย',
+  repair: 'ซ่อม',
+  released: 'ปล่อยออก',
+};
+
+const STATUS_LEGEND = [
+  { key: 'in_yard', label: 'ในลาน' },
+  { key: 'hold', label: 'ค้างจ่าย' },
+  { key: 'repair', label: 'ซ่อม' },
+  { key: 'released', label: 'ปล่อยออก' },
+];
 
 const ZONE_FLOOR_COLORS: Record<string, number> = {
   dry:    0x3B82F6,
@@ -77,8 +93,24 @@ const SHIPPING_COLORS: Record<string, number> = {
   'PIL':        0xE31937,
 };
 
+function hexColor(color: number) {
+  return `#${color.toString(16).padStart(6, '0').toUpperCase()}`;
+}
+
+function getContainerColor(ctr: ContainerBlock, colorMode: YardColorMode) {
+  if (colorMode === 'status') {
+    return STATUS_COLORS[ctr.status] || STATUS_COLORS.in_yard;
+  }
+
+  if (ctr.status === 'hold' || ctr.status === 'repair') {
+    return STATUS_COLORS[ctr.status];
+  }
+
+  return SHIPPING_COLORS[ctr.shipping_line] || STATUS_COLORS[ctr.status] || STATUS_COLORS.in_yard;
+}
+
 // สร้าง container mesh — NO edges, NO z-fighting
-function createContainerMesh(ctr: ContainerBlock): THREE.Group {
+function createContainerMesh(ctr: ContainerBlock, colorMode: YardColorMode): THREE.Group {
   const is40 = ctr.size === '40' || ctr.size === '45';
   const w = is40 ? CW_40 : CW_20;
   const h = ctr.size === '45' ? CH * 1.12 : CH;
@@ -86,10 +118,7 @@ function createContainerMesh(ctr: ContainerBlock): THREE.Group {
 
   const group = new THREE.Group();
 
-  // สี — ถ้ามี shipping line ใช้สีสายเรือ ถ้าไม่มีใช้สีตามสถานะ
-  let baseColor = SHIPPING_COLORS[ctr.shipping_line] || STATUS_COLORS[ctr.status] || 0x10B981;
-  if (ctr.status === 'hold') baseColor = 0xF59E0B;
-  if (ctr.status === 'repair') baseColor = 0xEF4444;
+  const baseColor = getContainerColor(ctr, colorMode);
 
   // === ตัวตู้ — single box, single material ===
   const bodyGeo = new THREE.BoxGeometry(w, h, d);
@@ -137,6 +166,13 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
   const [containers, setContainers] = useState<ContainerBlock[]>([]);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [colorMode, setColorMode] = useState<YardColorMode>('shipping');
+
+  const activeShippingLegend = Array.from(
+    new Set(containers.map(c => c.shipping_line).filter(Boolean))
+  )
+    .slice(0, 5)
+    .map(line => ({ label: line, color: hexColor(SHIPPING_COLORS[line] || STATUS_COLORS.in_yard) }));
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -180,7 +216,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.1;
     el.appendChild(renderer.domElement);
@@ -288,7 +324,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
         const is40 = ctr.size === '40' || ctr.size === '45';
         const ch = ctr.size === '45' ? CH * 1.12 : CH;
 
-        const containerGroup = createContainerMesh(ctr);
+        const containerGroup = createContainerMesh(ctr, colorMode);
 
         // 40ft ตู้ใหญ่กินพื้นที่ 2 bays — ต้องชดเชย offset ให้ยาวขึ้น
         const baySlot = CW_20 + GAP_X;
@@ -340,7 +376,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       renderer.dispose();
       if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement);
     };
-  }, [loading, zones, containers, selectedZone]);
+  }, [loading, zones, containers, selectedZone, colorMode]);
 
   // === Highlight + Camera Focus + X-Ray effect ===
   useEffect(() => {
@@ -584,7 +620,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
         hoveredRef.current = entry.mesh;
 
         const c = entry.data;
-        const statusLabel = c.status === 'in_yard' ? 'ในลาน' : c.status === 'hold' ? 'ค้างจ่าย' : c.status === 'repair' ? 'ซ่อม' : c.status;
+        const statusLabel = STATUS_LABELS[c.status] || c.status;
         setTooltip({
           x: e.clientX - canvasRef.current!.getBoundingClientRect().left,
           y: e.clientY - canvasRef.current!.getBoundingClientRect().top - 60,
@@ -650,19 +686,45 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
         </div>
       )}
 
-      {/* Legend */}
-      <div className="absolute bottom-3 left-3 z-10 flex items-center gap-3 bg-slate-900/80 backdrop-blur rounded-lg px-3 py-2 border border-slate-700">
-        <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mr-1">สถานะ:</span>
+      {/* Color mode */}
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-1 bg-slate-900/80 backdrop-blur rounded-lg p-1 border border-slate-700">
+        <span className="px-2 text-[10px] text-slate-400 font-semibold">สีตู้</span>
         {[
-          { color: '#10B981', label: 'ในลาน' },
-          { color: '#F59E0B', label: 'ค้างจ่าย' },
-          { color: '#EF4444', label: 'ซ่อม' },
-        ].map((s, i) => (
-          <span key={i} className="flex items-center gap-1 text-[10px] text-slate-300">
+          { key: 'shipping' as const, label: 'สายเรือ' },
+          { key: 'status' as const, label: 'สถานะ' },
+        ].map(option => (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => setColorMode(option.key)}
+            className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition ${
+              colorMode === option.key
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-300 hover:bg-slate-700/80'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="absolute bottom-3 left-3 right-3 z-10 flex flex-wrap items-center gap-2 bg-slate-900/80 backdrop-blur rounded-lg px-3 py-2 border border-slate-700">
+        <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mr-1">
+          {colorMode === 'shipping' ? 'สีตู้: สายเรือ' : 'สีตู้: สถานะ'}
+        </span>
+        {(colorMode === 'shipping' ? activeShippingLegend : STATUS_LEGEND.map(s => ({
+          label: s.label,
+          color: hexColor(STATUS_COLORS[s.key] || STATUS_COLORS.in_yard),
+        }))).map((s, i) => (
+          <span key={`${s.label}-${i}`} className="flex items-center gap-1 text-[10px] text-slate-300">
             <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: s.color }} />
             {s.label}
           </span>
         ))}
+        {colorMode === 'shipping' && (
+          <span className="text-[10px] text-slate-500">Hold/Repair แสดงสีสถานะ</span>
+        )}
       </div>
 
       {/* Controls hint */}
