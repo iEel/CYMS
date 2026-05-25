@@ -24,6 +24,25 @@ interface Branch {
   is_active?: boolean;
 }
 
+type PortalDefaultPermissionScope = {
+  view: boolean;
+  download: boolean;
+  eir: {
+    fields: {
+      container_grade: boolean;
+      damage_summary: boolean;
+      damage_photos: boolean;
+      seal_number: boolean;
+      driver_name: boolean;
+      truck_plate_full: boolean;
+      billing_clearance: boolean;
+      invoice_amount: boolean;
+      internal_note: boolean;
+    };
+  };
+  maskSensitiveFields: boolean;
+};
+
 interface Customer {
   customer_id: number;
   customer_code: string;
@@ -46,6 +65,8 @@ interface Customer {
   credit_hold_reason: string;
   edi_prefix: string;
   shipping_line_code: string;
+  portal_enabled?: boolean;
+  portal_default_permission_scope?: PortalDefaultPermissionScope;
   is_active: boolean;
   branches: Branch[];
 }
@@ -80,7 +101,28 @@ type FormFields = {
   credit_hold_reason: string;
   edi_prefix: string;
   shipping_line_code: string;
+  portal_enabled: boolean;
+  portal_default_permission_scope: PortalDefaultPermissionScope;
   branches: Branch[];
+};
+
+const defaultPortalPermissionScope: PortalDefaultPermissionScope = {
+  view: true,
+  download: true,
+  eir: {
+    fields: {
+      container_grade: false,
+      damage_summary: true,
+      damage_photos: true,
+      seal_number: true,
+      driver_name: false,
+      truck_plate_full: false,
+      billing_clearance: false,
+      invoice_amount: false,
+      internal_note: false,
+    },
+  },
+  maskSensitiveFields: true,
 };
 
 const emptyForm: FormFields = {
@@ -89,6 +131,8 @@ const emptyForm: FormFields = {
   contact_name: '', contact_phone: '', contact_email: '', default_payment_type: 'CASH',
   credit_term: 0, credit_limit: 0, credit_hold: false, credit_hold_reason: '',
   edi_prefix: '', shipping_line_code: '',
+  portal_enabled: true,
+  portal_default_permission_scope: defaultPortalPermissionScope,
   branches: [{ branch_code: '00000', branch_name: 'สำนักงานใหญ่', billing_address: '', contact_name: '', contact_phone: '', contact_email: '', is_default: true }],
 };
 
@@ -100,6 +144,22 @@ const emptyBranch: Branch = {
 
 export function getRoleBadges(c: { is_line?: boolean; is_forwarder?: boolean; is_trucking?: boolean; is_shipper?: boolean; is_consignee?: boolean }) {
   return ROLE_OPTIONS.filter(r => c[r.key]);
+}
+
+function normalizePortalDefaultScope(input: Customer['portal_default_permission_scope']): PortalDefaultPermissionScope {
+  const fields = input?.eir?.fields || defaultPortalPermissionScope.eir.fields;
+  return {
+    ...defaultPortalPermissionScope,
+    ...input,
+    eir: {
+      fields: {
+        ...defaultPortalPermissionScope.eir.fields,
+        ...fields,
+        internal_note: false,
+      },
+    },
+    maskSensitiveFields: true,
+  };
 }
 
 /* ========= Component ========= */
@@ -202,6 +262,8 @@ export default function CustomerMaster() {
       credit_hold: !!c.credit_hold, credit_hold_reason: c.credit_hold_reason || '',
       edi_prefix: c.edi_prefix || '',
       shipping_line_code: c.shipping_line_code || '',
+      portal_enabled: c.portal_enabled !== false,
+      portal_default_permission_scope: normalizePortalDefaultScope(c.portal_default_permission_scope),
       branches: c.branches?.length > 0 ? c.branches : [{ branch_code: '00000', branch_name: 'สำนักงานใหญ่', billing_address: '', contact_name: '', contact_phone: '', contact_email: '', is_default: true }],
     });
   };
@@ -362,6 +424,57 @@ export default function CustomerMaster() {
             </div>
           </>
         )}
+      </div>
+      <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-800 dark:text-white">Customer Portal</p>
+            <p className="text-xs text-slate-500">ค่าเริ่มต้นสำหรับ grants ใหม่ของลูกค้ารายนี้</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, portal_enabled: !form.portal_enabled })}
+            className={`h-9 rounded-lg px-3 text-xs font-semibold ${form.portal_enabled ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}
+          >
+            {form.portal_enabled ? 'เปิดใช้งาน Portal' : 'ปิด Portal'}
+          </button>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2">
+          {[
+            ['container_grade', 'แสดงเกรดตู้ใน EIR ให้ลูกค้า'],
+            ['damage_summary', 'แสดงสรุปผลตรวจสภาพ'],
+            ['damage_photos', 'แสดงรูป Damage'],
+            ['seal_number', 'แสดงเลขซีล'],
+            ['driver_name', 'แสดงชื่อคนขับ'],
+            ['truck_plate_full', 'แสดงทะเบียนเต็ม'],
+            ['billing_clearance', 'แสดง Billing Clearance'],
+            ['invoice_amount', 'แสดงยอด Invoice'],
+            ['internal_note', 'แสดง Internal Note'],
+          ].map(([key, label]) => (
+            <label key={key} className="flex items-center gap-2 rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/60">
+              <input
+                type="checkbox"
+                checked={Boolean(form.portal_default_permission_scope.eir.fields[key as keyof typeof form.portal_default_permission_scope.eir.fields])}
+                onChange={e => setForm(prev => ({
+                  ...prev,
+                  portal_default_permission_scope: {
+                    ...prev.portal_default_permission_scope,
+                    eir: {
+                      ...prev.portal_default_permission_scope.eir,
+                      fields: {
+                        ...prev.portal_default_permission_scope.eir.fields,
+                        [key]: key === 'internal_note' ? false : e.target.checked,
+                      },
+                    },
+                  },
+                }))}
+                disabled={key === 'internal_note'}
+                className="accent-blue-600"
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>

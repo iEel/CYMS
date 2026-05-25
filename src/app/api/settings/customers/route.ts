@@ -20,6 +20,43 @@ async function generateCustomerCode(pool: Awaited<ReturnType<typeof getDb>>): Pr
   return 'CUST-' + String(nextNum).padStart(5, '0');
 }
 
+function normalizePortalDefaultScope(input: unknown) {
+  const source = typeof input === 'object' && input !== null ? input as Record<string, unknown> : {};
+  const eir = typeof source.eir === 'object' && source.eir !== null ? source.eir as Record<string, unknown> : {};
+  const fields = typeof eir.fields === 'object' && eir.fields !== null ? eir.fields as Record<string, unknown> : {};
+  return {
+    view: true,
+    download: Boolean(source.download ?? true),
+    eir: {
+      fields: {
+        container_grade: Boolean(fields.container_grade),
+        damage_summary: fields.damage_summary !== false,
+        damage_photos: fields.damage_photos !== false,
+        seal_number: fields.seal_number !== false,
+        driver_name: Boolean(fields.driver_name),
+        truck_plate_full: Boolean(fields.truck_plate_full),
+        billing_clearance: Boolean(fields.billing_clearance),
+        invoice_amount: Boolean(fields.invoice_amount),
+        internal_note: false,
+      },
+    },
+    maskSensitiveFields: true,
+  };
+}
+
+function parsePortalDefaultScope(input: unknown) {
+  if (typeof input !== 'string') return input;
+  try {
+    return JSON.parse(input || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function stringifyPortalDefaultScope(input: unknown) {
+  return JSON.stringify(normalizePortalDefaultScope(input));
+}
+
 // GET — List all customers (with optional role filter)
 export async function GET(req: NextRequest) {
   try {
@@ -49,6 +86,8 @@ export async function GET(req: NextRequest) {
              ISNULL(c.credit_hold, 0) as credit_hold, c.credit_hold_reason,
              c.edi_prefix,
              ISNULL(c.shipping_line_code, '') as shipping_line_code,
+             ISNULL(c.portal_enabled, 1) AS portal_enabled,
+             c.portal_default_permission_scope,
              c.is_active, c.created_at, c.customer_type
       FROM Customers c
       ${whereClause}
@@ -72,6 +111,8 @@ export async function GET(req: NextRequest) {
 
     const customers = result.recordset.map(c => ({
       ...c,
+      portal_enabled: c.portal_enabled !== false && c.portal_enabled !== 0,
+      portal_default_permission_scope: normalizePortalDefaultScope(parsePortalDefaultScope(c.portal_default_permission_scope)),
       branches: branchMap[c.customer_id] || [],
     }));
 
@@ -146,18 +187,20 @@ export async function POST(req: NextRequest) {
       .input('credit_hold_reason', sql.NVarChar, credit_hold_reason || '')
       .input('edi_prefix', sql.NVarChar, edi_prefix || '')
       .input('shipping_line_code', sql.NVarChar, shipping_line_code || '')
+      .input('portalEnabled', sql.Bit, body.portal_enabled !== false)
+      .input('portalDefaultPermissionScope', sql.NVarChar, JSON.stringify(normalizePortalDefaultScope(body.portal_default_permission_scope)))
       .query(`
         INSERT INTO Customers (customer_code, customer_name, customer_type,
           is_line, is_forwarder, is_trucking, is_shipper, is_consignee,
           tax_id, address, billing_address, contact_name, contact_phone, contact_email,
           default_payment_type, credit_term, credit_limit, credit_hold, credit_hold_reason,
-          edi_prefix, shipping_line_code)
+          edi_prefix, shipping_line_code, portal_enabled, portal_default_permission_scope)
         OUTPUT INSERTED.*
         VALUES (@customer_code, @customer_name, @customer_type,
           @is_line, @is_forwarder, @is_trucking, @is_shipper, @is_consignee,
           @tax_id, @address, @billing_address, @contact_name, @contact_phone, @contact_email,
           @default_payment_type, @credit_term, @credit_limit, @credit_hold, @credit_hold_reason,
-          @edi_prefix, @shipping_line_code)
+          @edi_prefix, @shipping_line_code, @portalEnabled, @portalDefaultPermissionScope)
       `);
 
     const created = result.recordset[0];
@@ -182,6 +225,19 @@ export async function POST(req: NextRequest) {
     }
 
     await logAudit({ userId: auth.userId, yardId: body.yard_id, action: 'customer_create', entityType: 'customer', entityId: created.customer_id, details: { customer_name, customer_code: customerCode, roles: { is_line, is_forwarder, is_trucking, is_shipper, is_consignee } } });
+    if ('portal_enabled' in body || 'portal_default_permission_scope' in body) {
+      await logAudit({
+        userId: auth.userId,
+        yardId: body.yard_id,
+        action: 'customer_portal_visibility_update',
+        entityType: 'customer',
+        entityId: created.customer_id,
+        details: {
+          portal_enabled: body.portal_enabled !== false,
+          portal_default_permission_scope: normalizePortalDefaultScope(body.portal_default_permission_scope),
+        },
+      });
+    }
     return NextResponse.json({ success: true, data: created });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -231,8 +287,35 @@ export async function PUT(req: NextRequest) {
 
     // Derive legacy customer_type
     const legacyType = is_line ? 'shipping_line' : is_trucking ? 'trucker' : 'general';
+    const portalEnabledIncluded = Object.prototype.hasOwnProperty.call(body, 'portal_enabled');
+    const portalDefaultScopeIncluded = Object.prototype.hasOwnProperty.call(body, 'portal_default_permission_scope');
+    const portalDefaultsIncluded = portalEnabledIncluded || portalDefaultScopeIncluded;
+    const portalUpdateClauses = [];
+    if (portalEnabledIncluded) portalUpdateClauses.push('portal_enabled = @portalEnabled');
+    if (portalDefaultScopeIncluded) portalUpdateClauses.push('portal_default_permission_scope = @portalDefaultPermissionScope');
+    const portalUpdateSql = portalUpdateClauses.length ? `${portalUpdateClauses.join(', ')},` : '';
+    const nextPortalEnabled = body.portal_enabled !== false;
+    const nextPortalDefaultScope = normalizePortalDefaultScope(body.portal_default_permission_scope);
+    const nextPortalDefaultScopeJson = stringifyPortalDefaultScope(body.portal_default_permission_scope);
 
-    await pool.request()
+    const previousPortal = portalDefaultsIncluded
+      ? (await pool.request()
+        .input('customer_id', sql.Int, customer_id)
+        .query(`
+          SELECT ISNULL(portal_enabled, 1) AS portal_enabled, portal_default_permission_scope
+          FROM Customers
+          WHERE customer_id = @customer_id
+        `)).recordset[0]
+      : null;
+    const previousPortalEnabled = previousPortal
+      ? previousPortal.portal_enabled !== false && previousPortal.portal_enabled !== 0
+      : true;
+    const previousPortalDefaultScopeJson = stringifyPortalDefaultScope(parsePortalDefaultScope(previousPortal?.portal_default_permission_scope));
+    const portalChanged =
+      (portalEnabledIncluded && previousPortalEnabled !== nextPortalEnabled) ||
+      (portalDefaultScopeIncluded && previousPortalDefaultScopeJson !== nextPortalDefaultScopeJson);
+
+    const updateRequest = pool.request()
       .input('customer_id', sql.Int, customer_id)
       .input('customer_name', sql.NVarChar, customer_name)
       .input('customer_type', sql.NVarChar, legacyType)
@@ -254,8 +337,18 @@ export async function PUT(req: NextRequest) {
       .input('credit_hold_reason', sql.NVarChar, credit_hold_reason || '')
       .input('edi_prefix', sql.NVarChar, edi_prefix || '')
       .input('shipping_line_code', sql.NVarChar, shipping_line_code || '')
-      .input('is_active', sql.Bit, is_active !== undefined ? (is_active ? 1 : 0) : 1)
-      .query(`
+      .input('is_active', sql.Bit, is_active !== undefined ? (is_active ? 1 : 0) : 1);
+
+    if (portalDefaultsIncluded) {
+      if (portalEnabledIncluded) {
+        updateRequest.input('portalEnabled', sql.Bit, nextPortalEnabled);
+      }
+      if (portalDefaultScopeIncluded) {
+        updateRequest.input('portalDefaultPermissionScope', sql.NVarChar, nextPortalDefaultScopeJson);
+      }
+    }
+
+    await updateRequest.query(`
         UPDATE Customers
         SET customer_name = @customer_name, customer_type = @customer_type,
             is_line = @is_line, is_forwarder = @is_forwarder, is_trucking = @is_trucking,
@@ -265,6 +358,7 @@ export async function PUT(req: NextRequest) {
             default_payment_type = @default_payment_type, credit_term = @credit_term,
             credit_limit = @credit_limit, credit_hold = @credit_hold, credit_hold_reason = @credit_hold_reason,
             edi_prefix = @edi_prefix, shipping_line_code = @shipping_line_code,
+            ${portalUpdateSql}
             is_active = @is_active, updated_at = GETDATE()
         WHERE customer_id = @customer_id
       `);
@@ -322,6 +416,19 @@ export async function PUT(req: NextRequest) {
     }
 
     await logAudit({ userId: auth.userId, yardId: body.yard_id, action: 'customer_update', entityType: 'customer', entityId: customer_id, details: { customer_name } });
+    if (portalChanged) {
+      await logAudit({
+        userId: auth.userId,
+        yardId: body.yard_id,
+        action: 'customer_portal_visibility_update',
+        entityType: 'customer',
+        entityId: customer_id,
+        details: {
+          ...(portalEnabledIncluded ? { portal_enabled: nextPortalEnabled } : {}),
+          ...(portalDefaultScopeIncluded ? { portal_default_permission_scope: nextPortalDefaultScope } : {}),
+        },
+      });
+    }
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';

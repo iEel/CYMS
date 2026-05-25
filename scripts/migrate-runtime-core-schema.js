@@ -211,6 +211,13 @@ async function migrate() {
       END;
     `);
 
+    await runStep(pool, 'Customer portal default visibility columns', `
+      IF COL_LENGTH('Customers', 'portal_enabled') IS NULL
+        ALTER TABLE Customers ADD portal_enabled BIT NOT NULL CONSTRAINT DF_Customers_PortalEnabled DEFAULT 1;
+      IF COL_LENGTH('Customers', 'portal_default_permission_scope') IS NULL
+        ALTER TABLE Customers ADD portal_default_permission_scope NVARCHAR(MAX) NULL;
+    `);
+
     await runStep(pool, 'Gate owner/billing columns for customer 360', `
       IF COL_LENGTH('GateTransactions', 'billing_customer_id') IS NULL
         ALTER TABLE GateTransactions ADD billing_customer_id INT NULL;

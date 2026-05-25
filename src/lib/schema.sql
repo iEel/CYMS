@@ -192,6 +192,8 @@ CREATE TABLE Customers (
     default_payment_type VARCHAR(20) DEFAULT 'CASH',  -- 'CASH' หรือ 'CREDIT'
     credit_term         INT DEFAULT 0,                -- วันเครดิต
     edi_prefix          NVARCHAR(10),                 -- EDI prefix (บังคับเมื่อ is_line=1)
+    portal_enabled      BIT NOT NULL DEFAULT 1,
+    portal_default_permission_scope NVARCHAR(MAX) NULL,
 
     is_active           BIT DEFAULT 1,
     created_at          DATETIME2 DEFAULT GETDATE(),
