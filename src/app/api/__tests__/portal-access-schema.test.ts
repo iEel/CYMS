@@ -40,6 +40,19 @@ function expectEirAccessLogSchema(source: string) {
   expect(source).toContain("'public_verify'");
 }
 
+function createTableBlock(source: string, tableName: string) {
+  const match = source.match(new RegExp(`CREATE\\s+TABLE\\s+${tableName}\\s*\\(([\\s\\S]*?)\\n\\s*\\)`, 'i'));
+  expect(match).not.toBeNull();
+  return match?.[1] || '';
+}
+
+function expectUsersCustomerPortalColumns(source: string) {
+  const usersTable = createTableBlock(source, 'Users');
+
+  expect(usersTable).toMatch(/customer_id\s+INT\s+NULL/i);
+  expect(usersTable).toMatch(/customer_portal_role\s+NVARCHAR\(40\)\s+NULL/i);
+}
+
 describe('portal access durable schema migration', () => {
   it('adds scoped portal access columns when missing', () => {
     expect(migration).toContain("COL_LENGTH('PortalEntityAccess', 'permission_scope')");
@@ -56,14 +69,25 @@ describe('portal access durable schema migration', () => {
   });
 
   it('adds and backfills customer portal roles for customer users', () => {
+    expect(migration).toContain("COL_LENGTH('Users', 'customer_id')");
+    expect(migration).toMatch(/ALTER\s+TABLE\s+Users\s+ADD\s+customer_id\s+INT\s+NULL/i);
     expect(migration).toContain("COL_LENGTH('Users', 'customer_portal_role')");
     expect(migration).toContain('customer_admin');
+  });
+
+  it('separates customer portal role backfill from column creation and narrows it to customer role users', () => {
+    expect(migration).toMatch(/runStep\(pool,\s*'Customer portal user customer link column'/);
+    expect(migration).toMatch(/runStep\(pool,\s*'Customer portal user role column'/);
+    expect(migration).toMatch(/runStep\(pool,\s*'Customer portal user role backfill'[\s\S]*JOIN\s+Roles\s+r/i);
+    expect(migration).toMatch(/runStep\(pool,\s*'Customer portal user role backfill'[\s\S]*r\.role_code\s*=\s*'customer'/i);
+    expect(migration).toMatch(/runStep\(pool,\s*'Customer portal user role backfill'[\s\S]*u\.customer_id\s+IS\s+NOT\s+NULL/i);
+    expect(migration).toMatch(/runStep\(pool,\s*'Customer portal user role backfill'[\s\S]*u\.customer_portal_role\s+IS\s+NULL/i);
   });
 });
 
 describe.each(schemaMirrors)('%s portal access schema mirror', (_label, source) => {
-  it('includes customer portal roles on Users', () => {
-    expect(source).toMatch(/CREATE\s+TABLE\s+Users[\s\S]*customer_portal_role\s+NVARCHAR\(40\)\s+NULL/i);
+  it('includes customer portal link and role columns on Users', () => {
+    expectUsersCustomerPortalColumns(source);
   });
 
   it('includes scoped PortalEntityAccess columns', () => {

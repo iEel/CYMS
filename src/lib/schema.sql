@@ -103,6 +103,7 @@ CREATE TABLE Users (
     phone           NVARCHAR(20),
     avatar_url      NVARCHAR(500),
     status          NVARCHAR(20) DEFAULT 'active',  -- 'active','suspend','resign'
+    customer_id     INT NULL,
     customer_portal_role NVARCHAR(40) NULL,
     two_fa_enabled  BIT DEFAULT 0,
     two_fa_secret   NVARCHAR(128) NULL, -- TOTP secret (base32)

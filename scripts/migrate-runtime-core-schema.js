@@ -200,15 +200,24 @@ async function migrate() {
         ALTER TABLE Users ADD bound_device_mac NVARCHAR(128) NULL;
     `);
 
-    await runStep(pool, 'Customer portal user roles', `
+    await runStep(pool, 'Customer portal user customer link column', `
+      IF COL_LENGTH('Users', 'customer_id') IS NULL
+        ALTER TABLE Users ADD customer_id INT NULL;
+    `);
+
+    await runStep(pool, 'Customer portal user role column', `
       IF COL_LENGTH('Users', 'customer_portal_role') IS NULL
         ALTER TABLE Users ADD customer_portal_role NVARCHAR(40) NULL;
+    `);
 
-      IF COL_LENGTH('Users', 'customer_id') IS NOT NULL
-        UPDATE Users
-        SET customer_portal_role = 'customer_admin'
-        WHERE customer_id IS NOT NULL
-          AND customer_portal_role IS NULL;
+    await runStep(pool, 'Customer portal user role backfill', `
+      UPDATE u
+      SET customer_portal_role = 'customer_admin'
+      FROM Users u
+      JOIN Roles r ON r.role_id = u.role_id
+      WHERE r.role_code = 'customer'
+        AND u.customer_id IS NOT NULL
+        AND u.customer_portal_role IS NULL;
     `);
 
     await runStep(pool, 'Yard zone reefer plug capacity', `
