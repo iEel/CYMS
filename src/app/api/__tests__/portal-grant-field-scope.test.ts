@@ -196,6 +196,7 @@ describe('/api/portal/grants/field-scope', () => {
       access_id: 404,
       field: 'container_grade',
       enabled: false,
+      reason: 'Verify missing grant behavior',
     }));
 
     expect(res.status).toBe(404);

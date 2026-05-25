@@ -32,5 +32,8 @@ describe('portal access control UI', () => {
     expect(ui).toContain('โหลด grants ไม่สำเร็จ');
     expect(ui).toContain('Preview reconcile ไม่สำเร็จ');
     expect(ui).toContain('ซ่อมแซม grants ไม่สำเร็จ');
+    expect(ui).toContain('อัปเดตสิทธิ์ไม่สำเร็จ');
+    expect(ui).toContain('รูปแบบข้อมูลไม่ถูกต้อง');
+    expect(ui).toContain('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
   });
 });

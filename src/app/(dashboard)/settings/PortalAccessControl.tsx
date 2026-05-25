@@ -120,14 +120,26 @@ export default function PortalAccessControl() {
       toast('warning', 'กรุณาระบุเหตุผล', 'ต้องมี audit log ทุกครั้งที่เปลี่ยน field visibility');
       return;
     }
-    const res = await fetch('/api/portal/grants/field-scope', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ access_id: grant.access_id, field: 'container_grade', enabled, reason: trimmed }),
-    });
-    const json = await res.json();
-    toast(res.ok ? 'success' : 'error', res.ok ? 'อัปเดตสิทธิ์เรียบร้อย' : json.error || 'อัปเดตไม่สำเร็จ');
-    if (res.ok) loadGrants();
+    try {
+      const res = await fetch('/api/portal/grants/field-scope', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_id: grant.access_id, field: 'container_grade', enabled, reason: trimmed }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast('error', 'อัปเดตสิทธิ์ไม่สำเร็จ', json?.error || `HTTP ${res.status}`);
+        return;
+      }
+      if (!json || typeof json !== 'object') {
+        toast('error', 'อัปเดตสิทธิ์ไม่สำเร็จ', 'รูปแบบข้อมูลไม่ถูกต้อง');
+        return;
+      }
+      toast('success', 'อัปเดตสิทธิ์เรียบร้อย');
+      loadGrants();
+    } catch {
+      toast('error', 'อัปเดตสิทธิ์ไม่สำเร็จ', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+    }
   };
 
   return (
