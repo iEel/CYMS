@@ -13,7 +13,16 @@ export async function GET(request: NextRequest) {
   const customerId = Number(searchParams.get('customer_id') || 0);
   const entityType = searchParams.get('entity_type') || '';
   const active = searchParams.get('active') || '1';
-  const limit = Math.min(Number(searchParams.get('limit') || 100), 500);
+  const limitParam = searchParams.get('limit') ?? '100';
+  const limit = Number(limitParam);
+
+  if (!limitParam || !Number.isInteger(limit) || limit < 1 || limit > 500) {
+    return NextResponse.json({ error: 'limit ต้องเป็นจำนวนเต็มระหว่าง 1 ถึง 500' }, { status: 400 });
+  }
+
+  if (!['0', '1', 'all'].includes(active)) {
+    return NextResponse.json({ error: 'active ต้องเป็น 0, 1 หรือ all' }, { status: 400 });
+  }
 
   const db = await getDb();
   const req = db.request()

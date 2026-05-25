@@ -90,11 +90,12 @@ const groups = [
 const quickAccessIds = ['customers', 'users', 'storage', 'edi', 'documents'];
 
 export default function SettingsPage() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, session } = useAuth();
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('');
   const [search, setSearch] = useState('');
-  const visibleTabs = tabs.filter(tab => hasPermission(tab.permission));
+  const canUsePortalAccess = session?.role === 'yard_manager';
+  const visibleTabs = tabs.filter(tab => hasPermission(tab.permission) && (tab.id !== 'portal-access' || canUsePortalAccess));
   const visibleGroups = groups
     .map(group => ({ ...group, items: visibleTabs.filter(tab => tab.group === group.id) }))
     .filter(group => group.items.length > 0);

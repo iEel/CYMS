@@ -42,6 +42,7 @@ export default function PortalAccessControl() {
   const { toast } = useToast();
   const [grants, setGrants] = useState<PortalGrantRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [reconcile, setReconcile] = useState<{ missing?: unknown[]; stale?: unknown[] } | null>(null);
   const [reason, setReason] = useState('');
 
@@ -49,27 +50,68 @@ export default function PortalAccessControl() {
     setLoading(true);
     try {
       const res = await fetch('/api/portal/grants?limit=200');
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast('error', 'โหลด grants ไม่สำเร็จ', json?.error || `HTTP ${res.status}`);
+        return;
+      }
+      if (!json || !Array.isArray(json.grants)) {
+        toast('error', 'โหลด grants ไม่สำเร็จ', 'รูปแบบข้อมูลไม่ถูกต้อง');
+        setGrants([]);
+        return;
+      }
       setGrants(Array.isArray(json.grants) ? json.grants : []);
+    } catch {
+      toast('error', 'โหลด grants ไม่สำเร็จ', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => { loadGrants(); }, [loadGrants]);
 
   const previewReconcile = async () => {
-    const res = await fetch('/api/portal/grants/reconcile?mode=preview');
-    const json = await res.json();
-    setReconcile(json);
+    try {
+      const res = await fetch('/api/portal/grants/reconcile?mode=preview');
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast('error', 'Preview reconcile ไม่สำเร็จ', json?.error || `HTTP ${res.status}`);
+        return;
+      }
+      if (!json || typeof json !== 'object') {
+        toast('error', 'Preview reconcile ไม่สำเร็จ', 'รูปแบบข้อมูลไม่ถูกต้อง');
+        return;
+      }
+      setReconcile(json);
+    } catch {
+      toast('error', 'Preview reconcile ไม่สำเร็จ', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+    }
   };
 
   const repairReconcile = async () => {
-    const res = await fetch('/api/portal/grants/reconcile', { method: 'POST' });
-    const json = await res.json();
-    setReconcile(json);
-    toast(res.ok ? 'success' : 'error', res.ok ? 'ซ่อมแซม grants แล้ว' : json.error || 'ซ่อมแซม grants ไม่สำเร็จ');
-    loadGrants();
+    if (!reconcile || repairing) return;
+    if (!window.confirm('ยืนยันซ่อมแซม portal grants จากผล preview ล่าสุด?')) return;
+
+    setRepairing(true);
+    try {
+      const res = await fetch('/api/portal/grants/reconcile', { method: 'POST' });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast('error', 'ซ่อมแซม grants ไม่สำเร็จ', json?.error || `HTTP ${res.status}`);
+        return;
+      }
+      if (!json || typeof json !== 'object') {
+        toast('error', 'ซ่อมแซม grants ไม่สำเร็จ', 'รูปแบบข้อมูลไม่ถูกต้อง');
+        return;
+      }
+      setReconcile(json);
+      toast('success', 'ซ่อมแซม grants แล้ว');
+      loadGrants();
+    } catch {
+      toast('error', 'ซ่อมแซม grants ไม่สำเร็จ', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+    } finally {
+      setRepairing(false);
+    }
   };
 
   const toggleGrade = async (grant: PortalGrantRow, enabled: boolean) => {
@@ -149,7 +191,13 @@ export default function PortalAccessControl() {
             <p className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={14} /> Reconcile Grants</p>
             <div className="mt-3 flex gap-2">
               <button onClick={previewReconcile} className="rounded-lg border px-3 py-2 text-xs">Preview</button>
-              <button onClick={repairReconcile} className="rounded-lg bg-blue-600 px-3 py-2 text-xs text-white">Repair</button>
+              <button
+                onClick={repairReconcile}
+                disabled={repairing || !reconcile}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-xs text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {repairing ? 'Repairing...' : 'Repair'}
+              </button>
             </div>
             {reconcile && <pre className="mt-3 max-h-52 overflow-auto rounded-lg bg-slate-950 p-3 text-[10px] text-slate-100">{JSON.stringify(reconcile, null, 2)}</pre>}
           </div>
