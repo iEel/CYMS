@@ -22,6 +22,41 @@
 | **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
 
+### อัปเดตล่าสุด: Customer Portal Access Control + EIR Visibility Policy (25 พ.ค. 2569)
+
+รอบนี้ harden ชั้นข้อมูลของ Customer Portal และ EIR visibility เพื่อปิดความเสี่ยง data leakage ก่อนทำ Driver/Trucking Portal UI:
+
+- **Public EIR แยก endpoint แล้ว**: `/eir/[id]` ใช้ `/api/public/eir` เท่านั้น และแสดงเฉพาะ verification data เช่น `eir_number`, `container_number`, `transaction_type`, `gate_datetime`, yard/depot, `document_status`, condition summary; `/api/gate/eir` กลับเป็น internal authenticated API
+- **EIR policy กลาง**: เพิ่ม `src/lib/eirVisibility.ts` สำหรับ `internal/customer/shipping_line/booking_customer/billing/trucking/driver/public/auditor` และทุก EIR JSON/PDF ต้องผ่าน sanitized payload
+- **Container grade default hidden**: `container_grade` และ nested `damage_report.condition_grade` ไม่แสดงใน public/customer/driver/trucking โดย default; Customer Portal จะเห็นได้เฉพาะเมื่อ user มี `portal.eir.grade.view` และ grant มี `permission_scope.eir.fields.container_grade = true`
+- **EIR PDF/Print ใช้ policy เดียวกับ JSON**: Portal EIR PDF ใช้ sanitized payload และแสดง copy label เช่น `Customer Copy`; public copy ไม่เห็นรูปความเสียหาย, driver phone, full truck plate, signature, billing, internal note
+- **PortalEntityAccess ขยาย schema**: เพิ่ม `permission_scope`, `valid_from`, `valid_until`, `updated_at` และ entity type สำหรับ `eir`, `statement`, `document_bundle`, `reefer_check`, `reefer_exception`
+- **EIRAccessLog**: เพิ่มตารางและ helper `src/lib/eirAccessLog.ts` เพื่อ log action `view/download/print/public_verify`
+- **Customer Portal Action Permission**: เพิ่ม `src/lib/customerPortalPermissions.ts`, `Users.customer_portal_role`, role/action map และ `requirePortalAction()` ครอบ portal routes หลักทั้งหมด
+- **Grant creation rules กลาง**: เพิ่ม `src/lib/portalGrantRules.ts` เพื่อสร้าง grants จาก Booking, BookingContainers, GateTransactions/EIR/Container, Invoice, M&R invoice, Reefer check/exception โดย invoice grant ให้เฉพาะ bill-to/invoice customer เท่านั้น
+- **Driver/Trucking backend policy พร้อมต่อยอด**: รองรับ `access_role = trucking/driver`, `permission_scope`, และ `valid_until` ใน backend grants/reconciler โดยยังไม่ทำ Driver/Trucking Portal UI ตาม scope รอบนี้
+- **Reconciler/Backfill แข็งแรงขึ้น**: `src/lib/portalGrantReconciler.ts` preview/repair missing/stale grants พร้อม `permission_scope`, validity windows, reefer grants, และ yard-scoped gate booking fallback เพื่อไม่ grant ข้าม yard เมื่อ booking number ซ้ำ
+- **Admin field-scope endpoint**: เพิ่ม `PATCH /api/portal/grants/field-scope` สำหรับ yard manager เปิด/ปิด field `eir.fields.container_grade` พร้อม audit action `portal_grant_field_scope_update` และ label `แสดงเกรดตู้ใน EIR ให้ลูกค้า`
+- **Security regression tests**: เพิ่ม/ขยาย tests สำหรับ public EIR, portal EIR masking, customer_id จาก session เท่านั้น, invoice visibility, driver/trucking grants, reconciler, field-scope audit และ portal action permissions
+
+Migration ที่ต้องรันหลัง pull:
+
+```bash
+node scripts/migrate-runtime-core-schema.js
+```
+
+Verification รอบนี้ผ่านแล้ว:
+
+```bash
+node scripts/migrate-runtime-core-schema.js
+npm test -- src/lib/__tests__/eirVisibility.test.ts src/lib/__tests__/customerPortalPermissions.test.ts src/lib/__tests__/portalGrantRules.test.ts src/lib/__tests__/portalGrantReconciler.test.ts src/app/api/__tests__/eir-public-policy.test.ts src/app/api/__tests__/eir-access-log.test.ts src/app/api/__tests__/portal-eir-visibility.test.ts src/app/api/__tests__/portal-access-schema.test.ts src/app/api/__tests__/portal-action-permissions.test.ts src/app/api/__tests__/portal-data-leakage.test.ts src/app/api/__tests__/portal-grant-field-scope.test.ts src/app/api/__tests__/portal-grant-reconcile.test.ts --runInBand --cacheDirectory ./.next/jest-cache
+npm test -- --runInBand --cacheDirectory ./.next/jest-cache
+npx tsc --noEmit --pretty false
+npm run lint
+```
+
+ผลล่าสุด: focused tests `100/100` ผ่าน, full tests `757/757` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+
 ---
 
 ## 2. Tech Stack
