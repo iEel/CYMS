@@ -23,10 +23,28 @@ describe('portal grant reconciler', () => {
     expect(sql).toContain('FROM BookingContainers bc');
     expect(sql).toContain('FROM GateTransactions gt');
     expect(sql).toContain('FROM Invoices i');
+    expect(sql).toContain('booking_customer_id');
+    expect(sql).toContain('shipping_line_id');
+    expect(sql).toContain('trucking_company_id');
     expect(sql).toContain("'owner'");
     expect(sql).toContain("'billing'");
     expect(sql).toContain("'booking_customer'");
     expect(sql).toContain("'invoice_customer'");
+  });
+
+  it('includes scoped metadata and reefer grants from active container visibility', () => {
+    const sql = buildPortalExpectedGrantsSql();
+
+    expect(sql).toContain('permission_scope');
+    expect(sql).toContain('valid_from');
+    expect(sql).toContain('valid_until');
+    expect(sql).toContain('FROM ReeferTemperatureChecks rc');
+    expect(sql).toContain('FROM ReeferExceptions re');
+    expect(sql).toContain("CAST(N'reefer_check' AS NVARCHAR(40)) AS entity_type");
+    expect(sql).toContain("CAST(N'reefer_exception' AS NVARCHAR(40)) AS entity_type");
+    expect(sql).toContain('pea.entity_type = N\'container\'');
+    expect(sql).toContain('(pea.valid_from IS NULL OR pea.valid_from <= GETDATE())');
+    expect(sql).toContain('(pea.valid_until IS NULL OR pea.valid_until >= GETDATE())');
   });
 
   it('includes GateTransactions booking_customer expected grants for gate, EIR, and container targets', () => {
@@ -39,9 +57,11 @@ describe('portal grant reconciler', () => {
     expect(sql).not.toContain('OR gt.yard_id IS NULL OR b.yard_id IS NULL');
     expect(sql).not.toContain('COALESCE(gt.booking_customer_id, b.booking_customer_id, b.customer_id)');
     expect(sql).toMatch(/bookingGateCustomer[\s\S]*CAST\(N'booking_customer'\s+AS\s+NVARCHAR\(40\)\)/i);
-    expect(sql).toMatch(/CAST\(N'gate_transaction'\s+AS\s+NVARCHAR\(40\)\),\s+gt\.transaction_id,\s+gt\.eir_number/i);
-    expect(sql).toMatch(/CAST\(N'eir'\s+AS\s+NVARCHAR\(40\)\),\s+gt\.transaction_id,\s+gt\.eir_number/i);
-    expect(sql).toMatch(/CAST\(N'container'\s+AS\s+NVARCHAR\(40\)\),\s+gt\.container_id,\s+c\.container_number/i);
+    expect(sql).toContain("CAST(N'gate_transaction' AS NVARCHAR(40)) AS entity_type");
+    expect(sql).toContain("CAST(N'eir' AS NVARCHAR(40)) AS entity_type");
+    expect(sql).toContain("CAST(N'container' AS NVARCHAR(40)) AS entity_type");
+    expect(sql).toMatch(/gt\.transaction_id\s+AS\s+entity_id,\s+gt\.eir_number\s+AS\s+entity_ref/i);
+    expect(sql).toMatch(/gt\.container_id\s+AS\s+entity_id,\s+c\.container_number\s+AS\s+entity_ref/i);
   });
 
   it('previews missing and stale PortalEntityAccess grants', async () => {
@@ -73,8 +93,12 @@ describe('portal grant reconciler', () => {
 
     const combinedSql = db.query.mock.calls.map(([statement]) => statement).join('\n');
     expect(combinedSql).toContain('INSERT INTO PortalEntityAccess');
+    expect(combinedSql).toMatch(/INSERT INTO PortalEntityAccess \([\s\S]*permission_scope[\s\S]*valid_from[\s\S]*valid_until/i);
+    expect(combinedSql).toMatch(/SELECT[\s\S]*eg\.permission_scope[\s\S]*eg\.valid_from[\s\S]*eg\.valid_until/i);
     expect(combinedSql).toContain('UPDATE pea');
     expect(combinedSql).toContain('pea.source_table IN');
+    expect(combinedSql).toContain("N'ReeferTemperatureChecks'");
+    expect(combinedSql).toContain("N'ReeferExceptions'");
     expect(repair.repaired_missing).toBe(1);
     expect(repair.deactivated_stale).toBe(1);
   });

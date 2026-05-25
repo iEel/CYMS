@@ -31,6 +31,8 @@ const MANAGED_SOURCE_TABLES = [
   'Containers',
   'GateTransactions',
   'Invoices',
+  'ReeferTemperatureChecks',
+  'ReeferExceptions',
 ];
 
 function normalizeLimit(limit?: number) {
@@ -69,7 +71,10 @@ export function buildPortalExpectedGrantsSql() {
         b.booking_number AS entity_ref,
         party.access_role,
         CAST(N'Bookings' AS NVARCHAR(80)) AS source_table,
-        b.booking_id AS source_id
+        b.booking_id AS source_id,
+        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        CAST(NULL AS DATETIME2) AS valid_from,
+        CAST(NULL AS DATETIME2) AS valid_until
       FROM Bookings b
       CROSS APPLY (VALUES
         (COALESCE(b.booking_customer_id, b.customer_id), CAST(N'booking_customer' AS NVARCHAR(40))),
@@ -91,7 +96,10 @@ export function buildPortalExpectedGrantsSql() {
         c.container_number AS entity_ref,
         CAST(N'owner' AS NVARCHAR(40)) AS access_role,
         CAST(N'Containers' AS NVARCHAR(80)) AS source_table,
-        c.container_id AS source_id
+        c.container_id AS source_id,
+        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        CAST(NULL AS DATETIME2) AS valid_from,
+        CAST(NULL AS DATETIME2) AS valid_until
       FROM Containers c
       WHERE c.container_owner_id IS NOT NULL
 
@@ -104,7 +112,10 @@ export function buildPortalExpectedGrantsSql() {
         bc.container_number AS entity_ref,
         party.access_role,
         CAST(N'BookingContainers' AS NVARCHAR(80)) AS source_table,
-        bc.id AS source_id
+        bc.id AS source_id,
+        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        CAST(NULL AS DATETIME2) AS valid_from,
+        CAST(NULL AS DATETIME2) AS valid_until
       FROM BookingContainers bc
       JOIN Bookings b ON b.booking_id = bc.booking_id
       CROSS APPLY (VALUES
@@ -128,7 +139,10 @@ export function buildPortalExpectedGrantsSql() {
         target.entity_ref,
         party.access_role,
         CAST(N'GateTransactions' AS NVARCHAR(80)) AS source_table,
-        gt.transaction_id AS source_id
+        gt.transaction_id AS source_id,
+        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        CAST(NULL AS DATETIME2) AS valid_from,
+        CAST(NULL AS DATETIME2) AS valid_until
       FROM GateTransactions gt
       LEFT JOIN Containers c ON c.container_id = gt.container_id
       CROSS APPLY (VALUES
@@ -137,11 +151,11 @@ export function buildPortalExpectedGrantsSql() {
         (gt.trucking_company_id, CAST(N'trucking' AS NVARCHAR(40))),
         (gt.driver_user_id, CAST(N'driver' AS NVARCHAR(40)))
       ) party(customer_id, access_role)
-      CROSS APPLY (VALUES
-        (CAST(N'gate_transaction' AS NVARCHAR(40)), gt.transaction_id, gt.eir_number),
-        (CAST(N'eir' AS NVARCHAR(40)), gt.transaction_id, gt.eir_number),
-        (CAST(N'container' AS NVARCHAR(40)), gt.container_id, c.container_number)
-      ) target(entity_type, entity_id, entity_ref)
+      CROSS APPLY (
+        SELECT CAST(N'gate_transaction' AS NVARCHAR(40)) AS entity_type, gt.transaction_id AS entity_id, gt.eir_number AS entity_ref
+        UNION ALL SELECT CAST(N'eir' AS NVARCHAR(40)) AS entity_type, gt.transaction_id AS entity_id, gt.eir_number AS entity_ref
+        UNION ALL SELECT CAST(N'container' AS NVARCHAR(40)) AS entity_type, gt.container_id AS entity_id, c.container_number AS entity_ref
+      ) target
       WHERE party.customer_id IS NOT NULL
         AND (target.entity_id IS NOT NULL OR target.entity_ref IS NOT NULL)
 
@@ -154,7 +168,10 @@ export function buildPortalExpectedGrantsSql() {
         target.entity_ref,
         CAST(N'booking_customer' AS NVARCHAR(40)) AS access_role,
         CAST(N'GateTransactions' AS NVARCHAR(80)) AS source_table,
-        gt.transaction_id AS source_id
+        gt.transaction_id AS source_id,
+        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        CAST(NULL AS DATETIME2) AS valid_from,
+        CAST(NULL AS DATETIME2) AS valid_until
       FROM GateTransactions gt
       LEFT JOIN Containers c ON c.container_id = gt.container_id
       OUTER APPLY (
@@ -165,11 +182,11 @@ export function buildPortalExpectedGrantsSql() {
           AND b.yard_id = gt.yard_id
         ORDER BY COALESCE(b.eta, b.created_at) DESC, b.booking_id DESC
       ) bookingGateCustomer
-      CROSS APPLY (VALUES
-        (CAST(N'gate_transaction' AS NVARCHAR(40)), gt.transaction_id, gt.eir_number),
-        (CAST(N'eir' AS NVARCHAR(40)), gt.transaction_id, gt.eir_number),
-        (CAST(N'container' AS NVARCHAR(40)), gt.container_id, c.container_number)
-      ) target(entity_type, entity_id, entity_ref)
+      CROSS APPLY (
+        SELECT CAST(N'gate_transaction' AS NVARCHAR(40)) AS entity_type, gt.transaction_id AS entity_id, gt.eir_number AS entity_ref
+        UNION ALL SELECT CAST(N'eir' AS NVARCHAR(40)) AS entity_type, gt.transaction_id AS entity_id, gt.eir_number AS entity_ref
+        UNION ALL SELECT CAST(N'container' AS NVARCHAR(40)) AS entity_type, gt.container_id AS entity_id, c.container_number AS entity_ref
+      ) target
       WHERE COALESCE(gt.booking_customer_id, bookingGateCustomer.customer_id) IS NOT NULL
         AND (target.entity_id IS NOT NULL OR target.entity_ref IS NOT NULL)
 
@@ -182,9 +199,72 @@ export function buildPortalExpectedGrantsSql() {
         i.invoice_number AS entity_ref,
         CAST(N'invoice_customer' AS NVARCHAR(40)) AS access_role,
         CAST(N'Invoices' AS NVARCHAR(80)) AS source_table,
-        i.invoice_id AS source_id
+        i.invoice_id AS source_id,
+        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        CAST(NULL AS DATETIME2) AS valid_from,
+        CAST(NULL AS DATETIME2) AS valid_until
       FROM Invoices i
       WHERE i.customer_id IS NOT NULL
+
+      UNION ALL
+
+      SELECT
+        pea.customer_id,
+        CAST(N'reefer_check' AS NVARCHAR(40)) AS entity_type,
+        rc.check_id AS entity_id,
+        CAST(NULL AS NVARCHAR(80)) AS entity_ref,
+        pea.access_role,
+        CAST(N'ReeferTemperatureChecks' AS NVARCHAR(80)) AS source_table,
+        rc.check_id AS source_id,
+        pea.permission_scope,
+        pea.valid_from,
+        pea.valid_until
+      FROM ReeferTemperatureChecks rc
+      JOIN Containers c ON c.container_id = rc.container_id
+      JOIN PortalEntityAccess pea
+        ON pea.entity_type = N'container'
+        AND pea.is_active = 1
+        AND (pea.valid_from IS NULL OR pea.valid_from <= GETDATE())
+        AND (pea.valid_until IS NULL OR pea.valid_until >= GETDATE())
+        AND (
+          (pea.entity_id IS NOT NULL AND pea.entity_id = rc.container_id)
+          OR (
+            pea.entity_id IS NULL
+            AND pea.entity_ref IS NOT NULL
+            AND pea.entity_ref = c.container_number
+          )
+        )
+      WHERE rc.check_id IS NOT NULL
+
+      UNION ALL
+
+      SELECT
+        pea.customer_id,
+        CAST(N'reefer_exception' AS NVARCHAR(40)) AS entity_type,
+        re.exception_id AS entity_id,
+        CAST(NULL AS NVARCHAR(80)) AS entity_ref,
+        pea.access_role,
+        CAST(N'ReeferExceptions' AS NVARCHAR(80)) AS source_table,
+        re.exception_id AS source_id,
+        pea.permission_scope,
+        pea.valid_from,
+        pea.valid_until
+      FROM ReeferExceptions re
+      JOIN Containers c ON c.container_id = re.container_id
+      JOIN PortalEntityAccess pea
+        ON pea.entity_type = N'container'
+        AND pea.is_active = 1
+        AND (pea.valid_from IS NULL OR pea.valid_from <= GETDATE())
+        AND (pea.valid_until IS NULL OR pea.valid_until >= GETDATE())
+        AND (
+          (pea.entity_id IS NOT NULL AND pea.entity_id = re.container_id)
+          OR (
+            pea.entity_id IS NULL
+            AND pea.entity_ref IS NOT NULL
+            AND pea.entity_ref = c.container_number
+          )
+        )
+      WHERE re.exception_id IS NOT NULL
     ),
     ExpectedGrants AS (
       SELECT
@@ -194,7 +274,10 @@ export function buildPortalExpectedGrantsSql() {
         MAX(entity_ref) AS entity_ref,
         access_role,
         MIN(source_table) AS source_table,
-        MIN(source_id) AS source_id
+        MIN(source_id) AS source_id,
+        MAX(CAST(permission_scope AS NVARCHAR(4000))) AS permission_scope,
+        MAX(valid_from) AS valid_from,
+        MIN(valid_until) AS valid_until
       FROM RawExpectedGrants
       WHERE customer_id IS NOT NULL
         AND (entity_id IS NOT NULL OR entity_ref IS NOT NULL)
@@ -221,7 +304,10 @@ function missingGrantsQuery() {
         eg.entity_ref,
         eg.access_role,
         eg.source_table,
-        eg.source_id
+        eg.source_id,
+        eg.permission_scope,
+        eg.valid_from,
+        eg.valid_until
       FROM ExpectedGrants eg
       WHERE NOT EXISTS (
         SELECT 1
@@ -247,7 +333,10 @@ function staleGrantsQuery() {
         pea.entity_ref,
         pea.access_role,
         pea.source_table,
-        pea.source_id
+        pea.source_id,
+        pea.permission_scope,
+        pea.valid_from,
+        pea.valid_until
       FROM PortalEntityAccess pea
       WHERE pea.is_active = 1
         AND pea.source_table IN (${managedSourceTableList()})
@@ -273,7 +362,10 @@ function insertMissingGrantsQuery() {
       entity_ref,
       access_role,
       source_table,
-      source_id
+      source_id,
+      permission_scope,
+      valid_from,
+      valid_until
     )
     SELECT
       eg.customer_id,
@@ -282,7 +374,10 @@ function insertMissingGrantsQuery() {
       eg.entity_ref,
       eg.access_role,
       eg.source_table,
-      eg.source_id
+      eg.source_id,
+      eg.permission_scope,
+      eg.valid_from,
+      eg.valid_until
     FROM ExpectedGrants eg
     WHERE NOT EXISTS (
       SELECT 1

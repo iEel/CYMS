@@ -73,6 +73,14 @@ describe('/api/portal/grants/reconcile', () => {
     expect(mockedPreview).toHaveBeenCalled();
   });
 
+  it('previews grants for admin role users', async () => {
+    const res = await GET(request('GET', 'admin'));
+
+    expect(res.status).toBe(200);
+    expect(mockedGetDb).toHaveBeenCalled();
+    expect(mockedPreview).toHaveBeenCalled();
+  });
+
   it('repairs grants and records the actor in audit log', async () => {
     const res = await POST(request('POST'));
 
