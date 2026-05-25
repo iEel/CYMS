@@ -10,6 +10,7 @@ import {
   filterNotificationsByPreferences,
   getPortalNotificationPreferences,
 } from '@/lib/portalNotificationPreferences';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 function parseLimit(value: string | null) {
   const parsed = Number(value);
@@ -31,6 +32,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = parseLimit(searchParams.get('limit'));
     const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.container.view');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const preferences = await getPortalNotificationPreferences(db, cid);
 
     const reeferExceptions = await db.request()
@@ -58,21 +62,25 @@ export async function GET(request: NextRequest) {
           e.created_at DESC
       `);
 
-    const bookingUpdates = await db.request()
-      .input('cid', sql.Int, cid)
-      .input('limit', sql.Int, limit)
-      .query(`
-        SELECT TOP (@limit)
-          b.booking_id,
-          b.booking_number,
-          b.status,
-          b.eta,
-          b.created_at AS event_time
-        FROM Bookings b
-        WHERE ${portalBookingVisibilitySql('b')}
-          AND b.status IN ('pending', 'confirmed', 'cancelled', 'completed')
-        ORDER BY b.created_at DESC
-      `);
+    let bookingUpdateRows: Array<Record<string, unknown>> = [];
+    if (portalActor.actions.has('portal.booking.view')) {
+      const bookingUpdates = await db.request()
+        .input('cid', sql.Int, cid)
+        .input('limit', sql.Int, limit)
+        .query(`
+          SELECT TOP (@limit)
+            b.booking_id,
+            b.booking_number,
+            b.status,
+            b.eta,
+            b.created_at AS event_time
+          FROM Bookings b
+          WHERE ${portalBookingVisibilitySql('b')}
+            AND b.status IN ('pending', 'confirmed', 'cancelled', 'completed')
+          ORDER BY b.created_at DESC
+        `);
+      bookingUpdateRows = bookingUpdates.recordset;
+    }
 
     const notifications = filterNotificationsByPreferences([
       ...reeferExceptions.recordset.map((row: Record<string, unknown>) => ({
@@ -84,7 +92,7 @@ export async function GET(request: NextRequest) {
         time: row.event_time,
         deep_link: `/portal/reefer?container_id=${row.container_id}`,
       })),
-      ...bookingUpdates.recordset.map((row: Record<string, unknown>) => ({
+      ...bookingUpdateRows.map((row: Record<string, unknown>) => ({
         id: `booking-${row.booking_id}-${row.status}`,
         type: 'booking_status',
         severity: row.status === 'cancelled' ? 'warning' : 'info',

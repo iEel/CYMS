@@ -10,6 +10,7 @@ import {
   portalInvoiceVisibilitySql,
 } from '@/lib/portalAccess';
 import { normalizePortalContainerSummary, portalContainerSummarySelect } from '@/lib/portalContainerSummary';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 // GET — Customer Portal Overview
 export async function GET(request: NextRequest) {
@@ -18,6 +19,8 @@ export async function GET(request: NextRequest) {
     if (cid instanceof NextResponse) return cid;
 
     const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.container.view');
+    if (portalActor instanceof NextResponse) return portalActor;
 
     // Customer info
     const custResult = await db.request()
@@ -36,25 +39,29 @@ export async function GET(request: NextRequest) {
       `);
     const containers = normalizePortalContainerSummary(contResult.recordset[0]);
 
-    // Outstanding invoices
-    const invResult = await db.request()
-      .input('cid', sql.Int, cid)
-      .query(`
-        SELECT COUNT(*) as count, ISNULL(SUM(grand_total), 0) as total
-        FROM Invoices i
-        WHERE ${portalInvoiceVisibilitySql('i')} AND i.status = 'issued'
-      `);
-    const outstanding = invResult.recordset[0] || { count: 0, total: 0 };
+    let outstanding = { count: 0, total: 0 };
+    if (portalActor.actions.has('portal.invoice.view')) {
+      const invResult = await db.request()
+        .input('cid', sql.Int, cid)
+        .query(`
+          SELECT COUNT(*) as count, ISNULL(SUM(grand_total), 0) as total
+          FROM Invoices i
+          WHERE ${portalInvoiceVisibilitySql('i')} AND i.status = 'issued'
+        `);
+      outstanding = invResult.recordset[0] || outstanding;
+    }
 
-    // Active bookings
-    const bkResult = await db.request()
-      .input('cid', sql.Int, cid)
-      .query(`
-        SELECT COUNT(*) as count
-        FROM Bookings b
-        WHERE ${portalBookingVisibilitySql('b')} AND b.status IN ('pending', 'confirmed')
-      `);
-    const activeBookings = bkResult.recordset[0]?.count || 0;
+    let activeBookings = 0;
+    if (portalActor.actions.has('portal.booking.view')) {
+      const bkResult = await db.request()
+        .input('cid', sql.Int, cid)
+        .query(`
+          SELECT COUNT(*) as count
+          FROM Bookings b
+          WHERE ${portalBookingVisibilitySql('b')} AND b.status IN ('pending', 'confirmed')
+        `);
+      activeBookings = bkResult.recordset[0]?.count || 0;
+    }
 
     // Recent gate activity (last 10)
     const gateResult = await db.request()

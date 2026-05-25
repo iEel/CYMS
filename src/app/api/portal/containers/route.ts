@@ -8,6 +8,7 @@ import {
   portalVisibilityReasonSql,
 } from '@/lib/portalAccess';
 import { normalizePortalContainerSummary, portalContainerSummarySelect } from '@/lib/portalContainerSummary';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 const PORTAL_CONTAINER_CONTEXT_SQL = `
   OUTER APPLY (
@@ -74,6 +75,9 @@ export async function GET(request: NextRequest) {
     if (cid instanceof NextResponse) return cid;
 
     const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.container.view');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status')?.trim();
     const search = searchParams.get('search')?.trim();

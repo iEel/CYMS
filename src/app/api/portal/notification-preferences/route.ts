@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { getPortalCustomerId } from '@/lib/portalAccess';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 import {
   PORTAL_NOTIFICATION_TYPES,
   getPortalNotificationPreferences,
@@ -14,6 +15,9 @@ export async function GET(request: NextRequest) {
     if (customerId instanceof NextResponse) return customerId;
 
     const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.container.view');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const preferences = await getPortalNotificationPreferences(db, customerId);
     return NextResponse.json({ preferences });
   } catch (error) {
@@ -27,9 +31,12 @@ export async function PUT(request: NextRequest) {
     const customerId = getPortalCustomerId(request);
     if (customerId instanceof NextResponse) return customerId;
 
+    const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.container.view');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const body = await request.json();
     const preferences = mergePreferencePatch(body);
-    const db = await getDb();
 
     for (const type of PORTAL_NOTIFICATION_TYPES) {
       await db.request()

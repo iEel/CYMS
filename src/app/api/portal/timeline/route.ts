@@ -6,6 +6,7 @@ import {
   portalBookingVisibilitySql,
   portalContainerVisibilitySql,
 } from '@/lib/portalAccess';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 function positiveInt(value: string | null) {
   if (!value) return null;
@@ -33,6 +34,13 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const portalActor = await requirePortalAction(
+      request,
+      db,
+      bookingId ? 'portal.booking.view' : 'portal.container.view'
+    );
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const events: Array<Record<string, unknown>> = [];
 
     if (bookingId) {
