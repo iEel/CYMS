@@ -143,6 +143,10 @@ const gateBodySchema = z.object({
   container_owner_id: z.number().int().positive().optional().nullable(),
   billing_customer_id: z.number().int().positive().optional().nullable(),
   billing_clearance_id: z.number().int().positive().optional().nullable(),
+  tare_weight_kg: z.coerce.number().int().positive().optional().nullable(),
+  max_gross_weight_kg: z.coerce.number().int().positive().optional().nullable(),
+  boxtech_group_st: z.string().max(10).optional().nullable(),
+  boxtech_source: z.string().max(30).optional().nullable(),
 }).passthrough();
 
 // GET — ดึง gate transactions
@@ -219,7 +223,9 @@ export async function POST(request: NextRequest) {
       container_id,
       container_owner_id, billing_customer_id,
       billing_clearance_id,
+      tare_weight_kg, max_gross_weight_kg, boxtech_group_st, boxtech_source,
     } = body;
+    const hasBoxtechSpecs = tare_weight_kg || max_gross_weight_kg || boxtech_group_st || boxtech_source;
 
     const db = await getDb();
     const yardAccess = await requireYardAccess(request, db, yard_id);
@@ -306,6 +312,11 @@ export async function POST(request: NextRequest) {
           .input('ownerId', sql.Int, container_owner_id || null)
           .input('containerGrade', sql.NVarChar, containerGrade)
           .input('sealNumber', sql.NVarChar, seal_number || null)
+          .input('tareWeightKg', sql.Int, tare_weight_kg || null)
+          .input('maxGrossWeightKg', sql.Int, max_gross_weight_kg || null)
+          .input('boxtechGroupSt', sql.NVarChar, boxtech_group_st || null)
+          .input('boxtechSource', sql.NVarChar, boxtech_source || null)
+          .input('boxtechFetchedAt', sql.DateTime2, hasBoxtechSpecs ? new Date() : null)
           .input('gateInDate', sql.DateTime2, new Date())
           .query(`
             UPDATE Containers SET
@@ -314,7 +325,13 @@ export async function POST(request: NextRequest) {
               shipping_line = @shippingLine, is_laden = @isLaden,
               is_soc = @isSoc, container_owner_id = @ownerId,
               container_grade = @containerGrade,
-              seal_number = @sealNumber, gate_in_date = @gateInDate,
+              seal_number = @sealNumber,
+              tare_weight_kg = COALESCE(@tareWeightKg, tare_weight_kg),
+              max_gross_weight_kg = COALESCE(@maxGrossWeightKg, max_gross_weight_kg),
+              boxtech_group_st = COALESCE(@boxtechGroupSt, boxtech_group_st),
+              boxtech_source = COALESCE(@boxtechSource, boxtech_source),
+              boxtech_fetched_at = COALESCE(@boxtechFetchedAt, boxtech_fetched_at),
+              gate_in_date = @gateInDate,
               gate_out_date = NULL, updated_at = GETDATE()
             WHERE container_id = @containerId
           `);
@@ -336,13 +353,22 @@ export async function POST(request: NextRequest) {
           .input('ownerId', sql.Int, container_owner_id || null)
           .input('containerGrade', sql.NVarChar, containerGrade)
           .input('sealNumber', sql.NVarChar, seal_number || null)
+          .input('tareWeightKg', sql.Int, tare_weight_kg || null)
+          .input('maxGrossWeightKg', sql.Int, max_gross_weight_kg || null)
+          .input('boxtechGroupSt', sql.NVarChar, boxtech_group_st || null)
+          .input('boxtechSource', sql.NVarChar, boxtech_source || null)
+          .input('boxtechFetchedAt', sql.DateTime2, hasBoxtechSpecs ? new Date() : null)
           .input('gateInDate', sql.DateTime2, new Date())
           .query(`
             INSERT INTO Containers (container_number, size, type, status, yard_id, zone_id,
-              bay, [row], tier, shipping_line, is_laden, is_soc, container_owner_id, container_grade, seal_number, gate_in_date)
+              bay, [row], tier, shipping_line, is_laden, is_soc, container_owner_id,
+              container_grade, seal_number, tare_weight_kg, max_gross_weight_kg,
+              boxtech_group_st, boxtech_source, boxtech_fetched_at, gate_in_date)
             OUTPUT INSERTED.container_id
             VALUES (@containerNumber, @size, @type, @status, @yardId, @zoneId,
-              @bay, @row, @tier, @shippingLine, @isLaden, @isSoc, @ownerId, @containerGrade, @sealNumber, @gateInDate)
+              @bay, @row, @tier, @shippingLine, @isLaden, @isSoc, @ownerId,
+              @containerGrade, @sealNumber, @tareWeightKg, @maxGrossWeightKg,
+              @boxtechGroupSt, @boxtechSource, @boxtechFetchedAt, @gateInDate)
           `);
         finalContainerId = insertResult.recordset[0].container_id;
       }
