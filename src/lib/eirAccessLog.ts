@@ -2,12 +2,19 @@ import sql from 'mssql';
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 
-type DbPool = Awaited<ReturnType<typeof getDb>>;
-
 export type EirAccessAction = 'view' | 'download' | 'print' | 'public_verify';
 
+export interface EirAccessLogDbRequest {
+  input(name: string, type: unknown, value: unknown): EirAccessLogDbRequest;
+  query(statement: string): Promise<unknown>;
+}
+
+export interface EirAccessLogDb {
+  request(): EirAccessLogDbRequest;
+}
+
 export interface LogEirAccessParams {
-  db?: DbPool;
+  db?: EirAccessLogDb;
   request?: NextRequest;
   eirNumber: string;
   gateTransactionId?: number | null;
