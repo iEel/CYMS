@@ -98,6 +98,7 @@ describe('Customer Portal EIR', () => {
       }),
     }));
     expect(mockedGenerateEIRPDF.mock.calls[0][0]).not.toHaveProperty('container_grade');
+    expect(mockedGenerateEIRPDF.mock.calls[0][0]).not.toHaveProperty('truck_company');
     expect(mockedGenerateEIRPDF.mock.calls[0][0].damage_report).not.toHaveProperty('photo_completeness');
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('PortalEntityAccess');
@@ -113,7 +114,21 @@ describe('Customer Portal EIR', () => {
       q([{ customer_portal_role: 'customer_admin' }]),
       q([{ ...eirRow, access_role: 'booking_customer', permission_scope: null }]),
       q([{ company_name: 'CYMS', address: 'Bangkok', phone: '02', email: 'ops@example.test', logo_url: '', tax_id: '010' }]),
-      q([{ lifecycle_id: 1, document_type: 'eir', action: 'issued', user_name: 'Operator' }]),
+      q([{
+        lifecycle_id: 1,
+        document_type: 'eir',
+        document_number: 'EIR-IN-2026-000077',
+        status: 'issued',
+        action: 'issued',
+        event_type: 'created',
+        user_name: 'Operator',
+        yard_name: 'Main Yard',
+        created_at: '2026-05-21T08:00:00.000Z',
+        reason: 'Internal reason',
+        details: '{"private":true}',
+        internal_note: 'private note',
+        billing_clearance_id: 123,
+      }]),
       q([]),
     ]);
     mockedGetDb.mockResolvedValue(db);
@@ -133,7 +148,23 @@ describe('Customer Portal EIR', () => {
       lifecycle: [{ lifecycle_id: 1 }],
     });
     expect(body.eir).not.toHaveProperty('container_grade');
+    expect(body.eir).not.toHaveProperty('truck_company');
     expect(body.eir.damage_report).not.toHaveProperty('photo_completeness');
+    expect(body.lifecycle[0]).toEqual({
+      lifecycle_id: 1,
+      document_type: 'eir',
+      document_number: 'EIR-IN-2026-000077',
+      status: 'issued',
+      action: 'issued',
+      event_type: 'created',
+      user_name: 'Operator',
+      yard_name: 'Main Yard',
+      created_at: '2026-05-21T08:00:00.000Z',
+    });
+    expect(body.lifecycle[0]).not.toHaveProperty('reason');
+    expect(body.lifecycle[0]).not.toHaveProperty('details');
+    expect(body.lifecycle[0]).not.toHaveProperty('internal_note');
+    expect(body.lifecycle[0]).not.toHaveProperty('billing_clearance_id');
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('PortalEntityAccess');
     expect(combinedSql).toContain("pea.entity_type = 'eir'");

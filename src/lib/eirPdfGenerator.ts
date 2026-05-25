@@ -239,10 +239,12 @@ export function generateEIRPDF(data: EIRData): Buffer {
   // ─── Transport Info ───
   const transportInfo = [
     ['Driver', data.driver_name || '-'],
-    ['Driver Company', data.truck_company || '-'],
     ['Truck Plate', data.truck_plate || '-'],
     ['Processed By', data.processed_by || '-'],
   ];
+  if (data.truck_company) {
+    transportInfo.splice(1, 0, ['Driver Company', data.truck_company]);
+  }
 
   autoTable(doc, {
     startY: y,

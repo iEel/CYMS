@@ -63,7 +63,18 @@ const OPERATIONAL_FIELDS = [
   'yard_code',
   'gate_name',
   'gate_time',
-  'truck_company',
+] as const;
+
+const PORTAL_LIFECYCLE_FIELDS = [
+  'lifecycle_id',
+  'document_type',
+  'document_number',
+  'status',
+  'action',
+  'event_type',
+  'user_name',
+  'yard_name',
+  'created_at',
 ] as const;
 
 const GRADE_FIELDS = ['container_grade', 'container_grade_label'] as const;
@@ -168,6 +179,14 @@ function addPublicCopyMetadata(payload: EIRRecord, master: EIRRecord): EIRRecord
   return payload;
 }
 
+export function sanitizeEirLifecycle(events: unknown): EIRRecord[] {
+  if (!Array.isArray(events)) return [];
+
+  return events
+    .filter(isRecord)
+    .map((event) => pickFields(event, PORTAL_LIFECYCLE_FIELDS));
+}
+
 export function maskPhone(value: unknown): string {
   const raw = String(value ?? '');
   if (raw.length <= 6) return raw;
@@ -245,6 +264,9 @@ export function buildEirViewPayload(master: EIRRecord, context: EIRVisibilityCon
     if (Object.prototype.hasOwnProperty.call(master, 'truck_plate')) {
       eir.truck_plate = master.truck_plate;
     }
+    if (Object.prototype.hasOwnProperty.call(master, 'truck_company')) {
+      eir.truck_company = master.truck_company;
+    }
     return { eir };
   }
 
@@ -257,6 +279,9 @@ export function buildEirViewPayload(master: EIRRecord, context: EIRVisibilityCon
     }
     if (Object.prototype.hasOwnProperty.call(master, 'truck_plate')) {
       eir.truck_plate = master.truck_plate;
+    }
+    if (Object.prototype.hasOwnProperty.call(master, 'truck_company')) {
+      eir.truck_company = master.truck_company;
     }
     return { eir };
   }

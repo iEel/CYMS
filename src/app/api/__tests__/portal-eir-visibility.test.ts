@@ -44,6 +44,13 @@ describe('portal EIR visibility wiring', () => {
     expect(source).not.toContain('portalGateVisibilitySql');
   });
 
+  it('sanitizes portal JSON lifecycle before returning it', () => {
+    const source = readSource('src/app/api/portal/eir/route.ts');
+
+    expect(source).toContain('sanitizeEirLifecycle');
+    expect(source).toMatch(/lifecycle\s*:\s*sanitizeEirLifecycle\s*\(/);
+  });
+
   it('keeps copy and grade labels available to the PDF generator without forcing grade rows', () => {
     const source = readSource('src/lib/eirPdfGenerator.ts');
 
@@ -53,6 +60,8 @@ describe('portal EIR visibility wiring', () => {
     expect(source).toMatch(/container_grade_label\??\s*:\s*string/);
     expect(source).toMatch(/data\s*\.\s*copy_type_label/);
     expect(source).toMatch(/if\s*\(\s*data\s*\.\s*container_grade\s*\)/);
+    expect(source).toMatch(/if\s*\(\s*data\s*\.\s*truck_company\s*\)/);
+    expect(source).not.toContain("['Driver Company', data.truck_company || '-']");
     expect(source).not.toMatch(/container_grade\s*\|\|\s*data\.damage_report\?\.condition_grade\s*\|\|\s*['"`]A['"`]/);
   });
 

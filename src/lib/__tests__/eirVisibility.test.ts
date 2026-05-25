@@ -4,6 +4,7 @@ import {
   maskPersonName,
   maskPhone,
   maskTruckPlate,
+  sanitizeEirLifecycle,
 } from '../eirVisibility';
 
 const eirRow = {
@@ -155,6 +156,65 @@ describe('EIR visibility helpers', () => {
     expect(payload.eir.damage_report).not.toHaveProperty('photo_evidence');
     expect(payload.eir.damage_report).not.toHaveProperty('photos');
     expect(payload.eir.damage_report).not.toHaveProperty('inspector_notes');
+  });
+
+  it('does not expose truck company to customer-like EIR views', () => {
+    for (const viewType of ['customer', 'shipping_line', 'booking_customer', 'billing'] as const) {
+      const payload = buildEirViewPayload(eirRow, { viewType });
+
+      expect(payload.eir).not.toHaveProperty('truck_company');
+      expect(payload.eir.driver_name).toBe('Somchai D.');
+      expect(payload.eir.truck_plate).toBe('70-****');
+    }
+  });
+
+  it('keeps truck company available for driver and trucking views', () => {
+    expect(buildEirViewPayload(eirRow, { viewType: 'driver' }).eir).toMatchObject({
+      truck_company: 'ACME Trucking',
+      truck_plate: '70-1234',
+    });
+    expect(buildEirViewPayload(eirRow, { viewType: 'trucking' }).eir).toMatchObject({
+      truck_company: 'ACME Trucking',
+      truck_plate: '70-1234',
+    });
+  });
+
+  it('sanitizes portal lifecycle events to the public-safe field set', () => {
+    const lifecycle = sanitizeEirLifecycle([
+      {
+        lifecycle_id: 1,
+        document_type: 'eir',
+        document_number: 'EIR-IN-2026-000077',
+        status: 'issued',
+        action: 'created',
+        event_type: 'issued',
+        user_name: 'Operator',
+        yard_name: 'Main Yard',
+        created_at: '2026-05-21T08:00:00.000Z',
+        reason: 'Internal dispute reason',
+        details: '{"private":true}',
+        internal_note: 'manager only',
+        billing_clearance_id: 12,
+      },
+    ]);
+
+    expect(lifecycle).toEqual([
+      {
+        lifecycle_id: 1,
+        document_type: 'eir',
+        document_number: 'EIR-IN-2026-000077',
+        status: 'issued',
+        action: 'created',
+        event_type: 'issued',
+        user_name: 'Operator',
+        yard_name: 'Main Yard',
+        created_at: '2026-05-21T08:00:00.000Z',
+      },
+    ]);
+    expect(lifecycle[0]).not.toHaveProperty('reason');
+    expect(lifecycle[0]).not.toHaveProperty('details');
+    expect(lifecycle[0]).not.toHaveProperty('internal_note');
+    expect(lifecycle[0]).not.toHaveProperty('billing_clearance_id');
   });
 
   it('does not show container grade to customers by default', () => {

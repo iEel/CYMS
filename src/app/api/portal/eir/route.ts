@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { getPortalCustomerId, portalEirVisibilitySql } from '@/lib/portalAccess';
 import { buildEIRPayload, fetchCompanyProfile, fetchEIRLifecycle } from '@/lib/eirPayload';
-import { buildEirViewPayload, resolveEirViewType, type PortalScope } from '@/lib/eirVisibility';
+import { buildEirViewPayload, resolveEirViewType, sanitizeEirLifecycle, type PortalScope } from '@/lib/eirVisibility';
 import { ensureDocumentLifecycle } from '@/lib/documentLifecycle';
 import { requirePortalAction } from '@/lib/customerPortalPermissions';
 import { logEirAccess } from '@/lib/eirAccessLog';
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
       action: 'view',
     });
 
-    return NextResponse.json({ ...sanitizedPayload, lifecycle });
+    return NextResponse.json({ ...sanitizedPayload, lifecycle: sanitizeEirLifecycle(lifecycle) });
   } catch (error) {
     console.error('❌ Portal EIR detail error:', error);
     return NextResponse.json({ error: 'ไม่สามารถโหลดข้อมูล EIR ได้' }, { status: 500 });
