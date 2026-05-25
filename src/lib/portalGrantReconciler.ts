@@ -148,6 +148,32 @@ export function buildPortalExpectedGrantsSql() {
       UNION ALL
 
       SELECT
+        bookingGateCustomer.customer_id,
+        target.entity_type,
+        target.entity_id,
+        target.entity_ref,
+        CAST(N'booking_customer' AS NVARCHAR(40)) AS access_role,
+        CAST(N'GateTransactions' AS NVARCHAR(80)) AS source_table,
+        gt.transaction_id AS source_id
+      FROM GateTransactions gt
+      LEFT JOIN Containers c ON c.container_id = gt.container_id
+      OUTER APPLY (
+        SELECT TOP 1 COALESCE(gt.booking_customer_id, b.booking_customer_id, b.customer_id) AS customer_id
+        FROM Bookings b
+        WHERE b.booking_number = gt.booking_ref
+        ORDER BY COALESCE(b.eta, b.created_at) DESC, b.booking_id DESC
+      ) bookingGateCustomer
+      CROSS APPLY (VALUES
+        (CAST(N'gate_transaction' AS NVARCHAR(40)), gt.transaction_id, gt.eir_number),
+        (CAST(N'eir' AS NVARCHAR(40)), gt.transaction_id, gt.eir_number),
+        (CAST(N'container' AS NVARCHAR(40)), gt.container_id, c.container_number)
+      ) target(entity_type, entity_id, entity_ref)
+      WHERE bookingGateCustomer.customer_id IS NOT NULL
+        AND (target.entity_id IS NOT NULL OR target.entity_ref IS NOT NULL)
+
+      UNION ALL
+
+      SELECT
         i.customer_id,
         CAST(N'invoice' AS NVARCHAR(40)) AS entity_type,
         i.invoice_id AS entity_id,

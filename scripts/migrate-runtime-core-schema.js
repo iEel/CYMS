@@ -111,6 +111,8 @@ async function migrate() {
           ALTER TABLE GateTransactions ADD trucking_company_id INT NULL;
         IF COL_LENGTH('GateTransactions', 'driver_user_id') IS NULL
           ALTER TABLE GateTransactions ADD driver_user_id INT NULL;
+        IF COL_LENGTH('GateTransactions', 'booking_customer_id') IS NULL
+          ALTER TABLE GateTransactions ADD booking_customer_id INT NULL;
       END;
     `);
 
@@ -796,6 +798,35 @@ async function migrate() {
               )
           )
         ;
+
+        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
+        SELECT bookingGateCustomer.customer_id, target.entity_type, target.entity_id, target.entity_ref, 'booking_customer', 'GateTransactions', gt.transaction_id
+        FROM GateTransactions gt
+        LEFT JOIN Containers c ON c.container_id = gt.container_id
+        OUTER APPLY (
+          SELECT TOP 1 COALESCE(gt.booking_customer_id, b.booking_customer_id, b.customer_id) AS customer_id
+          FROM Bookings b
+          WHERE b.booking_number = gt.booking_ref
+          ORDER BY COALESCE(b.eta, b.created_at) DESC, b.booking_id DESC
+        ) bookingGateCustomer
+        CROSS APPLY (VALUES
+          ('gate_transaction', gt.transaction_id, gt.eir_number),
+          ('eir', gt.transaction_id, gt.eir_number),
+          ('container', gt.container_id, c.container_number)
+        ) target(entity_type, entity_id, entity_ref)
+        WHERE bookingGateCustomer.customer_id IS NOT NULL
+          AND (target.entity_id IS NOT NULL OR target.entity_ref IS NOT NULL)
+          AND NOT EXISTS (
+            SELECT 1 FROM PortalEntityAccess pea
+            WHERE pea.customer_id = bookingGateCustomer.customer_id
+              AND pea.entity_type = target.entity_type
+              AND pea.access_role = 'booking_customer'
+              AND pea.is_active = 1
+              AND (
+                (target.entity_id IS NOT NULL AND pea.entity_id = target.entity_id)
+                OR (target.entity_id IS NULL AND pea.entity_ref = target.entity_ref)
+              )
+          );
       END;
 
       IF OBJECT_ID('Invoices', 'U') IS NOT NULL

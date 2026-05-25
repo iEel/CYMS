@@ -528,6 +528,7 @@ CREATE TABLE GateTransactions (
     billing_customer_id INT NULL,               -- คนรับผิดชอบจ่ายเงิน (FK→Customers)
     trucking_company_id INT NULL,
     driver_user_id      INT NULL,
+    booking_customer_id INT NULL,
     created_at      DATETIME2 DEFAULT GETDATE()
 );
 

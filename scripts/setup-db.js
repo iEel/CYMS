@@ -342,6 +342,8 @@ async function run() {
               ALTER TABLE GateTransactions ADD trucking_company_id INT NULL;
             IF COL_LENGTH('GateTransactions', 'driver_user_id') IS NULL
               ALTER TABLE GateTransactions ADD driver_user_id INT NULL;
+            IF COL_LENGTH('GateTransactions', 'booking_customer_id') IS NULL
+              ALTER TABLE GateTransactions ADD booking_customer_id INT NULL;
           END;
         `,
       },

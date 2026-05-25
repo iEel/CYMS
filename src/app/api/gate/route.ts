@@ -486,6 +486,7 @@ export async function POST(request: NextRequest) {
       .input('damageReport', sql.NVarChar, damage_report ? JSON.stringify(damage_report) : null)
       .input('processedBy', sql.Int, actorUserId)
       .input('ownerId', sql.Int, container_owner_id || null)
+      .input('bookingCustomerId', sql.Int, resolvedBookingCustomerId || null)
       .input('billingId', sql.Int, billing_customer_id || null)
       .input('truckingCompanyId', sql.Int, trucking_company_id || null)
       .input('driverUserId', sql.Int, driver_user_id || null)
@@ -494,13 +495,13 @@ export async function POST(request: NextRequest) {
         INSERT INTO GateTransactions (container_id, yard_id, transaction_type,
           driver_name, driver_license, truck_plate, truck_company, seal_number, booking_ref,
           eir_number, notes, damage_report, processed_by,
-          container_owner_id, billing_customer_id,
+          container_owner_id, booking_customer_id, billing_customer_id,
           trucking_company_id, driver_user_id, billing_clearance_id)
         OUTPUT INSERTED.*
         VALUES (@containerId, @yardId, @transactionType,
           @driverName, @driverLicense, @truckPlate, @truckCompany, @sealNumber, @bookingRef,
           @eirNumber, @notes, @damageReport, @processedBy,
-          @ownerId, @billingId,
+          @ownerId, @bookingCustomerId, @billingId,
           @truckingCompanyId, @driverUserId, @billingClearanceId)
       `);
 
