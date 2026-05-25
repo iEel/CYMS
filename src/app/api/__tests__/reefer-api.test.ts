@@ -26,6 +26,9 @@ function makeDb() {
   const inputs: Array<[string, unknown, unknown]> = [];
   const query = jest.fn().mockImplementation((statement: string) => {
     queries.push(statement);
+    if (statement.includes('FROM Users')) {
+      return Promise.resolve({ recordset: [{ customer_portal_role: 'customer_admin' }] });
+    }
     if (statement.includes('FROM Containers c') && statement.includes('c.container_id = @containerId')) {
       return Promise.resolve({
         recordset: [{
@@ -193,7 +196,7 @@ describe('GET /api/portal/reefer', () => {
     mockedGetDb.mockResolvedValue(db);
 
     const res = await getPortalReefer(makeRequest('http://localhost/api/portal/reefer', {
-      headers: { 'x-customer-id': '42' },
+      headers: { 'x-customer-id': '42', 'x-user-id': '9' },
     }));
 
     expect(res.status).toBe(200);
