@@ -37,4 +37,15 @@ describe('Yard management UI', () => {
     expect(source).toContain('มุมมองด้านบน');
     expect(source).toContain('โฟกัสตู้ที่เลือก');
   });
+
+  it('turns 3D selected containers into an actionable yard panel', () => {
+    const source = fs.readFileSync(path.join(root, 'src/app/(dashboard)/yard/page.tsx'), 'utf8');
+
+    expect(source).toContain('selectedContainerActionPanel');
+    expect(source).toContain('ตู้ที่เลือกในลาน');
+    expect(source).toContain('เปิดรายละเอียด');
+    expect(source).toContain('Timeline');
+    expect(source).toContain('Booking');
+    expect(source).toContain('Billing');
+  });
 });
