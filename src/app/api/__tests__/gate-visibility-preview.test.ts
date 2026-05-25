@@ -10,6 +10,10 @@ describe('Gate visibility preview', () => {
     expect(route).toContain('invalid_request');
     expect(route).toContain('container_number_required');
     expect(route).toContain('positiveIntOrNull');
+    expect(route).toContain("typeof value === 'number'");
+    expect(route).toContain('Number.isSafeInteger(value)');
+    expect(route).toContain("typeof value === 'string'");
+    expect(route).toContain('/^[1-9]\\d*$/');
     expect(route).not.toContain('applyPortalGrants');
   });
 

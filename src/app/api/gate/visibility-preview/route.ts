@@ -4,8 +4,14 @@ import { requirePermission } from '@/lib/apiAuth';
 import { buildGatePartyGrants, defaultPortalPermissionScope } from '@/lib/portalGrantRules';
 
 function positiveIntOrNull(value: unknown) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+  if (typeof value === 'string' && /^[1-9]\d*$/.test(value)) {
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function cleanString(value: unknown) {
