@@ -27,6 +27,11 @@ export interface ContainerResult {
   row?: number;
   tier?: number;
   gate_in_date?: string;
+  tare_weight_kg?: number | null;
+  max_gross_weight_kg?: number | null;
+  boxtech_group_st?: string | null;
+  boxtech_source?: string | null;
+  boxtech_fetched_at?: string | null;
 }
 
 export interface BillingCharge {

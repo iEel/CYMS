@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
 
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
 
+    // c.* includes BoxTech technical spec fields used by Gate Out and Container 360.
     const result = await req.query(`
       SELECT c.*, y.yard_name, z.zone_name, z.zone_type
       FROM Containers c

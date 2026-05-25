@@ -66,4 +66,25 @@ describe('BoxTech container technical weights', () => {
     expect(source).toContain('boxtech_group_st: boxtechResult?.group_st || null');
     expect(source).toContain("boxtech_source: boxtechResult?.source === 'boxtech' ? 'boxtech' : null");
   });
+
+  it('shows read-only BoxTech technical specs during Gate Out', () => {
+    const types = fs.readFileSync(path.join(root, 'src/app/(dashboard)/gate/types.ts'), 'utf8');
+    const containersRoute = fs.readFileSync(path.join(root, 'src/app/api/containers/route.ts'), 'utf8');
+    const gateOut = fs.readFileSync(path.join(root, 'src/app/(dashboard)/gate/GateOutTab.tsx'), 'utf8');
+
+    expect(types).toContain('tare_weight_kg?: number | null');
+    expect(types).toContain('max_gross_weight_kg?: number | null');
+    expect(types).toContain('boxtech_group_st?: string | null');
+    expect(types).toContain('boxtech_source?: string | null');
+    expect(types).toContain('boxtech_fetched_at?: string | null');
+
+    expect(containersRoute).toContain('SELECT c.*');
+    expect(containersRoute).toContain('c.* includes BoxTech technical spec fields used by Gate Out and Container 360.');
+
+    expect(gateOut).toContain('(selectedContainer.tare_weight_kg != null || selectedContainer.max_gross_weight_kg != null)');
+    expect(gateOut).toContain('ข้อมูลสเปกจาก BoxTech');
+    expect(gateOut).toContain('Tare');
+    expect(gateOut).toContain('Max Gross');
+    expect(gateOut).toContain('ไม่ใช่น้ำหนักจริง/VGM');
+  });
 });

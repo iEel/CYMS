@@ -613,6 +613,24 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                 </div>
                 <button onClick={() => { setSelectedContainer(null); setGateOutPhase('search'); }} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
               </div>
+              {(selectedContainer.tare_weight_kg != null || selectedContainer.max_gross_weight_kg != null) && (
+                <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                  <p className="text-[10px] font-semibold text-blue-500 uppercase mb-2">ข้อมูลสเปกจาก BoxTech</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedContainer.tare_weight_kg != null && (
+                      <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-blue-100 dark:border-blue-800 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Tare {Number(selectedContainer.tare_weight_kg).toLocaleString()} kg
+                      </span>
+                    )}
+                    {selectedContainer.max_gross_weight_kg != null && (
+                      <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-blue-100 dark:border-blue-800 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Max Gross {Number(selectedContainer.max_gross_weight_kg).toLocaleString()} kg
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-500">เป็นสเปกตู้ ไม่ใช่น้ำหนักจริง/VGM</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Booking Summary + Picker */}
