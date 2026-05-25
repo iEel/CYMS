@@ -67,6 +67,11 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [boxtechLoading, setBoxtechLoading] = useState(false);
   const [boxtechResult, setBoxtechResult] = useState<{
     shipping_line?: string; size?: string; type?: string; source?: string;
+    tare_weight_kg?: number;
+    max_gross_weight_kg?: number;
+    tare_kg?: number;
+    max_gross_mass_kg?: number;
+    group_st?: string;
     customer?: { customer_id: number; customer_name: string; credit_term: number } | null;
     unknown_prefix?: boolean;
     multiple_customers?: boolean;
@@ -74,6 +79,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     candidates?: Array<{ customer_id: number; customer_name: string; is_line: boolean; is_forwarder: boolean; is_trucking: boolean; credit_term: number; is_primary: boolean }>;
   } | null>(null);
   const boxtechAbortRef = useRef<AbortController | null>(null);
+  const boxtechTareWeightKg = boxtechResult?.tare_weight_kg || boxtechResult?.tare_kg || null;
+  const boxtechMaxGrossWeightKg = boxtechResult?.max_gross_weight_kg || boxtechResult?.max_gross_mass_kg || null;
 
   // Gate-In Billing states
   const [gateInBillingData, setGateInBillingData] = useState<GateInBillingData | null>(null);
@@ -392,6 +399,10 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           container_owner_id: containerOwnerId || undefined,
           billing_customer_id: billingCustomerId || undefined,
           billing_clearance_id: gateInClearance?.clearance_id || undefined,
+          tare_weight_kg: boxtechTareWeightKg || null,
+          max_gross_weight_kg: boxtechMaxGrossWeightKg || null,
+          boxtech_group_st: boxtechResult?.group_st || null,
+          boxtech_source: boxtechResult?.source === 'boxtech' ? 'boxtech' : null,
           damage_report: inspectionReport || null,
         }),
       }, { operation: 'gate_in' });
@@ -563,6 +574,16 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                       <span className="text-[10px] bg-violet-50 dark:bg-violet-900/20 text-violet-600 px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Ship size={10} /> {boxtechResult.customer.customer_name}
                         {boxtechResult.customer.credit_term > 0 && ` (เครดิต ${boxtechResult.customer.credit_term} วัน)`}
+                      </span>
+                    )}
+                    {boxtechTareWeightKg && (
+                      <span className="text-[10px] bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded">
+                        Tare {Number(boxtechTareWeightKg).toLocaleString()} kg
+                      </span>
+                    )}
+                    {boxtechMaxGrossWeightKg && (
+                      <span className="text-[10px] bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded">
+                        Max Gross {Number(boxtechMaxGrossWeightKg).toLocaleString()} kg
                       </span>
                     )}
                     {boxtechResult?.unknown_prefix && (

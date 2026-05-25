@@ -49,4 +49,21 @@ describe('BoxTech container technical weights', () => {
     expect(source).toContain('@containerGrade, @sealNumber, @tareWeightKg, @maxGrossWeightKg,');
     expect(source).toContain('@boxtechGroupSt, @boxtechSource, @boxtechFetchedAt, @gateInDate)');
   });
+
+  it('shows BoxTech weight specs in Gate In and submits them with the transaction', () => {
+    const source = fs.readFileSync(path.join(root, 'src/app/(dashboard)/gate/GateInTab.tsx'), 'utf8');
+
+    expect(source).toContain('tare_weight_kg?: number');
+    expect(source).toContain('max_gross_weight_kg?: number');
+    expect(source).toContain('Tare');
+    expect(source).toContain('Max Gross');
+    expect(source).toContain('const boxtechTareWeightKg = boxtechResult?.tare_weight_kg || boxtechResult?.tare_kg || null;');
+    expect(source).toContain('const boxtechMaxGrossWeightKg = boxtechResult?.max_gross_weight_kg || boxtechResult?.max_gross_mass_kg || null;');
+    expect(source).toContain('tare_weight_kg: boxtechTareWeightKg || null');
+    expect(source).toContain('max_gross_weight_kg: boxtechMaxGrossWeightKg || null');
+    expect(source).toContain('Number(boxtechTareWeightKg).toLocaleString()');
+    expect(source).toContain('Number(boxtechMaxGrossWeightKg).toLocaleString()');
+    expect(source).toContain('boxtech_group_st: boxtechResult?.group_st || null');
+    expect(source).toContain("boxtech_source: boxtechResult?.source === 'boxtech' ? 'boxtech' : null");
+  });
 });
