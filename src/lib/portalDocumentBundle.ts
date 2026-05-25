@@ -21,6 +21,7 @@ export interface PortalBundleInput {
   statement: Record<string, unknown>;
   invoices: PortalBundleInvoice[];
   eirs: PortalBundleEir[];
+  includeInvoiceDownloads?: boolean;
 }
 
 function csvCell(value: unknown) {
@@ -37,6 +38,7 @@ function makeUrl(baseUrl: string, pathname: string, params: Record<string, strin
 }
 
 export function buildPortalDocumentBundleEntries(input: PortalBundleInput): ZipEntry[] {
+  const includeInvoiceDownloads = input.includeInvoiceDownloads !== false;
   const invoiceRows = [
     ['invoice_number', 'status', 'grand_total', 'invoice_pdf_url', 'receipt_pdf_url'],
     ...input.invoices.map(invoice => {
@@ -48,11 +50,11 @@ export function buildPortalDocumentBundleEntries(input: PortalBundleInput): ZipE
         invoice.invoice_number,
         invoice.status,
         invoice.grand_total,
-        makeUrl(input.baseUrl, '/api/portal/invoice-pdf', {
+        includeInvoiceDownloads ? makeUrl(input.baseUrl, '/api/portal/invoice-pdf', {
           invoice_id: invoice.invoice_id,
           type: isCreditNote ? 'credit_note' : 'invoice',
-        }),
-        isPaid ? makeUrl(input.baseUrl, '/api/portal/invoice-pdf', {
+        }) : '',
+        includeInvoiceDownloads && isPaid ? makeUrl(input.baseUrl, '/api/portal/invoice-pdf', {
           invoice_id: invoice.invoice_id,
           type: 'receipt',
         }) : '',
@@ -71,7 +73,7 @@ export function buildPortalDocumentBundleEntries(input: PortalBundleInput): ZipE
     ]),
   ].map(row => row.map(csvCell).join(',')).join('\n');
 
-  return [
+  const entries: ZipEntry[] = [
     {
       name: 'README.txt',
       data: [
@@ -79,13 +81,20 @@ export function buildPortalDocumentBundleEntries(input: PortalBundleInput): ZipE
         `Generated at: ${input.generatedAt}`,
         '',
         'Files:',
-        '- statement.json: AR statement summary',
-        '- invoices.csv: invoice/receipt PDF download links',
+        ...(Object.keys(input.statement).length > 0 ? ['- statement.json: AR statement summary'] : []),
+        ...(input.invoices.length > 0 ? ['- invoices.csv: invoice/receipt records'] : []),
         '- eir-documents.csv: EIR PDF download links',
       ].join('\n'),
     },
-    { name: 'statement.json', data: JSON.stringify(input.statement, null, 2) },
-    { name: 'invoices.csv', data: `${invoiceRows}\n` },
     { name: 'eir-documents.csv', data: `${eirRows}\n` },
   ];
+
+  if (Object.keys(input.statement).length > 0) {
+    entries.splice(1, 0, { name: 'statement.json', data: JSON.stringify(input.statement, null, 2) });
+  }
+  if (input.invoices.length > 0) {
+    entries.splice(entries.length - 1, 0, { name: 'invoices.csv', data: `${invoiceRows}\n` });
+  }
+
+  return entries;
 }

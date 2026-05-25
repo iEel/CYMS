@@ -26,38 +26,47 @@ export async function GET(request: NextRequest) {
     const portalActor = await requirePortalAction(request, db, 'portal.document.download');
     if (portalActor instanceof NextResponse) return portalActor;
 
-    const statementResult = await db.request()
-      .input('cid', sql.Int, cid)
-      .query(`
-        SELECT
-          ISNULL(SUM(CASE WHEN i.status = 'issued' THEN i.grand_total ELSE 0 END), 0) as outstanding,
-          ISNULL(SUM(CASE WHEN i.status = 'paid' THEN i.grand_total ELSE 0 END), 0) as paid_total,
-          ISNULL(SUM(CASE WHEN i.status = 'credit_note' OR i.document_type = 'credit_note' OR i.invoice_number LIKE 'CN-%' THEN ABS(i.grand_total) ELSE 0 END), 0) as credit_note_total,
-          COUNT(CASE WHEN i.status = 'issued' THEN 1 END) as open_count,
-          COUNT(CASE WHEN i.status = 'paid' THEN 1 END) as paid_count,
-          COUNT(CASE WHEN i.status = 'credit_note' OR i.document_type = 'credit_note' OR i.invoice_number LIKE 'CN-%' THEN 1 END) as credit_note_count
-        FROM Invoices i
-        WHERE ${portalInvoiceVisibilitySql('i')}
-          AND (
-            i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
-            OR i.document_type = 'credit_note'
-            OR i.invoice_number LIKE 'CN-%'
-          )
-      `);
+    const canViewInvoices = portalActor.actions.has('portal.invoice.view');
+    const canDownloadInvoices = portalActor.actions.has('portal.invoice.download');
+    let statement: Record<string, unknown> = {};
+    let invoices: unknown[] = [];
 
-    const invoiceResult = await db.request()
-      .input('cid', sql.Int, cid)
-      .query(`
-        SELECT TOP 200 invoice_id, invoice_number, status, grand_total, document_type
-        FROM Invoices i
-        WHERE ${portalInvoiceVisibilitySql('i')}
-          AND (
-            i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
-            OR i.document_type = 'credit_note'
-            OR i.invoice_number LIKE 'CN-%'
-          )
-        ORDER BY created_at DESC
-      `);
+    if (canViewInvoices) {
+      const statementResult = await db.request()
+        .input('cid', sql.Int, cid)
+        .query(`
+          SELECT
+            ISNULL(SUM(CASE WHEN i.status = 'issued' THEN i.grand_total ELSE 0 END), 0) as outstanding,
+            ISNULL(SUM(CASE WHEN i.status = 'paid' THEN i.grand_total ELSE 0 END), 0) as paid_total,
+            ISNULL(SUM(CASE WHEN i.status = 'credit_note' OR i.document_type = 'credit_note' OR i.invoice_number LIKE 'CN-%' THEN ABS(i.grand_total) ELSE 0 END), 0) as credit_note_total,
+            COUNT(CASE WHEN i.status = 'issued' THEN 1 END) as open_count,
+            COUNT(CASE WHEN i.status = 'paid' THEN 1 END) as paid_count,
+            COUNT(CASE WHEN i.status = 'credit_note' OR i.document_type = 'credit_note' OR i.invoice_number LIKE 'CN-%' THEN 1 END) as credit_note_count
+          FROM Invoices i
+          WHERE ${portalInvoiceVisibilitySql('i')}
+            AND (
+              i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
+              OR i.document_type = 'credit_note'
+              OR i.invoice_number LIKE 'CN-%'
+            )
+        `);
+      statement = statementResult.recordset[0] || {};
+
+      const invoiceResult = await db.request()
+        .input('cid', sql.Int, cid)
+        .query(`
+          SELECT TOP 200 invoice_id, invoice_number, status, grand_total, document_type
+          FROM Invoices i
+          WHERE ${portalInvoiceVisibilitySql('i')}
+            AND (
+              i.status IN ('issued', 'paid', 'cancelled', 'credit_note')
+              OR i.document_type = 'credit_note'
+              OR i.invoice_number LIKE 'CN-%'
+            )
+          ORDER BY created_at DESC
+        `);
+      invoices = invoiceResult.recordset;
+    }
 
     const eirResult = await db.request()
       .input('cid', sql.Int, cid)
@@ -74,9 +83,10 @@ export async function GET(request: NextRequest) {
     const entries = buildPortalDocumentBundleEntries({
       baseUrl: requestBaseUrl(request),
       generatedAt: generatedAt.toISOString(),
-      statement: statementResult.recordset[0] || {},
-      invoices: invoiceResult.recordset as never,
+      statement,
+      invoices: invoices as never,
       eirs: eirResult.recordset as never,
+      includeInvoiceDownloads: canDownloadInvoices,
     });
     const zip = createZipArchive(entries, generatedAt);
 

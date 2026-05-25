@@ -21,6 +21,19 @@ function normalizeTimeline(rows: Array<Record<string, unknown>>) {
     .slice(0, 100);
 }
 
+function sanitizeTimelineFields(
+  rows: Array<Record<string, unknown>>,
+  canViewTrucking: boolean,
+  canViewDriver: boolean
+) {
+  return rows.map(row => {
+    const sanitized = { ...row };
+    if (!canViewTrucking) delete sanitized.truck_plate;
+    if (!canViewDriver) delete sanitized.driver_name;
+    return sanitized;
+  });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const cid = getPortalCustomerId(request);
@@ -42,6 +55,8 @@ export async function GET(request: NextRequest) {
     if (portalActor instanceof NextResponse) return portalActor;
 
     const events: Array<Record<string, unknown>> = [];
+    const canViewTrucking = portalActor.actions.has('portal.trucking.view');
+    const canViewDriver = portalActor.actions.has('portal.driver.view');
 
     if (bookingId) {
       const booking = await db.request()
@@ -168,7 +183,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      timeline: normalizeTimeline(events),
+      timeline: sanitizeTimelineFields(normalizeTimeline(events), canViewTrucking, canViewDriver),
       read_only: true,
       generatedAt: new Date().toISOString(),
     });

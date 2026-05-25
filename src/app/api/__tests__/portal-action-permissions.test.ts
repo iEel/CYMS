@@ -25,6 +25,10 @@ const expectations: Array<[string, string]> = [
 ];
 
 const conditionalExpectations: Array<[string, string]> = [
+  ['src/app/api/portal/document-bundle/route.ts', 'portal.invoice.view'],
+  ['src/app/api/portal/document-bundle/route.ts', 'portal.invoice.download'],
+  ['src/app/api/portal/timeline/route.ts', 'portal.trucking.view'],
+  ['src/app/api/portal/timeline/route.ts', 'portal.driver.view'],
   ['src/app/api/portal/overview/route.ts', 'portal.invoice.view'],
   ['src/app/api/portal/overview/route.ts', 'portal.booking.view'],
   ['src/app/api/portal/notifications/route.ts', 'portal.booking.view'],
