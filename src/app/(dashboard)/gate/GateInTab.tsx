@@ -40,6 +40,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     container_number: '', size: '20', type: 'GP', shipping_line: '',
     is_laden: false, seal_number: '', driver_name: '', driver_license: '',
     truck_plate: '', truck_company: '', booking_ref: '', notes: '',
+    actual_gross_weight_kg: '', weight_source: 'manual',
   });
   const [sealPhoto, setSealPhoto] = useState('');
   const [driverSignature, setDriverSignature] = useState('');
@@ -81,6 +82,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const boxtechAbortRef = useRef<AbortController | null>(null);
   const boxtechTareWeightKg = boxtechResult?.tare_weight_kg || boxtechResult?.tare_kg || null;
   const boxtechMaxGrossWeightKg = boxtechResult?.max_gross_weight_kg || boxtechResult?.max_gross_mass_kg || null;
+  const actualGrossWeightKg = gateInForm.actual_gross_weight_kg ? Number(gateInForm.actual_gross_weight_kg) : null;
+  const cargoWeightEstimateKg = actualGrossWeightKg && boxtechTareWeightKg ? Math.max(actualGrossWeightKg - boxtechTareWeightKg, 0) : null;
+  const weightOverMaxGross = Boolean(actualGrossWeightKg && boxtechMaxGrossWeightKg && actualGrossWeightKg > boxtechMaxGrossWeightKg);
 
   // Gate-In Billing states
   const [gateInBillingData, setGateInBillingData] = useState<GateInBillingData | null>(null);
@@ -384,6 +388,10 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     if (!canGateIn) return;
     if (!gateInForm.container_number) return;
     if (containerValid === false) return;
+    if (weightOverMaxGross) {
+      setGateInResult({ success: false, message: '❌ น้ำหนัก Actual Gross/VGM เกิน Max Gross ของตู้' });
+      return;
+    }
     setGateInLoading(true);
     setGateInResult(null);
     try {
@@ -403,13 +411,15 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           max_gross_weight_kg: boxtechMaxGrossWeightKg || null,
           boxtech_group_st: boxtechResult?.group_st || null,
           boxtech_source: boxtechResult?.source === 'boxtech' ? 'boxtech' : null,
+          actual_gross_weight_kg: gateInForm.actual_gross_weight_kg ? Number(gateInForm.actual_gross_weight_kg) : null,
+          weight_source: gateInForm.actual_gross_weight_kg ? gateInForm.weight_source : null,
           damage_report: inspectionReport || null,
         }),
       }, { operation: 'gate_in' });
       const data = await res.json();
       if (isOfflineQueuedResponse(data)) {
         setGateInResult({ success: true, message: `บันทึก Gate-In ${gateInForm.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
-        setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '' });
+        setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
         setGateInClearance(null);
         setInspectionReport(null);
         setBoxtechResult(null);
@@ -437,7 +447,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         }
 
         setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
-        setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '' });
+        setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
         setGateInClearance(null);
         setInspectionReport(null);
         setBoxtechResult(null);
@@ -625,6 +635,22 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                   onChange={e => setGateInForm({ ...gateInForm, shipping_line: e.target.value })} className={inputClass} />
               </div>
               <div>
+                <label className={labelClass}>Tare Weight</label>
+                <input
+                  readOnly
+                  value={boxtechTareWeightKg ? `${Number(boxtechTareWeightKg).toLocaleString()} kg` : '-'}
+                  className={`${inputClass} bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-default`}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Max Gross</label>
+                <input
+                  readOnly
+                  value={boxtechMaxGrossWeightKg ? `${Number(boxtechMaxGrossWeightKg).toLocaleString()} kg` : '-'}
+                  className={`${inputClass} bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-default`}
+                />
+              </div>
+              <div>
                 <label className={labelClass}>เลขซีล</label>
                 <div className="flex gap-1">
                   <input type="text" placeholder="SEAL123456" value={gateInForm.seal_number}
@@ -647,6 +673,43 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                   </button>
                 </div>
               </div>
+              {gateInForm.is_laden && (
+                <>
+                  <div>
+                    <label className={labelClass}>Actual Gross / VGM (kg)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      placeholder="เช่น 24500"
+                      value={gateInForm.actual_gross_weight_kg}
+                      onChange={e => setGateInForm({ ...gateInForm, actual_gross_weight_kg: e.target.value })}
+                      className={`${inputClass} ${weightOverMaxGross ? '!border-rose-400 ring-1 ring-rose-200' : ''}`}
+                    />
+                    <p className="mt-1 text-[10px] text-slate-400">น้ำหนักรวมจริงของตู้พร้อมสินค้า แยกจาก Tare/Max Gross ของ BoxTech</p>
+                  </div>
+                  <div>
+                    <label className={labelClass}>แหล่งน้ำหนัก</label>
+                    <select
+                      value={gateInForm.weight_source}
+                      onChange={e => setGateInForm({ ...gateInForm, weight_source: e.target.value })}
+                      className={inputClass}
+                    >
+                      <option value="manual">Manual</option>
+                      <option value="scale">Scale</option>
+                      <option value="vgm_document">VGM Document</option>
+                    </select>
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      {cargoWeightEstimateKg != null ? `Net Cargo estimate ${cargoWeightEstimateKg.toLocaleString()} kg` : 'กรอก Actual Gross เพื่อคำนวณน้ำหนักสินค้าโดยประมาณ'}
+                    </p>
+                  </div>
+                  {weightOverMaxGross && (
+                    <div className="md:col-span-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300">
+                      Actual Gross/VGM เกิน Max Gross ของตู้ กรุณาตรวจสอบก่อนรับเข้า
+                    </div>
+                  )}
+                </>
+              )}
               <div>
                 <label className={labelClass}>Booking Ref</label>
                 <input type="text" placeholder="BK-123456" value={gateInForm.booking_ref}

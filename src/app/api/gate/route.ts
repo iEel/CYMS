@@ -147,6 +147,8 @@ const gateBodySchema = z.object({
   max_gross_weight_kg: z.coerce.number().int().positive().optional().nullable(),
   boxtech_group_st: z.string().max(10).optional().nullable(),
   boxtech_source: z.string().max(30).optional().nullable(),
+  actual_gross_weight_kg: z.coerce.number().int().positive().optional().nullable(),
+  weight_source: z.enum(['manual', 'scale', 'vgm_document']).optional().nullable(),
 }).passthrough();
 
 // GET — ดึง gate transactions
@@ -224,8 +226,10 @@ export async function POST(request: NextRequest) {
       container_owner_id, billing_customer_id,
       billing_clearance_id,
       tare_weight_kg, max_gross_weight_kg, boxtech_group_st, boxtech_source,
+      actual_gross_weight_kg, weight_source,
     } = body;
     const hasBoxtechSpecs = tare_weight_kg || max_gross_weight_kg || boxtech_group_st || boxtech_source;
+    const hasActualWeight = actual_gross_weight_kg && is_laden;
 
     const db = await getDb();
     const yardAccess = await requireYardAccess(request, db, yard_id);
@@ -317,6 +321,9 @@ export async function POST(request: NextRequest) {
           .input('boxtechGroupSt', sql.NVarChar, boxtech_group_st || null)
           .input('boxtechSource', sql.NVarChar, boxtech_source || null)
           .input('boxtechFetchedAt', sql.DateTime2, hasBoxtechSpecs ? new Date() : null)
+          .input('actualGrossWeightKg', sql.Int, hasActualWeight ? actual_gross_weight_kg : null)
+          .input('weightSource', sql.NVarChar, hasActualWeight ? (weight_source || 'manual') : null)
+          .input('weightCapturedAt', sql.DateTime2, hasActualWeight ? new Date() : null)
           .input('gateInDate', sql.DateTime2, new Date())
           .query(`
             UPDATE Containers SET
@@ -331,6 +338,9 @@ export async function POST(request: NextRequest) {
               boxtech_group_st = COALESCE(@boxtechGroupSt, boxtech_group_st),
               boxtech_source = COALESCE(@boxtechSource, boxtech_source),
               boxtech_fetched_at = COALESCE(@boxtechFetchedAt, boxtech_fetched_at),
+              actual_gross_weight_kg = COALESCE(@actualGrossWeightKg, actual_gross_weight_kg),
+              weight_source = COALESCE(@weightSource, weight_source),
+              weight_captured_at = COALESCE(@weightCapturedAt, weight_captured_at),
               gate_in_date = @gateInDate,
               gate_out_date = NULL, updated_at = GETDATE()
             WHERE container_id = @containerId
@@ -358,17 +368,22 @@ export async function POST(request: NextRequest) {
           .input('boxtechGroupSt', sql.NVarChar, boxtech_group_st || null)
           .input('boxtechSource', sql.NVarChar, boxtech_source || null)
           .input('boxtechFetchedAt', sql.DateTime2, hasBoxtechSpecs ? new Date() : null)
+          .input('actualGrossWeightKg', sql.Int, hasActualWeight ? actual_gross_weight_kg : null)
+          .input('weightSource', sql.NVarChar, hasActualWeight ? (weight_source || 'manual') : null)
+          .input('weightCapturedAt', sql.DateTime2, hasActualWeight ? new Date() : null)
           .input('gateInDate', sql.DateTime2, new Date())
           .query(`
             INSERT INTO Containers (container_number, size, type, status, yard_id, zone_id,
               bay, [row], tier, shipping_line, is_laden, is_soc, container_owner_id,
               container_grade, seal_number, tare_weight_kg, max_gross_weight_kg,
-              boxtech_group_st, boxtech_source, boxtech_fetched_at, gate_in_date)
+              boxtech_group_st, boxtech_source, boxtech_fetched_at,
+              actual_gross_weight_kg, weight_source, weight_captured_at, gate_in_date)
             OUTPUT INSERTED.container_id
             VALUES (@containerNumber, @size, @type, @status, @yardId, @zoneId,
               @bay, @row, @tier, @shippingLine, @isLaden, @isSoc, @ownerId,
               @containerGrade, @sealNumber, @tareWeightKg, @maxGrossWeightKg,
-              @boxtechGroupSt, @boxtechSource, @boxtechFetchedAt, @gateInDate)
+              @boxtechGroupSt, @boxtechSource, @boxtechFetchedAt,
+              @actualGrossWeightKg, @weightSource, @weightCapturedAt, @gateInDate)
           `);
         finalContainerId = insertResult.recordset[0].container_id;
       }

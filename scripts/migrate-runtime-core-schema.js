@@ -41,6 +41,12 @@ async function migrate() {
         ALTER TABLE Containers ADD boxtech_source NVARCHAR(30) NULL;
       IF COL_LENGTH('Containers', 'boxtech_fetched_at') IS NULL
         ALTER TABLE Containers ADD boxtech_fetched_at DATETIME2 NULL;
+      IF COL_LENGTH('Containers', 'actual_gross_weight_kg') IS NULL
+        ALTER TABLE Containers ADD actual_gross_weight_kg INT NULL;
+      IF COL_LENGTH('Containers', 'weight_source') IS NULL
+        ALTER TABLE Containers ADD weight_source NVARCHAR(30) NULL;
+      IF COL_LENGTH('Containers', 'weight_captured_at') IS NULL
+        ALTER TABLE Containers ADD weight_captured_at DATETIME2 NULL;
 
       IF OBJECT_ID('BillingClearances', 'U') IS NULL
       BEGIN

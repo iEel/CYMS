@@ -45,9 +45,11 @@ describe('BoxTech container technical weights', () => {
     expect(source).toContain('max_gross_weight_kg = COALESCE(@maxGrossWeightKg, max_gross_weight_kg)');
     expect(source).toContain('boxtech_fetched_at = COALESCE(@boxtechFetchedAt, boxtech_fetched_at)');
     expect(source).toContain('container_grade, seal_number, tare_weight_kg, max_gross_weight_kg,');
-    expect(source).toContain('boxtech_group_st, boxtech_source, boxtech_fetched_at, gate_in_date)');
+    expect(source).toContain('boxtech_group_st, boxtech_source, boxtech_fetched_at,');
+    expect(source).toContain('actual_gross_weight_kg, weight_source, weight_captured_at, gate_in_date)');
     expect(source).toContain('@containerGrade, @sealNumber, @tareWeightKg, @maxGrossWeightKg,');
-    expect(source).toContain('@boxtechGroupSt, @boxtechSource, @boxtechFetchedAt, @gateInDate)');
+    expect(source).toContain('@boxtechGroupSt, @boxtechSource, @boxtechFetchedAt,');
+    expect(source).toContain('@actualGrossWeightKg, @weightSource, @weightCapturedAt, @gateInDate)');
   });
 
   it('shows BoxTech weight specs in Gate In and submits them with the transaction', () => {

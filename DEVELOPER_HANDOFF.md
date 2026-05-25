@@ -427,7 +427,7 @@ container-yard-system/
 | `Users` | username, password_hash, role_id, status, **two_fa_enabled, two_fa_secret, two_fa_confirmed_at, bound_device_mac, notif_last_read_at** | ผู้ใช้งาน + TOTP 2FA + trusted browser device id (`bound_device_mac` เป็นชื่อ legacy ไม่ใช่ MAC จริง) + timestamp อ่านแจ้งเตือนล่าสุด |
 | `UserYardAccess` | user_id, yard_id | สิทธิ์เข้าถึงลาน |
 | `ApprovalHierarchy` | approver_id, level | สายอนุมัติ |
-| `Containers` | container_number, size, type, status, zone/bay/row/tier, **is_soc** (BIT, SOC=ตู้ลูกค้า), **container_owner_id** (FK→Customers), **tare_weight_kg**, **max_gross_weight_kg**, boxtech_group_st/source/fetched_at | ตู้คอนเทนเนอร์ + SOC/COC + สเปกเทคนิคจาก BoxTech (ไม่ใช่น้ำหนักจริง/VGM) |
+| `Containers` | container_number, size, type, status, zone/bay/row/tier, **is_soc** (BIT, SOC=ตู้ลูกค้า), **container_owner_id** (FK→Customers), **tare_weight_kg**, **max_gross_weight_kg**, boxtech_group_st/source/fetched_at, **actual_gross_weight_kg**, **weight_source**, weight_captured_at | ตู้คอนเทนเนอร์ + SOC/COC + สเปกเทคนิคจาก BoxTech และ Actual Gross/VGM สำหรับตู้มีสินค้า |
 | `Customers` | customer_code (auto-gen `CUST-XXXXX`), customer_name, **is_line, is_forwarder, is_trucking, is_shipper, is_consignee** (Boolean flags), tax_id, address, billing_address, contact_name/phone/email, **default_payment_type** (CASH/CREDIT), credit_term, **edi_prefix** (บังคับเมื่อ is_line=1), is_active | ลูกค้า — **Multi-role** (1 บริษัท = หลายบทบาท) |
 | `CustomerBranches` | customer_id (FK), branch_code (default '00000'), branch_name, billing_address, contact_name/phone/email, is_default, is_active | **สาขาลูกค้า** — หลายสาขาต่อ 1 บริษัท |
 | `PortalEntityAccess` | customer_id, entity_type, entity_id/entity_ref, access_role, source_table/source_id, is_active | Source-of-truth สำหรับ Customer Portal visibility ต่อ `container` / `booking` / `gate_transaction` / `invoice` |
@@ -730,6 +730,11 @@ container-yard-system/
   - Normalize `tare_kg`/`max_gross_mass_kg` เป็น `tare_weight_kg`/`max_gross_weight_kg`
   - Gate-In บันทึกสเปกตู้ลง `Containers` พร้อม `boxtech_group_st/source/fetched_at` เพื่อใช้ซ้ำใน Gate-Out, Container 360 และ EIR
   - ค่านี้เป็น **technical spec ของตู้** เท่านั้น ไม่ใช่น้ำหนักสินค้าจริง/VGM และไม่ใช้ตัดสิน weight limit
+- **Laden Actual Gross/VGM**:
+  - Gate-In แสดงช่อง `Actual Gross / VGM (kg)` เฉพาะเมื่อเลือก `มีสินค้า`
+  - บันทึก `actual_gross_weight_kg`, `weight_source` (`manual`/`scale`/`vgm_document`) และ `weight_captured_at` ลง `Containers`
+  - ถ้ามี BoxTech `tare_weight_kg` ระบบแสดง Net Cargo estimate = Actual Gross - Tare เพื่อช่วยตรวจ sanity
+  - ถ้า Actual Gross/VGM มากกว่า BoxTech `max_gross_weight_kg` ระบบเตือนและบล็อกการรับเข้าเพื่อกันน้ำหนักเกินสเปกตู้
 - **Prefix → Customer Mapping** (**ใหม่**):
   - จับคู่ prefix กับลูกค้าจาก PrefixMapping table → แสดงชื่อลูกค้าทันที
 - **Fallback — ตู้ prefix ไม่รู้จัก** (**ใหม่**):
@@ -1241,7 +1246,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 
 ### 🧱 Runtime DDL Migration (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **ย้าย direct request-time DDL ออกจาก core API routes** — ลบ schema guard ที่ `ALTER TABLE` / `CREATE TABLE` / `COL_LENGTH` จาก `api/gate`, `api/billing/invoices`, `api/mnr`, `api/customers/360`, `api/settings/customers`
-- [x] **Migration script กลาง** — เพิ่ม `scripts/migrate-runtime-core-schema.js` สำหรับเติม columns/tables ที่ core routes เคยสร้างเอง ได้แก่ `Containers.container_grade`, `Containers.tare_weight_kg/max_gross_weight_kg/boxtech_*`, `BillingClearances`, invoice document columns, M&R extended columns, customer role/credit/branch columns, `CustomerBranches`, และ owner/billing columns บน `GateTransactions`
+- [x] **Migration script กลาง** — เพิ่ม `scripts/migrate-runtime-core-schema.js` สำหรับเติม columns/tables ที่ core routes เคยสร้างเอง ได้แก่ `Containers.container_grade`, `Containers.tare_weight_kg/max_gross_weight_kg/boxtech_*`, `Containers.actual_gross_weight_kg/weight_source/weight_captured_at`, `BillingClearances`, invoice document columns, M&R extended columns, customer role/credit/branch columns, `CustomerBranches`, และ owner/billing columns บน `GateTransactions`
 - [x] **Batch 2 source-wide cleanup** — ย้าย DDL ที่เหลือออกจาก `src/app/api` และ `src/lib` รวม shared helpers (`documentLifecycle`, `documentNumber`, `customerCredit`, `attachmentCenter`, `approvalReview`, `integrationLog`) และ routes ที่เคย auto-migrate เช่น `containers`, `billing/clearance`, `billing/reports`, `edi/codeco`, `edi/templates`, `mnr/cedex`, `mnr/eor-pdf`, `settings/*`
 - [x] **Migration script ขยายครบ** — `scripts/migrate-runtime-core-schema.js` ตอนนี้ครอบคลุม DocumentSequences, DocumentLifecycle, EntityAttachments, ApprovalReviews, IntegrationLogs, ReconciliationActions, EDITemplates, CEDEXCodes, StorageRateTiers, PrefixMapping, SystemSettings, Company/Yard branch fields และ granular RBAC permission columns
 - [x] **Static regression test** — `src/app/api/__tests__/no-runtime-ddl.test.ts` ตรวจ production source ทั้ง `src/app/api` และ `src/lib` ไม่ให้มี `CREATE TABLE` / `ALTER TABLE` ใน runtime path อีก
