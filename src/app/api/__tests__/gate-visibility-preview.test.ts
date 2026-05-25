@@ -6,6 +6,10 @@ describe('Gate visibility preview', () => {
     const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gate/visibility-preview/route.ts'), 'utf8');
     expect(route).toContain('buildGatePartyGrants');
     expect(route).toContain('defaultPortalPermissionScope');
+    expect(route).toContain('try');
+    expect(route).toContain('invalid_request');
+    expect(route).toContain('container_number_required');
+    expect(route).toContain('positiveIntOrNull');
     expect(route).not.toContain('applyPortalGrants');
   });
 
@@ -14,5 +18,9 @@ describe('Gate visibility preview', () => {
     expect(gateIn).toContain('Portal Visibility Preview');
     expect(gateIn).toContain('/api/gate/visibility-preview');
     expect(gateIn).toContain('accessRole');
+    expect(gateIn).toContain('visibilityPreviewError');
+    expect(gateIn).toContain('containerValid !== true');
+    expect(gateIn).toContain('normalizedContainerNumber.length !== 11');
+    expect(gateIn).toContain('Visibility preview unavailable');
   });
 });

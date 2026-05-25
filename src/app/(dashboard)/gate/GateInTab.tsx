@@ -195,6 +195,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const bookingDerivedContextRef = useRef<BookingDerivedContext>({});
   const [visibilityPreview, setVisibilityPreview] = useState<PortalVisibilityPreviewRow[]>([]);
   const [visibilityPreviewLoading, setVisibilityPreviewLoading] = useState(false);
+  const [visibilityPreviewError, setVisibilityPreviewError] = useState('');
+  const visibilityPreviewRequestRef = useRef(0);
 
   const clearBookingDerivedContext = () => {
     const context = bookingDerivedContextRef.current;
@@ -372,18 +374,25 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   }, [yardId]);
 
   useEffect(() => {
-    if (!gateInForm.container_number) {
+    const normalizedContainerNumber = gateInForm.container_number.toUpperCase().replace(/[\s-]/g, '');
+    if (normalizedContainerNumber.length !== 11 || containerValid !== true) {
+      visibilityPreviewRequestRef.current += 1;
       setVisibilityPreview([]);
+      setVisibilityPreviewError('');
+      setVisibilityPreviewLoading(false);
       return;
     }
     const controller = new AbortController();
+    const requestId = visibilityPreviewRequestRef.current + 1;
+    visibilityPreviewRequestRef.current = requestId;
     setVisibilityPreviewLoading(true);
+    setVisibilityPreviewError('');
     fetch('/api/gate/visibility-preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
       body: JSON.stringify({
-        container_number: gateInForm.container_number,
+        container_number: normalizedContainerNumber,
         container_owner_id: containerOwnerId,
         booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || manualCustomerId,
         billing_customer_id: billingCustomerId,
@@ -391,14 +400,29 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         driver_user_id: null,
       }),
     })
-      .then(res => res.json())
-      .then(json => setVisibilityPreview(Array.isArray(json.preview) ? json.preview : []))
-      .catch(err => {
-        if (err.name !== 'AbortError') console.error('visibility preview error', err);
+      .then(async res => {
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json || !Array.isArray(json.preview)) {
+          throw new Error('Visibility preview unavailable');
+        }
+        if (visibilityPreviewRequestRef.current === requestId) {
+          setVisibilityPreview(json.preview);
+        }
       })
-      .finally(() => setVisibilityPreviewLoading(false));
+      .catch(err => {
+        if (err.name !== 'AbortError' && visibilityPreviewRequestRef.current === requestId) {
+          console.error('visibility preview error', err);
+          setVisibilityPreview([]);
+          setVisibilityPreviewError('Visibility preview unavailable');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && visibilityPreviewRequestRef.current === requestId) {
+          setVisibilityPreviewLoading(false);
+        }
+      });
     return () => controller.abort();
-  }, [gateInForm.container_number, containerOwnerId, selectedBooking, manualCustomerId, billingCustomerId]);
+  }, [gateInForm.container_number, containerValid, containerOwnerId, selectedBooking, manualCustomerId, billingCustomerId]);
 
   // Fetch gate-in billing when form has valid data
   useEffect(() => {
@@ -1035,7 +1059,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
               {visibilityPreviewLoading && <Loader2 size={14} className="animate-spin text-cyan-600" />}
             </div>
             <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-              {visibilityPreview.length === 0 ? (
+              {visibilityPreviewError ? (
+                <p className="text-xs text-rose-500">{visibilityPreviewError}</p>
+              ) : visibilityPreview.length === 0 ? (
                 <p className="text-xs text-slate-400">ยังไม่มี party ที่จะได้รับสิทธิ์</p>
               ) : visibilityPreview.map((row, index) => (
                 <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
