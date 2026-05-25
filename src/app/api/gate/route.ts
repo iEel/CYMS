@@ -267,6 +267,9 @@ export async function POST(request: NextRequest) {
     let gateOutHoldSnapshot: { hold_status?: string | null; status?: string | null; container_number?: string | null } | null = null;
     let gateOutHoldApproval: { approvedBy: number } | null = null;
     let resolvedBookingCustomerId = booking_customer_id || null;
+    const resolvedBillingCustomerId = billing_customer_id || null;
+    const resolvedTruckingCompanyId = trucking_company_id || null;
+    const resolvedDriverUserId = driver_user_id || null;
     const clearanceValidation = await validateBillingClearance(db, yard_id, transaction_type, billing_clearance_id || null);
     if (!clearanceValidation.ok) {
       return NextResponse.json({ error: clearanceValidation.error }, { status: 400 });
@@ -487,9 +490,9 @@ export async function POST(request: NextRequest) {
       .input('processedBy', sql.Int, actorUserId)
       .input('ownerId', sql.Int, container_owner_id || null)
       .input('bookingCustomerId', sql.Int, resolvedBookingCustomerId || null)
-      .input('billingId', sql.Int, billing_customer_id || null)
-      .input('truckingCompanyId', sql.Int, trucking_company_id || null)
-      .input('driverUserId', sql.Int, driver_user_id || null)
+      .input('billingId', sql.Int, resolvedBillingCustomerId)
+      .input('truckingCompanyId', sql.Int, resolvedTruckingCompanyId)
+      .input('driverUserId', sql.Int, resolvedDriverUserId)
       .input('billingClearanceId', sql.Int, billing_clearance_id || null)
       .query(`
         INSERT INTO GateTransactions (container_id, yard_id, transaction_type,
@@ -514,9 +517,9 @@ export async function POST(request: NextRequest) {
       container_number,
       container_owner_id,
       booking_customer_id: resolvedBookingCustomerId,
-      billing_customer_id,
-      trucking_company_id,
-      driver_user_id,
+      billing_customer_id: resolvedBillingCustomerId,
+      trucking_company_id: resolvedTruckingCompanyId,
+      driver_user_id: resolvedDriverUserId,
     }));
 
     // === Booking Auto-Link ===
