@@ -140,6 +140,7 @@ async function run() {
           phone           NVARCHAR(20),
           avatar_url      NVARCHAR(500),
           status          NVARCHAR(20) DEFAULT 'active',
+          customer_portal_role NVARCHAR(40) NULL,
           two_fa_enabled  BIT DEFAULT 0,
           two_fa_secret   NVARCHAR(128) NULL,
           two_fa_confirmed_at DATETIME2 NULL,
@@ -223,6 +224,9 @@ async function run() {
           entity_id       INT NULL,
           entity_ref      NVARCHAR(100) NULL,
           access_role     NVARCHAR(40) NOT NULL,
+          permission_scope NVARCHAR(MAX) NULL,
+          valid_from      DATETIME2 NULL,
+          valid_until     DATETIME2 NULL,
           source_table    NVARCHAR(80) NOT NULL,
           source_id       INT NULL,
           is_active       BIT DEFAULT 1,
@@ -253,6 +257,25 @@ async function run() {
           yard_id         INT REFERENCES Yards(yard_id),
           created_at      DATETIME2 DEFAULT GETDATE()
         )`,
+      },
+      {
+        name: 'EIRAccessLog',
+        sql: `CREATE TABLE EIRAccessLog (
+          access_id           BIGINT PRIMARY KEY IDENTITY(1,1),
+          eir_number          NVARCHAR(80) NOT NULL,
+          gate_transaction_id INT NULL,
+          user_id             INT NULL,
+          customer_id         INT NULL,
+          view_type           NVARCHAR(40) NOT NULL,
+          action              NVARCHAR(30) NOT NULL,
+          ip_address          NVARCHAR(100) NULL,
+          user_agent          NVARCHAR(500) NULL,
+          accessed_at         DATETIME2 NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT CK_EIRAccessLog_Action CHECK (action IN ('view', 'download', 'print', 'public_verify'))
+        );
+
+        CREATE INDEX IX_EIRAccessLog_EIR
+          ON EIRAccessLog (eir_number, accessed_at)`,
       },
       {
         name: 'AuditLog',

@@ -200,6 +200,17 @@ async function migrate() {
         ALTER TABLE Users ADD bound_device_mac NVARCHAR(128) NULL;
     `);
 
+    await runStep(pool, 'Customer portal user roles', `
+      IF COL_LENGTH('Users', 'customer_portal_role') IS NULL
+        ALTER TABLE Users ADD customer_portal_role NVARCHAR(40) NULL;
+
+      IF COL_LENGTH('Users', 'customer_id') IS NOT NULL
+        UPDATE Users
+        SET customer_portal_role = 'customer_admin'
+        WHERE customer_id IS NOT NULL
+          AND customer_portal_role IS NULL;
+    `);
+
     await runStep(pool, 'Yard zone reefer plug capacity', `
       IF OBJECT_ID('YardZones', 'U') IS NOT NULL
         AND COL_LENGTH('YardZones', 'plug_capacity') IS NULL
@@ -601,6 +612,9 @@ async function migrate() {
           entity_id INT NULL,
           entity_ref NVARCHAR(100) NULL,
           access_role NVARCHAR(40) NOT NULL,
+          permission_scope NVARCHAR(MAX) NULL,
+          valid_from DATETIME2 NULL,
+          valid_until DATETIME2 NULL,
           source_table NVARCHAR(80) NOT NULL,
           source_id INT NULL,
           is_active BIT NOT NULL CONSTRAINT DF_PortalEntityAccess_Active DEFAULT 1,
@@ -608,6 +622,18 @@ async function migrate() {
           updated_at DATETIME2 NULL,
           CONSTRAINT CK_PortalEntityAccess_Target CHECK (entity_id IS NOT NULL OR entity_ref IS NOT NULL)
         );
+      END;
+
+      IF OBJECT_ID('PortalEntityAccess', 'U') IS NOT NULL
+      BEGIN
+        IF COL_LENGTH('PortalEntityAccess', 'permission_scope') IS NULL
+          ALTER TABLE PortalEntityAccess ADD permission_scope NVARCHAR(MAX) NULL;
+        IF COL_LENGTH('PortalEntityAccess', 'valid_from') IS NULL
+          ALTER TABLE PortalEntityAccess ADD valid_from DATETIME2 NULL;
+        IF COL_LENGTH('PortalEntityAccess', 'valid_until') IS NULL
+          ALTER TABLE PortalEntityAccess ADD valid_until DATETIME2 NULL;
+        IF COL_LENGTH('PortalEntityAccess', 'updated_at') IS NULL
+          ALTER TABLE PortalEntityAccess ADD updated_at DATETIME2 NULL;
       END;
 
       IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('PortalEntityAccess') AND name = 'IX_PortalEntityAccess_Customer_Entity')
@@ -777,6 +803,29 @@ async function migrate() {
           GROUP BY i.customer_id, i.container_id;
         END;
       END;
+    `);
+
+    await runStep(pool, 'EIR access log table', `
+      IF OBJECT_ID('EIRAccessLog', 'U') IS NULL
+      BEGIN
+        CREATE TABLE EIRAccessLog (
+          access_id BIGINT PRIMARY KEY IDENTITY(1,1),
+          eir_number NVARCHAR(80) NOT NULL,
+          gate_transaction_id INT NULL,
+          user_id INT NULL,
+          customer_id INT NULL,
+          view_type NVARCHAR(40) NOT NULL,
+          action NVARCHAR(30) NOT NULL,
+          ip_address NVARCHAR(100) NULL,
+          user_agent NVARCHAR(500) NULL,
+          accessed_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT CK_EIRAccessLog_Action CHECK (action IN ('view', 'download', 'print', 'public_verify'))
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('EIRAccessLog') AND name = 'IX_EIRAccessLog_EIR')
+        CREATE INDEX IX_EIRAccessLog_EIR
+          ON EIRAccessLog (eir_number, accessed_at);
     `);
 
     await runStep(pool, 'Customer portal notification preferences', `

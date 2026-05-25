@@ -103,6 +103,7 @@ CREATE TABLE Users (
     phone           NVARCHAR(20),
     avatar_url      NVARCHAR(500),
     status          NVARCHAR(20) DEFAULT 'active',  -- 'active','suspend','resign'
+    customer_portal_role NVARCHAR(40) NULL,
     two_fa_enabled  BIT DEFAULT 0,
     two_fa_secret   NVARCHAR(128) NULL, -- TOTP secret (base32)
     two_fa_confirmed_at DATETIME2 NULL, -- เวลาเปิดใช้งาน 2FA สำเร็จ
@@ -224,6 +225,9 @@ CREATE TABLE PortalEntityAccess (
     entity_id           INT NULL,                     -- primary key ของ entity (ถ้ามี)
     entity_ref          NVARCHAR(100) NULL,           -- เลขตู้/booking/invoice/EIR สำหรับกรณี pre-link
     access_role         NVARCHAR(40) NOT NULL,        -- owner,billing,booking_customer,invoice_customer,forwarder,shipper,consignee
+    permission_scope    NVARCHAR(MAX) NULL,
+    valid_from          DATETIME2 NULL,
+    valid_until         DATETIME2 NULL,
     source_table        NVARCHAR(80) NOT NULL,        -- แหล่งข้อมูลที่สร้าง grant
     source_id           INT NULL,
     is_active           BIT DEFAULT 1,
@@ -502,6 +506,26 @@ CREATE TABLE GateTransactions (
     billing_customer_id INT NULL,               -- คนรับผิดชอบจ่ายเงิน (FK→Customers)
     created_at      DATETIME2 DEFAULT GETDATE()
 );
+
+-- ===================================
+-- ตาราง: EIR Access Log
+-- ===================================
+CREATE TABLE EIRAccessLog (
+    access_id           BIGINT PRIMARY KEY IDENTITY(1,1),
+    eir_number          NVARCHAR(80) NOT NULL,
+    gate_transaction_id INT NULL,
+    user_id             INT NULL,
+    customer_id         INT NULL,
+    view_type           NVARCHAR(40) NOT NULL,
+    action              NVARCHAR(30) NOT NULL,
+    ip_address          NVARCHAR(100) NULL,
+    user_agent          NVARCHAR(500) NULL,
+    accessed_at         DATETIME2 NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT CK_EIRAccessLog_Action CHECK (action IN ('view', 'download', 'print', 'public_verify'))
+);
+
+CREATE INDEX IX_EIRAccessLog_EIR
+ON EIRAccessLog (eir_number, accessed_at);
 
 -- ===================================
 -- ตาราง: บันทึกประวัติ (Audit Log)
