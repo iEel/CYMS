@@ -39,6 +39,19 @@
 - **Admin field-scope endpoint**: เพิ่ม `PATCH /api/portal/grants/field-scope` สำหรับ yard manager เปิด/ปิด field `eir.fields.container_grade` พร้อม audit action `portal_grant_field_scope_update` และ label `แสดงเกรดตู้ใน EIR ให้ลูกค้า`
 - **Security regression tests**: เพิ่ม/ขยาย tests สำหรับ public EIR, portal EIR masking, customer_id จาก session เท่านั้น, invoice visibility, driver/trucking grants, reconciler, field-scope audit และ portal action permissions
 
+### Customer Portal Access UI/UX
+
+- Settings > Users now supports `customer_portal_role` for customer users.
+- Settings > Customer Master stores portal default visibility and field-level EIR defaults.
+- Settings > Portal Access lists PortalEntityAccess grants, previews/repairs reconcile, and toggles EIR grade visibility with audit reason.
+- Gate In captures booking/business parties and shows Portal Visibility Preview only; field-level policy remains in Settings.
+- Gate In sends party IDs for booking_customer, billing, trucking, and future driver grants.
+
+Default policy:
+- Customer Portal does not see `container_grade` unless the user has `portal.eir.grade.view` and the grant scope enables `eir.fields.container_grade`.
+- Public EIR never shows `container_grade`.
+- Driver/trucking grants remain backend policy only; no Driver/Trucking Portal UI yet.
+
 Migration ที่ต้องรันหลัง pull:
 
 ```bash
