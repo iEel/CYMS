@@ -29,6 +29,28 @@ interface GateInTabProps {
   onViewEIR: (eirNumber: string) => void;
 }
 
+interface GateBookingOption {
+  booking_id: number;
+  booking_number: string;
+  customer_id?: number | null;
+  booking_customer_id?: number | null;
+  shipping_line_id?: number | null;
+  forwarder_id?: number | null;
+  shipper_id?: number | null;
+  consignee_id?: number | null;
+  trucking_company_id?: number | null;
+  bill_to_customer_id?: number | null;
+  booking_customer_name?: string | null;
+  shipping_line_name?: string | null;
+  forwarder_name?: string | null;
+  shipper_name?: string | null;
+  consignee_name?: string | null;
+  trucking_company_name?: string | null;
+  bill_to_customer_name?: string | null;
+  vessel_name?: string | null;
+  voyage_number?: string | null;
+}
+
 export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps) {
   const { hasPermission } = useAuth();
   const canGateIn = hasPermission('gate.in');
@@ -149,6 +171,34 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [gateInLoading, setGateInLoading] = useState(false);
   const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string; assigned_location?: { zone_name: string; bay: number; row: number; tier: number; reason: string } } | null>(null);
   const [recentGateTransactions, setRecentGateTransactions] = useState<GateRecentTransaction[]>([]);
+  const [selectedBooking, setSelectedBooking] = useState<GateBookingOption | null>(null);
+  const [bookingSearch, setBookingSearch] = useState('');
+  const [bookingResults, setBookingResults] = useState<GateBookingOption[]>([]);
+  const [showBookingPicker, setShowBookingPicker] = useState(false);
+
+  const applyGateInBooking = (booking: GateBookingOption | null) => {
+    setSelectedBooking(booking);
+    setShowBookingPicker(false);
+    setGateInForm(prev => ({ ...prev, booking_ref: booking?.booking_number || '' }));
+    if (!booking) {
+      setBookingSearch('');
+      return;
+    }
+    setBookingSearch(booking.booking_number);
+    if (booking.booking_customer_id || booking.customer_id) setManualCustomerId(booking.booking_customer_id || booking.customer_id || null);
+    if (booking.bill_to_customer_id) setBillingCustomerId(booking.bill_to_customer_id);
+    if (booking.trucking_company_name) {
+      setGateInForm(prev => ({ ...prev, truck_company: booking.trucking_company_name || prev.truck_company }));
+      setTruckCompanySearch(booking.trucking_company_name || '');
+    }
+  };
+
+  const searchBookings = async () => {
+    setShowBookingPicker(true);
+    const res = await fetch(`/api/edi/bookings?lookup=1&booking_number=${encodeURIComponent(bookingSearch)}&yard_id=${yardId}`);
+    const json = await res.json();
+    setBookingResults(json.booking ? [json.booking] : []);
+  };
 
   // === Check Digit Validation + Boxtech Auto-Lookup ===
   useEffect(() => {
@@ -213,8 +263,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     fetch(`/api/edi/bookings?lookup=1&container_number=${num}&yard_id=${yardId}`, { signal: controller.signal })
       .then(res => res.json())
       .then(data => {
-        if (data.booking) {
-          setGateInForm(prev => ({ ...prev, booking_ref: prev.booking_ref || data.booking.booking_number }));
+        if (data.booking && !gateInForm.booking_ref) {
+          applyGateInBooking(data.booking);
         }
       })
       .catch(err => {
@@ -420,6 +470,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       if (isOfflineQueuedResponse(data)) {
         setGateInResult({ success: true, message: `บันทึก Gate-In ${gateInForm.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
+        setSelectedBooking(null);
+        setBookingSearch('');
+        setBookingResults([]);
         setGateInClearance(null);
         setInspectionReport(null);
         setBoxtechResult(null);
@@ -448,6 +501,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
 
         setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
+        setSelectedBooking(null);
+        setBookingSearch('');
+        setBookingResults([]);
         setGateInClearance(null);
         setInspectionReport(null);
         setBoxtechResult(null);
@@ -710,12 +766,56 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                   )}
                 </>
               )}
-              <div>
-                <label className={labelClass}>Booking Ref</label>
-                <input type="text" placeholder="BK-123456" value={gateInForm.booking_ref}
-                  onChange={e => setGateInForm({ ...gateInForm, booking_ref: e.target.value })} className={inputClass} />
+              <div className="md:col-span-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 dark:border-indigo-900/40 dark:bg-indigo-900/10">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <label className={labelClass}>Booking</label>
+                    <p className="text-[10px] text-slate-400">เลือก Booking เพื่อดึง party และสร้าง grants ให้ถูกต้อง</p>
+                  </div>
+                  {selectedBooking && (
+                    <button onClick={() => applyGateInBooking(null)} className="text-xs text-slate-400 hover:text-rose-500">ไม่ใช้ Booking</button>
+                  )}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={bookingSearch}
+                    onChange={e => {
+                      setBookingSearch(e.target.value);
+                      setShowBookingPicker(true);
+                      if (!e.target.value) {
+                        setBookingResults([]);
+                        applyGateInBooking(null);
+                      }
+                    }}
+                    onFocus={() => setShowBookingPicker(true)}
+                    className={inputClass}
+                    placeholder="ค้นหา Booking No."
+                  />
+                  <button onClick={searchBookings} className="rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white">ค้นหา</button>
+                </div>
                 {boxtechResult?.customer_source === 'booking' && (
                   <span className="text-xs text-emerald-600 flex items-center gap-1 mt-1">&#x1F4CB; ยึดตาม Booking</span>
+                )}
+                {showBookingPicker && (
+                  <div className="mt-2 space-y-1">
+                    {bookingResults.map(booking => (
+                      <button key={booking.booking_id} onClick={() => applyGateInBooking(booking)} className="w-full rounded-lg bg-white px-3 py-2 text-left text-xs dark:bg-slate-800">
+                        <span className="font-mono font-semibold">{booking.booking_number}</span>
+                        <span className="ml-2 text-slate-400">{booking.booking_customer_name || '-'}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedBooking && (
+                  <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                    <InfoMini label="Booking Customer" value={selectedBooking.booking_customer_name || '-'} />
+                    <InfoMini label="Shipping Line" value={selectedBooking.shipping_line_name || '-'} />
+                    <InfoMini label="Forwarder" value={selectedBooking.forwarder_name || '-'} />
+                    <InfoMini label="Shipper" value={selectedBooking.shipper_name || '-'} />
+                    <InfoMini label="Consignee" value={selectedBooking.consignee_name || '-'} />
+                    <InfoMini label="Trucking Company" value={selectedBooking.trucking_company_name || '-'} />
+                    <InfoMini label="Bill To Customer" value={selectedBooking.bill_to_customer_name || '-'} />
+                  </div>
                 )}
               </div>
               {/* SOC Toggle */}
@@ -1358,5 +1458,14 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         </div>
       )}
     </>
+  );
+}
+
+function InfoMini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-white/70 bg-white/80 p-2 dark:border-slate-700 dark:bg-slate-800/60">
+      <p className="text-[10px] uppercase text-slate-400">{label}</p>
+      <p className="mt-0.5 truncate font-semibold text-slate-700 dark:text-slate-200">{value}</p>
+    </div>
   );
 }

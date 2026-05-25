@@ -9,6 +9,20 @@ function bookingSummarySelect() {
   return `
     b.booking_number, b.booking_id, b.vessel_name, b.voyage_number,
     b.booking_type, b.status, b.customer_id, c.customer_name,
+    b.booking_customer_id,
+    b.shipping_line_id,
+    b.forwarder_id,
+    b.shipper_id,
+    b.consignee_id,
+    b.trucking_company_id,
+    b.bill_to_customer_id,
+    bookingCustomer.customer_name AS booking_customer_name,
+    shippingLine.customer_name AS shipping_line_name,
+    forwarder.customer_name AS forwarder_name,
+    shipper.customer_name AS shipper_name,
+    consignee.customer_name AS consignee_name,
+    trucking.customer_name AS trucking_company_name,
+    billTo.customer_name AS bill_to_customer_name,
     b.container_count, b.container_size, b.container_type,
     (SELECT COUNT(*) FROM BookingContainers bc2 WHERE bc2.booking_id = b.booking_id) AS linked_containers,
     (SELECT COUNT(*) FROM BookingContainers bc3 WHERE bc3.booking_id = b.booking_id AND bc3.status IN ('received', 'released')) AS received_count,
@@ -20,6 +34,18 @@ function bookingSummarySelect() {
     CASE WHEN ISNULL(b.container_count, 0) > 0
       THEN CAST(ROUND(((SELECT COUNT(*) FROM BookingContainers bc7 WHERE bc7.booking_id = b.booking_id AND bc7.status = 'released') * 100.0) / b.container_count, 0) AS INT)
       ELSE 0 END AS release_percent
+  `;
+}
+
+function bookingPartyJoins() {
+  return `
+    LEFT JOIN Customers bookingCustomer ON bookingCustomer.customer_id = COALESCE(b.booking_customer_id, b.customer_id)
+    LEFT JOIN Customers shippingLine ON shippingLine.customer_id = b.shipping_line_id
+    LEFT JOIN Customers forwarder ON forwarder.customer_id = b.forwarder_id
+    LEFT JOIN Customers shipper ON shipper.customer_id = b.shipper_id
+    LEFT JOIN Customers consignee ON consignee.customer_id = b.consignee_id
+    LEFT JOIN Customers trucking ON trucking.customer_id = b.trucking_company_id
+    LEFT JOIN Customers billTo ON billTo.customer_id = b.bill_to_customer_id
   `;
 }
 
@@ -44,6 +70,7 @@ export async function GET(request: NextRequest) {
           SELECT TOP 1 ${bookingSummarySelect()}
           FROM Bookings b
           LEFT JOIN Customers c ON b.customer_id = c.customer_id
+          ${bookingPartyJoins()}
           WHERE b.booking_number = @bkRef
           ${yardId ? 'AND b.yard_id = @yardId' : ''}
           ORDER BY b.created_at DESC
@@ -60,6 +87,7 @@ export async function GET(request: NextRequest) {
           FROM BookingContainers bc
           JOIN Bookings b ON bc.booking_id = b.booking_id
           LEFT JOIN Customers c ON b.customer_id = c.customer_id
+          ${bookingPartyJoins()}
           WHERE bc.container_number = @cNum AND b.status IN ('pending', 'confirmed')
           ${yardId ? 'AND b.yard_id = @yardId' : ''}
           ORDER BY b.created_at DESC
@@ -112,6 +140,7 @@ export async function GET(request: NextRequest) {
           FROM CandidateBookings cb
           JOIN Bookings b ON cb.booking_id = b.booking_id
           LEFT JOIN Customers c ON b.customer_id = c.customer_id
+          ${bookingPartyJoins()}
           ORDER BY cb.match_priority, b.created_at DESC
         `);
         return NextResponse.json({ booking: result.recordset[0] || null });
