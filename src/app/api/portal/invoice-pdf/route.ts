@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sarabunBase64 } from '@/lib/sarabunFont';
 import { getPortalCustomerId, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 const FONT = 'Sarabun';
 
@@ -13,6 +14,10 @@ export async function GET(request: NextRequest) {
   try {
     const cid = getPortalCustomerId(request);
     if (cid instanceof NextResponse) return cid;
+
+    const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.invoice.download');
+    if (portalActor instanceof NextResponse) return portalActor;
 
     const { searchParams } = new URL(request.url);
     const invoiceId = searchParams.get('invoice_id');
@@ -23,9 +28,6 @@ export async function GET(request: NextRequest) {
     if (!['invoice', 'receipt', 'credit_note'].includes(type)) {
       return NextResponse.json({ error: 'ประเภทเอกสารไม่ถูกต้อง' }, { status: 400 });
     }
-
-    const db = await getDb();
-
     // Fetch invoice — only if the portal grant table allows this customer.
     const result = await db.request()
       .input('invoiceId', sql.Int, parseInt(invoiceId))

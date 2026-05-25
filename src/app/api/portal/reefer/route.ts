@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { getPortalCustomerId, portalContainerVisibilitySql } from '@/lib/portalAccess';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 function parsePositiveInt(value: string | null) {
   const parsed = Number(value);
@@ -13,9 +14,12 @@ export async function GET(request: NextRequest) {
     const cid = getPortalCustomerId(request);
     if (cid instanceof NextResponse) return cid;
 
+    const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.container.view');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const { searchParams } = new URL(request.url);
     const containerId = parsePositiveInt(searchParams.get('container_id'));
-    const db = await getDb();
     const req = db.request().input('cid', sql.Int, cid);
     const filters = [portalContainerVisibilitySql('c'), "c.type = 'RF'"];
     if (containerId) {

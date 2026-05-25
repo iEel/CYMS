@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { getPortalCustomerId, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 const ALLOWED_CATEGORIES = new Set(['billing', 'payment', 'damage', 'detention', 'document', 'other']);
 
@@ -15,6 +16,10 @@ export async function POST(request: NextRequest) {
   try {
     const cid = getPortalCustomerId(request);
     if (cid instanceof NextResponse) return cid;
+
+    const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.dispute.create');
+    if (portalActor instanceof NextResponse) return portalActor;
 
     const body = await request.json();
     const invoiceId = parsePositiveInt(body.invoice_id);
@@ -30,8 +35,6 @@ export async function POST(request: NextRequest) {
     if (message.length < 10) {
       return NextResponse.json({ error: 'กรุณาระบุรายละเอียดอย่างน้อย 10 ตัวอักษร' }, { status: 400 });
     }
-
-    const db = await getDb();
     const invoiceResult = await db.request()
       .input('invoiceId', sql.Int, invoiceId)
       .input('cid', sql.Int, cid)

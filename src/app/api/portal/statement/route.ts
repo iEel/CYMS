@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { getPortalCustomerId, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 // GET — Customer Portal: Statement / AR summary for current customer
 export async function GET(request: NextRequest) {
@@ -10,6 +11,8 @@ export async function GET(request: NextRequest) {
     if (cid instanceof NextResponse) return cid;
 
     const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.invoice.view');
+    if (portalActor instanceof NextResponse) return portalActor;
 
     const summaryResult = await db.request()
       .input('cid', sql.Int, cid)

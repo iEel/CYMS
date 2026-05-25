@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { getPortalCustomerId, portalBookingVisibilitySql } from '@/lib/portalAccess';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 const amendmentFields = new Set([
   'eta',
@@ -45,9 +46,12 @@ export async function GET(request: NextRequest) {
     const cid = getPortalCustomerId(request);
     if (cid instanceof NextResponse) return cid;
 
+    const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.booking.view');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const { searchParams } = new URL(request.url);
     const bookingId = positiveInt(searchParams.get('booking_id'));
-    const db = await getDb();
     const req = db.request()
       .input('cid', sql.Int, cid)
       .input('customerId', sql.Int, cid);
@@ -81,6 +85,10 @@ export async function POST(request: NextRequest) {
     const cid = getPortalCustomerId(request);
     if (cid instanceof NextResponse) return cid;
 
+    const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.booking.create');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const body = await request.json();
     const bookingId = positiveInt(body.booking_id);
     const requestType = body.request_type === 'cancel' ? 'cancel' : body.request_type === 'amend' ? 'amend' : null;
@@ -93,8 +101,6 @@ export async function POST(request: NextRequest) {
     if (requestType === 'amend' && Object.keys(requestedChanges).length === 0) {
       return NextResponse.json({ error: 'กรุณาระบุข้อมูลที่ต้องการแก้ไข' }, { status: 400 });
     }
-
-    const db = await getDb();
     const bookingResult = await db.request()
       .input('cid', sql.Int, cid)
       .input('customerId', sql.Int, cid)

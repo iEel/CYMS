@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAttachment } from '@/lib/attachmentCenter';
 import { getPortalCustomerId, portalBookingVisibilitySql } from '@/lib/portalAccess';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 const allowedCategories = new Set([
   'shipping_instruction',
@@ -23,8 +24,7 @@ function cleanText(value: unknown, max = 255) {
   return cleaned ? cleaned.slice(0, max) : null;
 }
 
-async function getScopedBooking(bookingId: number, customerId: number) {
-  const db = await getDb();
+async function getScopedBooking(db: Awaited<ReturnType<typeof getDb>>, bookingId: number, customerId: number) {
   const result = await db.request()
     .input('cid', sql.Int, customerId)
     .input('customerId', sql.Int, customerId)
@@ -35,7 +35,7 @@ async function getScopedBooking(bookingId: number, customerId: number) {
       WHERE b.booking_id = @bookingId
         AND ${portalBookingVisibilitySql('b')}
     `);
-  return { db, booking: result.recordset[0] };
+  return result.recordset[0];
 }
 
 export async function GET(request: NextRequest) {
@@ -43,11 +43,15 @@ export async function GET(request: NextRequest) {
     const cid = getPortalCustomerId(request);
     if (cid instanceof NextResponse) return cid;
 
+    const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.document.download');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const { searchParams } = new URL(request.url);
     const bookingId = positiveInt(searchParams.get('booking_id'));
     if (!bookingId) return NextResponse.json({ error: 'booking_id ไม่ถูกต้อง' }, { status: 400 });
 
-    const { db, booking } = await getScopedBooking(bookingId, cid);
+    const booking = await getScopedBooking(db, bookingId, cid);
     if (!booking) return NextResponse.json({ error: 'ไม่พบ Booking หรือไม่มีสิทธิ์เข้าถึง' }, { status: 404 });
 
     const result = await db.request()
@@ -76,6 +80,10 @@ export async function POST(request: NextRequest) {
     const cid = getPortalCustomerId(request);
     if (cid instanceof NextResponse) return cid;
 
+    const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.document.download');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const body = await request.json();
     const bookingId = positiveInt(body.booking_id);
     const fileUrl = cleanText(body.file_url, 1000);
@@ -83,7 +91,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'booking_id และ file_url จำเป็นต้องระบุ' }, { status: 400 });
     }
 
-    const { db, booking } = await getScopedBooking(bookingId, cid);
+    const booking = await getScopedBooking(db, bookingId, cid);
     if (!booking) return NextResponse.json({ error: 'ไม่พบ Booking หรือไม่มีสิทธิ์เข้าถึง' }, { status: 404 });
 
     const rawCategory = cleanText(body.category, 50) || 'other';

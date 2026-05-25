@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { decoratePortalBooking } from '@/lib/portalBooking';
 import { getPortalCustomerId, portalBookingVisibilitySql } from '@/lib/portalAccess';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 // GET — Customer Portal: read-only booking detail + container drill down
 export async function GET(request: NextRequest) {
@@ -17,6 +18,8 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.booking.view');
+    if (portalActor instanceof NextResponse) return portalActor;
 
     const bookingResult = await db.request()
       .input('bookingId', sql.Int, parseInt(bookingId))

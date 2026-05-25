@@ -6,6 +6,7 @@ import { decoratePortalBooking, decoratePortalBookings } from '@/lib/portalBooki
 import { getPortalCustomerId, portalBookingVisibilitySql, portalVisibilityReasonSql } from '@/lib/portalAccess';
 import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
 import { ensureReeferBookingPolicy } from '@/lib/reeferBookingPolicy';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 const BOOKING_TYPES = new Set(['import', 'export', 'empty_pickup', 'empty_return']);
 
@@ -46,6 +47,9 @@ export async function GET(request: NextRequest) {
     if (cid instanceof NextResponse) return cid;
 
     const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.booking.view');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const page = parseInt(searchParams.get('page') || '1');
@@ -95,6 +99,10 @@ export async function POST(request: NextRequest) {
     const cid = getPortalCustomerId(request);
     if (cid instanceof NextResponse) return cid;
 
+    const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.booking.create');
+    if (portalActor instanceof NextResponse) return portalActor;
+
     const body = await request.json();
     const bookingNumber = cleanText(body.booking_number, 100);
     const bookingType = cleanText(body.booking_type, 30);
@@ -115,7 +123,6 @@ export async function POST(request: NextRequest) {
     }
 
     const containerNumbers = normalizeContainerNumbers(body.container_numbers);
-    const db = await getDb();
 
     const result = await db.request()
       .input('bookingNumber', sql.NVarChar, bookingNumber)

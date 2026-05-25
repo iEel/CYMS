@@ -4,6 +4,7 @@ import sql from 'mssql';
 import { buildPortalDocumentBundleEntries } from '@/lib/portalDocumentBundle';
 import { getPortalCustomerId, portalGateVisibilitySql, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
 import { createZipArchive } from '@/lib/zipArchive';
+import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
 function requestBaseUrl(request: NextRequest) {
   const proto = request.headers.get('x-forwarded-proto') || 'http';
@@ -22,6 +23,8 @@ export async function GET(request: NextRequest) {
     if (cid instanceof NextResponse) return cid;
 
     const db = await getDb();
+    const portalActor = await requirePortalAction(request, db, 'portal.document.download');
+    if (portalActor instanceof NextResponse) return portalActor;
 
     const statementResult = await db.request()
       .input('cid', sql.Int, cid)
