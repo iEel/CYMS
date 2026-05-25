@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   try {
     const actor = requireRole(
       request,
-      ['admin', 'yard_manager'],
+      ['yard_manager'],
       'เฉพาะผู้ดูแลระบบเท่านั้นที่ตรวจสอบสิทธิ์ Customer Portal ได้'
     );
     if (actor instanceof NextResponse) return actor;
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   try {
     const actor = requireRole(
       request,
-      ['admin', 'yard_manager'],
+      ['yard_manager'],
       'เฉพาะผู้ดูแลระบบเท่านั้นที่ซ่อมแซมสิทธิ์ Customer Portal ได้'
     );
     if (actor instanceof NextResponse) return actor;

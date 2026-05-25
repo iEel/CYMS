@@ -57,8 +57,16 @@ describe('/api/portal/grants/reconcile', () => {
     });
   });
 
-  it('rejects non-admin preview before opening the database', async () => {
+  it('rejects non-yard-manager preview before opening the database', async () => {
     const res = await GET(request('GET', 'gate_clerk'));
+
+    expect(res.status).toBe(403);
+    expect(mockedGetDb).not.toHaveBeenCalled();
+    expect(mockedPreview).not.toHaveBeenCalled();
+  });
+
+  it('rejects admin role users before opening the database', async () => {
+    const res = await GET(request('GET', 'admin'));
 
     expect(res.status).toBe(403);
     expect(mockedGetDb).not.toHaveBeenCalled();
@@ -67,14 +75,6 @@ describe('/api/portal/grants/reconcile', () => {
 
   it('previews grants for yard managers', async () => {
     const res = await GET(request('GET'));
-
-    expect(res.status).toBe(200);
-    expect(mockedGetDb).toHaveBeenCalled();
-    expect(mockedPreview).toHaveBeenCalled();
-  });
-
-  it('previews grants for admin role users', async () => {
-    const res = await GET(request('GET', 'admin'));
 
     expect(res.status).toBe(200);
     expect(mockedGetDb).toHaveBeenCalled();

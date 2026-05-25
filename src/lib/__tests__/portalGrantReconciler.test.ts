@@ -47,6 +47,19 @@ describe('portal grant reconciler', () => {
     expect(sql).toContain('(pea.valid_until IS NULL OR pea.valid_until >= GETDATE())');
   });
 
+  it('uses default permission scope JSON for non-reefer expected grants', () => {
+    const sql = buildPortalExpectedGrantsSql();
+
+    expect(sql).not.toContain('CAST(NULL AS NVARCHAR(MAX)) AS permission_scope');
+    expect(sql).toContain('"eir":{"fields":{"container_grade":false},"damage_summary":true');
+    expect(sql).toContain('"download":true,"billing":{"view":false,"dispute":false}');
+    expect(sql).toContain('"download":false,"billing":{"view":false,"dispute":false},"eir":{"fields":{"container_grade":false},"damage_summary":true,"damage_photos":false}');
+    expect(sql).toContain('"download":true,"billing":{"view":true,"dispute":true}');
+    expect(sql).toMatch(/WHEN\s+LOWER\(.*access_role.*\)\s+IN\s+\(N'trucking',\s+N'driver'\)/i);
+    expect(sql).toMatch(/WHEN\s+LOWER\(.*access_role.*\)\s+IN\s+\(N'billing',\s+N'invoice_customer'\)/i);
+    expect(sql).toMatch(/WHEN\s+LOWER\(.*access_role.*\)\s+IN\s+\(N'owner',\s+N'booking_customer',\s+N'shipping_line',\s+N'forwarder',\s+N'shipper',\s+N'consignee'\)/i);
+  });
+
   it('includes GateTransactions booking_customer expected grants for gate, EIR, and container targets', () => {
     const sql = buildPortalExpectedGrantsSql();
 

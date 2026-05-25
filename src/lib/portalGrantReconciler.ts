@@ -35,6 +35,11 @@ const MANAGED_SOURCE_TABLES = [
   'ReeferExceptions',
 ];
 
+const DEFAULT_DOWNLOAD_SCOPE = '{"view":true,"download":true,"billing":{"view":false,"dispute":false},"eir":{"fields":{"container_grade":false},"damage_summary":true,"damage_photos":true},"maskSensitiveFields":true}';
+const DEFAULT_BILLING_SCOPE = '{"view":true,"download":true,"billing":{"view":true,"dispute":true},"eir":{"fields":{"container_grade":false},"damage_summary":true,"damage_photos":true},"maskSensitiveFields":true}';
+const DEFAULT_TRANSPORT_SCOPE = '{"view":true,"download":false,"billing":{"view":false,"dispute":false},"eir":{"fields":{"container_grade":false},"damage_summary":true,"damage_photos":false},"maskSensitiveFields":true}';
+const DEFAULT_VIEWER_SCOPE = '{"view":true,"download":false,"billing":{"view":false,"dispute":false},"eir":{"fields":{"container_grade":false},"damage_summary":true,"damage_photos":true},"maskSensitiveFields":true}';
+
 function normalizeLimit(limit?: number) {
   if (!Number.isInteger(limit)) return 500;
   return Math.min(Math.max(Number(limit), 1), 5000);
@@ -42,6 +47,16 @@ function normalizeLimit(limit?: number) {
 
 function managedSourceTableList() {
   return MANAGED_SOURCE_TABLES.map((table) => `N'${table}'`).join(', ');
+}
+
+function defaultPermissionScopeSql(accessRoleExpression: string) {
+  const normalizedRole = `LOWER(${accessRoleExpression})`;
+  return `CAST(CASE
+          WHEN ${normalizedRole} IN (N'trucking', N'driver') THEN N'${DEFAULT_TRANSPORT_SCOPE}'
+          WHEN ${normalizedRole} IN (N'billing', N'invoice_customer') THEN N'${DEFAULT_BILLING_SCOPE}'
+          WHEN ${normalizedRole} IN (N'owner', N'booking_customer', N'shipping_line', N'forwarder', N'shipper', N'consignee') THEN N'${DEFAULT_DOWNLOAD_SCOPE}'
+          ELSE N'${DEFAULT_VIEWER_SCOPE}'
+        END AS NVARCHAR(MAX))`;
 }
 
 function activeGrantMatch(expectedAlias = 'eg', grantAlias = 'pea') {
@@ -72,7 +87,7 @@ export function buildPortalExpectedGrantsSql() {
         party.access_role,
         CAST(N'Bookings' AS NVARCHAR(80)) AS source_table,
         b.booking_id AS source_id,
-        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        ${defaultPermissionScopeSql('party.access_role')} AS permission_scope,
         CAST(NULL AS DATETIME2) AS valid_from,
         CAST(NULL AS DATETIME2) AS valid_until
       FROM Bookings b
@@ -97,7 +112,7 @@ export function buildPortalExpectedGrantsSql() {
         CAST(N'owner' AS NVARCHAR(40)) AS access_role,
         CAST(N'Containers' AS NVARCHAR(80)) AS source_table,
         c.container_id AS source_id,
-        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        ${defaultPermissionScopeSql("N'owner'")} AS permission_scope,
         CAST(NULL AS DATETIME2) AS valid_from,
         CAST(NULL AS DATETIME2) AS valid_until
       FROM Containers c
@@ -113,7 +128,7 @@ export function buildPortalExpectedGrantsSql() {
         party.access_role,
         CAST(N'BookingContainers' AS NVARCHAR(80)) AS source_table,
         bc.id AS source_id,
-        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        ${defaultPermissionScopeSql('party.access_role')} AS permission_scope,
         CAST(NULL AS DATETIME2) AS valid_from,
         CAST(NULL AS DATETIME2) AS valid_until
       FROM BookingContainers bc
@@ -140,7 +155,7 @@ export function buildPortalExpectedGrantsSql() {
         party.access_role,
         CAST(N'GateTransactions' AS NVARCHAR(80)) AS source_table,
         gt.transaction_id AS source_id,
-        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        ${defaultPermissionScopeSql('party.access_role')} AS permission_scope,
         CAST(NULL AS DATETIME2) AS valid_from,
         CAST(NULL AS DATETIME2) AS valid_until
       FROM GateTransactions gt
@@ -169,7 +184,7 @@ export function buildPortalExpectedGrantsSql() {
         CAST(N'booking_customer' AS NVARCHAR(40)) AS access_role,
         CAST(N'GateTransactions' AS NVARCHAR(80)) AS source_table,
         gt.transaction_id AS source_id,
-        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        ${defaultPermissionScopeSql("N'booking_customer'")} AS permission_scope,
         CAST(NULL AS DATETIME2) AS valid_from,
         CAST(NULL AS DATETIME2) AS valid_until
       FROM GateTransactions gt
@@ -200,7 +215,7 @@ export function buildPortalExpectedGrantsSql() {
         CAST(N'invoice_customer' AS NVARCHAR(40)) AS access_role,
         CAST(N'Invoices' AS NVARCHAR(80)) AS source_table,
         i.invoice_id AS source_id,
-        CAST(NULL AS NVARCHAR(MAX)) AS permission_scope,
+        ${defaultPermissionScopeSql("N'invoice_customer'")} AS permission_scope,
         CAST(NULL AS DATETIME2) AS valid_from,
         CAST(NULL AS DATETIME2) AS valid_until
       FROM Invoices i
