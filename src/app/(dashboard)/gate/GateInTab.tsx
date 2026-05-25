@@ -51,6 +51,12 @@ interface GateBookingOption {
   voyage_number?: string | null;
 }
 
+interface BookingDerivedContext {
+  manualCustomerId?: number | null;
+  billingCustomerId?: number | null;
+  truckCompanyName?: string | null;
+}
+
 export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps) {
   const { hasPermission } = useAuth();
   const canGateIn = hasPermission('gate.in');
@@ -175,29 +181,89 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [bookingSearch, setBookingSearch] = useState('');
   const [bookingResults, setBookingResults] = useState<GateBookingOption[]>([]);
   const [showBookingPicker, setShowBookingPicker] = useState(false);
+  const [bookingSearchLoading, setBookingSearchLoading] = useState(false);
+  const [bookingSearchError, setBookingSearchError] = useState('');
+  const bookingDerivedContextRef = useRef<BookingDerivedContext>({});
+
+  const clearBookingDerivedContext = () => {
+    const context = bookingDerivedContextRef.current;
+    if (context.manualCustomerId) {
+      setManualCustomerId(prev => prev === context.manualCustomerId ? null : prev);
+    }
+    if (context.billingCustomerId) {
+      setBillingCustomerId(prev => prev === context.billingCustomerId ? null : prev);
+    }
+    if (context.truckCompanyName) {
+      setGateInForm(prev => ({
+        ...prev,
+        truck_company: prev.truck_company === context.truckCompanyName ? '' : prev.truck_company,
+      }));
+      setTruckCompanySearch(prev => prev === context.truckCompanyName ? '' : prev);
+    }
+    bookingDerivedContextRef.current = {};
+  };
 
   const applyGateInBooking = (booking: GateBookingOption | null) => {
+    clearBookingDerivedContext();
     setSelectedBooking(booking);
     setShowBookingPicker(false);
+    setBookingSearchError('');
     setGateInForm(prev => ({ ...prev, booking_ref: booking?.booking_number || '' }));
     if (!booking) {
       setBookingSearch('');
+      setBookingResults([]);
       return;
     }
+    const bookingCustomerId = booking.booking_customer_id || booking.customer_id || null;
     setBookingSearch(booking.booking_number);
-    if (booking.booking_customer_id || booking.customer_id) setManualCustomerId(booking.booking_customer_id || booking.customer_id || null);
+    if (bookingCustomerId) setManualCustomerId(bookingCustomerId);
     if (booking.bill_to_customer_id) setBillingCustomerId(booking.bill_to_customer_id);
     if (booking.trucking_company_name) {
       setGateInForm(prev => ({ ...prev, truck_company: booking.trucking_company_name || prev.truck_company }));
       setTruckCompanySearch(booking.trucking_company_name || '');
     }
+    bookingDerivedContextRef.current = {
+      manualCustomerId: bookingCustomerId,
+      billingCustomerId: booking.bill_to_customer_id || null,
+      truckCompanyName: booking.trucking_company_name || null,
+    };
   };
 
   const searchBookings = async () => {
+    const query = bookingSearch.trim();
     setShowBookingPicker(true);
-    const res = await fetch(`/api/edi/bookings?lookup=1&booking_number=${encodeURIComponent(bookingSearch)}&yard_id=${yardId}`);
-    const json = await res.json();
-    setBookingResults(json.booking ? [json.booking] : []);
+    setBookingSearchError('');
+    if (bookingSearchLoading) return;
+    if (!query) {
+      setBookingResults([]);
+      return;
+    }
+    setBookingSearchLoading(true);
+    try {
+      const res = await fetch(`/api/edi/bookings?lookup=1&booking_number=${encodeURIComponent(query)}&yard_id=${yardId}`);
+      if (!res.ok) throw new Error('Booking search failed');
+      const json = await res.json();
+      setBookingResults(json.booking ? [json.booking] : []);
+      if (!json.booking) setBookingSearchError('ไม่พบ Booking');
+    } catch (err) {
+      console.error('Booking search error:', err);
+      setBookingResults([]);
+      setBookingSearchError('ค้นหา Booking ไม่สำเร็จ');
+    } finally {
+      setBookingSearchLoading(false);
+    }
+  };
+
+  const handleBookingSearchChange = (value: string) => {
+    setBookingSearch(value);
+    setShowBookingPicker(true);
+    setBookingSearchError('');
+    setGateInForm(prev => ({ ...prev, booking_ref: value }));
+    if (selectedBooking) {
+      setSelectedBooking(null);
+      clearBookingDerivedContext();
+    }
+    if (!value) setBookingResults([]);
   };
 
   // === Check Digit Validation + Boxtech Auto-Lookup ===
@@ -779,20 +845,23 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                 <div className="mt-2 flex gap-2">
                   <input
                     value={bookingSearch}
-                    onChange={e => {
-                      setBookingSearch(e.target.value);
-                      setShowBookingPicker(true);
-                      if (!e.target.value) {
-                        setBookingResults([]);
-                        applyGateInBooking(null);
-                      }
+                    onChange={e => handleBookingSearchChange(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') searchBookings();
                     }}
                     onFocus={() => setShowBookingPicker(true)}
                     className={inputClass}
                     placeholder="ค้นหา Booking No."
                   />
-                  <button onClick={searchBookings} className="rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white">ค้นหา</button>
+                  <button
+                    onClick={searchBookings}
+                    disabled={bookingSearchLoading}
+                    className="rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    {bookingSearchLoading ? 'กำลังค้นหา' : 'ค้นหา'}
+                  </button>
                 </div>
+                {bookingSearchError && <p className="mt-1 text-[10px] text-rose-500">{bookingSearchError}</p>}
                 {boxtechResult?.customer_source === 'booking' && (
                   <span className="text-xs text-emerald-600 flex items-center gap-1 mt-1">&#x1F4CB; ยึดตาม Booking</span>
                 )}
