@@ -42,6 +42,18 @@ function request(body: Record<string, unknown>, role = 'yard_manager') {
   });
 }
 
+function rawRequest(body: string, role = 'yard_manager') {
+  return new NextRequest('http://localhost/api/portal/grants/field-scope', {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      'x-user-id': '7',
+      'x-user-role': role,
+    },
+    body,
+  });
+}
+
 function mockDb(recordset: unknown[]) {
   const requests: MockDbRequest[] = [];
   const db = {
@@ -96,6 +108,30 @@ describe('/api/portal/grants/field-scope', () => {
 
     expect(res.status).toBe(403);
     expect(mockedGetDb).not.toHaveBeenCalled();
+  });
+
+  it('returns bad request for malformed JSON before opening the database', async () => {
+    const { PATCH } = await import('../portal/grants/field-scope/route');
+
+    const res = await PATCH(rawRequest('{ bad json'));
+
+    expect(res.status).toBe(400);
+    expect(mockedGetDb).not.toHaveBeenCalled();
+    expect(mockedLogAudit).not.toHaveBeenCalled();
+  });
+
+  it('rejects boolean access_id before opening the database', async () => {
+    const { PATCH } = await import('../portal/grants/field-scope/route');
+
+    const res = await PATCH(request({
+      access_id: true,
+      field: 'container_grade',
+      enabled: true,
+    }));
+
+    expect(res.status).toBe(400);
+    expect(mockedGetDb).not.toHaveBeenCalled();
+    expect(mockedLogAudit).not.toHaveBeenCalled();
   });
 
   it('updates the container grade field scope and audits the exact change', async () => {

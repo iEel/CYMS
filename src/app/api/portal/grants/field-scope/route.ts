@@ -33,8 +33,15 @@ interface PortalEntityAccessRow {
 }
 
 function parsePositiveInt(value: unknown): number | null {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+
+  if (typeof value === 'string' && /^[1-9]\d*$/.test(value.trim())) {
+    return Number(value);
+  }
+
+  return null;
 }
 
 function parseScope(value: unknown): Record<string, unknown> {
@@ -84,7 +91,17 @@ export async function PATCH(request: NextRequest) {
     );
     if (actor instanceof NextResponse) return actor;
 
-    const body = await request.json() as FieldScopeBody;
+    let body: FieldScopeBody;
+    try {
+      const parsed = await request.json();
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return NextResponse.json({ error: 'รูปแบบคำขอไม่ถูกต้อง' }, { status: 400 });
+      }
+      body = parsed as FieldScopeBody;
+    } catch {
+      return NextResponse.json({ error: 'รูปแบบ JSON ไม่ถูกต้อง' }, { status: 400 });
+    }
+
     const accessId = parsePositiveInt(body.access_id);
     const field = typeof body.field === 'string' ? body.field : '';
     const fieldConfig = SUPPORTED_FIELDS[field as SupportedField];
