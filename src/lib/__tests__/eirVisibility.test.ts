@@ -10,8 +10,15 @@ const eirRow = {
   eir_number: 'EIR-IN-2026-000077',
   transaction_type: 'gate_in',
   created_at: '2026-05-21T08:00:00.000Z',
+  gate_datetime: '2026-05-21T08:15:00.000Z',
+  date: '2026-05-21T08:15:00.000Z',
   verification_status: 'verified',
+  document_status: 'issued',
+  version_no: 3,
   container_number: 'MSKU1234567',
+  yard_name: 'Main Yard',
+  yard_code: 'MYD',
+  container_condition: 'damage',
   container_grade: 'C',
   container_grade_label: 'Cargo worthy',
   driver_name: 'Somchai Driver',
@@ -55,10 +62,17 @@ describe('EIR visibility helpers', () => {
         eir_number: 'EIR-IN-2026-000077',
         transaction_type: 'gate_in',
         created_at: '2026-05-21T08:00:00.000Z',
+        gate_datetime: '2026-05-21T08:15:00.000Z',
+        date: '2026-05-21T08:15:00.000Z',
         verification_status: 'verified',
+        document_status: 'issued',
+        version_no: 3,
         container_number: 'MSKU1234567',
+        yard_name: 'Main Yard',
+        yard_code: 'MYD',
+        container_condition: 'damage',
         damage_summary: {
-          condition: 'C',
+          condition: 'damage',
           damage_points: 1,
         },
         copy_type_label: 'Public Verification Copy',
@@ -88,11 +102,46 @@ describe('EIR visibility helpers', () => {
     );
 
     expect(payload.eir.damage_summary).toEqual({
-      condition: 'B',
+      condition: 'damage',
       damage_points: 2,
     });
     expect(payload.eir.damage_summary).not.toHaveProperty('secret');
+    expect(payload.eir.damage_summary).not.toHaveProperty('condition_grade');
     expect(JSON.stringify(payload)).toContain('Public Verification Copy');
+  });
+
+  it('includes required public metadata without exposing grade-like damage condition values', () => {
+    const payload = buildEirViewPayload(
+      {
+        ...eirRow,
+        container_condition: 'sound',
+        damage_summary: { condition: 'C', damage_points: 7, secret: 'internal' },
+        damage_report: {
+          condition_grade: 'C',
+          inspector_notes: 'Internal handling note',
+          points: [{ side: 'front', type: 'scratch', severity: 'minor' }],
+        },
+      },
+      { viewType: 'public' },
+    );
+
+    expect(payload.eir).toMatchObject({
+      yard_name: 'Main Yard',
+      yard_code: 'MYD',
+      gate_datetime: '2026-05-21T08:15:00.000Z',
+      date: '2026-05-21T08:15:00.000Z',
+      document_status: 'issued',
+      version_no: 3,
+      container_condition: 'sound',
+      damage_summary: {
+        condition: 'sound',
+        damage_points: 1,
+      },
+    });
+    expect(payload.eir.damage_summary).not.toHaveProperty('condition_grade');
+    expect(payload.eir.damage_summary).not.toHaveProperty('secret');
+    expect(payload.eir.damage_summary).not.toHaveProperty('inspector_notes');
+    expect(payload.eir.damage_summary).not.toMatchObject({ condition: 'C' });
   });
 
   it('sanitizes customer damage report without exposing photos or internal notes', () => {

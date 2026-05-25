@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
       yard_name: row.yard_name,
       document_status: row.document_status ?? row.verification_status ?? 'verified',
       verification_status: row.verification_status ?? row.document_status ?? 'verified',
+      version_no: row.version_no ?? 1,
     };
 
     await logEirAccess({

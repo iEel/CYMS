@@ -40,8 +40,15 @@ const PUBLIC_FIELDS = [
   'eir_number',
   'transaction_type',
   'created_at',
+  'gate_datetime',
+  'date',
   'verification_status',
+  'document_status',
+  'version_no',
   'container_number',
+  'yard_name',
+  'yard_code',
+  'container_condition',
 ] as const;
 
 const OPERATIONAL_FIELDS = [
@@ -137,23 +144,17 @@ function sanitizeDamageReport(value: unknown): EIRRecord | undefined {
 
 function buildSafeDamageSummary(master: EIRRecord): EIRRecord | undefined {
   const damageReport = isRecord(master.damage_report) ? master.damage_report : undefined;
-  const rawSummary = isRecord(master.damage_summary) ? master.damage_summary : undefined;
-  const summary: EIRRecord = {};
   const points = sanitizeDamagePoints(damageReport?.points);
+  const condition = master.container_condition === 'damage' || master.container_condition === 'sound'
+    ? master.container_condition
+    : points.length > 0
+      ? 'damage'
+      : 'sound';
 
-  if (Object.prototype.hasOwnProperty.call(damageReport ?? {}, 'condition_grade')) {
-    summary.condition = damageReport?.condition_grade;
-  } else if (Object.prototype.hasOwnProperty.call(rawSummary ?? {}, 'condition')) {
-    summary.condition = rawSummary?.condition;
-  }
-
-  if (points.length > 0) {
-    summary.damage_points = points.length;
-  } else if (typeof rawSummary?.damage_points === 'number') {
-    summary.damage_points = rawSummary.damage_points;
-  }
-
-  return Object.keys(summary).length > 0 ? summary : undefined;
+  return {
+    condition,
+    damage_points: points.length,
+  };
 }
 
 function addPublicCopyMetadata(payload: EIRRecord, master: EIRRecord): EIRRecord {
@@ -211,8 +212,12 @@ export function canViewContainerGrade(context: EIRVisibilityContext): boolean {
 
 export function buildEirViewPayload(master: EIRRecord, context: EIRVisibilityContext): { eir: EIRRecord } {
   if (context.viewType === 'public') {
+    const eir = addPublicCopyMetadata(pickFields(master, PUBLIC_FIELDS), master);
+    eir.document_status = eir.document_status ?? eir.verification_status;
+    eir.version_no = eir.version_no ?? 1;
+
     return {
-      eir: addPublicCopyMetadata(pickFields(master, PUBLIC_FIELDS), master),
+      eir,
     };
   }
 

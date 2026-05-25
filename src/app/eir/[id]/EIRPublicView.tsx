@@ -11,8 +11,10 @@ interface PublicEIR {
   date?: string;
   gate_datetime?: string;
   yard_name?: string;
+  yard_code?: string;
   document_status?: string;
   verification_status?: string;
+  version_no?: number;
   copy_type_label?: string;
   damage_summary?: {
     condition?: string;
@@ -92,6 +94,7 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
 
   const eventDate = data.gate_datetime || data.date || data.created_at;
   const status = data.document_status || data.verification_status || '-';
+  const yard = [data.yard_name, data.yard_code].filter(Boolean).join(' / ') || '-';
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -122,7 +125,7 @@ export default function EIRPublicView({ paramsPromise }: EIRPublicViewProps) {
           <div className="p-4 grid grid-cols-2 gap-3">
             <MobileField label="EIR" value={data.eir_number || eirNumber} />
             <MobileField label="วันที่" value={displayDate(eventDate)} />
-            <MobileField label="ลาน" value={data.yard_name || '-'} />
+            <MobileField label="ลาน" value={yard} />
             <MobileField label="สถานะเอกสาร" value={status} />
           </div>
         </section>
