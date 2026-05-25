@@ -259,6 +259,22 @@ export default function YardPage() {
     }
     return slots;
   }).slice(0, 12);
+  const inYardCtrs = containers.filter(c => c.status !== 'gated_out' && c.gate_in_date);
+  const overdueCount = inYardCtrs.filter(c => calcDwellDays(c.gate_in_date) > 30).length;
+  const avgDwell = inYardCtrs.length > 0
+    ? (inYardCtrs.reduce((s, c) => s + calcDwellDays(c.gate_in_date), 0) / inYardCtrs.length).toFixed(1)
+    : '0';
+  const yardStats = [
+    { label: 'ตู้ทั้งหมด', value: summary.total || 0, color: 'text-slate-800 dark:text-white' },
+    { label: 'ในลาน', value: summary.in_yard || 0, color: 'text-emerald-600' },
+    { label: 'ค้างจ่าย', value: summary.on_hold || 0, color: 'text-amber-600' },
+    { label: 'ซ่อม', value: summary.in_repair || 0, color: 'text-rose-600' },
+    { label: 'Overdue (>30วัน)', value: overdueCount, color: overdueCount > 0 ? 'text-rose-600' : 'text-emerald-600' },
+    { label: 'Avg Dwell', value: `${avgDwell} วัน`, color: 'text-blue-600' },
+    { label: 'อัตราเต็ม', value: `${overallPct.toFixed(1)}%`, color: overallPct > 80 ? 'text-rose-600' : 'text-blue-600' },
+  ];
+  const useCompactYardStats = effectiveTab === 'search' || (effectiveTab === 'overview' && viewMode !== '2d');
+  const compactYardStats = useCompactYardStats ? yardStats : [];
 
   return (
     <div className="space-y-6">
@@ -311,31 +327,19 @@ export default function YardPage() {
       </div>
 
       {/* Summary Stats */}
-      {(() => {
-        const inYardCtrs = containers.filter(c => c.status !== 'gated_out' && c.gate_in_date);
-        const overdueCount = inYardCtrs.filter(c => calcDwellDays(c.gate_in_date) > 30).length;
-        const avgDwell = inYardCtrs.length > 0
-          ? (inYardCtrs.reduce((s, c) => s + calcDwellDays(c.gate_in_date), 0) / inYardCtrs.length).toFixed(1)
-          : '0';
-        return (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-            {[
-              { label: 'ตู้ทั้งหมด', value: summary.total || 0, color: 'text-slate-800 dark:text-white' },
-              { label: 'ในลาน', value: summary.in_yard || 0, color: 'text-emerald-600' },
-              { label: 'ค้างจ่าย', value: summary.on_hold || 0, color: 'text-amber-600' },
-              { label: 'ซ่อม', value: summary.in_repair || 0, color: 'text-rose-600' },
-              { label: 'Overdue (>30วัน)', value: overdueCount, color: overdueCount > 0 ? 'text-rose-600' : 'text-emerald-600' },
-              { label: 'Avg Dwell', value: `${avgDwell} วัน`, color: 'text-blue-600' },
-              { label: 'อัตราเต็ม', value: `${overallPct.toFixed(1)}%`, color: overallPct > 80 ? 'text-rose-600' : 'text-blue-600' },
-            ].map((stat, i) => (
-              <div key={i} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-                <p className="text-xs text-slate-400 mb-1">{stat.label}</p>
-                <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-              </div>
-            ))}
+      <div className={useCompactYardStats ? 'grid grid-cols-4 sm:grid-cols-7 gap-2' : 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4'}>
+        {(useCompactYardStats ? compactYardStats : yardStats).map((stat, i) => (
+          <div
+            key={i}
+            className={`bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 ${
+              useCompactYardStats ? 'px-2.5 py-2' : 'p-4'
+            }`}
+          >
+            <p className={`${useCompactYardStats ? 'text-[10px]' : 'text-xs'} text-slate-400 ${useCompactYardStats ? 'truncate' : 'mb-1'}`}>{stat.label}</p>
+            <p className={`${useCompactYardStats ? 'text-base sm:text-lg' : 'text-2xl'} font-bold ${stat.color}`}>{stat.value}</p>
           </div>
-        );
-      })()}
+        ))}
+      </div>
 
       {/* Tab Content */}
       {effectiveTab === 'overview' && (

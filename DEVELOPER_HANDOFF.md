@@ -646,6 +646,7 @@ container-yard-system/
   - **Overdue**: แสดงจำนวนตู้ค้างเกิน 30 วัน — สีแดงถ้ามี, สีเขียวถ้าไม่มี
   - **Avg Dwell**: ค่าเฉลี่ยจำนวนวันในลานทั้งหมด
   - คำนวณด้วย `calcDwellDays()` (Calendar Days +1)
+  - **Compact mode**: เมื่ออยู่ Bay/3D/Search view การ์ด KPI จะย่อเป็นแถว compact เพื่อลดการเลื่อนก่อนถึงแผนผังลานบนจอแคบ
 - **2D / Bay / 3D** toggle (3 มุมมอง)
 - **2D**: Zone cards + occupancy bars
 - **Yard Planning panel**: slot aging heatmap, move recommendations, daily release forecast, congestion forecast และปุ่มสร้าง Work Order จาก recommendation พร้อม target slot
