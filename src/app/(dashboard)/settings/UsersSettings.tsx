@@ -18,6 +18,7 @@ interface UserData {
   role_name: string;
   yard_ids: string; // comma separated
   customer_id?: number;
+  customer_portal_role?: string | null;
   failed_login_count?: number;
   locked_at?: string;
   bound_device_mac?: string | null;
@@ -45,6 +46,17 @@ const ROLES = [
   { code: 'rs_driver', label: 'คนขับรถยก' },
   { code: 'billing_officer', label: 'พนักงานบัญชี' },
   { code: 'customer', label: 'ลูกค้า (สายเรือ/ขนส่ง)' },
+];
+
+const CUSTOMER_PORTAL_ROLES = [
+  { code: 'customer_admin', label: 'Customer Admin', actions: ['ทุกสิทธิ์ของบริษัท'] },
+  { code: 'operations_user', label: 'Operations', actions: ['ดูตู้', 'ดู Booking', 'ดู EIR'] },
+  { code: 'booking_user', label: 'Booking', actions: ['สร้าง/ติดตาม Booking'] },
+  { code: 'billing_user', label: 'Billing', actions: ['ดู Invoice', 'ดาวน์โหลดเอกสารบัญชี'] },
+  { code: 'document_user', label: 'Document', actions: ['ดาวน์โหลด EIR/Bundle'] },
+  { code: 'trucking_coordinator', label: 'Trucking Coordinator', actions: ['ดูงานรถที่เกี่ยวข้อง'] },
+  { code: 'driver_user', label: 'Driver', actions: ['ดูงาน/EIR ของตัวเอง'] },
+  { code: 'read_only_viewer', label: 'Read-only', actions: ['ดูข้อมูลที่ได้รับ grant'] },
 ];
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -81,6 +93,7 @@ export default function UsersSettings() {
     username: '', password: '', full_name: '', email: '', phone: '',
     role_code: 'gate_clerk', status: 'active', yard_ids: [1] as number[],
     customer_id: null as number | null,
+    customer_portal_role: 'customer_admin',
   });
   const [passwordPolicy, setPasswordPolicy] = useState<PasswordPolicyConfig>(DEFAULT_PASSWORD_POLICY);
   const [showPassword, setShowPassword] = useState(false);
@@ -124,7 +137,7 @@ export default function UsersSettings() {
 
   const openAdd = () => {
     setEditingUser(null);
-    setForm({ username: '', password: '', full_name: '', email: '', phone: '', role_code: 'gate_clerk', status: 'active', yard_ids: [1], customer_id: null });
+    setForm({ username: '', password: '', full_name: '', email: '', phone: '', role_code: 'gate_clerk', status: 'active', yard_ids: [1], customer_id: null, customer_portal_role: 'customer_admin' });
     setShowPassword(false);
     setShowForm(true);
   };
@@ -141,6 +154,7 @@ export default function UsersSettings() {
       status: user.status,
       yard_ids: user.yard_ids ? user.yard_ids.split(',').map(Number) : [],
       customer_id: user.customer_id || null,
+      customer_portal_role: user.customer_portal_role || 'customer_admin',
     });
     setShowPassword(false);
     setShowForm(true);
@@ -374,7 +388,12 @@ export default function UsersSettings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-slate-500 mb-1.5">บทบาท</label>
-                  <select value={form.role_code} onChange={e => setForm({...form, role_code: e.target.value, customer_id: e.target.value !== 'customer' ? null : form.customer_id})}
+                  <select value={form.role_code} onChange={e => setForm({
+                    ...form,
+                    role_code: e.target.value,
+                    customer_id: e.target.value !== 'customer' ? null : form.customer_id,
+                    customer_portal_role: e.target.value !== 'customer' ? 'customer_admin' : form.customer_portal_role,
+                  })}
                     className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all">
                     {ROLES.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
                   </select>
@@ -398,6 +417,27 @@ export default function UsersSettings() {
                       <option value="">-- เลือกบริษัท --</option>
                       {customers.map(c => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
                     </select>
+                  </div>
+                )}
+                {form.role_code === 'customer' && (
+                  <div className="md:col-span-2 rounded-xl border border-violet-100 bg-violet-50/60 p-4 dark:border-violet-900/40 dark:bg-violet-900/10">
+                    <label className="block text-xs font-semibold text-violet-700 dark:text-violet-300 mb-2">
+                      Customer Portal Role
+                    </label>
+                    <select
+                      value={form.customer_portal_role}
+                      onChange={e => setForm({ ...form, customer_portal_role: e.target.value })}
+                      className="h-11 w-full px-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm"
+                    >
+                      {CUSTOMER_PORTAL_ROLES.map(role => <option key={role.code} value={role.code}>{role.label}</option>)}
+                    </select>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(CUSTOMER_PORTAL_ROLES.find(role => role.code === form.customer_portal_role)?.actions || []).map(action => (
+                        <span key={action} className="rounded-full bg-white px-2 py-1 text-[10px] text-violet-600 dark:bg-slate-800">
+                          {action}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

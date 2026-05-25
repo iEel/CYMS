@@ -13,6 +13,25 @@ function requireYardManager(request: NextRequest): { actorId: number } | NextRes
   return { actorId: actor.userId };
 }
 
+const CUSTOMER_PORTAL_ROLES = new Set([
+  'customer_admin',
+  'operations_user',
+  'booking_user',
+  'billing_user',
+  'document_user',
+  'trucking_coordinator',
+  'driver_user',
+  'read_only_viewer',
+]);
+
+function normalizeCustomerPortalRole(roleCode: string, value: unknown) {
+  if (roleCode !== 'customer') return null;
+  const role = typeof value === 'string' && CUSTOMER_PORTAL_ROLES.has(value)
+    ? value
+    : 'customer_admin';
+  return role;
+}
+
 // GET — ดึงรายชื่อผู้ใช้ทั้งหมด (yard_manager only)
 export async function GET(request: NextRequest) {
   const auth = requireYardManager(request);
@@ -23,7 +42,7 @@ export async function GET(request: NextRequest) {
     const result = await db.request().query(`
       SELECT u.user_id, u.username, u.full_name, u.email, u.phone,
              u.status, u.two_fa_enabled, u.bound_device_mac, u.created_at,
-             u.customer_id, u.failed_login_count, u.locked_at, u.password_changed_at,
+             u.customer_id, u.customer_portal_role, u.failed_login_count, u.locked_at, u.password_changed_at,
              r.role_code, r.role_name,
              STRING_AGG(CAST(uya.yard_id AS VARCHAR), ',') as yard_ids
       FROM Users u
@@ -31,7 +50,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN UserYardAccess uya ON u.user_id = uya.user_id
       GROUP BY u.user_id, u.username, u.full_name, u.email, u.phone,
                u.status, u.two_fa_enabled, u.bound_device_mac, u.created_at,
-               u.customer_id, u.failed_login_count, u.locked_at, u.password_changed_at,
+               u.customer_id, u.customer_portal_role, u.failed_login_count, u.locked_at, u.password_changed_at,
                r.role_code, r.role_name
       ORDER BY u.user_id
     `);
@@ -82,10 +101,11 @@ export async function POST(request: NextRequest) {
       .input('email', sql.NVarChar, body.email || null)
       .input('phone', sql.NVarChar, body.phone || null)
       .input('customerId', sql.Int, body.role_code === 'customer' && body.customer_id ? body.customer_id : null)
+      .input('customerPortalRole', sql.NVarChar, normalizeCustomerPortalRole(body.role_code, body.customer_portal_role))
       .query(`
-        INSERT INTO Users (username, password_hash, full_name, role_id, email, phone, customer_id, password_changed_at)
+        INSERT INTO Users (username, password_hash, full_name, role_id, email, phone, customer_id, customer_portal_role, password_changed_at)
         OUTPUT INSERTED.user_id
-        VALUES (@username, @passwordHash, @fullName, @roleId, @email, @phone, @customerId, GETDATE())
+        VALUES (@username, @passwordHash, @fullName, @roleId, @email, @phone, @customerId, @customerPortalRole, GETDATE())
       `);
 
     const userId = insertResult.recordset[0].user_id;
@@ -101,7 +121,19 @@ export async function POST(request: NextRequest) {
     }
 
     // [Security] audit actor = ผู้ใช้ที่ล็อกอินอยู่จาก JWT (ไม่ใช้ body.created_by)
-    await logAudit({ userId: actorId, action: 'user_create', entityType: 'user', entityId: userId, details: { username: body.username, full_name: body.full_name, role_code: body.role_code } });
+    await logAudit({
+      userId: actorId,
+      action: 'user_create',
+      entityType: 'user',
+      entityId: userId,
+      details: {
+        username: body.username,
+        full_name: body.full_name,
+        role_code: body.role_code,
+        customer_portal_role: normalizeCustomerPortalRole(body.role_code, body.customer_portal_role),
+        status: body.status,
+      },
+    });
     return NextResponse.json({ success: true, userId });
   } catch (error: unknown) {
     console.error('❌ POST user error:', error);
@@ -165,7 +197,9 @@ export async function PUT(request: NextRequest) {
     let query = `
       UPDATE Users SET
         full_name = @fullName, role_id = @roleId, email = @email,
-        phone = @phone, status = @status, customer_id = @customerId, updated_at = GETDATE()
+        phone = @phone, status = @status, customer_id = @customerId,
+        customer_portal_role = @customerPortalRole,
+        updated_at = GETDATE()
     `;
 
     const req = db.request()
@@ -175,7 +209,8 @@ export async function PUT(request: NextRequest) {
       .input('email', sql.NVarChar, body.email || null)
       .input('phone', sql.NVarChar, body.phone || null)
       .input('status', sql.NVarChar, body.status || 'active')
-      .input('customerId', sql.Int, body.role_code === 'customer' && body.customer_id ? body.customer_id : null);
+      .input('customerId', sql.Int, body.role_code === 'customer' && body.customer_id ? body.customer_id : null)
+      .input('customerPortalRole', sql.NVarChar, normalizeCustomerPortalRole(body.role_code, body.customer_portal_role));
 
     // อัปเดต password ถ้ามีเปลี่ยน
     if (body.password) {
@@ -208,7 +243,18 @@ export async function PUT(request: NextRequest) {
     }
 
     // [Security] audit actor = ผู้ใช้ที่ล็อกอินอยู่จาก JWT
-    await logAudit({ userId: actorId, action: 'user_update', entityType: 'user', entityId: body.user_id, details: { full_name: body.full_name, role_code: body.role_code, status: body.status } });
+    await logAudit({
+      userId: actorId,
+      action: 'user_update',
+      entityType: 'user',
+      entityId: body.user_id,
+      details: {
+        full_name: body.full_name,
+        role_code: body.role_code,
+        customer_portal_role: normalizeCustomerPortalRole(body.role_code, body.customer_portal_role),
+        status: body.status,
+      },
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT user error:', error);
