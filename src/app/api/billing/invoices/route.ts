@@ -5,37 +5,8 @@ import { logAudit } from '@/lib/audit';
 import { logApprovalReview, requireApprovalForAction } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
-import { upsertPortalEntityAccess, type PortalEntityAccessDb } from '@/lib/portalEntityAccess';
+import { applyPortalGrants, buildInvoicePartyGrants } from '@/lib/portalGrantRules';
 import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
-
-interface PortalInvoiceGrantSource {
-  customer_id?: number | null;
-  invoice_id?: number | null;
-  invoice_number?: string | null;
-  container_id?: number | null;
-}
-
-async function grantInvoicePortalAccess(db: PortalEntityAccessDb, invoice: PortalInvoiceGrantSource) {
-  await upsertPortalEntityAccess({
-    db,
-    customerId: invoice.customer_id || null,
-    entityType: 'invoice',
-    entityId: invoice.invoice_id || null,
-    entityRef: invoice.invoice_number || null,
-    accessRole: 'invoice_customer',
-    sourceTable: 'Invoices',
-    sourceId: invoice.invoice_id || null,
-  });
-  await upsertPortalEntityAccess({
-    db,
-    customerId: invoice.customer_id || null,
-    entityType: 'container',
-    entityId: invoice.container_id || null,
-    accessRole: 'invoice_customer',
-    sourceTable: 'Invoices',
-    sourceId: invoice.invoice_id || null,
-  });
-}
 
 function normalizePositiveAmount(value: unknown, fallback: number) {
   const parsed = Number(value ?? fallback);
@@ -233,7 +204,7 @@ export async function POST(request: NextRequest) {
 
     // Audit log
     const inv = result.recordset[0];
-    await grantInvoicePortalAccess(db, inv);
+    await applyPortalGrants(db, buildInvoicePartyGrants(inv));
     await logAudit({
       userId: actor.userId, yardId: body.yard_id,
       action: 'invoice_create', entityType: 'invoice', entityId: inv.invoice_id,
@@ -509,7 +480,7 @@ export async function PUT(request: NextRequest) {
 
         const remainingAfterCredit = Math.max(remainingBeforeCredit - creditAmt, 0);
         const creditNote = cnResult.recordset[0];
-        await grantInvoicePortalAccess(db, creditNote);
+        await applyPortalGrants(db, buildInvoicePartyGrants(creditNote));
 
         queueDocumentLifecycle({
           db,
@@ -629,7 +600,7 @@ export async function PUT(request: NextRequest) {
             `);
 
           revisedInvoice = revisedResult.recordset[0];
-          await grantInvoicePortalAccess(db, revisedInvoice);
+          await applyPortalGrants(db, buildInvoicePartyGrants(revisedInvoice));
           queueDocumentLifecycle({
             db,
             documentType: 'invoice',

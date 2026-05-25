@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
-import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
+import { applyPortalGrants, buildBookingContainerGrants, buildBookingPartyGrants } from '@/lib/portalGrantRules';
 import { ensureReeferBookingPolicy } from '@/lib/reeferBookingPolicy';
 
 function bookingSummarySelect() {
@@ -233,6 +233,14 @@ export async function POST(request: NextRequest) {
       .input('bookingNumber', sql.NVarChar, body.booking_number)
       .input('yardId', sql.Int, body.yard_id)
       .input('customerId', sql.Int, body.customer_id || null)
+      .input('bookingCustomerId', sql.Int, body.booking_customer_id || body.customer_id || null)
+      .input('shippingLineId', sql.Int, body.shipping_line_id || null)
+      .input('forwarderId', sql.Int, body.forwarder_id || null)
+      .input('shipperId', sql.Int, body.shipper_id || null)
+      .input('consigneeId', sql.Int, body.consignee_id || null)
+      .input('truckingCompanyId', sql.Int, body.trucking_company_id || null)
+      .input('billToCustomerId', sql.Int, body.bill_to_customer_id || null)
+      .input('createdByCustomerUserId', sql.Int, body.created_by_customer_user_id || null)
       .input('bookingType', sql.NVarChar, body.booking_type)
       .input('vesselName', sql.NVarChar, body.vessel_name || null)
       .input('voyageNumber', sql.NVarChar, body.voyage_number || null)
@@ -245,11 +253,17 @@ export async function POST(request: NextRequest) {
       .input('sealNumber', sql.NVarChar, body.seal_number || null)
       .input('notes', sql.NVarChar, body.notes || null)
       .query(`
-        INSERT INTO Bookings (booking_number, yard_id, customer_id, booking_type,
+        INSERT INTO Bookings (booking_number, yard_id, customer_id,
+          booking_customer_id, shipping_line_id, forwarder_id, shipper_id, consignee_id,
+          trucking_company_id, bill_to_customer_id, created_by_customer_user_id,
+          booking_type,
           vessel_name, voyage_number, container_count, container_size, container_type,
           eta, valid_from, valid_to, seal_number, notes)
         OUTPUT INSERTED.*
-        VALUES (@bookingNumber, @yardId, @customerId, @bookingType,
+        VALUES (@bookingNumber, @yardId, @customerId,
+          @bookingCustomerId, @shippingLineId, @forwarderId, @shipperId, @consigneeId,
+          @truckingCompanyId, @billToCustomerId, @createdByCustomerUserId,
+          @bookingType,
           @vesselName, @voyageNumber, @containerCount, @containerSize, @containerType,
           @eta, @validFrom, @validTo, @sealNumber, @notes)
       `);
@@ -268,34 +282,25 @@ export async function POST(request: NextRequest) {
       maxTempC: body.reefer_max_temp_c,
     });
 
-    await upsertPortalEntityAccess({
-      db,
-      customerId: booking.customer_id,
-      entityType: 'booking',
-      entityId: booking.booking_id,
-      entityRef: booking.booking_number,
-      accessRole: 'booking_customer',
-      sourceTable: 'Bookings',
-      sourceId: booking.booking_id,
-    });
+    await applyPortalGrants(db, buildBookingPartyGrants({ ...body, ...booking }));
 
     // Auto-create BookingContainers if container_numbers provided
     if (body.container_numbers && Array.isArray(body.container_numbers)) {
       for (const cn of body.container_numbers) {
         if (cn && cn.trim()) {
           const containerNumber = cn.trim().toUpperCase();
-          await db.request()
+          const linkResult = await db.request()
             .input('bookingId', sql.Int, booking.booking_id)
             .input('containerNumber', sql.NVarChar, containerNumber)
-            .query(`INSERT INTO BookingContainers (booking_id, container_number) VALUES (@bookingId, @containerNumber)`);
-          await upsertPortalEntityAccess({
-            db,
-            customerId: booking.customer_id,
-            entityType: 'container',
-            entityRef: containerNumber,
-            accessRole: 'booking_customer',
-            sourceTable: 'BookingContainers',
-          });
+            .query(`
+              INSERT INTO BookingContainers (booking_id, container_number)
+              OUTPUT INSERTED.id, INSERTED.container_id, INSERTED.container_number
+              VALUES (@bookingId, @containerNumber)
+            `);
+          await applyPortalGrants(db, buildBookingContainerGrants(
+            { ...body, ...booking },
+            linkResult.recordset[0] || { container_number: containerNumber },
+          ));
         }
       }
     }
@@ -330,6 +335,14 @@ export async function PUT(request: NextRequest) {
     if (body.valid_from !== undefined) { sets.push('valid_from = @validFrom'); req.input('validFrom', sql.DateTime2, body.valid_from || null); }
     if (body.valid_to !== undefined) { sets.push('valid_to = @validTo'); req.input('validTo', sql.DateTime2, body.valid_to || null); }
     if (body.customer_id !== undefined) { sets.push('customer_id = @customerId'); req.input('customerId', sql.Int, body.customer_id || null); }
+    if (body.booking_customer_id !== undefined) { sets.push('booking_customer_id = @bookingCustomerId'); req.input('bookingCustomerId', sql.Int, body.booking_customer_id || null); }
+    if (body.shipping_line_id !== undefined) { sets.push('shipping_line_id = @shippingLineId'); req.input('shippingLineId', sql.Int, body.shipping_line_id || null); }
+    if (body.forwarder_id !== undefined) { sets.push('forwarder_id = @forwarderId'); req.input('forwarderId', sql.Int, body.forwarder_id || null); }
+    if (body.shipper_id !== undefined) { sets.push('shipper_id = @shipperId'); req.input('shipperId', sql.Int, body.shipper_id || null); }
+    if (body.consignee_id !== undefined) { sets.push('consignee_id = @consigneeId'); req.input('consigneeId', sql.Int, body.consignee_id || null); }
+    if (body.trucking_company_id !== undefined) { sets.push('trucking_company_id = @truckingCompanyId'); req.input('truckingCompanyId', sql.Int, body.trucking_company_id || null); }
+    if (body.bill_to_customer_id !== undefined) { sets.push('bill_to_customer_id = @billToCustomerId'); req.input('billToCustomerId', sql.Int, body.bill_to_customer_id || null); }
+    if (body.created_by_customer_user_id !== undefined) { sets.push('created_by_customer_user_id = @CreatedByCustomerUserId'); req.input('CreatedByCustomerUserId', sql.Int, body.created_by_customer_user_id || null); }
     if (body.seal_number !== undefined) { sets.push('seal_number = @sealNumber'); req.input('sealNumber', sql.NVarChar, body.seal_number); }
     if (body.notes !== undefined) { sets.push('notes = @notes'); req.input('notes', sql.NVarChar, body.notes); }
 
@@ -339,19 +352,16 @@ export async function PUT(request: NextRequest) {
 
     const updatedBookingResult = await db.request()
       .input('bookingId', sql.Int, body.booking_id)
-      .query('SELECT booking_id, booking_number, customer_id FROM Bookings WHERE booking_id = @bookingId');
+      .query(`
+        SELECT booking_id, booking_number, customer_id, booking_customer_id, shipping_line_id,
+          forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id,
+          created_by_customer_user_id
+        FROM Bookings
+        WHERE booking_id = @bookingId
+      `);
     const updatedBooking = updatedBookingResult.recordset[0];
     if (updatedBooking) {
-      await upsertPortalEntityAccess({
-        db,
-        customerId: updatedBooking.customer_id,
-        entityType: 'booking',
-        entityId: updatedBooking.booking_id,
-        entityRef: updatedBooking.booking_number,
-        accessRole: 'booking_customer',
-        sourceTable: 'Bookings',
-        sourceId: updatedBooking.booking_id,
-      });
+      await applyPortalGrants(db, buildBookingPartyGrants(updatedBooking));
     }
 
     await logAudit({ action: 'booking_update', entityType: 'booking', entityId: body.booking_id, details: { status: body.status, vessel_name: body.vessel_name } });

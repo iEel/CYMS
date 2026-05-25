@@ -4,7 +4,7 @@ import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { decoratePortalBooking, decoratePortalBookings } from '@/lib/portalBooking';
 import { getPortalCustomerId, portalBookingVisibilitySql, portalVisibilityReasonSql } from '@/lib/portalAccess';
-import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
+import { applyPortalGrants, buildBookingContainerGrants, buildBookingPartyGrants } from '@/lib/portalGrantRules';
 import { ensureReeferBookingPolicy } from '@/lib/reeferBookingPolicy';
 import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
@@ -128,6 +128,8 @@ export async function POST(request: NextRequest) {
       .input('bookingNumber', sql.NVarChar, bookingNumber)
       .input('yardId', sql.Int, yardId)
       .input('customerId', sql.Int, cid)
+      .input('bookingCustomerId', sql.Int, cid)
+      .input('createdByCustomerUserId', sql.Int, portalActor.userId)
       .input('bookingType', sql.NVarChar, bookingType)
       .input('status', sql.NVarChar, 'pending')
       .input('vesselName', sql.NVarChar, cleanText(body.vessel_name, 120))
@@ -141,11 +143,15 @@ export async function POST(request: NextRequest) {
       .input('sealNumber', sql.NVarChar, cleanText(body.seal_number, 80))
       .input('notes', sql.NVarChar, cleanText(body.notes, 1000))
       .query(`
-        INSERT INTO Bookings (booking_number, yard_id, customer_id, booking_type, status,
+        INSERT INTO Bookings (booking_number, yard_id, customer_id,
+          booking_customer_id, created_by_customer_user_id,
+          booking_type, status,
           vessel_name, voyage_number, container_count, container_size, container_type,
           eta, valid_from, valid_to, seal_number, notes)
         OUTPUT INSERTED.*
-        VALUES (@bookingNumber, @yardId, @customerId, @bookingType, @status,
+        VALUES (@bookingNumber, @yardId, @customerId,
+          @bookingCustomerId, @createdByCustomerUserId,
+          @bookingType, @status,
           @vesselName, @voyageNumber, @containerCount, @containerSize, @containerType,
           @eta, @validFrom, @validTo, @sealNumber, @notes)
       `);
@@ -164,34 +170,26 @@ export async function POST(request: NextRequest) {
       maxTempC: body.reefer_max_temp_c,
     });
 
-    await upsertPortalEntityAccess({
-      db,
-      customerId: cid,
-      entityType: 'booking',
-      entityId: booking.booking_id,
-      entityRef: booking.booking_number,
-      accessRole: 'booking_customer',
-      sourceTable: 'Bookings',
-      sourceId: booking.booking_id,
-    });
+    await applyPortalGrants(db, buildBookingPartyGrants({
+      ...booking,
+      booking_customer_id: cid,
+      customer_id: cid,
+    }));
 
     for (const containerNumber of containerNumbers) {
-      await db.request()
+      const linkResult = await db.request()
         .input('bookingId', sql.Int, booking.booking_id)
         .input('containerNumber', sql.NVarChar, containerNumber)
         .query(`
           INSERT INTO BookingContainers (booking_id, container_number)
+          OUTPUT INSERTED.id, INSERTED.container_id, INSERTED.container_number
           VALUES (@bookingId, @containerNumber)
         `);
 
-      await upsertPortalEntityAccess({
-        db,
-        customerId: cid,
-        entityType: 'container',
-        entityRef: containerNumber,
-        accessRole: 'booking_customer',
-        sourceTable: 'BookingContainers',
-      });
+      await applyPortalGrants(db, buildBookingContainerGrants(
+        { ...booking, booking_customer_id: cid, customer_id: cid },
+        linkResult.recordset[0] || { container_number: containerNumber },
+      ));
     }
 
     await logAudit({

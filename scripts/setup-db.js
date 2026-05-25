@@ -308,6 +308,50 @@ async function run() {
       }
     }
 
+    const schemaAugmentations = [
+      {
+        label: 'Bookings portal grant party columns',
+        sql: `
+          IF OBJECT_ID('Bookings', 'U') IS NOT NULL
+          BEGIN
+            IF COL_LENGTH('Bookings', 'booking_customer_id') IS NULL
+              ALTER TABLE Bookings ADD booking_customer_id INT NULL;
+            IF COL_LENGTH('Bookings', 'shipping_line_id') IS NULL
+              ALTER TABLE Bookings ADD shipping_line_id INT NULL;
+            IF COL_LENGTH('Bookings', 'forwarder_id') IS NULL
+              ALTER TABLE Bookings ADD forwarder_id INT NULL;
+            IF COL_LENGTH('Bookings', 'shipper_id') IS NULL
+              ALTER TABLE Bookings ADD shipper_id INT NULL;
+            IF COL_LENGTH('Bookings', 'consignee_id') IS NULL
+              ALTER TABLE Bookings ADD consignee_id INT NULL;
+            IF COL_LENGTH('Bookings', 'trucking_company_id') IS NULL
+              ALTER TABLE Bookings ADD trucking_company_id INT NULL;
+            IF COL_LENGTH('Bookings', 'bill_to_customer_id') IS NULL
+              ALTER TABLE Bookings ADD bill_to_customer_id INT NULL;
+            IF COL_LENGTH('Bookings', 'created_by_customer_user_id') IS NULL
+              ALTER TABLE Bookings ADD created_by_customer_user_id INT NULL;
+          END;
+        `,
+      },
+      {
+        label: 'GateTransactions portal grant party columns',
+        sql: `
+          IF OBJECT_ID('GateTransactions', 'U') IS NOT NULL
+          BEGIN
+            IF COL_LENGTH('GateTransactions', 'trucking_company_id') IS NULL
+              ALTER TABLE GateTransactions ADD trucking_company_id INT NULL;
+            IF COL_LENGTH('GateTransactions', 'driver_user_id') IS NULL
+              ALTER TABLE GateTransactions ADD driver_user_id INT NULL;
+          END;
+        `,
+      },
+    ];
+
+    for (const step of schemaAugmentations) {
+      await pool.request().query(step.sql);
+      console.log(`  ✅ ${step.label}`);
+    }
+
     // ขั้นที่ 3: ใส่ข้อมูลเริ่มต้น (Seed Data)
     console.log('\n📝 กำลังใส่ข้อมูลเริ่มต้น...');
 

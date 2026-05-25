@@ -243,6 +243,27 @@ ON PortalEntityAccess (customer_id, entity_type, entity_id, is_active);
 CREATE INDEX IX_PortalEntityAccess_EntityRef
 ON PortalEntityAccess (entity_type, entity_ref, customer_id, is_active);
 
+-- Optional party columns used by portal grant rules when Bookings is present.
+IF OBJECT_ID('Bookings', 'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('Bookings', 'booking_customer_id') IS NULL
+        ALTER TABLE Bookings ADD booking_customer_id INT NULL;
+    IF COL_LENGTH('Bookings', 'shipping_line_id') IS NULL
+        ALTER TABLE Bookings ADD shipping_line_id INT NULL;
+    IF COL_LENGTH('Bookings', 'forwarder_id') IS NULL
+        ALTER TABLE Bookings ADD forwarder_id INT NULL;
+    IF COL_LENGTH('Bookings', 'shipper_id') IS NULL
+        ALTER TABLE Bookings ADD shipper_id INT NULL;
+    IF COL_LENGTH('Bookings', 'consignee_id') IS NULL
+        ALTER TABLE Bookings ADD consignee_id INT NULL;
+    IF COL_LENGTH('Bookings', 'trucking_company_id') IS NULL
+        ALTER TABLE Bookings ADD trucking_company_id INT NULL;
+    IF COL_LENGTH('Bookings', 'bill_to_customer_id') IS NULL
+        ALTER TABLE Bookings ADD bill_to_customer_id INT NULL;
+    IF COL_LENGTH('Bookings', 'created_by_customer_user_id') IS NULL
+        ALTER TABLE Bookings ADD created_by_customer_user_id INT NULL;
+END;
+
 -- ===================================
 -- ตาราง: Portal Booking Amendments (คำขอแก้ไข/ยกเลิก Booking จากลูกค้า)
 -- ===================================
@@ -505,6 +526,8 @@ CREATE TABLE GateTransactions (
     to_yard_id      INT REFERENCES Yards(yard_id),  -- ลานปลายทาง (สำหรับ transfer)
     container_owner_id  INT NULL,               -- เจ้าของกรรมสิทธิ์ตู้ (FK→Customers)
     billing_customer_id INT NULL,               -- คนรับผิดชอบจ่ายเงิน (FK→Customers)
+    trucking_company_id INT NULL,
+    driver_user_id      INT NULL,
     created_at      DATETIME2 DEFAULT GETDATE()
 );
 

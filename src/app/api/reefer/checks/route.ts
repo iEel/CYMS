@@ -13,6 +13,12 @@ import {
   type ReeferPolicyInput,
 } from '@/lib/reeferMonitoring';
 import { buildReeferExceptionDraft } from '@/lib/reeferExceptions';
+import {
+  applyPortalGrants,
+  buildReeferCheckGrants,
+  buildReeferExceptionGrants,
+  fetchContainerPortalGrantRows,
+} from '@/lib/portalGrantRules';
 
 type Db = Awaited<ReturnType<typeof getDb>>;
 
@@ -272,6 +278,12 @@ export async function POST(request: NextRequest) {
       `);
 
     const check = insertResult.recordset[0];
+    const containerGrantRows = await fetchContainerPortalGrantRows(db, {
+      container_id: container.container_id,
+      container_number: container.container_number,
+    });
+    await applyPortalGrants(db, buildReeferCheckGrants(check, containerGrantRows));
+
     const exceptionDraft = buildReeferExceptionDraft(check);
     let exception = null;
     if (exceptionDraft) {
@@ -301,8 +313,11 @@ export async function POST(request: NextRequest) {
               AND status IN ('open', 'in_progress')
               AND reason = @reason
           )
-        `);
+      `);
       exception = exceptionResult.recordset[0] || null;
+      if (exception) {
+        await applyPortalGrants(db, buildReeferExceptionGrants(exception, containerGrantRows));
+      }
     }
 
     await logAudit({

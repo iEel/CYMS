@@ -6,7 +6,7 @@ import { logAudit } from '@/lib/audit';
 import { logApprovalReview, requireApprovalForAction } from '@/lib/approvalReview';
 import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
-import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
+import { applyPortalGrants, buildBookingContainerGrants, buildGatePartyGrants } from '@/lib/portalGrantRules';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 async function validateBillingClearance(
@@ -115,7 +115,12 @@ async function validateGateOutBooking(
     }
   }
 
-  return { ok: true, bookingId: booking.booking_id, containerNumber: finalContainerNumber };
+  return {
+    ok: true,
+    bookingId: booking.booking_id,
+    bookingCustomerId: booking.customer_id || null,
+    containerNumber: finalContainerNumber,
+  };
 }
 
 const gateBodySchema = z.object({
@@ -141,7 +146,10 @@ const gateBodySchema = z.object({
   damage_report: z.any().optional(),
   container_id: z.number().int().positive().optional(),
   container_owner_id: z.number().int().positive().optional().nullable(),
+  booking_customer_id: z.number().int().positive().optional().nullable(),
   billing_customer_id: z.number().int().positive().optional().nullable(),
+  trucking_company_id: z.number().int().positive().optional().nullable(),
+  driver_user_id: z.number().int().positive().optional().nullable(),
   billing_clearance_id: z.number().int().positive().optional().nullable(),
   tare_weight_kg: z.coerce.number().int().positive().optional().nullable(),
   max_gross_weight_kg: z.coerce.number().int().positive().optional().nullable(),
@@ -223,7 +231,7 @@ export async function POST(request: NextRequest) {
       driver_name, driver_license, truck_plate, truck_company, seal_number, booking_ref, notes,
       damage_report,
       container_id,
-      container_owner_id, billing_customer_id,
+      container_owner_id, booking_customer_id, billing_customer_id, trucking_company_id, driver_user_id,
       billing_clearance_id,
       tare_weight_kg, max_gross_weight_kg, boxtech_group_st, boxtech_source,
       actual_gross_weight_kg, weight_source,
@@ -258,6 +266,7 @@ export async function POST(request: NextRequest) {
     let assignedLocation: { zone_name: string; zone_id: number; bay: number; row: number; tier: number; reason: string } | null = null;
     let gateOutHoldSnapshot: { hold_status?: string | null; status?: string | null; container_number?: string | null } | null = null;
     let gateOutHoldApproval: { approvedBy: number } | null = null;
+    let resolvedBookingCustomerId = booking_customer_id || null;
     const clearanceValidation = await validateBillingClearance(db, yard_id, transaction_type, billing_clearance_id || null);
     if (!clearanceValidation.ok) {
       return NextResponse.json({ error: clearanceValidation.error }, { status: 400 });
@@ -406,6 +415,7 @@ export async function POST(request: NextRequest) {
         if (!bookingValidation.ok) {
           return NextResponse.json({ error: bookingValidation.error }, { status: 400 });
         }
+        resolvedBookingCustomerId = bookingValidation.bookingCustomerId || resolvedBookingCustomerId;
       }
       const holdResult = await db.request()
         .input('containerId', sql.Int, finalContainerId)
@@ -445,6 +455,21 @@ export async function POST(request: NextRequest) {
         `);
     }
 
+    if (booking_ref && !resolvedBookingCustomerId) {
+      const bookingPartyResult = await db.request()
+        .input('grantBookingRef', sql.NVarChar, booking_ref)
+        .input('grantYardId', sql.Int, yard_id)
+        .query(`
+          SELECT TOP 1 customer_id, booking_customer_id
+          FROM Bookings
+          WHERE booking_number = @grantBookingRef
+            AND yard_id = @grantYardId
+            AND status != 'cancelled'
+        `);
+      const bookingParty = bookingPartyResult.recordset[0];
+      resolvedBookingCustomerId = bookingParty?.booking_customer_id || bookingParty?.customer_id || null;
+    }
+
     // Create GateTransaction record (with owner/billing separation)
     const txResult = await db.request()
       .input('containerId', sql.Int, finalContainerId)
@@ -462,60 +487,36 @@ export async function POST(request: NextRequest) {
       .input('processedBy', sql.Int, actorUserId)
       .input('ownerId', sql.Int, container_owner_id || null)
       .input('billingId', sql.Int, billing_customer_id || null)
+      .input('truckingCompanyId', sql.Int, trucking_company_id || null)
+      .input('driverUserId', sql.Int, driver_user_id || null)
       .input('billingClearanceId', sql.Int, billing_clearance_id || null)
       .query(`
         INSERT INTO GateTransactions (container_id, yard_id, transaction_type,
           driver_name, driver_license, truck_plate, truck_company, seal_number, booking_ref,
           eir_number, notes, damage_report, processed_by,
-          container_owner_id, billing_customer_id, billing_clearance_id)
+          container_owner_id, billing_customer_id,
+          trucking_company_id, driver_user_id, billing_clearance_id)
         OUTPUT INSERTED.*
         VALUES (@containerId, @yardId, @transactionType,
           @driverName, @driverLicense, @truckPlate, @truckCompany, @sealNumber, @bookingRef,
           @eirNumber, @notes, @damageReport, @processedBy,
-          @ownerId, @billingId, @billingClearanceId)
+          @ownerId, @billingId,
+          @truckingCompanyId, @driverUserId, @billingClearanceId)
       `);
 
     const gateTransaction = txResult.recordset[0];
-    await upsertPortalEntityAccess({
-      db,
-      customerId: container_owner_id || null,
-      entityType: 'gate_transaction',
-      entityId: gateTransaction.transaction_id,
-      entityRef: eirNumber,
-      accessRole: 'owner',
-      sourceTable: 'GateTransactions',
-      sourceId: gateTransaction.transaction_id,
-    });
-    await upsertPortalEntityAccess({
-      db,
-      customerId: billing_customer_id || null,
-      entityType: 'gate_transaction',
-      entityId: gateTransaction.transaction_id,
-      entityRef: eirNumber,
-      accessRole: 'billing',
-      sourceTable: 'GateTransactions',
-      sourceId: gateTransaction.transaction_id,
-    });
-    await upsertPortalEntityAccess({
-      db,
-      customerId: container_owner_id || null,
-      entityType: 'container',
-      entityId: finalContainerId,
-      entityRef: container_number,
-      accessRole: 'owner',
-      sourceTable: 'GateTransactions',
-      sourceId: gateTransaction.transaction_id,
-    });
-    await upsertPortalEntityAccess({
-      db,
-      customerId: billing_customer_id || null,
-      entityType: 'container',
-      entityId: finalContainerId,
-      entityRef: container_number,
-      accessRole: 'billing',
-      sourceTable: 'GateTransactions',
-      sourceId: gateTransaction.transaction_id,
-    });
+    await applyPortalGrants(db, buildGatePartyGrants({
+      ...gateTransaction,
+      transaction_id: gateTransaction.transaction_id,
+      eir_number: eirNumber,
+      container_id: finalContainerId,
+      container_number,
+      container_owner_id,
+      booking_customer_id: resolvedBookingCustomerId,
+      billing_customer_id,
+      trucking_company_id,
+      driver_user_id,
+    }));
 
     // === Booking Auto-Link ===
     if (booking_ref) {
@@ -525,7 +526,13 @@ export async function POST(request: NextRequest) {
           const bkResult = await db.request()
             .input('bkRef', sql.NVarChar, booking_ref)
             .input('bkYardId', sql.Int, yard_id)
-            .query(`SELECT booking_id, booking_number, customer_id, status FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId`);
+            .query(`
+              SELECT booking_id, booking_number, customer_id, booking_customer_id, shipping_line_id,
+                forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id,
+                status
+              FROM Bookings
+              WHERE booking_number = @bkRef AND yard_id = @bkYardId
+            `);
 
           if (bkResult.recordset.length > 0) {
             const bk = bkResult.recordset[0];
@@ -544,11 +551,16 @@ export async function POST(request: NextRequest) {
                   .query(`UPDATE BookingContainers SET container_id = @cId, status = 'received', gate_in_at = GETDATE() WHERE id = @linkId`);
               } else {
                 // Create new link
-                await db.request()
+                const createdLink = await db.request()
                   .input('bkId2', sql.Int, bk.booking_id)
                   .input('cId2', sql.Int, finalContainerId)
                   .input('cNum2', sql.NVarChar, container_number)
-                  .query(`INSERT INTO BookingContainers (booking_id, container_id, container_number, status, gate_in_at) VALUES (@bkId2, @cId2, @cNum2, 'received', GETDATE())`);
+                  .query(`
+                    INSERT INTO BookingContainers (booking_id, container_id, container_number, status, gate_in_at)
+                    OUTPUT INSERTED.id
+                    VALUES (@bkId2, @cId2, @cNum2, 'received', GETDATE())
+                  `);
+                existLink.recordset = createdLink.recordset;
               }
 
               // Update received_count
@@ -556,15 +568,11 @@ export async function POST(request: NextRequest) {
                 .input('bkId3', sql.Int, bk.booking_id)
                 .query(`UPDATE Bookings SET received_count = (SELECT COUNT(*) FROM BookingContainers WHERE booking_id = @bkId3 AND status IN ('received', 'released')) WHERE booking_id = @bkId3`);
 
-              await upsertPortalEntityAccess({
-                db,
-                customerId: bk.customer_id,
-                entityType: 'container',
-                entityId: finalContainerId,
-                entityRef: container_number,
-                accessRole: 'booking_customer',
-                sourceTable: 'BookingContainers',
-              });
+              await applyPortalGrants(db, buildBookingContainerGrants(bk, {
+                id: existLink.recordset[0]?.id || null,
+                container_id: finalContainerId,
+                container_number,
+              }));
 
               // Send email: container received
               try {
@@ -594,7 +602,13 @@ export async function POST(request: NextRequest) {
           const bkResult = await db.request()
             .input('bkRef', sql.NVarChar, booking_ref)
             .input('bkYardId', sql.Int, yard_id)
-            .query(`SELECT booking_id, booking_number, customer_id, container_count FROM Bookings WHERE booking_number = @bkRef AND yard_id = @bkYardId AND status != 'cancelled'`);
+            .query(`
+              SELECT booking_id, booking_number, customer_id, booking_customer_id, shipping_line_id,
+                forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id,
+                container_count
+              FROM Bookings
+              WHERE booking_number = @bkRef AND yard_id = @bkYardId AND status != 'cancelled'
+            `);
 
           if (bkResult.recordset.length > 0) {
             const bk = bkResult.recordset[0];
@@ -626,14 +640,16 @@ export async function POST(request: NextRequest) {
                   WHERE id = @linkId
                 `);
             } else {
-              await db.request()
+              const createdLink = await db.request()
                 .input('bkId', sql.Int, bk.booking_id)
                 .input('cId', sql.Int, finalContainerId)
                 .input('cNum', sql.NVarChar, finalContainerNumber)
                 .query(`
                   INSERT INTO BookingContainers (booking_id, container_id, container_number, status, gate_out_at)
+                  OUTPUT INSERTED.id
                   VALUES (@bkId, @cId, @cNum, 'released', GETDATE())
                 `);
+              linkResult.recordset = createdLink.recordset;
             }
 
             // Update released_count
@@ -646,15 +662,11 @@ export async function POST(request: NextRequest) {
                 WHERE booking_id = @bkId2
               `);
 
-            await upsertPortalEntityAccess({
-              db,
-              customerId: bk.customer_id,
-              entityType: 'container',
-              entityId: finalContainerId,
-              entityRef: finalContainerNumber,
-              accessRole: 'booking_customer',
-              sourceTable: 'BookingContainers',
-            });
+            await applyPortalGrants(db, buildBookingContainerGrants(bk, {
+              id: linkResult.recordset[0]?.id || null,
+              container_id: finalContainerId,
+              container_number: finalContainerNumber,
+            }));
 
             // Auto-complete if all containers released
             const updBk = await db.request()

@@ -5,6 +5,11 @@ import { logAudit } from '@/lib/audit';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 import { deriveReeferEscalation } from '@/lib/reeferEscalation';
 import { nextReeferExceptionStatus } from '@/lib/reeferExceptions';
+import {
+  applyPortalGrants,
+  buildReeferExceptionGrants,
+  fetchContainerPortalGrantRows,
+} from '@/lib/portalGrantRules';
 
 function parsePositiveInt(value: unknown) {
   const parsed = Number(value);
@@ -111,6 +116,11 @@ export async function PATCH(request: NextRequest) {
       `);
 
     const updated = result.recordset[0];
+    const containerGrantRows = await fetchContainerPortalGrantRows(db, {
+      container_id: updated.container_id,
+    });
+    await applyPortalGrants(db, buildReeferExceptionGrants(updated, containerGrantRows));
+
     await logAudit({
       userId: actor.userId,
       yardId: current.yard_id,

@@ -84,6 +84,36 @@ async function migrate() {
         ALTER TABLE Invoices ADD balance_amount DECIMAL(12,2) NULL;
     `);
 
+    await runStep(pool, 'Portal grant party columns', `
+      IF OBJECT_ID('Bookings', 'U') IS NOT NULL
+      BEGIN
+        IF COL_LENGTH('Bookings', 'booking_customer_id') IS NULL
+          ALTER TABLE Bookings ADD booking_customer_id INT NULL;
+        IF COL_LENGTH('Bookings', 'shipping_line_id') IS NULL
+          ALTER TABLE Bookings ADD shipping_line_id INT NULL;
+        IF COL_LENGTH('Bookings', 'forwarder_id') IS NULL
+          ALTER TABLE Bookings ADD forwarder_id INT NULL;
+        IF COL_LENGTH('Bookings', 'shipper_id') IS NULL
+          ALTER TABLE Bookings ADD shipper_id INT NULL;
+        IF COL_LENGTH('Bookings', 'consignee_id') IS NULL
+          ALTER TABLE Bookings ADD consignee_id INT NULL;
+        IF COL_LENGTH('Bookings', 'trucking_company_id') IS NULL
+          ALTER TABLE Bookings ADD trucking_company_id INT NULL;
+        IF COL_LENGTH('Bookings', 'bill_to_customer_id') IS NULL
+          ALTER TABLE Bookings ADD bill_to_customer_id INT NULL;
+        IF COL_LENGTH('Bookings', 'created_by_customer_user_id') IS NULL
+          ALTER TABLE Bookings ADD created_by_customer_user_id INT NULL;
+      END;
+
+      IF OBJECT_ID('GateTransactions', 'U') IS NOT NULL
+      BEGIN
+        IF COL_LENGTH('GateTransactions', 'trucking_company_id') IS NULL
+          ALTER TABLE GateTransactions ADD trucking_company_id INT NULL;
+        IF COL_LENGTH('GateTransactions', 'driver_user_id') IS NULL
+          ALTER TABLE GateTransactions ADD driver_user_id INT NULL;
+      END;
+    `);
+
     await runStep(pool, 'M&R extended columns', `
       IF COL_LENGTH('RepairOrders', 'customer_id') IS NULL
         ALTER TABLE RepairOrders ADD customer_id INT NULL;
@@ -666,15 +696,24 @@ async function migrate() {
       IF OBJECT_ID('Bookings', 'U') IS NOT NULL
       BEGIN
         INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
-        SELECT b.customer_id, 'booking', b.booking_id, b.booking_number, 'booking_customer', 'Bookings', b.booking_id
+        SELECT party.customer_id, 'booking', b.booking_id, b.booking_number, party.access_role, 'Bookings', b.booking_id
         FROM Bookings b
-        WHERE b.customer_id IS NOT NULL
+        CROSS APPLY (VALUES
+          (COALESCE(b.booking_customer_id, b.customer_id), 'booking_customer'),
+          (b.shipping_line_id, 'shipping_line'),
+          (b.forwarder_id, 'forwarder'),
+          (b.shipper_id, 'shipper'),
+          (b.consignee_id, 'consignee'),
+          (b.trucking_company_id, 'trucking'),
+          (b.bill_to_customer_id, 'billing')
+        ) party(customer_id, access_role)
+        WHERE party.customer_id IS NOT NULL
           AND NOT EXISTS (
             SELECT 1 FROM PortalEntityAccess pea
-            WHERE pea.customer_id = b.customer_id
+            WHERE pea.customer_id = party.customer_id
               AND pea.entity_type = 'booking'
               AND pea.entity_id = b.booking_id
-              AND pea.access_role = 'booking_customer'
+              AND pea.access_role = party.access_role
               AND pea.is_active = 1
           );
       END;
@@ -698,84 +737,65 @@ async function migrate() {
       IF OBJECT_ID('BookingContainers', 'U') IS NOT NULL AND OBJECT_ID('Bookings', 'U') IS NOT NULL
       BEGIN
         INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
-        SELECT b.customer_id, 'container', bc.container_id, MAX(bc.container_number), 'booking_customer', 'BookingContainers', MIN(bc.id)
+        SELECT party.customer_id, 'container', bc.container_id, MAX(bc.container_number), party.access_role, 'BookingContainers', MIN(bc.id)
         FROM BookingContainers bc
         JOIN Bookings b ON b.booking_id = bc.booking_id
-        WHERE b.customer_id IS NOT NULL
+        CROSS APPLY (VALUES
+          (COALESCE(b.booking_customer_id, b.customer_id), 'booking_customer'),
+          (b.shipping_line_id, 'shipping_line'),
+          (b.forwarder_id, 'forwarder'),
+          (b.shipper_id, 'shipper'),
+          (b.consignee_id, 'consignee'),
+          (b.trucking_company_id, 'trucking'),
+          (b.bill_to_customer_id, 'billing')
+        ) party(customer_id, access_role)
+        WHERE party.customer_id IS NOT NULL
           AND (bc.container_id IS NOT NULL OR bc.container_number IS NOT NULL)
           AND NOT EXISTS (
             SELECT 1 FROM PortalEntityAccess pea
-            WHERE pea.customer_id = b.customer_id
+            WHERE pea.customer_id = party.customer_id
               AND pea.entity_type = 'container'
-              AND pea.access_role = 'booking_customer'
+              AND pea.access_role = party.access_role
               AND pea.is_active = 1
               AND (
                 (bc.container_id IS NOT NULL AND pea.entity_id = bc.container_id)
                 OR (bc.container_id IS NULL AND pea.entity_ref = bc.container_number)
               )
           )
-        GROUP BY b.customer_id, bc.container_id, bc.container_number;
+        GROUP BY party.customer_id, party.access_role, bc.container_id, bc.container_number;
       END;
 
       IF OBJECT_ID('GateTransactions', 'U') IS NOT NULL
       BEGIN
         INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
-        SELECT gt.container_owner_id, 'gate_transaction', gt.transaction_id, gt.eir_number, 'owner', 'GateTransactions', gt.transaction_id
-        FROM GateTransactions gt
-        WHERE gt.container_owner_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM PortalEntityAccess pea
-            WHERE pea.customer_id = gt.container_owner_id
-              AND pea.entity_type = 'gate_transaction'
-              AND pea.entity_id = gt.transaction_id
-              AND pea.access_role = 'owner'
-              AND pea.is_active = 1
-          );
-
-        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
-        SELECT gt.billing_customer_id, 'gate_transaction', gt.transaction_id, gt.eir_number, 'billing', 'GateTransactions', gt.transaction_id
-        FROM GateTransactions gt
-        WHERE gt.billing_customer_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM PortalEntityAccess pea
-            WHERE pea.customer_id = gt.billing_customer_id
-              AND pea.entity_type = 'gate_transaction'
-              AND pea.entity_id = gt.transaction_id
-              AND pea.access_role = 'billing'
-              AND pea.is_active = 1
-          );
-
-        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
-        SELECT gt.container_owner_id, 'container', gt.container_id, MAX(c.container_number), 'owner', 'GateTransactions', MIN(gt.transaction_id)
+        SELECT party.customer_id, target.entity_type, target.entity_id, target.entity_ref, party.access_role, 'GateTransactions', gt.transaction_id
         FROM GateTransactions gt
         LEFT JOIN Containers c ON c.container_id = gt.container_id
-        WHERE gt.container_owner_id IS NOT NULL
-          AND gt.container_id IS NOT NULL
+        CROSS APPLY (VALUES
+          (gt.container_owner_id, 'owner'),
+          (gt.billing_customer_id, 'billing'),
+          (gt.trucking_company_id, 'trucking'),
+          (gt.driver_user_id, 'driver')
+        ) party(customer_id, access_role)
+        CROSS APPLY (VALUES
+          ('gate_transaction', gt.transaction_id, gt.eir_number),
+          ('eir', gt.transaction_id, gt.eir_number),
+          ('container', gt.container_id, c.container_number)
+        ) target(entity_type, entity_id, entity_ref)
+        WHERE party.customer_id IS NOT NULL
+          AND (target.entity_id IS NOT NULL OR target.entity_ref IS NOT NULL)
           AND NOT EXISTS (
             SELECT 1 FROM PortalEntityAccess pea
-            WHERE pea.customer_id = gt.container_owner_id
-              AND pea.entity_type = 'container'
-              AND pea.entity_id = gt.container_id
-              AND pea.access_role = 'owner'
+            WHERE pea.customer_id = party.customer_id
+              AND pea.entity_type = target.entity_type
+              AND pea.access_role = party.access_role
               AND pea.is_active = 1
+              AND (
+                (target.entity_id IS NOT NULL AND pea.entity_id = target.entity_id)
+                OR (target.entity_id IS NULL AND pea.entity_ref = target.entity_ref)
+              )
           )
-        GROUP BY gt.container_owner_id, gt.container_id;
-
-        INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
-        SELECT gt.billing_customer_id, 'container', gt.container_id, MAX(c.container_number), 'billing', 'GateTransactions', MIN(gt.transaction_id)
-        FROM GateTransactions gt
-        LEFT JOIN Containers c ON c.container_id = gt.container_id
-        WHERE gt.billing_customer_id IS NOT NULL
-          AND gt.container_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM PortalEntityAccess pea
-            WHERE pea.customer_id = gt.billing_customer_id
-              AND pea.entity_type = 'container'
-              AND pea.entity_id = gt.container_id
-              AND pea.access_role = 'billing'
-              AND pea.is_active = 1
-          )
-        GROUP BY gt.billing_customer_id, gt.container_id;
+        ;
       END;
 
       IF OBJECT_ID('Invoices', 'U') IS NOT NULL
@@ -793,24 +813,6 @@ async function migrate() {
               AND pea.is_active = 1
           );
 
-        IF COL_LENGTH('Invoices', 'container_id') IS NOT NULL
-        BEGIN
-          INSERT INTO PortalEntityAccess (customer_id, entity_type, entity_id, entity_ref, access_role, source_table, source_id)
-          SELECT i.customer_id, 'container', i.container_id, MAX(c.container_number), 'invoice_customer', 'Invoices', MIN(i.invoice_id)
-          FROM Invoices i
-          LEFT JOIN Containers c ON c.container_id = i.container_id
-          WHERE i.customer_id IS NOT NULL
-            AND i.container_id IS NOT NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM PortalEntityAccess pea
-              WHERE pea.customer_id = i.customer_id
-                AND pea.entity_type = 'container'
-                AND pea.entity_id = i.container_id
-                AND pea.access_role = 'invoice_customer'
-                AND pea.is_active = 1
-            )
-          GROUP BY i.customer_id, i.container_id;
-        END;
       END;
     `);
 

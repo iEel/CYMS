@@ -63,15 +63,24 @@ export function buildPortalExpectedGrantsSql() {
   return `
     WITH RawExpectedGrants AS (
       SELECT
-        b.customer_id,
+        party.customer_id,
         CAST(N'booking' AS NVARCHAR(40)) AS entity_type,
         b.booking_id AS entity_id,
         b.booking_number AS entity_ref,
-        CAST(N'booking_customer' AS NVARCHAR(40)) AS access_role,
+        party.access_role,
         CAST(N'Bookings' AS NVARCHAR(80)) AS source_table,
         b.booking_id AS source_id
       FROM Bookings b
-      WHERE b.customer_id IS NOT NULL
+      CROSS APPLY (VALUES
+        (COALESCE(b.booking_customer_id, b.customer_id), CAST(N'booking_customer' AS NVARCHAR(40))),
+        (b.shipping_line_id, CAST(N'shipping_line' AS NVARCHAR(40))),
+        (b.forwarder_id, CAST(N'forwarder' AS NVARCHAR(40))),
+        (b.shipper_id, CAST(N'shipper' AS NVARCHAR(40))),
+        (b.consignee_id, CAST(N'consignee' AS NVARCHAR(40))),
+        (b.trucking_company_id, CAST(N'trucking' AS NVARCHAR(40))),
+        (b.bill_to_customer_id, CAST(N'billing' AS NVARCHAR(40)))
+      ) party(customer_id, access_role)
+      WHERE party.customer_id IS NOT NULL
 
       UNION ALL
 
@@ -89,73 +98,52 @@ export function buildPortalExpectedGrantsSql() {
       UNION ALL
 
       SELECT
-        b.customer_id,
+        party.customer_id,
         CAST(N'container' AS NVARCHAR(40)) AS entity_type,
         bc.container_id AS entity_id,
         bc.container_number AS entity_ref,
-        CAST(N'booking_customer' AS NVARCHAR(40)) AS access_role,
+        party.access_role,
         CAST(N'BookingContainers' AS NVARCHAR(80)) AS source_table,
         bc.id AS source_id
       FROM BookingContainers bc
       JOIN Bookings b ON b.booking_id = bc.booking_id
-      WHERE b.customer_id IS NOT NULL
+      CROSS APPLY (VALUES
+        (COALESCE(b.booking_customer_id, b.customer_id), CAST(N'booking_customer' AS NVARCHAR(40))),
+        (b.shipping_line_id, CAST(N'shipping_line' AS NVARCHAR(40))),
+        (b.forwarder_id, CAST(N'forwarder' AS NVARCHAR(40))),
+        (b.shipper_id, CAST(N'shipper' AS NVARCHAR(40))),
+        (b.consignee_id, CAST(N'consignee' AS NVARCHAR(40))),
+        (b.trucking_company_id, CAST(N'trucking' AS NVARCHAR(40))),
+        (b.bill_to_customer_id, CAST(N'billing' AS NVARCHAR(40)))
+      ) party(customer_id, access_role)
+      WHERE party.customer_id IS NOT NULL
         AND (bc.container_id IS NOT NULL OR bc.container_number IS NOT NULL)
 
       UNION ALL
 
       SELECT
-        gt.container_owner_id AS customer_id,
-        CAST(N'gate_transaction' AS NVARCHAR(40)) AS entity_type,
-        gt.transaction_id AS entity_id,
-        gt.eir_number AS entity_ref,
-        CAST(N'owner' AS NVARCHAR(40)) AS access_role,
-        CAST(N'GateTransactions' AS NVARCHAR(80)) AS source_table,
-        gt.transaction_id AS source_id
-      FROM GateTransactions gt
-      WHERE gt.container_owner_id IS NOT NULL
-
-      UNION ALL
-
-      SELECT
-        gt.billing_customer_id AS customer_id,
-        CAST(N'gate_transaction' AS NVARCHAR(40)) AS entity_type,
-        gt.transaction_id AS entity_id,
-        gt.eir_number AS entity_ref,
-        CAST(N'billing' AS NVARCHAR(40)) AS access_role,
-        CAST(N'GateTransactions' AS NVARCHAR(80)) AS source_table,
-        gt.transaction_id AS source_id
-      FROM GateTransactions gt
-      WHERE gt.billing_customer_id IS NOT NULL
-
-      UNION ALL
-
-      SELECT
-        gt.container_owner_id AS customer_id,
-        CAST(N'container' AS NVARCHAR(40)) AS entity_type,
-        gt.container_id AS entity_id,
-        c.container_number AS entity_ref,
-        CAST(N'owner' AS NVARCHAR(40)) AS access_role,
+        party.customer_id,
+        target.entity_type,
+        target.entity_id,
+        target.entity_ref,
+        party.access_role,
         CAST(N'GateTransactions' AS NVARCHAR(80)) AS source_table,
         gt.transaction_id AS source_id
       FROM GateTransactions gt
       LEFT JOIN Containers c ON c.container_id = gt.container_id
-      WHERE gt.container_owner_id IS NOT NULL
-        AND gt.container_id IS NOT NULL
-
-      UNION ALL
-
-      SELECT
-        gt.billing_customer_id AS customer_id,
-        CAST(N'container' AS NVARCHAR(40)) AS entity_type,
-        gt.container_id AS entity_id,
-        c.container_number AS entity_ref,
-        CAST(N'billing' AS NVARCHAR(40)) AS access_role,
-        CAST(N'GateTransactions' AS NVARCHAR(80)) AS source_table,
-        gt.transaction_id AS source_id
-      FROM GateTransactions gt
-      LEFT JOIN Containers c ON c.container_id = gt.container_id
-      WHERE gt.billing_customer_id IS NOT NULL
-        AND gt.container_id IS NOT NULL
+      CROSS APPLY (VALUES
+        (gt.container_owner_id, CAST(N'owner' AS NVARCHAR(40))),
+        (gt.billing_customer_id, CAST(N'billing' AS NVARCHAR(40))),
+        (gt.trucking_company_id, CAST(N'trucking' AS NVARCHAR(40))),
+        (gt.driver_user_id, CAST(N'driver' AS NVARCHAR(40)))
+      ) party(customer_id, access_role)
+      CROSS APPLY (VALUES
+        (CAST(N'gate_transaction' AS NVARCHAR(40)), gt.transaction_id, gt.eir_number),
+        (CAST(N'eir' AS NVARCHAR(40)), gt.transaction_id, gt.eir_number),
+        (CAST(N'container' AS NVARCHAR(40)), gt.container_id, c.container_number)
+      ) target(entity_type, entity_id, entity_ref)
+      WHERE party.customer_id IS NOT NULL
+        AND (target.entity_id IS NOT NULL OR target.entity_ref IS NOT NULL)
 
       UNION ALL
 
@@ -169,21 +157,6 @@ export function buildPortalExpectedGrantsSql() {
         i.invoice_id AS source_id
       FROM Invoices i
       WHERE i.customer_id IS NOT NULL
-
-      UNION ALL
-
-      SELECT
-        i.customer_id,
-        CAST(N'container' AS NVARCHAR(40)) AS entity_type,
-        i.container_id AS entity_id,
-        c.container_number AS entity_ref,
-        CAST(N'invoice_customer' AS NVARCHAR(40)) AS access_role,
-        CAST(N'Invoices' AS NVARCHAR(80)) AS source_table,
-        i.invoice_id AS source_id
-      FROM Invoices i
-      LEFT JOIN Containers c ON c.container_id = i.container_id
-      WHERE i.customer_id IS NOT NULL
-        AND i.container_id IS NOT NULL
     ),
     ExpectedGrants AS (
       SELECT

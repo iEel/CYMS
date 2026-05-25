@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { upsertPortalEntityAccess } from '@/lib/portalEntityAccess';
+import { applyPortalGrants, buildBookingContainerGrants } from '@/lib/portalGrantRules';
 
 // GET — ดึงรายการตู้ที่ผูกกับ Booking
 export async function GET(request: NextRequest) {
@@ -56,8 +56,13 @@ export async function POST(request: NextRequest) {
 
     const bookingResult = await db.request()
       .input('bookingId', sql.Int, booking_id)
-      .query('SELECT customer_id FROM Bookings WHERE booking_id = @bookingId');
-    const bookingCustomerId = bookingResult.recordset[0]?.customer_id || null;
+      .query(`
+        SELECT booking_id, booking_number, customer_id, booking_customer_id, shipping_line_id,
+          forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id
+        FROM Bookings
+        WHERE booking_id = @bookingId
+      `);
+    const booking = bookingResult.recordset[0] || { booking_id };
 
     const linkResult = await db.request()
       .input('bookingId', sql.Int, booking_id)
@@ -69,16 +74,11 @@ export async function POST(request: NextRequest) {
         VALUES (@bookingId, @containerId, @containerNumber)
       `);
 
-    await upsertPortalEntityAccess({
-      db,
-      customerId: bookingCustomerId,
-      entityType: 'container',
-      entityId: container_id || null,
-      entityRef: container_number.toUpperCase(),
-      accessRole: 'booking_customer',
-      sourceTable: 'BookingContainers',
-      sourceId: linkResult.recordset[0]?.id || null,
-    });
+    await applyPortalGrants(db, buildBookingContainerGrants(booking, {
+      id: linkResult.recordset[0]?.id || null,
+      container_id: container_id || null,
+      container_number: container_number.toUpperCase(),
+    }));
 
     return NextResponse.json({ success: true });
   } catch (error) {

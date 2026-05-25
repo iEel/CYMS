@@ -222,9 +222,9 @@ describe('PUT /api/billing/invoices — status actions', () => {
       q([{ credited_total: 0 }]), // previous CN
       q([{ invoice_id: 21, invoice_number: 'CN-2026-000001', grand_total: -1070, customer_id: 2, container_id: 3 }]), // insert CN
       q([]), // grant CN invoice portal access
-      q([]), // grant CN container portal access
       q([]), // cancel original
       q([{ invoice_id: 22, invoice_number: 'INV-2026-000002', grand_total: 535, customer_id: 2, container_id: 3 }]), // insert revised
+      q([]), // grant revised invoice portal access
     ];
 
     const res = await PUT(makeRequest('PUT', 'http://localhost/api/billing/invoices', {
