@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 22 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 25 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs** (~100%)
 
 ---
 
@@ -169,8 +169,8 @@ container-yard-system/
 │   │   │   ├── gate/
 │   │   │   │   ├── page.tsx          # **🧩 Orchestrator** (95 lines) — tab switching + EIR modal + Timeline modal
 │   │   │   │   ├── types.ts          # Shared types (Transaction, ContainerResult, BillingCharge, BillingData, BillingClearance, GateOutBooking) + CSS constants
-│   │   │   │   ├── GateInTab.tsx     # Gate-In: auto-allocation + **ISO 6346 check digit** + **Boxtech auto-fill** + **prefix→customer** + billing + **Billing Clearance** + inspection + OCR + guided workflow panel
-│   │   │   │   ├── GateOutTab.tsx    # Gate-Out: **2-Phase workflow** (ขอดึง → รอรถยก → ปล่อยออก) + billing + payment + **Booking Picker/Summary** + **Billing Clearance** + guided workflow panel
+│   │   │   │   ├── GateInTab.tsx     # Gate-In: auto-allocation + **ISO 6346 check digit** + **Boxtech auto-fill/spec capture** + **prefix→customer** + billing + **Billing Clearance** + inspection + OCR + guided workflow panel
+│   │   │   │   ├── GateOutTab.tsx    # Gate-Out: **2-Phase workflow** (ขอดึง → รอรถยก → ปล่อยออก) + billing + payment + **Booking Picker/Summary** + **Billing Clearance** + BoxTech specs read-only + guided workflow panel
 │   │   │   │   ├── HistoryTab.tsx    # ประวัติ Gate: search + date filter + pagination + **Excel export**
 │   │   │   │   └── TransferTab.tsx   # ย้ายข้ามลาน: send transfer + receive in-transit
 │   │   │   ├── operations/page.tsx # หน้าปฏิบัติการ (3 tabs: Job Queue/สร้างงาน/Shifting)
@@ -338,7 +338,7 @@ container-yard-system/
 │   │   ├── portal/
 │   │   │   └── PortalInspectionModal.tsx # Customer Portal read-only inspection: 6-side SVG, damage points, photo evidence
 │   │   └── gate/
-│   │       ├── EIRDocument.tsx         # EIR A5 landscape print (physical 202×140mm area, readable print text, Portal, QR, condition, grade, signatures)
+│   │       ├── EIRDocument.tsx         # EIR A5 landscape print (physical 202×140mm area, readable print text, Portal, QR, condition, grade, BoxTech specs, signatures)
 │   │       ├── ContainerInspection.tsx  # 6-side SVG damage marking + photo + grade
 │   │       ├── GateWorkflowPanel.tsx    # Guided checklist/exception panel for Gate-In and Gate-Out
 │   │       ├── GateDecisionBar.tsx      # Sticky billing/booking/evidence/supervisor decision summary
@@ -372,7 +372,7 @@ container-yard-system/
 │       ├── apiAuth.ts            # **🔐 withAuth() wrapper** — JWT + rate limiting + role-based access
 │       ├── authFetch.ts          # **🔐 Client auth fetch** — auto-attach Bearer token + 401 redirect
 │       ├── audit.ts              # **🔐 Centralized logAudit()** — non-fatal AuditLog INSERT
-│       ├── eirPayload.ts         # Shared EIR payload builder: damage_report parse, condition/grade, company, lifecycle
+│       ├── eirPayload.ts         # Shared EIR payload builder: damage_report parse, condition/grade, company, lifecycle, BoxTech technical specs
 │       ├── portalEntityAccess.ts # Non-fatal upsert helper for PortalEntityAccess grants
 │       ├── portalAccess.ts       # Customer Portal access grants SQL helpers + visibility reason subquery
 │       ├── portalContainerSummary.ts # Shared Portal container KPI buckets (total/in-yard/released/hold/repair)
@@ -427,7 +427,7 @@ container-yard-system/
 | `Users` | username, password_hash, role_id, status, **two_fa_enabled, two_fa_secret, two_fa_confirmed_at, bound_device_mac, notif_last_read_at** | ผู้ใช้งาน + TOTP 2FA + trusted browser device id (`bound_device_mac` เป็นชื่อ legacy ไม่ใช่ MAC จริง) + timestamp อ่านแจ้งเตือนล่าสุด |
 | `UserYardAccess` | user_id, yard_id | สิทธิ์เข้าถึงลาน |
 | `ApprovalHierarchy` | approver_id, level | สายอนุมัติ |
-| `Containers` | container_number, size, type, status, zone/bay/row/tier, **is_soc** (BIT, SOC=ตู้ลูกค้า), **container_owner_id** (FK→Customers) | ตู้คอนเทนเนอร์ + SOC/COC |
+| `Containers` | container_number, size, type, status, zone/bay/row/tier, **is_soc** (BIT, SOC=ตู้ลูกค้า), **container_owner_id** (FK→Customers), **tare_weight_kg**, **max_gross_weight_kg**, boxtech_group_st/source/fetched_at | ตู้คอนเทนเนอร์ + SOC/COC + สเปกเทคนิคจาก BoxTech (ไม่ใช่น้ำหนักจริง/VGM) |
 | `Customers` | customer_code (auto-gen `CUST-XXXXX`), customer_name, **is_line, is_forwarder, is_trucking, is_shipper, is_consignee** (Boolean flags), tax_id, address, billing_address, contact_name/phone/email, **default_payment_type** (CASH/CREDIT), credit_term, **edi_prefix** (บังคับเมื่อ is_line=1), is_active | ลูกค้า — **Multi-role** (1 บริษัท = หลายบทบาท) |
 | `CustomerBranches` | customer_id (FK), branch_code (default '00000'), branch_name, billing_address, contact_name/phone/email, is_default, is_active | **สาขาลูกค้า** — หลายสาขาต่อ 1 บริษัท |
 | `PortalEntityAccess` | customer_id, entity_type, entity_id/entity_ref, access_role, source_table/source_id, is_active | Source-of-truth สำหรับ Customer Portal visibility ต่อ `container` / `booking` / `gate_transaction` / `invoice` |
@@ -506,7 +506,7 @@ container-yard-system/
 |--------|----------|---------|
 | GET | `/api/gate?yard_id=X&type=gate_in&date=today&search=` | ดึงรายการ gate transactions (date: `today` หรือ `YYYY-MM-DD`, search: เลขตู้/คนขับ/ทะเบียน/EIR) |
 | POST | `/api/gate` | Gate-In/Gate-Out — `{ transaction_type, container_number, ... }` → **auto-allocate** + EIR + **auto Work Order** |
-| GET | `/api/gate/eir?eir_number=X` | ดึงข้อมูล EIR (+ condition/grade/company info) |
+| GET | `/api/gate/eir?eir_number=X` | ดึงข้อมูล EIR (+ condition/grade/company info + BoxTech technical specs) |
 
 ### Uploads (File Storage)
 
@@ -571,7 +571,7 @@ container-yard-system/
 |--------|----------|---------|
 | GET | `/api/containers/timeline?container_id=X` | **Container Timeline** — unified events from GateTransactions + AuditLog + Invoices sorted by time |
 | GET | `/api/containers/timeline?container_number=XXXX1234567` | **Container Timeline** — same, lookup by container_number |
-| GET | `/api/boxtech?container_number=XXXX1234567` | Boxtech proxy — BIC code + container lookup + prefix→customer mapping → `{ shipping_line, size, type, customer, source }` |
+| GET | `/api/boxtech?container_number=XXXX1234567` | Boxtech proxy — BIC code + container lookup + prefix→customer mapping + normalized `tare_weight_kg`/`max_gross_weight_kg` → `{ shipping_line, size, type, customer, source, tare_weight_kg, max_gross_weight_kg }` |
 
 ### 📊 Gate Reports
 
@@ -727,6 +727,9 @@ container-yard-system/
   - เมื่อ check digit ผ่าน → เรียก Boxtech API ดึงข้อมูลสายเรือ/ขนาด/ประเภท
   - Auto-fill ช่อง shipping_line, size, type + badge "✅ Boxtech"
   - Token cache ฝั่ง server (auto-refresh)
+  - Normalize `tare_kg`/`max_gross_mass_kg` เป็น `tare_weight_kg`/`max_gross_weight_kg`
+  - Gate-In บันทึกสเปกตู้ลง `Containers` พร้อม `boxtech_group_st/source/fetched_at` เพื่อใช้ซ้ำใน Gate-Out, Container 360 และ EIR
+  - ค่านี้เป็น **technical spec ของตู้** เท่านั้น ไม่ใช่น้ำหนักสินค้าจริง/VGM และไม่ใช้ตัดสิน weight limit
 - **Prefix → Customer Mapping** (**ใหม่**):
   - จับคู่ prefix กับลูกค้าจาก PrefixMapping table → แสดงชื่อลูกค้าทันที
 - **Fallback — ตู้ prefix ไม่รู้จัก** (**ใหม่**):
@@ -778,6 +781,7 @@ container-yard-system/
 - ใบเสร็จ/ใบแจ้งหนี้บันทึก **เฉพาะรายการที่เลือก** + ราคาที่แก้ไข
 - บันทึก `billing_clearance_id` ลง GateTransactions เพื่อให้ตรวจย้อนหลังได้ว่า Gate-Out รอบนั้นเคลียร์เงินด้วยเงื่อนไขใด
 - **Gate-Out Booking Picker/Summary**: เมื่อมี Booking ที่เกี่ยวข้อง ระบบให้เลือก Booking ก่อนปล่อยออก และแสดง progress เช่น `จำนวนตู้: 3/5 received, 1/5 released`
+- **BoxTech Specs Read-only**: แสดง `Tare` และ `Max Gross` จาก `Containers` ใน panel ตู้ที่เลือก พร้อมข้อความกำกับว่าเป็นสเปกตู้ ไม่ใช่น้ำหนักจริง/VGM; ไม่มีช่องให้พนักงานกรอก/แก้จาก Gate-Out
 - **UX — Toast Banner**: หลัง Gate-Out สำเร็จ → form reset ทันที + toast banner แสดง EIR print + auto-dismiss 15 วินาที
 - **WO กรองเฉพาะรอบปัจจุบัน**: ดูเฉพาะ Work Orders ที่สร้างหลัง gate_in_date — ไม่ดึง WO เก่ามาข้าม Phase
 
@@ -794,6 +798,7 @@ container-yard-system/
 - **React Portal**: render เป็น direct child ของ `<body>` — ป้องกัน print ซ้ำหลายหน้า
 - เลข EIR ออกอัตโนมัติ (EIR-IN-YYYY-XXXXXX / EIR-OUT-YYYY-XXXXXX)
 - ข้อมูลครบ: ตู้, คนขับ, รถ, ซีล, ลาน, พิกัด, ผู้ดำเนินการ
+- แสดง `Tare Weight` และ `Max Gross` จาก BoxTech technical specs ถ้ามีค่า (ใช้ร่วมกันทั้ง EIR ฝั่งพนักงาน, Portal EIR และ Portal EIR PDF)
 - **Company Header**: ชื่อบริษัท + (สำนักงานใหญ่) + ที่อยู่ + เลขประจำตัวผู้เสียภาษี + เบอร์โทร + โลโก้
 - **สภาพตู้ (Container Condition)**: ✅ Sound / ⚠️ Damage (คำนวณจาก damage_report)
 - **เกรดตู้ (Container Grade)**: A (สภาพดี) / B (สภาพพอใช้) / C (ใส่ของทั่วไป) / D (ห้ามใช้งาน)
@@ -1236,7 +1241,7 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 
 ### 🧱 Runtime DDL Migration (✅ เสร็จ — 21 พ.ค. 2569)
 - [x] **ย้าย direct request-time DDL ออกจาก core API routes** — ลบ schema guard ที่ `ALTER TABLE` / `CREATE TABLE` / `COL_LENGTH` จาก `api/gate`, `api/billing/invoices`, `api/mnr`, `api/customers/360`, `api/settings/customers`
-- [x] **Migration script กลาง** — เพิ่ม `scripts/migrate-runtime-core-schema.js` สำหรับเติม columns/tables ที่ core routes เคยสร้างเอง ได้แก่ `Containers.container_grade`, `BillingClearances`, invoice document columns, M&R extended columns, customer role/credit/branch columns, `CustomerBranches`, และ owner/billing columns บน `GateTransactions`
+- [x] **Migration script กลาง** — เพิ่ม `scripts/migrate-runtime-core-schema.js` สำหรับเติม columns/tables ที่ core routes เคยสร้างเอง ได้แก่ `Containers.container_grade`, `Containers.tare_weight_kg/max_gross_weight_kg/boxtech_*`, `BillingClearances`, invoice document columns, M&R extended columns, customer role/credit/branch columns, `CustomerBranches`, และ owner/billing columns บน `GateTransactions`
 - [x] **Batch 2 source-wide cleanup** — ย้าย DDL ที่เหลือออกจาก `src/app/api` และ `src/lib` รวม shared helpers (`documentLifecycle`, `documentNumber`, `customerCredit`, `attachmentCenter`, `approvalReview`, `integrationLog`) และ routes ที่เคย auto-migrate เช่น `containers`, `billing/clearance`, `billing/reports`, `edi/codeco`, `edi/templates`, `mnr/cedex`, `mnr/eor-pdf`, `settings/*`
 - [x] **Migration script ขยายครบ** — `scripts/migrate-runtime-core-schema.js` ตอนนี้ครอบคลุม DocumentSequences, DocumentLifecycle, EntityAttachments, ApprovalReviews, IntegrationLogs, ReconciliationActions, EDITemplates, CEDEXCodes, StorageRateTiers, PrefixMapping, SystemSettings, Company/Yard branch fields และ granular RBAC permission columns
 - [x] **Static regression test** — `src/app/api/__tests__/no-runtime-ddl.test.ts` ตรวจ production source ทั้ง `src/app/api` และ `src/lib` ไม่ให้มี `CREATE TABLE` / `ALTER TABLE` ใน runtime path อีก
