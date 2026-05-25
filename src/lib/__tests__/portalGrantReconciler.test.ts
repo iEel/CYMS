@@ -33,8 +33,9 @@ describe('portal grant reconciler', () => {
     const sql = buildPortalExpectedGrantsSql();
 
     expect(sql).toMatch(/FROM\s+GateTransactions\s+gt[\s\S]*bookingGateCustomer/i);
-    expect(sql).toMatch(/bookingGateCustomer\.customer_id[\s\S]*target\.entity_type[\s\S]*CAST\(N'booking_customer'\s+AS\s+NVARCHAR\(40\)\)\s+AS\s+access_role[\s\S]*CAST\(N'GateTransactions'\s+AS\s+NVARCHAR\(80\)\)\s+AS\s+source_table/i);
-    expect(sql).toContain('COALESCE(gt.booking_customer_id, b.booking_customer_id, b.customer_id)');
+    expect(sql).toMatch(/COALESCE\(gt\.booking_customer_id,\s*bookingGateCustomer\.customer_id\)\s+AS\s+customer_id[\s\S]*target\.entity_type[\s\S]*CAST\(N'booking_customer'\s+AS\s+NVARCHAR\(40\)\)\s+AS\s+access_role[\s\S]*CAST\(N'GateTransactions'\s+AS\s+NVARCHAR\(80\)\)\s+AS\s+source_table/i);
+    expect(sql).toContain('COALESCE(b.booking_customer_id, b.customer_id) AS customer_id');
+    expect(sql).not.toContain('COALESCE(gt.booking_customer_id, b.booking_customer_id, b.customer_id)');
     expect(sql).toMatch(/bookingGateCustomer[\s\S]*CAST\(N'booking_customer'\s+AS\s+NVARCHAR\(40\)\)/i);
     expect(sql).toMatch(/CAST\(N'gate_transaction'\s+AS\s+NVARCHAR\(40\)\),\s+gt\.transaction_id,\s+gt\.eir_number/i);
     expect(sql).toMatch(/CAST\(N'eir'\s+AS\s+NVARCHAR\(40\)\),\s+gt\.transaction_id,\s+gt\.eir_number/i);

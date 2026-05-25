@@ -86,8 +86,10 @@ describe('portal access durable schema migration', () => {
 
   it('backfills GateTransactions booking customer grants without relying only on generic booking grants', () => {
     expect(migration).toMatch(/FROM\s+GateTransactions\s+gt[\s\S]*bookingGateCustomer/i);
-    expect(migration).toMatch(/bookingGateCustomer\.customer_id,\s*target\.entity_type,\s*target\.entity_id,\s*target\.entity_ref,\s*'booking_customer',\s*'GateTransactions'/i);
+    expect(migration).toMatch(/SELECT\s+COALESCE\(gt\.booking_customer_id,\s*bookingGateCustomer\.customer_id\),\s*target\.entity_type,\s*target\.entity_id,\s*target\.entity_ref,\s*'booking_customer',\s*'GateTransactions'/i);
     expect(migration).toMatch(/OUTER\s+APPLY[\s\S]*FROM\s+Bookings\s+b[\s\S]*b\.booking_number\s*=\s*gt\.booking_ref/i);
+    expect(migration).toContain('COALESCE(b.booking_customer_id, b.customer_id) AS customer_id');
+    expect(migration).not.toContain('COALESCE(gt.booking_customer_id, b.booking_customer_id, b.customer_id)');
     expect(migration).toMatch(/'gate_transaction',\s*gt\.transaction_id,\s*gt\.eir_number/i);
     expect(migration).toMatch(/'eir',\s*gt\.transaction_id,\s*gt\.eir_number/i);
     expect(migration).toMatch(/'container',\s*gt\.container_id,\s*c\.container_number/i);

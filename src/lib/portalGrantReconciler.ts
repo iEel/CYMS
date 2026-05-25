@@ -148,7 +148,7 @@ export function buildPortalExpectedGrantsSql() {
       UNION ALL
 
       SELECT
-        bookingGateCustomer.customer_id,
+        COALESCE(gt.booking_customer_id, bookingGateCustomer.customer_id) AS customer_id,
         target.entity_type,
         target.entity_id,
         target.entity_ref,
@@ -158,7 +158,7 @@ export function buildPortalExpectedGrantsSql() {
       FROM GateTransactions gt
       LEFT JOIN Containers c ON c.container_id = gt.container_id
       OUTER APPLY (
-        SELECT TOP 1 COALESCE(gt.booking_customer_id, b.booking_customer_id, b.customer_id) AS customer_id
+        SELECT TOP 1 COALESCE(b.booking_customer_id, b.customer_id) AS customer_id
         FROM Bookings b
         WHERE b.booking_number = gt.booking_ref
         ORDER BY COALESCE(b.eta, b.created_at) DESC, b.booking_id DESC
@@ -168,7 +168,7 @@ export function buildPortalExpectedGrantsSql() {
         (CAST(N'eir' AS NVARCHAR(40)), gt.transaction_id, gt.eir_number),
         (CAST(N'container' AS NVARCHAR(40)), gt.container_id, c.container_number)
       ) target(entity_type, entity_id, entity_ref)
-      WHERE bookingGateCustomer.customer_id IS NOT NULL
+      WHERE COALESCE(gt.booking_customer_id, bookingGateCustomer.customer_id) IS NOT NULL
         AND (target.entity_id IS NOT NULL OR target.entity_ref IS NOT NULL)
 
       UNION ALL
