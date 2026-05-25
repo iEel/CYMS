@@ -57,6 +57,15 @@ interface BookingDerivedContext {
   truckCompanyName?: string | null;
 }
 
+interface PortalVisibilityPreviewRow {
+  customerId: number;
+  entityType: string;
+  entityRef?: string | null;
+  accessRole: string;
+  validUntil?: string | null;
+  permissionScope?: Record<string, unknown>;
+}
+
 export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps) {
   const { hasPermission } = useAuth();
   const canGateIn = hasPermission('gate.in');
@@ -184,6 +193,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [bookingSearchLoading, setBookingSearchLoading] = useState(false);
   const [bookingSearchError, setBookingSearchError] = useState('');
   const bookingDerivedContextRef = useRef<BookingDerivedContext>({});
+  const [visibilityPreview, setVisibilityPreview] = useState<PortalVisibilityPreviewRow[]>([]);
+  const [visibilityPreviewLoading, setVisibilityPreviewLoading] = useState(false);
 
   const clearBookingDerivedContext = () => {
     const context = bookingDerivedContextRef.current;
@@ -359,6 +370,35 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       });
     return () => controller.abort();
   }, [yardId]);
+
+  useEffect(() => {
+    if (!gateInForm.container_number) {
+      setVisibilityPreview([]);
+      return;
+    }
+    const controller = new AbortController();
+    setVisibilityPreviewLoading(true);
+    fetch('/api/gate/visibility-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        container_number: gateInForm.container_number,
+        container_owner_id: containerOwnerId,
+        booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || manualCustomerId,
+        billing_customer_id: billingCustomerId,
+        trucking_company_id: selectedBooking?.trucking_company_id || null,
+        driver_user_id: null,
+      }),
+    })
+      .then(res => res.json())
+      .then(json => setVisibilityPreview(Array.isArray(json.preview) ? json.preview : []))
+      .catch(err => {
+        if (err.name !== 'AbortError') console.error('visibility preview error', err);
+      })
+      .finally(() => setVisibilityPreviewLoading(false));
+    return () => controller.abort();
+  }, [gateInForm.container_number, containerOwnerId, selectedBooking, manualCustomerId, billingCustomerId]);
 
   // Fetch gate-in billing when form has valid data
   useEffect(() => {
@@ -984,6 +1024,27 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-800 dark:text-white">Portal Visibility Preview</p>
+                <p className="text-[10px] text-slate-400">Gate In แสดงเฉพาะว่าจะสร้าง grant ให้ใคร ไม่ได้ตั้ง field policy รายครั้ง</p>
+              </div>
+              {visibilityPreviewLoading && <Loader2 size={14} className="animate-spin text-cyan-600" />}
+            </div>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+              {visibilityPreview.length === 0 ? (
+                <p className="text-xs text-slate-400">ยังไม่มี party ที่จะได้รับสิทธิ์</p>
+              ) : visibilityPreview.map((row, index) => (
+                <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
+                  <p className="font-semibold text-slate-700 dark:text-slate-200">Customer #{row.customerId}</p>
+                  <p className="mt-0.5 text-slate-400">{row.entityType} · {row.accessRole}</p>
+                  <p className="mt-1 text-[10px] text-slate-400">Grade default: hidden</p>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Driver Info */}
