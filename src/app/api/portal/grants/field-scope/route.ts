@@ -118,9 +118,10 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'enabled ต้องเป็น boolean' }, { status: 400 });
     }
 
-    const reason = typeof body.reason === 'string' && body.reason.trim()
-      ? body.reason.trim()
-      : undefined;
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    if (!reason) {
+      return NextResponse.json({ error: 'กรุณาระบุเหตุผลการเปลี่ยนสิทธิ์' }, { status: 400 });
+    }
 
     const db = await getDb();
     const existing = await db.request()
@@ -171,7 +172,7 @@ export async function PATCH(request: NextRequest) {
         entity_type: grant.entity_type,
         entity_id: grant.entity_id,
         entity_ref: grant.entity_ref,
-        ...(reason ? { reason } : {}),
+        reason,
       },
     });
 
