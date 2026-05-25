@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cyms-v2';
+const CACHE_NAME = 'cyms-v3';
 
 // Precache เฉพาะ static assets สาธารณะ — ห้าม cache page ที่ต้องการ auth
 const PRECACHE_URLS = [
@@ -39,6 +39,10 @@ self.addEventListener('fetch', (event) => {
   // เพราะ API response มี auth context และ state ที่เปลี่ยนตลอดเวลา
   if (url.pathname.startsWith('/api/')) return;
 
+  // [สำคัญ] ข้าม Next.js runtime/chunks ทั้งหมด
+  // dev server ใช้ชื่อ chunk ค่อนข้างคงที่ ถ้า cache-first จะทำให้หน้า route ใหม่ค้างหรือ hydrate ด้วย bundle เก่า
+  if (url.pathname.startsWith('/_next/')) return;
+
   // [สำคัญ] ข้าม page navigations (HTML) ทั้งหมด — ให้ browser/middleware จัดการ auth เอง
   // ถ้า SW เสิร์ฟ cached redirect → login ผู้ใช้จะถูก logout ทุกครั้ง
   if (request.destination === 'document') return;
@@ -61,6 +65,5 @@ self.addEventListener('fetch', (event) => {
   }
 
   // ทุกอย่างอื่น — Network first (ไม่ cache)
-  // รวมถึง /_next/ chunks ที่ไม่ใช่ static assets รูปแบบธรรมดา
+  // รวมถึง dynamic route/data request ที่ไม่ควรเก็บใน cache
 });
-

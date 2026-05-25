@@ -655,6 +655,8 @@ container-yard-system/
 - **API hardening**: `/api/yard/stats`, `GET /api/containers`, `check_position`, และ `/api/yard/allocate` บังคับ `yard_id` ที่ถูกต้อง + `requireYardAccess`; auto-allocation ไม่ fallback ไป yard 1 แล้ว และต้องมีสิทธิ์ `yard.location.assign` หรือ `yard.slot.move`
 - **Bay**: (**ใหม่**) Bay Cross-Section — แสดง Row×Tier grid แยกตาม Bay + เลือก Zone + สี shipping line/status + hover tooltip + click detail + legend
 - **3D**: Three.js — ตู้สมจริง (สัดส่วนจริง 20ft/40ft/45ft), toggle สีตู้ตาม `สายเรือ/สถานะ`, legend เปลี่ยนตาม color mode จริง, Hold/Repair ยังเด่นด้วยสีสถานะ, camera controls สำหรับ reset/top/focus selected container และ selected container action panel สำหรับเปิด detail/timeline/booking/billing ต่อทันที
+- **Live Yard Layer**: หน้า Yard ต่อ `/api/operations/stream` ผ่าน SSE เพื่อแสดงสถานะ `Live Yard` และ refresh ข้อมูลลานอัตโนมัติเมื่อ Work Order มีการเปลี่ยนแปลง
+- **PWA cache hardening**: `public/sw.js` ข้าม `/_next/` runtime/chunks ทั้งหมด และ bump cache เป็น `cyms-v3` เพื่อป้องกัน stale chunk ของ Next dev server ทำให้หน้า Yard/route ใหม่ค้างที่ loading หรือ hydrate ด้วย bundle เก่า
 - ตารางตู้ + filter + search + **pagination** (25 ตู้/หน้า + ปุ่มเลขหน้า + รีเซ็ตอัตโนมัติเมื่อเปลี่ยน filter)
 - **คลิกแถวตู้ → Container Detail Modal** (popup ตรงกลาง)
 

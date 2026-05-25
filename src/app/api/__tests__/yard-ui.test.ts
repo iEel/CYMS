@@ -3,9 +3,10 @@ import path from 'path';
 
 describe('Yard management UI', () => {
   const root = process.cwd();
+  const clientPath = 'src/app/(dashboard)/yard/YardPageClient.tsx';
 
   it('keeps operational yard views compact before the Bay/3D canvas', () => {
-    const source = fs.readFileSync(path.join(root, 'src/app/(dashboard)/yard/page.tsx'), 'utf8');
+    const source = fs.readFileSync(path.join(root, clientPath), 'utf8');
 
     expect(source).toContain('useCompactYardStats');
     expect(source).toContain('yardStats');
@@ -39,7 +40,7 @@ describe('Yard management UI', () => {
   });
 
   it('turns 3D selected containers into an actionable yard panel', () => {
-    const source = fs.readFileSync(path.join(root, 'src/app/(dashboard)/yard/page.tsx'), 'utf8');
+    const source = fs.readFileSync(path.join(root, clientPath), 'utf8');
 
     expect(source).toContain('selectedContainerActionPanel');
     expect(source).toContain('ตู้ที่เลือกในลาน');
@@ -47,6 +48,22 @@ describe('Yard management UI', () => {
     expect(source).toContain('Timeline');
     expect(source).toContain('Booking');
     expect(source).toContain('Billing');
+  });
+
+  it('keeps the yard view live when work orders change', () => {
+    const source = fs.readFileSync(path.join(root, clientPath), 'utf8');
+
+    expect(source).toContain('/api/operations/stream?yard_id=');
+    expect(source).toContain('Live Yard');
+    expect(source).toContain('lastLiveRefreshAt');
+    expect(source).toContain('ordersEventCountRef');
+    expect(source).toContain('fetchData();');
+  });
+
+  it('keeps the operational yard route dynamic so live state is not served from stale route cache', () => {
+    const source = fs.readFileSync(path.join(root, 'src/app/(dashboard)/yard/page.tsx'), 'utf8');
+
+    expect(source).toContain("export const dynamic = 'force-dynamic';");
   });
 
   it('avoids nested button semantics in yard search results', () => {
