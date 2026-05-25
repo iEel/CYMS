@@ -50,7 +50,7 @@ async function validateGateOutBooking(
     .input('yardId', sql.Int, yardId)
     .query(`
       SELECT TOP 1 b.booking_id, b.booking_number, b.status, b.container_count,
-        b.customer_id, b.container_size, b.container_type,
+        b.customer_id, b.booking_customer_id, b.container_size, b.container_type,
         (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id) AS linked_count
       FROM Bookings b
       WHERE b.booking_number = @bkRef AND b.yard_id = @yardId
@@ -118,7 +118,7 @@ async function validateGateOutBooking(
   return {
     ok: true,
     bookingId: booking.booking_id,
-    bookingCustomerId: booking.customer_id || null,
+    bookingCustomerId: booking.booking_customer_id || booking.customer_id || null,
     containerNumber: finalContainerNumber,
   };
 }

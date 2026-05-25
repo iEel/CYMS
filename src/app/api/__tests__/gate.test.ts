@@ -4,6 +4,8 @@
  */
 
 import { NextRequest } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 
 // ── Mock DB ────────────────────────────────────────────────────────
 const mockQuery = jest.fn();
@@ -128,5 +130,16 @@ describe('GET /api/gate (history)', () => {
     const req = makeGetRequest('http://localhost/api/gate?yard_id=1');
     const res = await GET(req);
     expect(res.status).toBe(500);
+  });
+});
+
+describe('gate portal grant source rules', () => {
+  it('uses gate-out booking_customer_id before legacy customer_id for booking grants', () => {
+    const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gate/route.ts'), 'utf8');
+    const validateGateOutBooking = source.match(/async function validateGateOutBooking[\s\S]*?\n}\n\nconst gateBodySchema/);
+
+    expect(validateGateOutBooking).not.toBeNull();
+    expect(validateGateOutBooking?.[0]).toContain('b.booking_customer_id');
+    expect(validateGateOutBooking?.[0]).toContain('bookingCustomerId: booking.booking_customer_id || booking.customer_id');
   });
 });

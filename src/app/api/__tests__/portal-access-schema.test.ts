@@ -88,6 +88,7 @@ describe('portal access durable schema migration', () => {
     expect(migration).toMatch(/FROM\s+GateTransactions\s+gt[\s\S]*bookingGateCustomer/i);
     expect(migration).toMatch(/SELECT\s+COALESCE\(gt\.booking_customer_id,\s*bookingGateCustomer\.customer_id\),\s*target\.entity_type,\s*target\.entity_id,\s*target\.entity_ref,\s*'booking_customer',\s*'GateTransactions'/i);
     expect(migration).toMatch(/OUTER\s+APPLY[\s\S]*FROM\s+Bookings\s+b[\s\S]*b\.booking_number\s*=\s*gt\.booking_ref/i);
+    expect(migration).toMatch(/WHERE\s+b\.booking_number\s*=\s*gt\.booking_ref[\s\S]*AND\s+\(b\.yard_id\s*=\s*gt\.yard_id\s+OR\s+gt\.yard_id\s+IS\s+NULL\s+OR\s+b\.yard_id\s+IS\s+NULL\)/i);
     expect(migration).toContain('COALESCE(b.booking_customer_id, b.customer_id) AS customer_id');
     expect(migration).not.toContain('COALESCE(gt.booking_customer_id, b.booking_customer_id, b.customer_id)');
     expect(migration).toMatch(/'gate_transaction',\s*gt\.transaction_id,\s*gt\.eir_number/i);
