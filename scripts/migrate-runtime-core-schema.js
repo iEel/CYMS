@@ -31,6 +31,16 @@ async function migrate() {
     await runStep(pool, 'Gate/billing clearance columns', `
       IF COL_LENGTH('Containers', 'container_grade') IS NULL
         ALTER TABLE Containers ADD container_grade NVARCHAR(1) NOT NULL CONSTRAINT DF_Containers_Grade DEFAULT 'A';
+      IF COL_LENGTH('Containers', 'tare_weight_kg') IS NULL
+        ALTER TABLE Containers ADD tare_weight_kg INT NULL;
+      IF COL_LENGTH('Containers', 'max_gross_weight_kg') IS NULL
+        ALTER TABLE Containers ADD max_gross_weight_kg INT NULL;
+      IF COL_LENGTH('Containers', 'boxtech_group_st') IS NULL
+        ALTER TABLE Containers ADD boxtech_group_st NVARCHAR(10) NULL;
+      IF COL_LENGTH('Containers', 'boxtech_source') IS NULL
+        ALTER TABLE Containers ADD boxtech_source NVARCHAR(30) NULL;
+      IF COL_LENGTH('Containers', 'boxtech_fetched_at') IS NULL
+        ALTER TABLE Containers ADD boxtech_fetched_at DATETIME2 NULL;
 
       IF OBJECT_ID('BillingClearances', 'U') IS NULL
       BEGIN
