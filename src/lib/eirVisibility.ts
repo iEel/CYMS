@@ -78,6 +78,14 @@ const PORTAL_LIFECYCLE_FIELDS = [
 ] as const;
 
 const GRADE_FIELDS = ['container_grade', 'container_grade_label'] as const;
+const DAMAGE_REPORT_GRADE_FIELDS = [
+  'condition_grade',
+  'condition_grade_label',
+  'container_grade',
+  'container_grade_label',
+  'grade',
+  'grade_label',
+] as const;
 
 function isRecord(value: unknown): value is EIRRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -136,13 +144,17 @@ function sanitizeDamagePoints(value: unknown): EIRRecord[] {
     });
 }
 
-function sanitizeDamageReport(value: unknown): EIRRecord | undefined {
+function sanitizeDamageReport(value: unknown, includeGradeFields: boolean): EIRRecord | undefined {
   if (!isRecord(value)) return undefined;
 
   const sanitized: EIRRecord = {};
 
-  if (Object.prototype.hasOwnProperty.call(value, 'condition_grade')) {
-    sanitized.condition_grade = value.condition_grade;
+  if (includeGradeFields) {
+    for (const field of DAMAGE_REPORT_GRADE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(value, field)) {
+        sanitized[field] = value[field];
+      }
+    }
   }
 
   const points = sanitizeDamagePoints(value.points);
@@ -295,7 +307,7 @@ export function buildEirViewPayload(master: EIRRecord, context: EIRVisibilityCon
   if (Object.prototype.hasOwnProperty.call(master, 'truck_plate')) {
     eir.truck_plate = maskTruckPlate(master.truck_plate);
   }
-  const damageReport = sanitizeDamageReport(master.damage_report);
+  const damageReport = sanitizeDamageReport(master.damage_report, canViewContainerGrade(context));
   if (damageReport) {
     eir.damage_report = damageReport;
   }

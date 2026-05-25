@@ -32,6 +32,11 @@ const eirRow = {
   },
   damage_report: {
     condition_grade: 'C',
+    condition_grade_label: 'Cargo worthy',
+    container_grade: 'C',
+    container_grade_label: 'Cargo worthy',
+    grade: 'C',
+    grade_label: 'Cargo worthy',
     inspector_notes: 'Internal handling note',
     photo_evidence: [{ url: 'https://example.test/private.jpg' }],
     photos: ['https://example.test/photo.jpg'],
@@ -149,10 +154,15 @@ describe('EIR visibility helpers', () => {
     const payload = buildEirViewPayload(eirRow, { viewType: 'customer' });
 
     expect(payload.eir.damage_report).toEqual({
-      condition_grade: 'C',
       points: [{ side: 'left', type: 'dent', severity: 'major', note: 'Panel dent' }],
     });
     expect(payload.eir.damage_report).not.toBe(eirRow.damage_report);
+    expect(payload.eir.damage_report).not.toHaveProperty('condition_grade');
+    expect(payload.eir.damage_report).not.toHaveProperty('condition_grade_label');
+    expect(payload.eir.damage_report).not.toHaveProperty('container_grade');
+    expect(payload.eir.damage_report).not.toHaveProperty('container_grade_label');
+    expect(payload.eir.damage_report).not.toHaveProperty('grade');
+    expect(payload.eir.damage_report).not.toHaveProperty('grade_label');
     expect(payload.eir.damage_report).not.toHaveProperty('photo_evidence');
     expect(payload.eir.damage_report).not.toHaveProperty('photos');
     expect(payload.eir.damage_report).not.toHaveProperty('inspector_notes');
@@ -224,6 +234,22 @@ describe('EIR visibility helpers', () => {
 
     expect(payload.eir).not.toHaveProperty('container_grade');
     expect(payload.eir).not.toHaveProperty('container_grade_label');
+    expect(payload.eir.damage_report).not.toHaveProperty('condition_grade');
+  });
+
+  it('does not show nested customer condition grade with action permission alone', () => {
+    const payload = buildEirViewPayload(eirRow, {
+      viewType: 'customer',
+      permissions: ['portal.eir.view', 'portal.eir.grade.view'],
+    });
+
+    expect(payload.eir).not.toHaveProperty('container_grade');
+    expect(payload.eir.damage_report).not.toHaveProperty('condition_grade');
+    expect(payload.eir.damage_report).not.toHaveProperty('condition_grade_label');
+    expect(payload.eir.damage_report).not.toHaveProperty('container_grade');
+    expect(payload.eir.damage_report).not.toHaveProperty('container_grade_label');
+    expect(payload.eir.damage_report).not.toHaveProperty('grade');
+    expect(payload.eir.damage_report).not.toHaveProperty('grade_label');
   });
 
   it('does not show customer container grade when the field grant scope is closed', () => {
@@ -245,6 +271,7 @@ describe('EIR visibility helpers', () => {
 
     expect(payload.eir).not.toHaveProperty('container_grade');
     expect(payload.eir).not.toHaveProperty('container_grade_label');
+    expect(payload.eir.damage_report).not.toHaveProperty('condition_grade');
   });
 
   it('shows customer container grade only with both permissions and an open field grant scope', () => {
@@ -267,6 +294,14 @@ describe('EIR visibility helpers', () => {
     expect(payload.eir).toMatchObject({
       container_grade: 'C',
       container_grade_label: 'Cargo worthy',
+      damage_report: {
+        condition_grade: 'C',
+        condition_grade_label: 'Cargo worthy',
+        container_grade: 'C',
+        container_grade_label: 'Cargo worthy',
+        grade: 'C',
+        grade_label: 'Cargo worthy',
+      },
     });
   });
 
@@ -279,7 +314,11 @@ describe('EIR visibility helpers', () => {
       container_grade: 'C',
       container_grade_label: 'Cargo worthy',
     });
-    expect(buildEirViewPayload(eirRow, { viewType: 'trucking' }).eir).not.toHaveProperty('container_grade');
-    expect(buildEirViewPayload(eirRow, { viewType: 'driver' }).eir).not.toHaveProperty('container_grade');
+    const truckingPayload = buildEirViewPayload(eirRow, { viewType: 'trucking' }).eir;
+    const driverPayload = buildEirViewPayload(eirRow, { viewType: 'driver' }).eir;
+    expect(truckingPayload).not.toHaveProperty('container_grade');
+    expect(driverPayload).not.toHaveProperty('container_grade');
+    expect(truckingPayload).not.toHaveProperty('damage_report');
+    expect(driverPayload).not.toHaveProperty('damage_report');
   });
 });

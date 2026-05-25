@@ -93,12 +93,12 @@ describe('Customer Portal EIR', () => {
     expect(mockedGenerateEIRPDF).toHaveBeenCalledWith(expect.objectContaining({
       eir_number: 'EIR-IN-2026-000077',
       damage_report: expect.objectContaining({
-        condition_grade: 'C',
         points: expect.arrayContaining([expect.objectContaining({ side: 'left', type: 'dent' })]),
       }),
     }));
     expect(mockedGenerateEIRPDF.mock.calls[0][0]).not.toHaveProperty('container_grade');
     expect(mockedGenerateEIRPDF.mock.calls[0][0]).not.toHaveProperty('truck_company');
+    expect(mockedGenerateEIRPDF.mock.calls[0][0].damage_report).not.toHaveProperty('condition_grade');
     expect(mockedGenerateEIRPDF.mock.calls[0][0].damage_report).not.toHaveProperty('photo_completeness');
     const combinedSql = db.queries.join('\n');
     expect(combinedSql).toContain('PortalEntityAccess');
@@ -141,7 +141,6 @@ describe('Customer Portal EIR', () => {
       eir: {
         eir_number: 'EIR-IN-2026-000077',
         damage_report: {
-          condition_grade: 'C',
           points: [{ side: 'left', type: 'dent', severity: 'major', note: 'Dent' }],
         },
       },
@@ -149,6 +148,7 @@ describe('Customer Portal EIR', () => {
     });
     expect(body.eir).not.toHaveProperty('container_grade');
     expect(body.eir).not.toHaveProperty('truck_company');
+    expect(body.eir.damage_report).not.toHaveProperty('condition_grade');
     expect(body.eir.damage_report).not.toHaveProperty('photo_completeness');
     expect(body.lifecycle[0]).toEqual({
       lifecycle_id: 1,
