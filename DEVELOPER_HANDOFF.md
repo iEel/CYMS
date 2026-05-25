@@ -666,6 +666,7 @@ container-yard-system/
 #### แท็บ "ค้นหาตู้" (Split Screen)
 - **ซ้าย**: Instant search → รายชื่อ → **Detail Panel** (gate-in, เกรด, จุดเสียหาย, 📸 รูปถ่าย, ลิงก์ EIR)
 - **ขวา**: 3D Viewer — **X-Ray Mode** (ตู้อื่น opacity 60%) + **Beacon สีเหลือง** + **Floating Label** (เลขตู้ + พิกัด + สายเรือ) + วงแหวนบนพื้น + กล้องซูม smooth
+- **Accessibility**: ผลค้นหาแยก row select กับปุ่ม `3D` เป็น sibling buttons พร้อม `aria-label` เพื่อเลี่ยง nested button และ click behavior แปลกบน browser/assistive tech
 
 #### แท็บ "จัดวางตู้" (Smart Auto-Allocation)
 - ฟอร์มระบุตู้ (เลขตู้, ขนาด, ประเภท, สายเรือ)

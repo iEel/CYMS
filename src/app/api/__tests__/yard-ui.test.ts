@@ -48,4 +48,12 @@ describe('Yard management UI', () => {
     expect(source).toContain('Booking');
     expect(source).toContain('Billing');
   });
+
+  it('avoids nested button semantics in yard search results', () => {
+    const source = fs.readFileSync(path.join(root, 'src/components/yard/ContainerSearch.tsx'), 'utf8');
+
+    expect(source).not.toContain('role="button"');
+    expect(source).toContain('aria-label={`Locate ${c.container_number} in 3D`}');
+    expect(source).toContain('onClick={(e) => { e.stopPropagation(); handleSelect(c); }}');
+  });
 });

@@ -162,48 +162,53 @@ export default function ContainerSearch({ yardId, onLocate }: Props) {
             <div className="p-6 text-center text-slate-400 text-sm">ไม่พบตู้ที่ค้นหา</div>
           )}
           {results.map((c) => (
-            <button
+            <div
               key={c.container_id}
-              onClick={() => handleSelect(c)}
-              className={`w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors
+              className={`flex items-stretch hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors
                 ${selected?.container_id === c.container_id ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500' : ''}`}
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-mono font-bold text-slate-800 dark:text-white">{c.container_number}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    <span className="inline-flex items-center gap-1"><Ship size={10} /> {c.shipping_line || '—'}</span>
-                    <span className="mx-2">•</span>
-                    <span>{c.size}&apos;{c.type}</span>
-                    <span className="mx-2">•</span>
-                    <span className={c.status === 'in_yard' ? 'text-emerald-500' : c.status === 'hold' ? 'text-amber-500' : 'text-rose-500'}>
-                      {STATUS_TH[c.status] || c.status}
-                    </span>
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-mono text-xs text-slate-500">
-                    <MapPin size={10} className="inline mr-1" />
-                    Zone {c.zone_name} • B{c.bay}-R{c.row}-T{c.tier}
-                  </p>
-                  <div className="flex items-center gap-1.5 justify-end mt-1">
-                    {c.gate_in_date && (() => {
-                      const days = calcDwellDays(c.gate_in_date);
-                      const color = days <= 7 ? 'text-emerald-600 bg-emerald-50' : days <= 14 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
-                      return <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${color}`}><Clock size={8} className="inline mr-0.5" />{days} วัน</span>;
-                    })()}
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => { e.stopPropagation(); handleSelect(c); }}
-                      className="text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <Sparkles size={10} /> 3D
-                    </span>
+              <button
+                type="button"
+                onClick={() => handleSelect(c)}
+                className="min-w-0 flex-1 px-4 py-3 text-left"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono font-bold text-slate-800 dark:text-white">{c.container_number}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      <span className="inline-flex items-center gap-1"><Ship size={10} /> {c.shipping_line || '—'}</span>
+                      <span className="mx-2">•</span>
+                      <span>{c.size}&apos;{c.type}</span>
+                      <span className="mx-2">•</span>
+                      <span className={c.status === 'in_yard' ? 'text-emerald-500' : c.status === 'hold' ? 'text-amber-500' : 'text-rose-500'}>
+                        {STATUS_TH[c.status] || c.status}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-xs text-slate-500">
+                      <MapPin size={10} className="inline mr-1" />
+                      Zone {c.zone_name} • B{c.bay}-R{c.row}-T{c.tier}
+                    </p>
+                    <div className="flex items-center gap-1.5 justify-end mt-1">
+                      {c.gate_in_date && (() => {
+                        const days = calcDwellDays(c.gate_in_date);
+                        const color = days <= 7 ? 'text-emerald-600 bg-emerald-50' : days <= 14 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
+                        return <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${color}`}><Clock size={8} className="inline mr-0.5" />{days} วัน</span>;
+                      })()}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </button>
+              </button>
+              <button
+                type="button"
+                aria-label={`Locate ${c.container_number} in 3D`}
+                onClick={(e) => { e.stopPropagation(); handleSelect(c); }}
+                className="my-3 mr-4 inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-blue-50 px-2 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 hover:text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
+              >
+                <Sparkles size={10} /> 3D
+              </button>
+            </div>
           ))}
         </div>
 
