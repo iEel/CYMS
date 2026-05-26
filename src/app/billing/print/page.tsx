@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { RawImage } from '@/components/ui/RawImage';
+import { amountToThaiBahtText } from '@/lib/thaiBahtText';
 
 interface InvoiceData {
   invoice_id: number; invoice_number: string; customer_name: string;
@@ -56,41 +57,6 @@ interface CompanyData {
   company_name: string; tax_id: string; address: string;
   phone: string; email: string; logo_url: string;
   branch_type: string; branch_number: string;
-}
-
-function numberToThaiText(num: number): string {
-  const digits = ['', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
-  const units = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
-  if (num === 0) return 'ศูนย์บาทถ้วน';
-  const prefix = num < 0 ? 'ลบ' : '';
-  num = Math.abs(num);
-
-  const intPart = Math.floor(num);
-  const decimalPart = Math.round((num - intPart) * 100);
-  
-  function intToThai(n: number): string {
-    if (n === 0) return '';
-    const s = String(n);
-    let result = '';
-    for (let i = 0; i < s.length; i++) {
-      const d = parseInt(s[i]);
-      const pos = s.length - 1 - i;
-      if (d === 0) continue;
-      if (pos === 1 && d === 1) { result += 'สิบ'; continue; }
-      if (pos === 1 && d === 2) { result += 'ยี่สิบ'; continue; }
-      if (pos === 0 && d === 1 && s.length > 1) { result += 'เอ็ด'; continue; }
-      result += digits[d] + units[pos];
-    }
-    return result;
-  }
-
-  let text = intToThai(intPart) + 'บาท';
-  if (decimalPart > 0) {
-    text += intToThai(decimalPart) + 'สตางค์';
-  } else {
-    text += 'ถ้วน';
-  }
-  return prefix + text;
 }
 
 export default function PrintInvoicePage() {
@@ -384,7 +350,7 @@ export default function PrintInvoicePage() {
         {/* Thai Amount Text */}
         <div className="p-3 bg-slate-50 rounded-lg mb-6 text-sm">
           <span className="text-slate-500">จำนวนเงิน (ตัวอักษร): </span>
-          <strong>{numberToThaiText(invoice.grand_total || 0)}</strong>
+          <strong>{amountToThaiBahtText(invoice.grand_total || 0)}</strong>
         </div>
 
         {paymentQr?.qr_payload && !isReceipt && !isCreditNote && (
