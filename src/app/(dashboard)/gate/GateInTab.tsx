@@ -459,6 +459,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
       body: JSON.stringify({
+        yard_id: yardId,
         container_number: normalizedContainerNumber,
         booking_id: selectedBooking?.booking_id || null,
         container_owner_id: containerOwnerId,
@@ -490,7 +491,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         }
       });
     return () => controller.abort();
-  }, [gateInForm.container_number, containerValid, containerOwnerId, selectedBooking, manualCustomerId, billingCustomerId, resolvedTruckingCompanyId]);
+  }, [gateInForm.container_number, containerValid, containerOwnerId, selectedBooking, manualCustomerId, billingCustomerId, resolvedTruckingCompanyId, yardId]);
 
   // Fetch gate-in billing when form has valid data
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { requireAnyPermission } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 import sql from 'mssql';
 import { buildBookingPartyGrants, buildGatePartyGrants, defaultPortalPermissionScope, type PortalGrantRule } from '@/lib/portalGrantRules';
 
@@ -40,17 +40,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'container_number_required', message: 'container_number is required' }, { status: 400 });
   }
 
+  const yardId = positiveIntOrNull(body.yard_id);
+  const yardAccess = await requireYardAccess(request, db, yardId);
+  if (yardAccess instanceof NextResponse) return yardAccess;
+
   const bookingId = positiveIntOrNull(body.booking_id);
   const bookingGrants: PortalGrantRule[] = [];
 
   if (bookingId) {
     const bookingResult = await db.request()
       .input('bookingId', sql.Int, bookingId)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT booking_id, booking_number, customer_id, booking_customer_id, shipping_line_id,
           forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id
         FROM Bookings
         WHERE booking_id = @bookingId
+          AND yard_id = @yardId
       `);
     const booking = bookingResult.recordset[0];
     if (booking) {

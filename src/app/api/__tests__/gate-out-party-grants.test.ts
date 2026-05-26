@@ -71,6 +71,7 @@ describe('Gate Out party grants', () => {
 
   it('gate API stores party ids and builds grants from resolved Gate Out ids', () => {
     const insertInputs = sliceAfter(route, "input('bookingCustomerId'", 500);
+    const bookingValidation = sliceAfter(route, 'async function validateGateOutBooking', 4200);
     const grantBody = sliceAfter(route, 'buildGatePartyGrants({', 800);
 
     expect(route).toContain('let resolvedBookingCustomerId = booking_customer_id || null');
@@ -78,6 +79,11 @@ describe('Gate Out party grants', () => {
     expect(route).toContain('const resolvedTruckingCompanyId = trucking_company_id || null');
     expect(route).toContain('const resolvedDriverUserId = driver_user_id || null');
     expect(route).toMatch(/resolvedBookingCustomerId\s*=\s*bookingValidation\.bookingCustomerId\s*\|\|\s*resolvedBookingCustomerId/);
+    expect(bookingValidation).toContain('b.bill_to_customer_id');
+    expect(bookingValidation).toContain('const bookingCustomerId = booking.booking_customer_id || booking.customer_id || null');
+    expect(bookingValidation).toContain('const billToCustomerId = booking.bill_to_customer_id || bookingCustomerId');
+    expect(bookingValidation).toContain('const bookingPartyCustomerIds = [bookingCustomerId, billToCustomerId]');
+    expect(bookingValidation).toContain('bookingPartyCustomerIds.some(customerId => acceptedCustomerIds.includes(customerId))');
     expect(insertInputs).toContain("input('bookingCustomerId', sql.Int, resolvedBookingCustomerId || null)");
     expect(insertInputs).toContain("input('billingId', sql.Int, resolvedBillingCustomerId)");
     expect(insertInputs).toContain("input('truckingCompanyId', sql.Int, resolvedTruckingCompanyId)");

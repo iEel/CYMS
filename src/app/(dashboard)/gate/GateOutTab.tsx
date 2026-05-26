@@ -140,6 +140,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
       body: JSON.stringify({
+        yard_id: yardId,
         container_number: selectedContainer.container_number,
         container_id: selectedContainer.container_id,
         container_owner_id: selectedContainer.container_owner_id || billingData?.owner?.customer_id || null,
@@ -174,6 +175,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     selectedBooking,
     billingData?.owner?.customer_id,
     resolvedCustomer?.customer_id,
+    yardId,
   ]);
 
   const bookingProgressText = (booking: GateOutBooking) => {

@@ -50,7 +50,7 @@ async function validateGateOutBooking(
     .input('yardId', sql.Int, yardId)
     .query(`
       SELECT TOP 1 b.booking_id, b.booking_number, b.status, b.container_count,
-        b.customer_id, b.booking_customer_id, b.container_size, b.container_type,
+        b.customer_id, b.booking_customer_id, b.bill_to_customer_id, b.container_size, b.container_type,
         (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id) AS linked_count
       FROM Bookings b
       WHERE b.booking_number = @bkRef AND b.yard_id = @yardId
@@ -109,8 +109,17 @@ async function validateGateOutBooking(
     if (booking.container_type && booking.container_type !== container.type) {
       return { ok: false, error: `ประเภทตู้ไม่ตรงกับ Booking ${bookingRef} (${container.type} ≠ ${booking.container_type})` };
     }
-    const acceptedCustomerIds = [container.container_owner_id, containerOwnerId, billingCustomerId].filter(Boolean);
-    if (booking.customer_id && acceptedCustomerIds.length > 0 && !acceptedCustomerIds.includes(booking.customer_id)) {
+    const bookingCustomerId = booking.booking_customer_id || booking.customer_id || null;
+    const billToCustomerId = booking.bill_to_customer_id || bookingCustomerId;
+    const acceptedCustomerIds = [container.container_owner_id, containerOwnerId, billingCustomerId]
+      .filter((customerId): customerId is number => typeof customerId === 'number' && customerId > 0);
+    const bookingPartyCustomerIds = [bookingCustomerId, billToCustomerId]
+      .filter((customerId): customerId is number => typeof customerId === 'number' && customerId > 0);
+    if (
+      acceptedCustomerIds.length > 0
+      && bookingPartyCustomerIds.length > 0
+      && !bookingPartyCustomerIds.some(customerId => acceptedCustomerIds.includes(customerId))
+    ) {
       return { ok: false, error: `ลูกค้าของตู้ไม่ตรงกับลูกค้าใน Booking ${bookingRef}` };
     }
   }

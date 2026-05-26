@@ -7,15 +7,19 @@ describe('Gate visibility preview', () => {
     expect(route).toContain('buildGatePartyGrants');
     expect(route).toContain('buildBookingPartyGrants');
     expect(route).toContain('requireAnyPermission');
+    expect(route).toContain('requireYardAccess');
     expect(route).toContain("'gate.in'");
     expect(route).toContain("'gate.out'");
     expect(route).toContain('defaultPortalPermissionScope');
     expect(route).toContain('try');
     expect(route).toContain('invalid_request');
     expect(route).toContain('container_number_required');
+    expect(route).toContain('positiveIntOrNull(body.yard_id)');
+    expect(route).toContain('@yardId');
     expect(route).toContain('positiveIntOrNull(body.booking_id)');
     expect(route).toContain('@bookingId');
     expect(route).toContain('FROM Bookings');
+    expect(route).toContain('AND yard_id = @yardId');
     expect(route).toContain('Customers');
     expect(route).toContain('customerName');
     expect(route).toContain('positiveIntOrNull');
@@ -30,6 +34,7 @@ describe('Gate visibility preview', () => {
     const gateIn = fs.readFileSync(path.join(process.cwd(), 'src/app/(dashboard)/gate/GateInTab.tsx'), 'utf8');
     expect(gateIn).toContain('Portal Visibility Preview');
     expect(gateIn).toContain('/api/gate/visibility-preview');
+    expect(gateIn).toContain('yard_id: yardId');
     expect(gateIn).toContain('booking_id: selectedBooking?.booking_id || null');
     expect(gateIn).toContain('accessRole');
     expect(gateIn).toContain('customerName?: string | null');

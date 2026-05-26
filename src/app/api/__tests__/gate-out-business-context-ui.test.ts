@@ -19,6 +19,7 @@ describe('Gate Out business context UI', () => {
     expect(gateOut).toContain('Portal Visibility Preview');
     expect(gateOut).toContain('/api/gate/visibility-preview');
     expect(gateOut).toContain('visibilityPreview');
+    expect(gateOut).toContain('yard_id: yardId');
     expect(gateOut).toContain('row.customerName');
     expect(gateOut).toContain('if (!controller.signal.aborted) setVisibilityPreview(json.preview)');
   });
