@@ -47,6 +47,7 @@
 - Gate In captures booking/business parties and shows Portal Visibility Preview only; field-level policy remains in Settings.
 - Gate In sends party IDs for booking_customer, billing, trucking, and future driver grants.
 - Gate guardrail UI no longer renders Gate Pass QR. Gate pass/QR remains a future phase so gate users do not confuse the current EIR workflow with a released gate-pass module.
+- Gate decision bar now uses compact Thai labels and only shows ready state when the final workflow action is ready/done, preventing mixed signals such as "ready" while the container number or evidence is still invalid.
 
 Default policy:
 - Customer Portal does not see `container_grade` unless the user has `portal.eir.grade.view` and the grant scope enables `eir.fields.container_grade`.
@@ -745,6 +746,7 @@ container-yard-system/
 - Gate-Out แสดงลำดับ: Select container → Match booking → Billing clearance → Pickup request → Release and EIR
 - Exception panel แจ้ง blocker สำคัญ เช่น billing hold, booking mismatch, prefix/customer conflict, missing inspection/seal photo, permission missing
 - เพิ่ม `GateDecisionBar.tsx` เป็น sticky decision bar สรุป Billing / Booking / Evidence / Supervisor state พร้อม next decision สำหรับงานหน้าด่าน
+- ปรับ `GateDecisionBar.tsx` ให้เป็น compact Thai status strip และใช้ final workflow step เป็นเงื่อนไขพร้อมบันทึก เพื่อไม่แสดงสถานะพร้อมเมื่อยังต้องกรอกเลขตู้/ตรวจสภาพ/เคลียร์งานต่อ
 - Unit test: `src/lib/__tests__/gateWorkflow.test.ts` ครอบคลุม billing blocker, ready-to-submit, booking mismatch + billing hold และ decision signals
 
 #### Gate Operational Guardrails (✅ เสร็จ — 21 พ.ค. 2569)

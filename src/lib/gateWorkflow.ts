@@ -188,13 +188,13 @@ export function buildGateInWorkflow(input: GateInWorkflowInput): GateWorkflowSum
   ];
 
   const nextAction =
-    !containerDone ? 'Enter a valid container number' :
-    !customerDone ? 'Resolve owner and billing customer' :
-    input.billingRequired && !input.billingCleared ? 'Clear billing before Gate-In' :
-    !evidenceDone ? 'Complete inspection evidence' :
-    !input.canSubmit ? 'Ask an authorized user to submit' :
-    input.submitted ? 'Print or view EIR' :
-    'Submit Gate-In and issue EIR';
+    !containerDone ? 'กรอกเลขตู้ให้ถูกต้อง' :
+    !customerDone ? 'ระบุเจ้าของตู้และลูกค้าวางบิล' :
+    input.billingRequired && !input.billingCleared ? 'เคลียร์ค่าใช้จ่ายก่อน Gate-In' :
+    !evidenceDone ? 'ตรวจสภาพและแนบหลักฐานให้ครบ' :
+    !input.canSubmit ? 'ใช้บัญชีที่มีสิทธิ์บันทึก Gate-In' :
+    input.submitted ? 'เปิดดูหรือพิมพ์ EIR' :
+    'บันทึก Gate-In และออก EIR';
 
   return { steps, exceptions, nextAction };
 }
@@ -286,14 +286,14 @@ export function buildGateOutWorkflow(input: GateOutWorkflowInput): GateWorkflowS
   ];
 
   const nextAction =
-    !input.containerSelected ? 'Search and select a yard container' :
-    hasBookingMismatch ? 'Resolve booking mismatch' :
-    input.billingRequired && !input.billingCleared ? 'Clear billing before Gate-Out' :
-    !pickupDone ? 'Request pickup move' :
-    !input.readyToRelease ? 'Wait for pickup confirmation' :
-    !input.canSubmit ? 'Ask an authorized user to release' :
-    input.submitted ? 'Print or view EIR' :
-    'Confirm Gate-Out and issue EIR';
+    !input.containerSelected ? 'ค้นหาและเลือกตู้ในลาน' :
+    hasBookingMismatch ? 'แก้ไข Booking mismatch' :
+    input.billingRequired && !input.billingCleared ? 'เคลียร์ค่าใช้จ่ายก่อน Gate-Out' :
+    !pickupDone ? 'สร้างคำขอรับตู้' :
+    !input.readyToRelease ? 'รอยืนยันงานรับตู้' :
+    !input.canSubmit ? 'ใช้บัญชีที่มีสิทธิ์ปล่อยตู้' :
+    input.submitted ? 'เปิดดูหรือพิมพ์ EIR' :
+    'ยืนยัน Gate-Out และออก EIR';
 
   return { steps, exceptions, nextAction };
 }
@@ -316,38 +316,41 @@ export function buildGateDecisionSignals(input: GateDecisionInput): GateDecision
   const photoCompleted = Number(input.photoCompleted || 0);
 
   const billing = !input.billingRequired
-    ? signal('billing', 'Billing', 'ไม่คิดเงิน', 'No clearance needed for this move', 'ok')
+    ? signal('billing', 'บัญชี', 'ไม่คิดเงิน', 'ไม่ต้องเคลียร์ค่าใช้จ่ายสำหรับรายการนี้', 'ok')
     : input.billingCleared
-      ? signal('billing', 'Billing', 'Clear', 'Payment, credit, no-charge, or waiver is recorded', 'ok')
-      : signal('billing', 'Billing', 'ต้องเคลียร์', 'Clear charges before issuing EIR', 'blocked');
+      ? signal('billing', 'บัญชี', 'ผ่าน', 'บันทึกชำระ เครดิต ไม่คิดเงิน หรือยกเว้นแล้ว', 'ok')
+      : signal('billing', 'บัญชี', 'ต้องเคลียร์', 'เคลียร์ค่าใช้จ่ายก่อนออก EIR', 'blocked');
 
   const booking = input.mode === 'gate_in'
     ? input.bookingSelected
-      ? signal('booking', 'Booking', 'Linked', 'Booking reference is attached to Gate-In', 'ok')
-      : signal('booking', 'Booking', 'Optional', 'Gate-In can continue without a booking reference', 'pending')
+      ? signal('booking', 'Booking', 'ผูกแล้ว', 'เชื่อม Booking กับ Gate-In แล้ว', 'ok')
+      : signal('booking', 'Booking', 'ไม่จำเป็น', 'Gate-In ทำต่อได้แม้ไม่มี Booking', 'pending')
     : bookingWarnings.length > 0
-      ? signal('booking', 'Booking', 'Mismatch', bookingWarnings.join(' | '), 'blocked')
+      ? signal('booking', 'Booking', 'ไม่ตรงกัน', bookingWarnings.join(' | '), 'blocked')
       : input.bookingSelected
-        ? signal('booking', 'Booking', 'Matched', 'Release booking is selected', 'ok')
-        : signal('booking', 'Booking', 'Optional', 'Gate-Out can continue without a booking reference', 'pending');
+        ? signal('booking', 'Booking', 'ตรงกัน', 'เลือก Booking สำหรับปล่อยตู้แล้ว', 'ok')
+        : signal('booking', 'Booking', 'ไม่จำเป็น', 'Gate-Out ทำต่อได้แม้ไม่มี Booking', 'pending');
 
   const evidenceValue = photoRequired > 0 ? `${Math.min(photoCompleted, photoRequired)}/${photoRequired}` : (input.evidenceComplete ? 'ครบ' : 'รอตรวจ');
   const evidence = input.evidenceComplete
-    ? signal('evidence', 'Evidence', evidenceValue, 'Inspection and photo evidence are ready', 'ok')
-    : signal('evidence', 'Evidence', evidenceValue, photoRequired > 0 ? 'Capture required photos before final confirmation' : 'Complete inspection evidence', 'active');
+    ? signal('evidence', 'หลักฐาน', evidenceValue, 'ตรวจสภาพและรูปหลักฐานครบแล้ว', 'ok')
+    : signal('evidence', 'หลักฐาน', evidenceValue, photoRequired > 0 ? 'ถ่ายรูปที่จำเป็นก่อนยืนยันรายการ' : 'ตรวจสภาพและแนบหลักฐาน', 'active');
 
   const supervisor = input.supervisorPending
-    ? signal('supervisor', 'Supervisor', 'Pending', 'Waiting for supervisor approval', 'blocked')
+    ? signal('supervisor', 'อนุมัติ', 'รออนุมัติ', 'รอผู้อนุมัติพิจารณา', 'blocked')
     : !input.canSubmit || hasDanger
-      ? signal('supervisor', 'Supervisor', 'Blocked', 'Resolve permission or critical exception first', 'blocked')
+      ? signal('supervisor', 'อนุมัติ', 'ติดเงื่อนไข', 'แก้สิทธิ์หรือ exception สำคัญก่อน', 'blocked')
       : hasWarning
-        ? signal('supervisor', 'Supervisor', 'Review', 'Operational exception needs attention', 'active')
-        : signal('supervisor', 'Supervisor', 'Clear', 'No approval blocker detected', 'ok');
+        ? signal('supervisor', 'อนุมัติ', 'ตรวจทาน', 'มี exception ที่ควรตรวจสอบ', 'active')
+        : signal('supervisor', 'อนุมัติ', 'ผ่าน', 'ไม่พบ blocker การอนุมัติ', 'ok');
 
   const items = [billing, booking, evidence, supervisor];
+  const finalStep = input.workflow.steps.at(-1);
+  const workflowReady = finalStep?.status === 'active' || finalStep?.status === 'done';
+
   return {
     items,
-    canProceed: items.every(item => item.status !== 'blocked') && input.canSubmit,
+    canProceed: Boolean(workflowReady) && items.every(item => item.status !== 'blocked') && input.canSubmit,
     nextAction: input.workflow.nextAction,
   };
 }

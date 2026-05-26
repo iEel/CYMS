@@ -34,7 +34,7 @@ describe('gate workflow helpers', () => {
       title: 'Billing clearance required',
       detail: 'Collect payment, place on credit, or approve a waiver before issuing EIR.',
     });
-    expect(workflow.nextAction).toBe('Clear billing before Gate-In');
+    expect(workflow.nextAction).toBe('เคลียร์ค่าใช้จ่ายก่อน Gate-In');
   });
 
   it('marks gate-in ready when customer, billing, inspection, and seal evidence are complete', () => {
@@ -55,7 +55,7 @@ describe('gate workflow helpers', () => {
 
     expect(workflow.steps.at(-1)).toMatchObject({ id: 'eir', status: 'active' });
     expect(workflow.exceptions).toEqual([]);
-    expect(workflow.nextAction).toBe('Submit Gate-In and issue EIR');
+    expect(workflow.nextAction).toBe('บันทึก Gate-In และออก EIR');
   });
 
   it('surfaces gate-out booking mismatch and billing blockers before release', () => {
@@ -81,7 +81,7 @@ describe('gate workflow helpers', () => {
       ['release', 'blocked'],
     ]);
     expect(workflow.exceptions.map((item) => item.code)).toEqual(['booking_mismatch', 'billing_hold']);
-    expect(workflow.nextAction).toBe('Resolve booking mismatch');
+    expect(workflow.nextAction).toBe('แก้ไข Booking mismatch');
   });
 
   it('treats missing gate-out booking as optional when there is no mismatch', () => {
@@ -104,7 +104,7 @@ describe('gate workflow helpers', () => {
       status: 'done',
     });
     expect(workflow.exceptions.map((item) => item.code)).not.toContain('booking_required');
-    expect(workflow.nextAction).toBe('Request pickup move');
+    expect(workflow.nextAction).toBe('สร้างคำขอรับตู้');
 
     const signals = buildGateDecisionSignals({
       mode: 'gate_out',
@@ -120,10 +120,10 @@ describe('gate workflow helpers', () => {
     });
 
     expect(signals.items.find(item => item.key === 'booking')).toMatchObject({
-      value: 'Optional',
+      value: 'ไม่จำเป็น',
       status: 'pending',
     });
-    expect(signals.canProceed).toBe(true);
+    expect(signals.canProceed).toBe(false);
   });
 
   it('builds sticky decision signals for gate-out operators', () => {
@@ -161,6 +161,39 @@ describe('gate workflow helpers', () => {
       ['supervisor', 'blocked'],
     ]);
     expect(signals.canProceed).toBe(false);
-    expect(signals.nextAction).toBe('Resolve booking mismatch');
+    expect(signals.nextAction).toBe('แก้ไข Booking mismatch');
+  });
+
+  it('does not mark the decision bar ready while workflow final action is blocked', () => {
+    const workflow = buildGateInWorkflow({
+      containerNumber: 'ABCU1234567',
+      containerValid: false,
+      ownerResolved: false,
+      billingCustomerResolved: false,
+      billingRequired: false,
+      billingCleared: false,
+      inspectionComplete: false,
+      sealRequired: false,
+      sealCaptured: false,
+      submitted: false,
+      halted: false,
+      canSubmit: true,
+    });
+
+    const signals = buildGateDecisionSignals({
+      mode: 'gate_in',
+      workflow,
+      billingRequired: false,
+      billingCleared: false,
+      bookingSelected: false,
+      evidenceComplete: false,
+      photoCompleted: 0,
+      photoRequired: 0,
+      canSubmit: true,
+    });
+
+    expect(workflow.steps.at(-1)).toMatchObject({ id: 'eir', status: 'blocked' });
+    expect(signals.canProceed).toBe(false);
+    expect(signals.nextAction).toBe('กรอกเลขตู้ให้ถูกต้อง');
   });
 });
