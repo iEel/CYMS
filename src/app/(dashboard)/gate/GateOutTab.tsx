@@ -24,6 +24,15 @@ interface GateOutTabProps {
   onViewEIR: (eirNumber: string) => void;
 }
 
+interface PortalVisibilityPreviewRow {
+  customerId: number;
+  customerName: string | null;
+  entityType: string;
+  entityRef: string | null;
+  accessRole: string;
+  validUntil: string | null;
+}
+
 export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProps) {
   const { hasPermission, hasAnyPermission } = useAuth();
   const canGateOut = hasPermission('gate.out');
@@ -75,6 +84,9 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [bookingLoading, setBookingLoading] = useState(false);
   const [showBookingPicker, setShowBookingPicker] = useState(false);
   const [bookingWarning, setBookingWarning] = useState('');
+  const [visibilityPreview, setVisibilityPreview] = useState<PortalVisibilityPreviewRow[]>([]);
+  const [visibilityPreviewLoading, setVisibilityPreviewLoading] = useState(false);
+  const [visibilityPreviewError, setVisibilityPreviewError] = useState('');
 
   // Fetch customer list for manual selection
   useEffect(() => {
@@ -110,6 +122,59 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     const q = customerSearch.toLowerCase();
     return customerList.filter(c => c.customer_name.toLowerCase().includes(q)).slice(0, 10);
   }, [customerList, customerSearch]);
+
+  useEffect(() => {
+    if (!selectedContainer) {
+      setVisibilityPreview([]);
+      setVisibilityPreviewError('');
+      setVisibilityPreviewLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setVisibilityPreviewLoading(true);
+    setVisibilityPreviewError('');
+
+    fetch('/api/gate/visibility-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        container_number: selectedContainer.container_number,
+        container_id: selectedContainer.container_id,
+        container_owner_id: selectedContainer.container_owner_id || billingData?.owner?.customer_id || null,
+        booking_id: selectedBooking?.booking_id || null,
+        booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || null,
+        billing_customer_id: resolvedCustomer?.customer_id || null,
+        trucking_company_id: selectedBooking?.trucking_company_id || null,
+        driver_user_id: null,
+      }),
+    })
+      .then(async res => {
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json || !Array.isArray(json.preview)) {
+          throw new Error('Visibility preview unavailable');
+        }
+        setVisibilityPreview(json.preview);
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          console.error('visibility preview error', err);
+          setVisibilityPreview([]);
+          setVisibilityPreviewError('Visibility preview unavailable');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setVisibilityPreviewLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [
+    selectedContainer,
+    selectedBooking,
+    billingData?.owner?.customer_id,
+    resolvedCustomer?.customer_id,
+  ]);
 
   const bookingProgressText = (booking: GateOutBooking) => {
     const total = booking.container_count || 0;
@@ -714,6 +779,43 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
               )}
             </div>
 
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/20">
+              <h4 className="mb-3 text-xs font-semibold uppercase text-slate-500">Business Relationship</h4>
+              <div className="grid grid-cols-2 gap-2 text-[11px] md:grid-cols-4">
+                <InfoMini label="Container Owner" value={billingData?.owner?.customer_name || selectedContainer.shipping_line || '-'} />
+                <InfoMini label="Booking Customer" value={selectedBooking?.booking_customer_name || selectedBooking?.customer_name || '-'} />
+                <InfoMini label="Shipping Line" value={selectedBooking?.shipping_line_name || selectedContainer.shipping_line || '-'} />
+                <InfoMini label="Forwarder" value={selectedBooking?.forwarder_name || '-'} />
+                <InfoMini label="Shipper" value={selectedBooking?.shipper_name || '-'} />
+                <InfoMini label="Consignee" value={selectedBooking?.consignee_name || '-'} />
+                <InfoMini label="Trucking Company" value={selectedBooking?.trucking_company_name || '-'} />
+                <InfoMini label="Bill To Customer" value={selectedBooking?.bill_to_customer_name || resolvedCustomer?.customer_name || '-'} />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white">Portal Visibility Preview</p>
+                  <p className="text-[10px] text-slate-400">Gate Out แสดงเฉพาะว่าจะให้ portal เห็นข้อมูลกับใคร ไม่ได้ตั้ง field policy รายครั้ง</p>
+                </div>
+                {visibilityPreviewLoading && <Loader2 size={14} className="animate-spin text-cyan-600" />}
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+                {visibilityPreviewError ? (
+                  <p className="text-xs text-rose-500">{visibilityPreviewError}</p>
+                ) : visibilityPreview.length === 0 ? (
+                  <p className="text-xs text-slate-400">ยังไม่มี party ที่จะได้รับสิทธิ์</p>
+                ) : visibilityPreview.map((row, index) => (
+                  <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
+                    <p className="font-semibold text-slate-700 dark:text-slate-200">{row.customerName || `Customer #${row.customerId}`}</p>
+                    <p className="mt-0.5 text-slate-400">{row.entityType} · {row.accessRole}</p>
+                    <p className="mt-1 text-[10px] text-slate-400">Grade default: hidden</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* ===== BILLING CARD ===== */}
             {billingLoading ? (
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 text-sm text-slate-400">
@@ -1222,6 +1324,15 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           onClose={() => setShowOCR(null)}
         />
       )}
+    </div>
+  );
+}
+
+function InfoMini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-white/70 bg-white/80 p-2 dark:border-slate-700 dark:bg-slate-800/60">
+      <p className="text-[10px] uppercase text-slate-400">{label}</p>
+      <p className="mt-0.5 truncate font-semibold text-slate-700 dark:text-slate-200">{value}</p>
     </div>
   );
 }
