@@ -23,7 +23,12 @@ describe('continuous billing print payload', () => {
   it('builds a sample tax invoice payload with template binding keys', () => {
     const payload = buildSampleContinuousPrintPayload();
 
+    expect(payload.company.company_name).toBeTruthy();
+    expect(payload.customer.customer_name).toBeTruthy();
+    expect(payload.customer.branch_name).toBeTruthy();
     expect(payload.document.document_title).toContain('ใบกำกับภาษี');
+    expect(payload.document.document_date).toBeTruthy();
+    expect(payload.document.tax_invoice_number).toBe(payload.document.invoice_number);
     expect(payload.document.receipt_number).toBeDefined();
     expect(payload.lines.length).toBeGreaterThan(0);
     expect(payload.lines[0].qty).toBeGreaterThan(0);
@@ -71,7 +76,12 @@ describe('continuous billing print payload', () => {
     const payload = await buildContinuousPrintPayload(db, { invoiceId: 7, type: 'receipt' });
 
     expect(db.inputs).toContainEqual(['invoiceId', expect.anything(), 7]);
+    expect(payload.company.company_name).toBeTruthy();
+    expect(payload.customer.customer_name).toBe('ACME Logistics');
+    expect(payload.customer.branch_name).toBe('สำนักงานใหญ่');
     expect(payload.document.document_title).toContain('ใบเสร็จรับเงิน');
+    expect(payload.document.document_date).toBe('2026-05-20T03:00:00.000Z');
+    expect(payload.document.tax_invoice_number).toBe('INV-202605-000007');
     expect(payload.document.receipt_number).toBe('RCT-202605-000007');
     expect(payload.totals.amount_text_th).toContain('บาท');
     expect(payload.lines[0].qty).toBe(1);

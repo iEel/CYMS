@@ -13,6 +13,7 @@ export type ContinuousPrintLine = {
 export type ContinuousPrintPayload = {
   company: {
     name: string;
+    company_name: string;
     tax_id: string;
     address: string;
     phone: string;
@@ -24,19 +25,23 @@ export type ContinuousPrintPayload = {
   };
   customer: {
     name: string;
+    customer_name: string;
     tax_id: string;
     address: string;
     branch_type: string;
     branch_number: string;
+    branch_name: string;
   };
   document: {
     document_title: string;
     document_type: string;
     invoice_id: number;
     invoice_number: string;
+    tax_invoice_number: string;
     receipt_number: string;
     document_number: string;
     issue_date: string;
+    document_date: string;
     due_date: string;
     paid_at: string;
     status: string;
@@ -102,6 +107,12 @@ const DEFAULT_COMPANY = {
   yard_name: '',
   yard_code: '',
 };
+
+function branchName(branchType: unknown, branchNumber: unknown) {
+  if (asString(branchType, 'head_office') === 'head_office') return 'สำนักงานใหญ่';
+  const number = asString(branchNumber).trim();
+  return number ? `สาขา ${number}` : 'สาขา';
+}
 
 function asString(value: unknown, fallback = '') {
   if (value === null || value === undefined) return fallback;
@@ -191,12 +202,19 @@ function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload
   const grandTotal = money(row.grand_total, subtotal + vatAmount);
   const vatRate = subtotal === 0 ? 0 : Number((vatAmount / subtotal).toFixed(4));
   const receiptNumber = asString(row.receipt_number);
+  const invoiceNumber = asString(row.invoice_number);
   const documentNumber = type === 'receipt' && receiptNumber ? receiptNumber : asString(row.invoice_number);
+  const companyName = asString(row.company_name, DEFAULT_COMPANY.name);
+  const customerName = asString(row.customer_name, 'ลูกค้าทั่วไป');
+  const issueDate = dateText(row.created_at);
+  const customerBranchType = asString(row.customer_branch_type, 'head_office');
+  const customerBranchNumber = asString(row.customer_branch_number, '00000');
 
   return {
     company: {
       ...DEFAULT_COMPANY,
-      name: asString(row.company_name, DEFAULT_COMPANY.name),
+      name: companyName,
+      company_name: companyName,
       tax_id: asString(row.company_tax_id),
       address: asString(row.company_address),
       phone: asString(row.company_phone),
@@ -207,20 +225,24 @@ function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload
       yard_code: asString(row.yard_code),
     },
     customer: {
-      name: asString(row.customer_name, 'ลูกค้าทั่วไป'),
+      name: customerName,
+      customer_name: customerName,
       tax_id: asString(row.customer_tax_id),
       address: asString(row.customer_address),
-      branch_type: asString(row.customer_branch_type, 'head_office'),
-      branch_number: asString(row.customer_branch_number, '00000'),
+      branch_type: customerBranchType,
+      branch_number: customerBranchNumber,
+      branch_name: branchName(customerBranchType, customerBranchNumber),
     },
     document: {
       document_title: documentTitle(type, row),
       document_type: type,
       invoice_id: asNumber(row.invoice_id),
-      invoice_number: asString(row.invoice_number),
+      invoice_number: invoiceNumber,
+      tax_invoice_number: invoiceNumber,
       receipt_number: receiptNumber,
       document_number: documentNumber,
-      issue_date: dateText(row.created_at),
+      issue_date: issueDate,
+      document_date: issueDate,
       due_date: dateText(row.due_date),
       paid_at: dateText(row.paid_at),
       status: asString(row.status),
