@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
 import { requireAnyPermission, requirePermission } from '@/lib/apiAuth';
 import {
   applyStoredPrintPolicy,
@@ -101,6 +102,20 @@ export async function GET(request: NextRequest) {
     const payload = useSample
       ? buildSampleContinuousPrintPayload()
       : await buildContinuousPrintPayload(db, { invoiceId, type: documentType });
+
+    await logAudit({
+      userId: actor.userId,
+      action: 'document_template_preview',
+      entityType: 'document_template',
+      entityId: useSample ? null : invoiceId,
+      details: {
+        document_type: documentType,
+        preview: useSample ? 'sample' : 'real',
+        invoice_id: invoiceId,
+        mode: config.mode,
+        copy_mode: config.copy_mode,
+      },
+    });
 
     return NextResponse.json({ payload, config });
   } catch (error) {

@@ -6,6 +6,7 @@ import { POST as publishTemplate } from '../document-templates/[templateId]/publ
 import { POST as setDefaultTemplate } from '../document-templates/[templateId]/set-default/route';
 import { POST as deactivateTemplate } from '../document-templates/[templateId]/deactivate/route';
 import { GET as previewTemplate } from '../document-templates/preview/route';
+import { POST as testPrintTemplate } from '../document-templates/test-print/route';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { requireAnyPermission, requirePermission } from '@/lib/apiAuth';
@@ -481,6 +482,17 @@ describe('document template API', () => {
     expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
     expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 7,
+      action: 'document_template_preview',
+      entityType: 'document_template',
+      details: expect.objectContaining({
+        document_type: 'tax_invoice_receipt',
+        preview: 'sample',
+        mode: 'overlay',
+        copy_mode: 'separate',
+      }),
+    }));
     expect(body.payload.document.document_type).toBe('sample');
     expect(body.config.mode).toBe('overlay');
     expect(body.config.copy_mode).toBe('separate');
@@ -512,7 +524,63 @@ describe('document template API', () => {
     });
     expect(mockedBuildSampleContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 7,
+      action: 'document_template_preview',
+      entityType: 'document_template',
+      entityId: 77,
+      details: expect.objectContaining({
+        document_type: 'tax_invoice_receipt',
+        preview: 'real',
+        invoice_id: 77,
+      }),
+    }));
     expect(body.payload.document.invoice_id).toBe(77);
     expect(body.config.print_policy.reprint_label_template).toBe('พิมพ์ซ้ำครั้งที่ {reprint_count}');
+  });
+
+  it('returns sample test print payload with settings permission and no document numbering', async () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    config.print_policy.red_ref_source = 'receipt_number';
+    const db = makeDb([{ recordset: [{ config_json: JSON.stringify(config) }] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/test-print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_type: 'receipt',
+        mode: 'overlay',
+        copyMode: 'separate',
+        template_id: 12,
+      }),
+    });
+
+    const response = await testPrintTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'settings.manage', expect.any(String));
+    expect(mockedRequireAnyPermission).not.toHaveBeenCalled();
+    expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
+    expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
+    expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+    expect(db.queries.join('\n')).not.toContain('DocumentPrintLogs');
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 7,
+      action: 'document_template_test_print',
+      entityType: 'document_template',
+      entityId: 12,
+      details: expect.objectContaining({
+        document_type: 'receipt',
+        mode: 'overlay',
+        copy_mode: 'separate',
+        template_id: 12,
+      }),
+    }));
+    expect(body.payload.document.document_type).toBe('sample');
+    expect(body.config.mode).toBe('overlay');
+    expect(body.config.copy_mode).toBe('separate');
+    expect(body.config.print_policy.red_ref_source).toBe('receipt_number');
+    expect(body.testPrint).toBe(true);
   });
 });
