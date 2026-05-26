@@ -49,6 +49,16 @@
 - Gate guardrail UI no longer renders Gate Pass QR. Gate pass/QR remains a future phase so gate users do not confuse the current EIR workflow with a released gate-pass module.
 - Gate decision bar now uses compact Thai labels and only shows ready state when the final workflow action is ready/done, preventing mixed signals such as "ready" while the container number or evidence is still invalid.
 
+### Booking / Gate Business Relationship UI
+
+- Booking create form captures Booking Customer, Shipping Line / Container Owner, Forwarder, Shipper, Consignee, Trucking Company, and Bill To Customer.
+- Booking list/detail returns party names so Gate In and Gate Out can use Booking as source-of-truth.
+- Booking import template and row mapper support party id columns for `booking_customer_id`, `shipping_line_id`, `forwarder_id`, `shipper_id`, `consignee_id`, `trucking_company_id`, and `bill_to_customer_id`.
+- Gate In auto-fills Container Owner from Booking shipping line for COC and still supports manual owner selection.
+- Gate Out submits owner, booking customer, billing customer, trucking, and future driver ids to `/api/gate`.
+- Gate In and Gate Out show Portal Visibility Preview with customer names, roles, and entity types. Field-level visibility policy remains in Settings/Customer Master.
+- Gate Out compatibility now checks `booking_customer_id` and `bill_to_customer_id` before falling back to legacy `customer_id`, while still allowing no-booking/no-policy gate work.
+
 Default policy:
 - Customer Portal does not see `container_grade` unless the user has `portal.eir.grade.view` and the grant scope enables `eir.fields.container_grade`.
 - Public EIR never shows `container_grade`.
