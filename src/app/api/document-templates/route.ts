@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       .input('documentType', sql.NVarChar(50), documentType)
       .input('description', sql.NVarChar(500), description)
       .input('status', sql.NVarChar(20), 'draft')
-      .input('isDefault', sql.Bit, body.is_default ? 1 : 0)
+      .input('isDefault', sql.Bit, 0)
       .input('createdBy', sql.Int, actor.userId)
       .input('versionNo', sql.Int, 1);
 

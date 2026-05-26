@@ -120,6 +120,7 @@ describe('document template API', () => {
         template_code: 'TAX_CONTINUOUS',
         template_name: 'Tax invoice continuous',
         document_type: 'tax_invoice',
+        is_default: true,
         config,
       }),
     });
@@ -134,9 +135,13 @@ describe('document template API', () => {
     expect(db.queries[0]).toContain('COMMIT TRAN');
     expect(db.inputs).toEqual(expect.arrayContaining([
       { name: 'templateCode', value: 'TAX_CONTINUOUS' },
+      { name: 'isDefault', value: 0 },
       { name: 'versionNo', value: 1 },
       { name: 'status', value: 'draft' },
       { name: 'configJson', value: JSON.stringify(config) },
+    ]));
+    expect(db.inputs).not.toEqual(expect.arrayContaining([
+      { name: 'isDefault', value: 1 },
     ]));
     expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
       userId: 7,
