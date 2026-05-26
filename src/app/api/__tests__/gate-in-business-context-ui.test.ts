@@ -22,7 +22,12 @@ describe('Gate In business context UI', () => {
     expect(gateIn).toContain('bookingDerivedContextRef');
     expect(gateIn).toContain('setGateInForm(prev => ({ ...prev, booking_ref');
     expect(gateIn).toContain('ownerSearch');
+    expect(gateIn).toContain('ownerSearchOpen');
+    expect(gateIn).toContain('ownerSearchRef');
+    expect(gateIn).toContain('ownerSearchRef.current && !ownerSearchRef.current.contains');
     expect(gateIn).toContain('setContainerOwnerId(booking.shipping_line_id)');
+    expect(gateIn).toContain("setOwnerSearch(booking.shipping_line_name || '')");
+    expect(gateIn).toContain('if (!billingDiffFromOwner && !booking.bill_to_customer_id) setBillingCustomerId(booking.shipping_line_id)');
     expect(gateIn).toContain('onKeyDown');
     expect(gateIn).toContain('bookingSearchError');
     expect(gateIn).toContain('!res.ok');

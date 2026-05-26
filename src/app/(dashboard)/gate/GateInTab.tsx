@@ -260,7 +260,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     if (booking.bill_to_customer_id) setBillingCustomerId(booking.bill_to_customer_id);
     if (booking.shipping_line_id) {
       setContainerOwnerId(booking.shipping_line_id);
-      if (booking.shipping_line_name) setOwnerSearch(booking.shipping_line_name);
+      setOwnerSearch(booking.shipping_line_name || '');
       if (!billingDiffFromOwner && !booking.bill_to_customer_id) setBillingCustomerId(booking.shipping_line_id);
     }
     if (booking.trucking_company_name) {
