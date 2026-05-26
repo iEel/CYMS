@@ -412,7 +412,6 @@ export default function BookingPage() {
   const setPartyId = (field: keyof typeof emptyCreateForm, value: number | null) => {
     setCreateForm(prev => {
       const next = { ...prev, [field]: value };
-      if (field === 'booking_customer_id' && !prev.bill_to_customer_id) next.bill_to_customer_id = value;
       return next;
     });
   };
@@ -888,7 +887,7 @@ export default function BookingPage() {
                   <p className="text-[10px] text-slate-400 mt-0.5">Party context for portal access grants and EIR visibility</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <PartySelect label="Booking Customer" required value={createForm.booking_customer_id} options={customerOptions('any')} onChange={value => setPartyId('booking_customer_id', value)} />
+                  <PartySelect label="Booking Customer" required value={createForm.booking_customer_id} options={customerOptions('any')} onChange={value => setCreateForm(prev => ({ ...prev, booking_customer_id: value, bill_to_customer_id: !prev.bill_to_customer_id || prev.bill_to_customer_id === prev.booking_customer_id ? value : prev.bill_to_customer_id }))} />
                   <PartySelect label="Shipping Line / Container Owner" value={createForm.shipping_line_id} options={customerOptions('line')} onChange={value => setPartyId('shipping_line_id', value)} />
                   <PartySelect label="Forwarder" value={createForm.forwarder_id} options={customerOptions('forwarder')} onChange={value => setPartyId('forwarder_id', value)} />
                   <PartySelect label="Shipper" value={createForm.shipper_id} options={customerOptions('any')} onChange={value => setPartyId('shipper_id', value)} />

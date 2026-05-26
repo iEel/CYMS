@@ -26,6 +26,10 @@ describe('Booking business relationship UI', () => {
     expect(bookingPage).toContain('bill_to_customer_id: createForm.bill_to_customer_id || createForm.booking_customer_id || undefined');
   });
 
+  it('keeps bill-to customer synced while it is still booking-customer derived', () => {
+    expect(bookingPage).toContain('bill_to_customer_id: !prev.bill_to_customer_id || prev.bill_to_customer_id === prev.booking_customer_id ? value : prev.bill_to_customer_id');
+  });
+
   it('booking API route exposes party names for existing lookups', () => {
     expect(bookingRoute).toContain('booking_customer_name');
     expect(bookingRoute).toContain('shipping_line_name');
