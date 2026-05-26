@@ -68,10 +68,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const templateId = parseDocumentTemplateId(rawTemplateId);
     if (!templateId) return NextResponse.json({ error: 'templateId ไม่ถูกต้อง' }, { status: 400 });
 
-    const body = await request.json();
     const db = await getDb();
     const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
+
+    const body = await request.json();
 
     const currentResult = await db.request()
       .input('templateId', sql.Int, templateId)

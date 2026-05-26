@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { GET, POST } from '../document-templates/route';
 import { POST as duplicateTemplate } from '../document-templates/[templateId]/duplicate/route';
 import { PUT as updateTemplate } from '../document-templates/[templateId]/route';
@@ -101,7 +101,17 @@ describe('document template API', () => {
       version_no: 1,
       status: 'draft',
     };
-    const db = makeDb([{ recordset: [created] }, { recordset: [version] }]);
+    const db = makeDb([{ recordset: [{
+      template_template_id: created.template_id,
+      template_template_code: created.template_code,
+      template_template_name: created.template_name,
+      template_document_type: created.document_type,
+      template_status: created.status,
+      version_version_id: version.version_id,
+      version_template_id: version.template_id,
+      version_version_no: version.version_no,
+      version_status: version.status,
+    }] }]);
     mockedGetDb.mockResolvedValue(db);
     const request = makeRequest('/api/document-templates', {
       method: 'POST',
@@ -120,6 +130,8 @@ describe('document template API', () => {
     expect(response.status).toBe(200);
     expect(db.queries.join('\n')).toContain('INSERT INTO DocumentTemplates');
     expect(db.queries.join('\n')).toContain('INSERT INTO DocumentTemplateVersions');
+    expect(db.queries[0]).toContain('BEGIN TRAN');
+    expect(db.queries[0]).toContain('COMMIT TRAN');
     expect(db.inputs).toEqual(expect.arrayContaining([
       { name: 'templateCode', value: 'TAX_CONTINUOUS' },
       { name: 'versionNo', value: 1 },
@@ -133,6 +145,31 @@ describe('document template API', () => {
       entityId: 12,
     }));
     expect(body).toEqual({ success: true, template: created, version });
+  });
+
+  it('returns auth response before parsing malformed create JSON', async () => {
+    const db = makeDb();
+    mockedGetDb.mockResolvedValue(db);
+    const forbidden = NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    mockedRequirePermission.mockResolvedValue(forbidden);
+    const request = makeRequest('/api/document-templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{not-json',
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual({ error: 'forbidden' });
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      request,
+      db,
+      'settings.manage',
+      expect.any(String),
+    );
+    expect(db.query).not.toHaveBeenCalled();
   });
 
   it('checks settings permission before returning invalid create config feedback', async () => {
@@ -262,6 +299,7 @@ describe('document template API', () => {
     const existing = {
       template_id: 12,
       document_type: 'tax_invoice',
+      version_status: 'published',
     };
     const updated = {
       template_id: 12,
@@ -272,7 +310,6 @@ describe('document template API', () => {
     };
     const db = makeDb([
       { recordset: [existing] },
-      { recordset: [] },
       { recordset: [updated] },
     ]);
     mockedGetDb.mockResolvedValue(db);
@@ -288,8 +325,9 @@ describe('document template API', () => {
       'settings.manage',
       expect.any(String),
     );
+    expect(db.queries[1]).toContain('BEGIN TRAN');
     expect(db.queries[1]).toContain('is_default = 0');
-    expect(db.queries[2]).toContain('is_default = 1');
+    expect(db.queries[1]).toContain('is_default = 1');
     expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
       userId: 7,
       action: 'document_template_set_default',
@@ -297,6 +335,29 @@ describe('document template API', () => {
       entityId: 12,
     }));
     expect(body).toEqual({ success: true, template: updated });
+  });
+
+  it('rejects setting default when the current version is not published without clearing defaults', async () => {
+    const db = makeDb([{
+      recordset: [{
+        template_id: 12,
+        document_type: 'tax_invoice',
+        version_status: 'draft',
+      }],
+    }]);
+    mockedGetDb.mockResolvedValue(db);
+
+    const response = await setDefaultTemplate(
+      makeRequest('/api/document-templates/12/set-default', { method: 'POST' }),
+      makeRouteContext('12'),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('ตั้งเป็น default ได้เฉพาะ template version ที่ published แล้ว');
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.queries[0]).toContain('DocumentTemplateVersions');
+    expect(mockedLogAudit).not.toHaveBeenCalled();
   });
 
   it('rejects PUT updates when the current version is not draft before updating', async () => {

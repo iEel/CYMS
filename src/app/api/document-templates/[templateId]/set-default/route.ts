@@ -22,35 +22,48 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const existingResult = await db.request()
       .input('templateId', sql.Int, templateId)
       .query(`
-        SELECT template_id, document_type
-        FROM DocumentTemplates
-        WHERE template_id = @templateId
-          AND status <> 'inactive'
+        SELECT t.template_id, t.document_type, t.status, v.status AS version_status
+        FROM DocumentTemplates t
+        JOIN DocumentTemplateVersions v
+          ON v.template_id = t.template_id
+         AND v.version_no = t.current_version_no
+        WHERE t.template_id = @templateId
+          AND t.status <> 'inactive'
       `);
 
     const existing = existingResult.recordset[0];
     if (!existing) return NextResponse.json({ error: 'ไม่พบเทมเพลตเอกสารที่เปิดใช้งานได้' }, { status: 404 });
-
-    await db.request()
-      .input('documentType', sql.NVarChar(50), existing.document_type)
-      .query(`
-        UPDATE DocumentTemplates
-        SET is_default = 0,
-            updated_at = GETDATE()
-        WHERE document_type = @documentType
-      `);
+    if (existing.version_status !== 'published') {
+      return NextResponse.json({ error: 'ตั้งเป็น default ได้เฉพาะ template version ที่ published แล้ว' }, { status: 400 });
+    }
 
     const updateResult = await db.request()
       .input('templateId', sql.Int, templateId)
+      .input('documentType', sql.NVarChar(50), existing.document_type)
       .input('updatedBy', sql.Int, actor.userId)
       .query(`
-        UPDATE DocumentTemplates
-        SET is_default = 1,
-            status = CASE WHEN status = 'draft' THEN 'active' ELSE status END,
-            updated_by = @updatedBy,
-            updated_at = GETDATE()
-        OUTPUT INSERTED.*
-        WHERE template_id = @templateId
+        BEGIN TRY
+          BEGIN TRAN;
+
+          UPDATE DocumentTemplates
+          SET is_default = 0,
+              updated_at = GETDATE()
+          WHERE document_type = @documentType;
+
+          UPDATE DocumentTemplates
+          SET is_default = 1,
+              status = 'active',
+              updated_by = @updatedBy,
+              updated_at = GETDATE()
+          OUTPUT INSERTED.*
+          WHERE template_id = @templateId;
+
+          COMMIT TRAN;
+        END TRY
+        BEGIN CATCH
+          IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+          THROW;
+        END CATCH;
       `);
 
     await logAudit({

@@ -15,18 +15,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const templateId = parseDocumentTemplateId(rawTemplateId);
     if (!templateId) return NextResponse.json({ error: 'templateId ไม่ถูกต้อง' }, { status: 400 });
 
-    const body = await request.json().catch(() => ({}));
-    const versionNo = parseDocumentTemplateId(body.version_no) || null;
-
     const db = await getDb();
     const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
+
+    const body = await request.json().catch(() => ({}));
+    const versionNo = parseDocumentTemplateId(body.version_no) || null;
 
     const result = await db.request()
       .input('templateId', sql.Int, templateId)
       .input('versionNo', sql.Int, versionNo)
       .input('publishedBy', sql.Int, actor.userId)
       .query(`
+        BEGIN TRY
+          BEGIN TRAN;
+
         DECLARE @targetVersionNo INT;
 
         SELECT TOP 1 @targetVersionNo = version_no
@@ -51,6 +54,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
           OUTPUT INSERTED.*
           WHERE template_id = @templateId;
         END
+
+          COMMIT TRAN;
+        END TRY
+        BEGIN CATCH
+          IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+          THROW;
+        END CATCH;
       `);
 
     const template = result.recordset[0];
