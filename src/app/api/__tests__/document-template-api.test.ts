@@ -1,5 +1,9 @@
 import { NextRequest } from 'next/server';
 import { GET, POST } from '../document-templates/route';
+import { POST as duplicateTemplate } from '../document-templates/[templateId]/duplicate/route';
+import { PUT as updateTemplate } from '../document-templates/[templateId]/route';
+import { POST as publishTemplate } from '../document-templates/[templateId]/publish/route';
+import { POST as deactivateTemplate } from '../document-templates/[templateId]/deactivate/route';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { requirePermission } from '@/lib/apiAuth';
@@ -40,6 +44,10 @@ function makeDb(plan: QueryPlan = []) {
 
 function makeRequest(path: string, init?: ConstructorParameters<typeof NextRequest>[1]) {
   return new NextRequest(`http://localhost${path}`, init);
+}
+
+function makeRouteContext(templateId: string) {
+  return { params: Promise.resolve({ templateId }) };
 }
 
 describe('document template API', () => {
@@ -126,11 +134,11 @@ describe('document template API', () => {
     expect(body).toEqual({ success: true, template: created, version });
   });
 
-  it('rejects invalid template config before insert or audit', async () => {
+  it('checks settings permission before returning invalid create config feedback', async () => {
     const db = makeDb();
     mockedGetDb.mockResolvedValue(db);
 
-    const response = await POST(makeRequest('/api/document-templates', {
+    const request = makeRequest('/api/document-templates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -139,12 +147,139 @@ describe('document template API', () => {
         document_type: 'tax_invoice',
         config: { paper: { width_mm: 0 } },
       }),
-    }));
+    });
+
+    const response = await POST(request);
     const body = await response.json();
 
     expect(response.status).toBe(400);
+    expect(mockedGetDb).toHaveBeenCalled();
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      request,
+      db,
+      'settings.manage',
+      expect.any(String),
+    );
     expect(body.error).toBe('template config ไม่ถูกต้อง');
     expect(db.query).not.toHaveBeenCalled();
+    expect(mockedLogAudit).not.toHaveBeenCalled();
+  });
+
+  it('checks settings permission before returning duplicate metadata validation feedback', async () => {
+    const db = makeDb();
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/12/duplicate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_code: '', template_name: '' }),
+    });
+
+    const response = await duplicateTemplate(request, makeRouteContext('12'));
+
+    expect(response.status).toBe(400);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      request,
+      db,
+      'settings.manage',
+      expect.any(String),
+    );
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('publishes a template version after settings permission and records audit trail', async () => {
+    const template = {
+      template_id: 12,
+      template_code: 'TAX_CONTINUOUS',
+      current_version_no: 2,
+      status: 'active',
+    };
+    const db = makeDb([{ recordset: [template] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/12/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version_no: 2 }),
+    });
+
+    const response = await publishTemplate(request, makeRouteContext('12'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      request,
+      db,
+      'settings.manage',
+      expect.any(String),
+    );
+    expect(db.queries[0]).toContain('UPDATE DocumentTemplateVersions');
+    expect(db.queries[0]).toContain('UPDATE DocumentTemplates');
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'templateId', value: 12 },
+      { name: 'versionNo', value: 2 },
+      { name: 'publishedBy', value: 7 },
+    ]));
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 7,
+      action: 'document_template_publish',
+      entityType: 'document_template',
+      entityId: 12,
+    }));
+    expect(body).toEqual({ success: true, template });
+  });
+
+  it('deactivates a template with settings permission and clears default state', async () => {
+    const template = {
+      template_id: 12,
+      template_code: 'TAX_CONTINUOUS',
+      status: 'inactive',
+      is_default: false,
+    };
+    const db = makeDb([{ recordset: [template] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/12/deactivate', { method: 'POST' });
+
+    const response = await deactivateTemplate(request, makeRouteContext('12'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      request,
+      db,
+      'settings.manage',
+      expect.any(String),
+    );
+    expect(db.queries[0]).toContain("status = 'inactive'");
+    expect(db.queries[0]).toContain('is_default = 0');
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'document_template_deactivate',
+      entityId: 12,
+    }));
+    expect(body).toEqual({ success: true, template });
+  });
+
+  it('rejects PUT updates when the current version is not draft before updating', async () => {
+    const db = makeDb([{
+      recordset: [{
+        template_id: 12,
+        template_name: 'Tax invoice continuous',
+        description: null,
+        version_id: 22,
+        version_no: 2,
+        version_status: 'published',
+      }],
+    }]);
+    mockedGetDb.mockResolvedValue(db);
+    const response = await updateTemplate(makeRequest('/api/document-templates/12', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_name: 'Changed' }),
+    }), makeRouteContext('12'));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('แก้ไขได้เฉพาะ version draft ปัจจุบัน');
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.queries[0]).toContain('FROM DocumentTemplates');
     expect(mockedLogAudit).not.toHaveBeenCalled();
   });
 });

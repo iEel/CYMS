@@ -86,6 +86,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     const current = currentResult.recordset[0];
     if (!current) return NextResponse.json({ error: 'ไม่พบเทมเพลตเอกสาร' }, { status: 404 });
+    if (current.version_status !== 'draft') {
+      return NextResponse.json({ error: 'แก้ไขได้เฉพาะ version draft ปัจจุบัน' }, { status: 400 });
+    }
 
     const templateName = cleanOptionalString(body.template_name);
     const documentType = cleanOptionalString(body.document_type);
@@ -97,9 +100,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     let normalizedConfig = null;
     if (body.config !== undefined) {
-      if (current.version_status !== 'draft') {
-        return NextResponse.json({ error: 'แก้ไข config ได้เฉพาะ version draft ปัจจุบัน' }, { status: 400 });
-      }
       normalizedConfig = normalizeTemplateConfig(body.config);
       if (!normalizedConfig.config) {
         return NextResponse.json({ error: 'template config ไม่ถูกต้อง', errors: normalizedConfig.errors }, { status: 400 });

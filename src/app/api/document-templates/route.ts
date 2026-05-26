@@ -67,6 +67,10 @@ export async function POST(request: NextRequest) {
     const documentType = cleanString(body.document_type);
     const description = cleanString(body.description) || null;
 
+    const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
+    if (actor instanceof NextResponse) return actor;
+
     if (!templateCode || !templateName || !documentType) {
       return NextResponse.json({ error: 'template_code, template_name และ document_type จำเป็นต้องระบุ' }, { status: 400 });
     }
@@ -75,10 +79,6 @@ export async function POST(request: NextRequest) {
     if (!normalized.config) {
       return NextResponse.json({ error: 'template config ไม่ถูกต้อง', errors: normalized.errors }, { status: 400 });
     }
-
-    const db = await getDb();
-    const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
-    if (actor instanceof NextResponse) return actor;
 
     const templateResult = await db.request()
       .input('templateCode', sql.NVarChar(80), templateCode)

@@ -27,13 +27,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const body = await request.json();
     const templateCode = cleanString(body.template_code).toUpperCase();
     const templateName = cleanString(body.template_name);
-    if (!templateCode || !templateName) {
-      return NextResponse.json({ error: 'template_code และ template_name ใหม่จำเป็นต้องระบุ' }, { status: 400 });
-    }
 
     const db = await getDb();
     const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
+
+    if (!templateCode || !templateName) {
+      return NextResponse.json({ error: 'template_code และ template_name ใหม่จำเป็นต้องระบุ' }, { status: 400 });
+    }
 
     const sourceResult = await db.request()
       .input('templateId', sql.Int, templateId)
