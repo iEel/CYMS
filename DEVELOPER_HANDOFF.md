@@ -43,7 +43,10 @@
 
 - Settings > Users now supports `customer_portal_role` for customer users.
 - Settings > Customer Master stores portal default visibility and field-level EIR defaults.
+- Settings > Customer Master now includes Customer Portal module toggles and Reefer-specific settings (`modules.reefer`, `show_temperature_history`, `show_photo_evidence`, `show_exceptions`, `download_temperature_log`, `allow_exception_dispute`).
 - Settings > Portal Access lists PortalEntityAccess grants, previews/repairs reconcile, and toggles EIR grade visibility with audit reason.
+- Customer Portal navigation calls `/api/portal/capabilities` and hides `/portal/reefer` unless the customer module is enabled, the user has `portal.reefer.view`, and the customer has RF container or reefer grants.
+- `GET /api/portal/reefer` now enforces `portal.reefer.view`, customer Reefer module policy, RF/reefer visibility, and masks photo evidence when customer settings disable it.
 - Gate In captures booking/business parties and shows Portal Visibility Preview only; field-level policy remains in Settings.
 - Gate In sends party IDs for booking_customer, billing, trucking, and future driver grants.
 - Gate guardrail UI no longer renders Gate Pass QR. Gate pass/QR remains a future phase so gate users do not confuse the current EIR workflow with a released gate-pass module.
@@ -1509,8 +1512,10 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 - [x] **Customer portal notifications** — เพิ่ม `GET /api/portal/notifications` ที่ใช้ `PortalEntityAccess`/portal visibility เดิมเท่านั้น เพื่อแจ้งลูกค้าเรื่อง open reefer exception และ booking status ล่าสุด; หน้า `/portal` เพิ่ม panel `การแจ้งเตือนล่าสุด` พร้อม deep-link ไป `/portal/reefer` หรือ `/portal/bookings`
 - [x] **Escalation rule** — เพิ่ม `deriveReeferEscalation()` แบบ server-side policy โดยไม่เพิ่ม schema: `critical` breach หลัง 30 นาที, `high` 120 นาที, `medium` 240 นาที, `low` 480 นาที; `GET /api/reefer/exceptions` และคิวหน้า `/reefer` ส่ง/แสดง `escalation_level`, `breached`, due/age minutes เพื่อให้ supervisor เห็นงานที่ต้องเร่งทันที
 - [x] **Customer notification preferences** — เพิ่ม `PortalNotificationPreferences` + `GET/PUT /api/portal/notification-preferences`; ใช้ customer id จาก portal session/header เท่านั้น, default เปิดทุกประเภท และ `GET /api/portal/notifications` filter ฝั่ง server ตาม preference พร้อม fallback default ถ้ายังไม่ได้ migrate
+- [x] **Customer Portal Reefer Settings** — Customer Master เพิ่ม module-level portal settings และ Reefer-specific controls (`show_temperature_history`, `show_photo_evidence`, `show_exceptions`, `download_temperature_log`, `allow_exception_dispute`); `/api/portal/capabilities` ซ่อนเมนู `/portal/reefer` เมื่อ customer/user/grant ไม่เข้าเงื่อนไข และ `/api/portal/reefer` enforce policy ฝั่ง server
 
 **Verify ล่าสุด:**
+- `npm test -- src/app/api/__tests__/portal-capabilities.test.ts src/app/api/__tests__/customer-portal-defaults.test.ts src/app/api/__tests__/settings-users-customer-portal-role.test.ts src/app/api/__tests__/reefer-api.test.ts src/app/api/__tests__/reefer-ui.test.ts --runInBand --cacheDirectory ./.next/jest-cache` ✅
 - `npm test -- src/app/api/__tests__/reefer-api.test.ts src/app/api/__tests__/reefer-ui.test.ts --runInBand --cacheDirectory ./.next/jest-cache` ✅ (6 tests)
 - `npm test -- src/app/api/__tests__/reefer-plug-plan.test.ts src/app/api/__tests__/yard-zone-plug-capacity.test.ts --runInBand --cacheDirectory ./.next/jest-cache` ✅ (3 tests)
 - `node scripts/migrate-runtime-core-schema.js` ✅ (เพิ่ม `YardZones.plug_capacity` และ rerun schema guards)
