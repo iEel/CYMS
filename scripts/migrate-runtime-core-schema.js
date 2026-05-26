@@ -84,6 +84,42 @@ async function migrate() {
         ALTER TABLE Invoices ADD balance_amount DECIMAL(12,2) NULL;
     `);
 
+    await runStep(pool, 'Gate Out durable request sessions', `
+      IF OBJECT_ID('GateOutRequests', 'U') IS NULL
+      BEGIN
+        CREATE TABLE GateOutRequests (
+          request_id INT PRIMARY KEY IDENTITY(1,1),
+          yard_id INT NOT NULL,
+          container_id INT NOT NULL,
+          booking_id INT NULL,
+          booking_ref NVARCHAR(100) NULL,
+          billing_customer_id INT NULL,
+          billing_clearance_id INT NULL,
+          work_order_id INT NULL,
+          gate_transaction_id INT NULL,
+          eir_number NVARCHAR(80) NULL,
+          driver_name NVARCHAR(100) NULL,
+          driver_license NVARCHAR(50) NULL,
+          truck_plate NVARCHAR(20) NULL,
+          seal_number NVARCHAR(50) NULL,
+          notes NVARCHAR(500) NULL,
+          status NVARCHAR(30) NOT NULL CONSTRAINT DF_GateOutRequests_Status DEFAULT 'requested',
+          requested_by INT NULL,
+          requested_at DATETIME2 NOT NULL CONSTRAINT DF_GateOutRequests_RequestedAt DEFAULT GETDATE(),
+          completed_at DATETIME2 NULL,
+          updated_at DATETIME2 NULL
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('GateOutRequests') AND name = 'IX_GateOutRequests_Yard_Status')
+        CREATE INDEX IX_GateOutRequests_Yard_Status
+          ON GateOutRequests (yard_id, status, requested_at DESC);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('GateOutRequests') AND name = 'IX_GateOutRequests_Container_Open')
+        CREATE INDEX IX_GateOutRequests_Container_Open
+          ON GateOutRequests (container_id, status, requested_at DESC);
+    `);
+
     await runStep(pool, 'Portal grant party columns', `
       IF OBJECT_ID('Bookings', 'U') IS NOT NULL
       BEGIN

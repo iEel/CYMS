@@ -103,6 +103,62 @@ export interface GateOutBooking {
   released_containers?: number;
 }
 
+export interface GateOutRequest {
+  request_id: number;
+  yard_id: number;
+  container_id: number;
+  container_number: string;
+  size?: string;
+  type?: string;
+  shipping_line?: string;
+  container_status?: string;
+  zone_id?: number | null;
+  zone_name?: string | null;
+  bay?: number | null;
+  row?: number | null;
+  tier?: number | null;
+  gate_in_date?: string | null;
+  container_owner_id?: number | null;
+  booking_id?: number | null;
+  booking_ref?: string | null;
+  booking_number?: string | null;
+  booking_status?: string | null;
+  customer_id?: number | null;
+  booking_customer_id?: number | null;
+  shipping_line_id?: number | null;
+  forwarder_id?: number | null;
+  shipper_id?: number | null;
+  consignee_id?: number | null;
+  trucking_company_id?: number | null;
+  bill_to_customer_id?: number | null;
+  booking_customer_name?: string | null;
+  shipping_line_name?: string | null;
+  forwarder_name?: string | null;
+  shipper_name?: string | null;
+  consignee_name?: string | null;
+  trucking_company_name?: string | null;
+  bill_to_customer_name?: string | null;
+  container_count?: number | null;
+  container_size?: string | null;
+  container_type?: string | null;
+  received_count?: number | null;
+  released_count?: number | null;
+  billing_customer_id?: number | null;
+  billing_clearance_id?: number | null;
+  clearance_type?: BillingClearanceType | null;
+  clearance_invoice_id?: number | null;
+  work_order_id?: number | null;
+  work_order_status?: string | null;
+  status?: 'requested' | 'moving' | 'at_gate' | 'released' | 'cancelled' | string;
+  display_status?: 'requested' | 'moving' | 'at_gate' | 'released' | 'cancelled' | string;
+  driver_name?: string | null;
+  driver_license?: string | null;
+  truck_plate?: string | null;
+  seal_number?: string | null;
+  notes?: string | null;
+  requested_at?: string | null;
+}
+
 export interface GateInBillingData {
   customer: { customer_id: number; customer_name: string; credit_term: number; tax_id?: string } | null;
   is_credit: boolean;

@@ -256,7 +256,7 @@ export function buildGateOutWorkflow(input: GateOutWorkflowInput): GateWorkflowS
     {
       id: 'container',
       label: 'Select container',
-      detail: input.containerSelected ? 'Container selected from yard' : 'Search by container number or shipping line',
+      detail: input.containerSelected ? 'Container selected from yard' : 'Search by container number or Booking No.',
       status: input.containerSelected ? 'done' : 'active',
     },
     {

@@ -1,17 +1,17 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Loader2, Search, CheckCircle2, Truck,
   Package, User, FileText, X, Users,
-  ArrowUpFromLine, AlertTriangle, ScanLine,
+  ArrowUpFromLine, AlertTriangle, ScanLine, Clock3, MapPin,
 } from 'lucide-react';
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import CameraOCR from '@/components/gate/CameraOCR';
 import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import GateGuardrailPanel from '@/components/gate/GateGuardrailPanel';
 import GateDecisionBar from '@/components/gate/GateDecisionBar';
-import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
+import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, GateOutRequest, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
 import { buildGateDecisionSignals, buildGateOutWorkflow } from '@/lib/gateWorkflow';
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
@@ -53,6 +53,62 @@ interface GateOutBookingSearchResult {
 
 type GateOutSearchResult = GateOutContainerSearchResult | GateOutBookingSearchResult;
 
+function gateOutPhaseFromRequest(request: GateOutRequest): 'search' | 'pending_pickup' | 'confirm_release' {
+  const status = request.display_status || request.status;
+  if (status === 'at_gate' || request.work_order_status === 'completed') return 'confirm_release';
+  if (['requested', 'moving'].includes(String(status)) || ['pending', 'assigned', 'in_progress'].includes(String(request.work_order_status))) {
+    return 'pending_pickup';
+  }
+  return 'search';
+}
+
+function containerFromGateOutRequest(request: GateOutRequest): ContainerResult {
+  return {
+    container_id: request.container_id,
+    container_number: request.container_number,
+    size: request.size || '',
+    type: request.type || '',
+    shipping_line: request.shipping_line || '',
+    status: request.container_status || 'in_yard',
+    zone_id: request.zone_id || undefined,
+    zone_name: request.zone_name || undefined,
+    bay: request.bay ?? undefined,
+    row: request.row ?? undefined,
+    tier: request.tier ?? undefined,
+    gate_in_date: request.gate_in_date || undefined,
+    container_owner_id: request.container_owner_id || null,
+  };
+}
+
+function bookingFromGateOutRequest(request: GateOutRequest): GateOutBooking | null {
+  if (!request.booking_id && !request.booking_ref && !request.booking_number) return null;
+  return {
+    booking_id: request.booking_id || 0,
+    booking_number: request.booking_number || request.booking_ref || '',
+    status: request.booking_status || 'confirmed',
+    customer_id: request.customer_id || undefined,
+    booking_customer_id: request.booking_customer_id || null,
+    shipping_line_id: request.shipping_line_id || null,
+    forwarder_id: request.forwarder_id || null,
+    shipper_id: request.shipper_id || null,
+    consignee_id: request.consignee_id || null,
+    trucking_company_id: request.trucking_company_id || null,
+    bill_to_customer_id: request.bill_to_customer_id || null,
+    booking_customer_name: request.booking_customer_name || null,
+    shipping_line_name: request.shipping_line_name || null,
+    forwarder_name: request.forwarder_name || null,
+    shipper_name: request.shipper_name || null,
+    consignee_name: request.consignee_name || null,
+    trucking_company_name: request.trucking_company_name || null,
+    bill_to_customer_name: request.bill_to_customer_name || null,
+    container_count: request.container_count || 0,
+    container_size: request.container_size || undefined,
+    container_type: request.container_type || undefined,
+    received_count: request.received_count || 0,
+    released_count: request.released_count || 0,
+  };
+}
+
 export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProps) {
   const { hasPermission, hasAnyPermission } = useAuth();
   const canGateOut = hasPermission('gate.out');
@@ -77,6 +133,9 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [releaseLoading, setReleaseLoading] = useState(false);
   const [showOCR, setShowOCR] = useState<'plate' | 'seal' | null>(null);
   const [recentGateTransactions, setRecentGateTransactions] = useState<GateRecentTransaction[]>([]);
+  const [gateOutRequests, setGateOutRequests] = useState<GateOutRequest[]>([]);
+  const [gateOutRequestsLoading, setGateOutRequestsLoading] = useState(false);
+  const [selectedGateOutRequest, setSelectedGateOutRequest] = useState<GateOutRequest | null>(null);
 
   // Billing
   const [billingData, setBillingData] = useState<BillingData | null>(null);
@@ -126,6 +185,28 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       });
     return () => controller.abort();
   }, [yardId]);
+
+  const loadGateOutRequests = useCallback(async (options?: { containerId?: number; quiet?: boolean }) => {
+    if (!options?.quiet) setGateOutRequestsLoading(true);
+    try {
+      const url = `/api/gate/out-requests?yard_id=${yardId}${options?.containerId ? `&container_id=${options.containerId}` : ''}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const rows = Array.isArray(data.requests) ? data.requests : [];
+      if (!options?.containerId) setGateOutRequests(rows);
+      return rows as GateOutRequest[];
+    } catch (err) {
+      console.error('Load Gate-Out requests error:', err);
+      if (!options?.containerId) setGateOutRequests([]);
+      return [] as GateOutRequest[];
+    } finally {
+      if (!options?.quiet) setGateOutRequestsLoading(false);
+    }
+  }, [yardId]);
+
+  useEffect(() => {
+    void loadGateOutRequests({ quiet: true });
+  }, [loadGateOutRequests]);
 
   // Resolved customer: auto-matched or manually selected
   const resolvedCustomer = useMemo(() => {
@@ -307,6 +388,12 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       invoice_id: invoiceId || null,
     });
     setBillingPaid(true);
+    if (selectedGateOutRequest?.request_id) {
+      await updateGateOutRequestContext(selectedGateOutRequest.request_id, {
+        billing_clearance_id: data.clearance_id,
+        billing_customer_id: resolvedCustomer?.customer_id || null,
+      });
+    }
     return data.clearance_id as number;
   };
 
@@ -334,6 +421,105 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     finally { setBillingLoading(false); }
   };
 
+  const updateGateOutRequestContext = async (
+    requestId: number,
+    overrides: {
+      action?: 'update_context' | 'mark_at_gate' | 'cancel';
+      booking_id?: number | null;
+      booking_ref?: string | null;
+      billing_customer_id?: number | null;
+      billing_clearance_id?: number | null;
+      driver_name?: string | null;
+      driver_license?: string | null;
+      truck_plate?: string | null;
+      seal_number?: string | null;
+      notes?: string | null;
+    } = {}
+  ) => {
+    try {
+      const res = await fetch('/api/gate/out-requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request_id: requestId,
+          action: overrides.action || 'update_context',
+          booking_id: selectedBooking?.booking_id || null,
+          booking_ref: gateOutForm.booking_ref || selectedBooking?.booking_number || null,
+          billing_customer_id: resolvedCustomer?.customer_id
+            || selectedBooking?.bill_to_customer_id
+            || selectedBooking?.booking_customer_id
+            || selectedBooking?.customer_id
+            || null,
+          driver_name: gateOutForm.driver_name || null,
+          driver_license: gateOutForm.driver_license || null,
+          truck_plate: gateOutForm.truck_plate || null,
+          seal_number: gateOutForm.seal_number || null,
+          notes: gateOutForm.notes || null,
+          ...overrides,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (data?.request) {
+        setSelectedGateOutRequest(data.request);
+        await loadGateOutRequests({ quiet: true });
+        return data.request as GateOutRequest;
+      }
+    } catch (err) {
+      console.error('Update Gate-Out request context error:', err);
+    }
+    return null;
+  };
+
+  const applyGateOutRequest = async (request: GateOutRequest) => {
+    const container = containerFromGateOutRequest(request);
+    const booking = bookingFromGateOutRequest(request);
+    const bookingRef = request.booking_ref || request.booking_number || booking?.booking_number || '';
+    const billingCustomerId = request.billing_customer_id
+      || booking?.bill_to_customer_id
+      || booking?.booking_customer_id
+      || booking?.customer_id
+      || null;
+
+    setSelectedGateOutRequest(request);
+    setSelectedContainer(container);
+    setSelectedBooking(booking);
+    setSearchResults([]);
+    setSearchQuery(container.container_number);
+    setBookingWarning('');
+    setGateOutForm({
+      driver_name: request.driver_name || '',
+      driver_license: request.driver_license || '',
+      truck_plate: request.truck_plate || '',
+      seal_number: request.seal_number || '',
+      booking_ref: bookingRef,
+      notes: request.notes || '',
+    });
+    if (billingCustomerId) setManualCustomerId(billingCustomerId);
+    if (request.billing_clearance_id) {
+      setBillingClearance({
+        clearance_id: request.billing_clearance_id,
+        clearance_type: request.clearance_type || 'credit',
+        invoice_id: request.clearance_invoice_id || null,
+      });
+      setBillingPaid(true);
+      setBillingInvoiceId(request.clearance_invoice_id || null);
+    } else {
+      setBillingClearance(null);
+      setBillingPaid(false);
+      setBillingInvoiceId(null);
+    }
+    await loadGateOutBilling(container, billingCustomerId, bookingRef);
+    if (request.billing_clearance_id) {
+      setBillingClearance({
+        clearance_id: request.billing_clearance_id,
+        clearance_type: request.clearance_type || 'credit',
+        invoice_id: request.clearance_invoice_id || null,
+      });
+      setBillingPaid(true);
+    }
+    setGateOutPhase(gateOutPhaseFromRequest(request));
+  };
+
   const applyGateOutBooking = async (booking: GateOutBooking | null, container = selectedContainer) => {
     if (booking) {
       const check = getBookingCompatibility(booking, container);
@@ -353,6 +539,13 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     const bookingBillingCustomerId = booking?.bill_to_customer_id || booking?.booking_customer_id || booking?.customer_id || null;
     if (bookingBillingCustomerId) setManualCustomerId(bookingBillingCustomerId);
     if (container) await loadGateOutBilling(container, bookingBillingCustomerId || manualCustomerId, bookingRef);
+    if (selectedGateOutRequest?.request_id) {
+      await updateGateOutRequestContext(selectedGateOutRequest.request_id, {
+        booking_id: booking?.booking_id || null,
+        booking_ref: bookingRef || null,
+        billing_customer_id: bookingBillingCustomerId || manualCustomerId || null,
+      });
+    }
   };
 
   const loadBookingByNumber = async (bookingNumber: string, container = selectedContainer) => {
@@ -398,6 +591,12 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     setBillingInvoiceNumber('');
     setBillingInvoiceId(null);
     await loadGateOutBilling(selectedContainer, customerId, gateOutForm.booking_ref);
+    if (selectedGateOutRequest?.request_id) {
+      await updateGateOutRequestContext(selectedGateOutRequest.request_id, {
+        billing_customer_id: customerId,
+        billing_clearance_id: null,
+      });
+    }
   };
 
   // Search containers or booking numbers for Gate-Out release.
@@ -429,6 +628,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     setBillingClearance(null);
     setBillingInvoiceNumber('');
     setBillingInvoiceId(null);
+    setSelectedGateOutRequest(null);
 
     let bookingRef = gateOutForm.booking_ref;
     let billingCustomerId: number | null = null;
@@ -452,35 +652,14 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       } catch (err) { console.error('Booking lookup error:', err); }
     }
 
-    await loadGateOutBilling(c, billingCustomerId, bookingRef);
+    const existingRequests = await loadGateOutRequests({ containerId: c.container_id, quiet: true });
+    const existingRequest = existingRequests[0];
+    if (existingRequest) {
+      await applyGateOutRequest(existingRequest);
+      return;
+    }
 
-    // Check existing work orders
-    try {
-      const res = await fetch(`/api/operations?yard_id=${yardId}`);
-      const data = await res.json();
-      const containerGateIn = c.gate_in_date ? new Date(c.gate_in_date) : null;
-      const gateOutOrders = (data.orders || []).filter(
-        (o: { container_number: string; notes?: string; status: string; created_at?: string }) =>
-          o.container_number === c.container_number &&
-          o.notes?.includes('Gate-Out') &&
-          o.status !== 'cancelled' &&
-          (!containerGateIn || !o.created_at || new Date(o.created_at) >= containerGateIn)
-      );
-      if (gateOutOrders.length > 0) {
-        const activeWO = gateOutOrders.find(
-          (o: { status: string }) => ['pending', 'assigned', 'in_progress'].includes(o.status)
-        );
-        if (activeWO) {
-          setGateOutPhase('pending_pickup');
-        } else {
-          setGateOutPhase('confirm_release');
-        }
-        try {
-          const saved = localStorage.getItem(`gateout_driver_${c.container_number}`);
-          if (saved) setGateOutForm(JSON.parse(saved));
-        } catch { /* ignore */ }
-      }
-    } catch (err) { console.error(err); }
+    await loadGateOutBilling(c, billingCustomerId, bookingRef);
 
   };
 
@@ -490,43 +669,55 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     if (!selectedContainer) return;
     setReleaseLoading(true);
     try {
-      const res = await offlineFetch('/api/operations', {
+      const res = await offlineFetch('/api/gate/out-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           yard_id: yardId,
-          order_type: 'move',
           container_id: selectedContainer.container_id,
+          booking_id: selectedBooking?.booking_id || null,
+          booking_ref: gateOutForm.booking_ref || selectedBooking?.booking_number || null,
+          billing_customer_id: resolvedCustomer?.customer_id
+            || selectedBooking?.bill_to_customer_id
+            || selectedBooking?.booking_customer_id
+            || selectedBooking?.customer_id
+            || null,
+          billing_clearance_id: billingClearance?.clearance_id || null,
           from_zone_id: selectedContainer.zone_id,
           from_bay: selectedContainer.bay,
           from_row: selectedContainer.row,
           from_tier: selectedContainer.tier,
           priority: 3,
+          driver_name: gateOutForm.driver_name || null,
+          driver_license: gateOutForm.driver_license || null,
+          truck_plate: gateOutForm.truck_plate || null,
+          seal_number: gateOutForm.seal_number || null,
           notes: `Gate-Out → ดึงตู้ ${selectedContainer.container_number} จาก Zone ${selectedContainer.zone_name || '-'} B${selectedContainer.bay}-R${selectedContainer.row}-T${selectedContainer.tier} ไปที่ประตู${gateOutForm.truck_plate ? ` | 🚛 ${gateOutForm.truck_plate}` : ''}${gateOutForm.driver_name ? ` | 👤 ${gateOutForm.driver_name}` : ''}`,
         }),
       }, { operation: 'gate_out_pickup_request' });
       const data = await res.json();
       if (isOfflineQueuedResponse(data)) {
-        try {
-          localStorage.setItem(
-            `gateout_driver_${selectedContainer.container_number}`,
-            JSON.stringify(gateOutForm)
-          );
-        } catch { /* ignore */ }
         setGateOutPhase('pending_pickup');
         return;
       }
-      if (data.success) {
-        try {
-          localStorage.setItem(
-            `gateout_driver_${selectedContainer.container_number}`,
-            JSON.stringify(gateOutForm)
-          );
-        } catch { /* ignore */ }
-        setGateOutPhase('pending_pickup');
+      if (data.success && data.request) {
+        setSelectedGateOutRequest(data.request);
+        setGateOutPhase(gateOutPhaseFromRequest(data.request));
+        await loadGateOutRequests({ quiet: true });
       }
     } catch (err) { console.error(err); }
     finally { setReleaseLoading(false); }
+  };
+
+  const handleMarkAtGate = async () => {
+    if (selectedGateOutRequest?.request_id) {
+      const updated = await updateGateOutRequestContext(selectedGateOutRequest.request_id, { action: 'mark_at_gate' });
+      if (updated) {
+        setGateOutPhase(gateOutPhaseFromRequest(updated));
+        return;
+      }
+    }
+    setGateOutPhase('confirm_release');
   };
 
   // Phase 3: Confirm release
@@ -545,6 +736,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           user_id: userId,
           container_id: selectedContainer.container_id,
           container_number: selectedContainer.container_number,
+          gate_out_request_id: selectedGateOutRequest?.request_id || undefined,
           billing_customer_id: resolvedCustomer?.customer_id || selectedBooking?.bill_to_customer_id || selectedBooking?.booking_customer_id || selectedBooking?.customer_id || undefined,
           container_owner_id: selectedContainer.container_owner_id || billingData?.owner?.customer_id || undefined,
           booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || undefined,
@@ -558,8 +750,8 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       const data = await res.json();
       if (isOfflineQueuedResponse(data)) {
         setGateOutResult({ success: true, message: `บันทึก Gate-Out ${selectedContainer.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
-        try { localStorage.removeItem(`gateout_driver_${selectedContainer.container_number}`); } catch { /* ignore */ }
         setSelectedContainer(null);
+        setSelectedGateOutRequest(null);
         setSearchResults([]);
         setSearchQuery('');
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
@@ -570,13 +762,14 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
         setBillingClearance(null);
         setBillingInvoiceNumber('');
         setBillingInvoiceId(null);
+        void loadGateOutRequests({ quiet: true });
         setTimeout(() => setGateOutResult(null), 15000);
         return;
       }
       if (data.success) {
         setGateOutResult({ success: true, message: `✅ ปล่อยตู้ ${selectedContainer.container_number} ออกจากลานสำเร็จ`, eir_number: data.eir_number });
-        try { localStorage.removeItem(`gateout_driver_${selectedContainer.container_number}`); } catch { /* ignore */ }
         setSelectedContainer(null);
+        setSelectedGateOutRequest(null);
         setSearchResults([]);
         setSearchQuery('');
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
@@ -587,6 +780,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
         setBillingClearance(null);
         setBillingInvoiceNumber('');
         setBillingInvoiceId(null);
+        void loadGateOutRequests({ quiet: true });
         setTimeout(() => setGateOutResult(null), 15000);
       } else {
         setGateOutResult({ success: false, message: `❌ ${data.error}` });
@@ -636,6 +830,92 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     releasePhase: gateOutPhase,
   }), [gateOutForm, gateOutPhase, gateOutPhotos.length, recentGateTransactions, selectedContainer?.container_number]);
 
+  const gateOutPendingJobsPanel = (
+    <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+            <Clock3 size={15} /> งาน Gate Out ค้าง
+          </h4>
+          <p className="text-[10px] text-slate-400 mt-0.5">รายการที่ขอดึงตู้ไว้แล้ว กลับมาเลือกต่อเพื่อออก EIR ได้</p>
+        </div>
+        {gateOutRequestsLoading && <Loader2 size={14} className="animate-spin text-slate-400" />}
+      </div>
+      <div className="p-3">
+        {gateOutRequests.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-slate-400 dark:border-slate-700">
+            ยังไม่มีงาน Gate Out ที่ค้างอยู่
+          </p>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {gateOutRequests.slice(0, 4).map(request => {
+              const status = request.display_status || request.status;
+              const isSelected = selectedGateOutRequest?.request_id === request.request_id;
+              return (
+                <button
+                  key={request.request_id}
+                  onClick={() => applyGateOutRequest(request)}
+                  className={`rounded-lg border p-3 text-left transition-all ${
+                    isSelected
+                      ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
+                      : 'border-slate-200 bg-slate-50 hover:border-blue-200 hover:bg-blue-50/60 dark:border-slate-700 dark:bg-slate-900/20 dark:hover:border-blue-800'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm font-bold text-slate-800 dark:text-white">{request.container_number}</p>
+                      <p className="mt-0.5 text-[10px] text-slate-400">
+                        {request.booking_number || request.booking_ref || 'No booking'} • {request.truck_plate || 'ยังไม่ระบุทะเบียน'}
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      status === 'at_gate'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                    }`}>
+                      {status === 'at_gate' ? 'ถึงประตู' : status === 'moving' ? 'รถยกกำลังดึง' : 'รอรถยก'}
+                    </span>
+                  </div>
+                  <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-400">
+                    <MapPin size={11} /> {request.zone_name ? `Zone ${request.zone_name} B${request.bay}-R${request.row}-T${request.tier}` : 'ไม่มีพิกัด'}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+
+  const gateOutVisibilityPreviewPanel = (
+    <section className="rounded-xl border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-800 dark:text-white">Portal Visibility Preview</p>
+          <p className="text-[10px] text-slate-400">แสดงว่าจะ grant ให้ใครบ้าง ไม่ใช่จุดตั้ง field policy</p>
+        </div>
+        {visibilityPreviewLoading && <Loader2 size={14} className="animate-spin text-cyan-600" />}
+      </div>
+      <div className="mt-3 space-y-2">
+        {visibilityPreviewError ? (
+          <p className="text-xs text-rose-500">{visibilityPreviewError}</p>
+        ) : visibilityPreview.length === 0 ? (
+          <p className="text-xs text-slate-400">ยังไม่มี party ที่จะได้รับสิทธิ์</p>
+        ) : visibilityPreview.slice(0, 5).map((row, index) => (
+          <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{row.customerName || `Customer #${row.customerId}`}</p>
+            <p className="mt-0.5 text-slate-400">{row.entityType} · {row.accessRole}</p>
+            <p className="mt-1 text-[10px] text-slate-400">Grade default: hidden</p>
+          </div>
+        ))}
+        {visibilityPreview.length > 5 && (
+          <p className="text-[10px] text-cyan-600">+{visibilityPreview.length - 5} party เพิ่มเติม</p>
+        )}
+      </div>
+    </section>
+  );
+
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
       <div className="p-5 border-b border-slate-100 dark:border-slate-700">
@@ -652,23 +932,24 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
 
       <div className="p-5 space-y-4">
         <GateWorkflowPanel title="Gate-Out guided workflow" workflow={gateOutWorkflow} />
-        <GateGuardrailPanel title="Gate-Out operational guardrails" snapshot={gateOutGuardrails} />
-        <GateDecisionBar signals={gateOutDecisionSignals} />
+        <div className="gate-out-workstation-shell grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+          <div className="gate-out-primary-workspace space-y-4">
+            {gateOutPendingJobsPanel}
 
-        {/* Search */}
-        <div>
-          <label className={labelClass}>ค้นหาตู้ในลาน</label>
-          <div className="flex gap-2">
-            <input type="text" placeholder="ค้นหาเลขตู้ หรือ Booking No." value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && searchContainers()}
-              className={`${inputClass} font-mono flex-1`} />
-            <button onClick={searchContainers} disabled={searching}
-              className="h-10 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5 transition-all">
-              {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} ค้นหา
-            </button>
-          </div>
-        </div>
+            {/* Search */}
+            <div>
+              <label className={labelClass}>ค้นหาตู้ในลาน</label>
+              <div className="flex gap-2">
+                <input type="text" placeholder="ค้นหาเลขตู้ หรือ Booking No." value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && searchContainers()}
+                  className={`${inputClass} font-mono flex-1`} />
+                <button onClick={searchContainers} disabled={searching}
+                  className="h-10 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5 transition-all">
+                  {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} ค้นหา
+                </button>
+              </div>
+            </div>
 
         {/* Search Results */}
         {searchResults.length > 0 && !selectedContainer && (
@@ -879,29 +1160,6 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                 <InfoMini label="Consignee" value={selectedBooking?.consignee_name || '-'} />
                 <InfoMini label="Trucking Company" value={selectedBooking?.trucking_company_name || '-'} />
                 <InfoMini label="Bill To Customer" value={selectedBooking?.bill_to_customer_name || resolvedCustomer?.customer_name || '-'} />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-white">Portal Visibility Preview</p>
-                  <p className="text-[10px] text-slate-400">Gate Out แสดงเฉพาะว่าจะให้ portal เห็นข้อมูลกับใคร ไม่ได้ตั้ง field policy รายครั้ง</p>
-                </div>
-                {visibilityPreviewLoading && <Loader2 size={14} className="animate-spin text-cyan-600" />}
-              </div>
-              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
-                {visibilityPreviewError ? (
-                  <p className="text-xs text-rose-500">{visibilityPreviewError}</p>
-                ) : visibilityPreview.length === 0 ? (
-                  <p className="text-xs text-slate-400">ยังไม่มี party ที่จะได้รับสิทธิ์</p>
-                ) : visibilityPreview.map((row, index) => (
-                  <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
-                    <p className="font-semibold text-slate-700 dark:text-slate-200">{row.customerName || `Customer #${row.customerId}`}</p>
-                    <p className="mt-0.5 text-slate-400">{row.entityType} · {row.accessRole}</p>
-                    <p className="mt-1 text-[10px] text-slate-400">Grade default: hidden</p>
-                  </div>
-                ))}
               </div>
             </div>
 
@@ -1321,7 +1579,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                   <p className="text-xs text-amber-500 mt-1">คำสั่งงานถูกส่งไปหน้าปฏิบัติการแล้ว กรุณารอจนกว่าตู้จะมาถึง</p>
                 </div>
 
-                <button onClick={() => setGateOutPhase('confirm_release')}
+                <button onClick={handleMarkAtGate}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-all w-full justify-center">
                   <CheckCircle2 size={16} /> ตู้ถึงประตูแล้ว → ตรวจสภาพ & ปล่อยออก
                 </button>
@@ -1398,6 +1656,15 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
             </button>
           </div>
         )}
+          </div>
+          <aside className="gate-out-side-rail space-y-3 xl:sticky xl:top-20 xl:self-start">
+            <GateDecisionBar signals={gateOutDecisionSignals} compact />
+            {gateOutGuardrails.alerts.length > 0 && (
+              <GateGuardrailPanel title="Gate-Out checks" snapshot={gateOutGuardrails} compact />
+            )}
+            {gateOutVisibilityPreviewPanel}
+          </aside>
+        </div>
       </div>
 
       {/* OCR Modal */}

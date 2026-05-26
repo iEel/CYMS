@@ -245,6 +245,38 @@ ON PortalEntityAccess (customer_id, entity_type, entity_id, is_active);
 CREATE INDEX IX_PortalEntityAccess_EntityRef
 ON PortalEntityAccess (entity_type, entity_ref, customer_id, is_active);
 
+-- ===================================
+-- ตาราง: Gate Out Requests (งานปล่อยตู้ที่ทำต่อได้)
+-- ===================================
+CREATE TABLE GateOutRequests (
+    request_id          INT PRIMARY KEY IDENTITY(1,1),
+    yard_id             INT NOT NULL,
+    container_id        INT NOT NULL,
+    booking_id          INT NULL,
+    booking_ref         NVARCHAR(100) NULL,
+    billing_customer_id INT NULL,
+    billing_clearance_id INT NULL,
+    work_order_id       INT NULL,
+    gate_transaction_id INT NULL,
+    eir_number          NVARCHAR(80) NULL,
+    driver_name         NVARCHAR(100) NULL,
+    driver_license      NVARCHAR(50) NULL,
+    truck_plate         NVARCHAR(20) NULL,
+    seal_number         NVARCHAR(50) NULL,
+    notes               NVARCHAR(500) NULL,
+    status              NVARCHAR(30) NOT NULL DEFAULT 'requested', -- requested,moving,at_gate,released,cancelled
+    requested_by        INT NULL,
+    requested_at        DATETIME2 NOT NULL DEFAULT GETDATE(),
+    completed_at        DATETIME2 NULL,
+    updated_at          DATETIME2 NULL
+);
+
+CREATE INDEX IX_GateOutRequests_Yard_Status
+ON GateOutRequests (yard_id, status, requested_at DESC);
+
+CREATE INDEX IX_GateOutRequests_Container_Open
+ON GateOutRequests (container_id, status, requested_at DESC);
+
 -- Optional party columns used by portal grant rules when Bookings is present.
 IF OBJECT_ID('Bookings', 'U') IS NOT NULL
 BEGIN

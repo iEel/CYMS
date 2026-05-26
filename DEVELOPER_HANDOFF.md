@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 26 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 26 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs** (~100%)
 
 ---
 
@@ -62,6 +62,9 @@
 - Gate Out compatibility now checks `booking_customer_id` and `bill_to_customer_id` before falling back to legacy `customer_id`, while still allowing no-booking/no-policy gate work.
 - Gate Out primary search now accepts only container number or Booking No.; shipping line is no longer part of the primary search.
 - `/api/gate/out-search` returns container matches and booking matches scoped to current yard, with selectable in-yard containers for booking results.
+- Gate Out now has durable request sessions in `GateOutRequests`: clicking **ขอดึงตู้** creates/reuses a yard-scoped request plus WorkOrder, persists driver/truck/booking/billing context, and restores the same job when the operator leaves and returns to Gate Out.
+- Gate Out UI is now a workstation layout: pending Gate Out jobs and container/booking search stay in the primary workspace, while readiness, guardrail alerts, and Portal Visibility Preview move to a compact side rail.
+- Final Gate Out EIR submit sends `gate_out_request_id`; `/api/gate` marks the durable request `released`, stores `gate_transaction_id`, `eir_number`, and `billing_clearance_id`.
 
 Default policy:
 - Customer Portal does not see `container_grade` unless the user has `portal.eir.grade.view` and the grant scope enables `eir.fields.container_grade`.
@@ -77,14 +80,14 @@ node scripts/migrate-runtime-core-schema.js
 Verification รอบนี้ผ่านแล้ว:
 
 ```bash
-node scripts/migrate-runtime-core-schema.js
+npm test -- src/app/api/__tests__/gate-out-workstation-ui.test.ts src/app/api/__tests__/gate-out-request-persistence.test.ts src/app/api/__tests__/gate-out-search-ui.test.ts src/app/api/__tests__/gate-out-business-context-ui.test.ts src/app/api/__tests__/gate-out-party-grants.test.ts src/app/api/__tests__/gate-out-search.test.ts --runInBand --cacheDirectory ./.next/jest-cache
 npm test -- src/lib/__tests__/eirVisibility.test.ts src/lib/__tests__/customerPortalPermissions.test.ts src/lib/__tests__/portalGrantRules.test.ts src/lib/__tests__/portalGrantReconciler.test.ts src/app/api/__tests__/eir-public-policy.test.ts src/app/api/__tests__/eir-access-log.test.ts src/app/api/__tests__/portal-eir-visibility.test.ts src/app/api/__tests__/portal-access-schema.test.ts src/app/api/__tests__/portal-action-permissions.test.ts src/app/api/__tests__/portal-data-leakage.test.ts src/app/api/__tests__/portal-grant-field-scope.test.ts src/app/api/__tests__/portal-grant-reconcile.test.ts --runInBand --cacheDirectory ./.next/jest-cache
 npm test -- --runInBand --cacheDirectory ./.next/jest-cache
 npx tsc --noEmit --pretty false
 npm run lint
 ```
 
-ผลล่าสุด: focused Gate In workstation tests `22/22` ผ่าน, full tests `806/806` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+ผลล่าสุด: focused Gate Out workstation/request tests `21/21` ผ่าน, full tests `815/815` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
 
 ---
 
@@ -234,7 +237,7 @@ container-yard-system/
 │   │   │   │   ├── page.tsx          # **🧩 Orchestrator** (95 lines) — tab switching + EIR modal + Timeline modal
 │   │   │   │   ├── types.ts          # Shared types (Transaction, ContainerResult, BillingCharge, BillingData, BillingClearance, GateOutBooking) + CSS constants
 │   │   │   │   ├── GateInTab.tsx     # Gate-In: auto-allocation + **ISO 6346 check digit** + **Boxtech auto-fill/spec capture** + **prefix→customer** + billing + **Billing Clearance** + inspection + OCR + guided workflow panel
-│   │   │   │   ├── GateOutTab.tsx    # Gate-Out: **2-Phase workflow** (ขอดึง → รอรถยก → ปล่อยออก) + billing + payment + **Booking Picker/Summary** + **Billing Clearance** + BoxTech specs read-only + guided workflow panel
+│   │   │   │   ├── GateOutTab.tsx    # Gate-Out: **2-Phase durable request workflow** (ขอดึง → รอรถยก → ปล่อยออก) + pending jobs + billing + payment + **Booking Picker/Summary** + **Billing Clearance** + BoxTech specs read-only + workstation UI
 │   │   │   │   ├── HistoryTab.tsx    # ประวัติ Gate: search + date filter + pagination + **Excel export**
 │   │   │   │   └── TransferTab.tsx   # ย้ายข้ามลาน: send transfer + receive in-transit
 │   │   │   ├── operations/page.tsx # หน้าปฏิบัติการ (3 tabs: Job Queue/สร้างงาน/Shifting)
@@ -502,6 +505,7 @@ container-yard-system/
 | `DocumentFormats` | doc_type, prefix, running_number | เลขเอกสาร |
 | `GateTransactions` | container_id, transaction_type, driver_name, truck_plate, eir_number, **container_owner_id** (FK→Customers), **billing_customer_id** (FK→Customers), **billing_clearance_id** | บันทึก Gate In/Out — **แยกเจ้าของตู้/คนจ่ายเงิน** + ผูกหลักฐาน Billing Clearance ก่อนออก EIR |
 | `WorkOrders` | container_id, order_type, from/to positions, priority, status | คำสั่งงานรถยก |
+| `GateOutRequests` | yard_id, container_id, booking_id/ref, billing_customer_id, billing_clearance_id, work_order_id, gate_transaction_id, eir_number, driver/truck/seal context, status | Durable session สำหรับ Gate-Out: ขอดึงตู้ → restore context → mark at gate → released |
 | `Bookings` | booking_number, booking_type, vessel_name, container_count, seal_number | Booking/Manifest |
 | `RepairOrders` | eor_number, container_id, damage_details, estimated_cost, status | ใบซ่อม EOR |
 | `Tariffs` | charge_type, rate, unit, free_days | อัตราค่าบริการ (LOLO, gate, etc.) |
@@ -570,6 +574,7 @@ container-yard-system/
 |--------|----------|---------|
 | GET | `/api/gate?yard_id=X&type=gate_in&date=today&search=` | ดึงรายการ gate transactions (date: `today` หรือ `YYYY-MM-DD`, search: เลขตู้/คนขับ/ทะเบียน/EIR) |
 | POST | `/api/gate` | Gate-In/Gate-Out — `{ transaction_type, container_number, ... }` → **auto-allocate** + EIR + **auto Work Order** |
+| GET/POST/PATCH | `/api/gate/out-requests` | Durable Gate-Out request sessions — list/create/update ขอดึงตู้, ผูก WorkOrder, restore context, mark at-gate/cancel |
 | GET | `/api/gate/eir?eir_number=X` | ดึงข้อมูล EIR (+ condition/grade/company info + BoxTech technical specs) |
 
 ### Uploads (File Storage)
@@ -819,22 +824,25 @@ container-yard-system/
   - บันทึก `billing_clearance_id` ลง GateTransactions เพื่อผูก Gate/EIR กับหลักฐานเคลียร์เงิน
 - **UX — Toast Banner**: หลัง Gate-In สำเร็จ → form reset ทันที (กรอกเลขตู้ใหม่ได้เลย) + toast banner เล็กๆ แสดง EIR number + ปุ่ม "พิมพ์ EIR" + ✕ ปิดได้ + auto-dismiss 15 วินาที
 
-#### แท็บ "Gate-Out (ปล่อยออก)" — **2-Phase Workflow**
+#### แท็บ "Gate-Out (ปล่อยออก)" — **2-Phase Durable Request Workflow**
 
 ขั้นตอนที่ 1 — **ขอดึงตู้**:
-- ค้นหาตู้ในลาน → เลือกตู้ → กรอกคนขับ/ทะเบียน → **ชำระเงิน/วางบิลก่อน** → กดปุ่ม "ขอดึงตู้"
+- ค้นหาเฉพาะเลขตู้หรือ Booking No. → เลือกตู้ → กรอกคนขับ/ทะเบียน → **ชำระเงิน/วางบิลก่อน** → กดปุ่ม "ขอดึงตู้"
 - **ปุ่ม "ขอดึงตู้" ล็อก** จนกว่าจะชำระเงิน (เงินสด) หรือวางบิล (ลูกค้าเครดิต) เสร็จ
-- สร้าง Work Order ส่งไปหน้าปฏิบัติการ (**ยังไม่ออก EIR**) — notes รวม 🚛 ทะเบียนรถ + 👤 ชื่อคนขับ
-- บันทึกข้อมูลคนขับลง localStorage (persist ข้ามหน้า)
+- สร้าง/Reuse `GateOutRequests` และ Work Order ส่งไปหน้าปฏิบัติการ (**ยังไม่ออก EIR**) — notes รวม 🚛 ทะเบียนรถ + 👤 ชื่อคนขับ
+- Persist ข้อมูลคนขับ/รถ/booking/billing ลง DB แทน localStorage เพื่อให้กลับมาหน้า Gate Out แล้วทำต่อได้
 
 ขั้นตอนที่ 2 — **รอรถยก**:
 - แสดง 🚛 "รอรถยกนำตู้มาที่ประตู..." พร้อม step indicator
-- เมื่อกลับมาค้นหาตู้เดิม ระบบตรวจ Work Order อัตโนมัติ → ข้ามไป Phase ที่ถูกต้อง
+- เมื่อกลับมาค้นหาตู้เดิม ระบบโหลด `GateOutRequests` อัตโนมัติ → restore context และข้ามไป Phase ที่ถูกต้อง
+- ปุ่ม "ตู้ถึงประตูแล้ว" อัปเดต request เป็น `at_gate` ผ่าน `/api/gate/out-requests`
 
 ขั้นตอนที่ 3 — **ปล่อยตู้ + ออก EIR**:
 - ถ่ายรูปตู้ขาออก (ไม่บังคับ, สูงสุด 4 รูป) → อัปโหลดเป็นไฟล์อัตโนมัติ
-- กดยืนยันปล่อยตู้ → อัปเดท container status + **ออก EIR อัตโนมัติ** (รวมข้อมูลคนขับจาก Phase 1)
+- กดยืนยันปล่อยตู้ → ส่ง `gate_out_request_id` ให้ `/api/gate`, อัปเดท container status + **ออก EIR อัตโนมัติ** (รวมข้อมูลคนขับจาก Phase 1)
+- `/api/gate` mark `GateOutRequests.status = released` พร้อม `gate_transaction_id`, `eir_number`, และ `billing_clearance_id`
 - รูปถ่ายขาออกเก็บเป็น `exit_photos` ใน `damage_report` JSON (URL, ไม่ใช่ base64)
+- UI เป็น workstation layout: งาน Gate Out ค้าง + search อยู่ซ้าย, readiness/guardrails/Portal Visibility Preview อยู่ side rail ขวา
 
 **💰 Gate-Out Billing**:
 - เลือกตู้ → คำนวณค่าบริการอัตโนมัติจาก **Tiered Storage Rates** (ตามวันที่อยู่ + ขนาดตู้ 20'/40'/45')
@@ -853,7 +861,7 @@ container-yard-system/
 - **Gate-Out Booking Picker/Summary**: เมื่อมี Booking ที่เกี่ยวข้อง ระบบให้เลือก Booking ก่อนปล่อยออก และแสดง progress เช่น `จำนวนตู้: 3/5 received, 1/5 released`
 - **BoxTech Specs Read-only**: แสดง `Tare` และ `Max Gross` จาก `Containers` ใน panel ตู้ที่เลือก พร้อมข้อความกำกับว่าเป็นสเปกตู้ ไม่ใช่น้ำหนักจริง/VGM; ไม่มีช่องให้พนักงานกรอก/แก้จาก Gate-Out
 - **UX — Toast Banner**: หลัง Gate-Out สำเร็จ → form reset ทันที + toast banner แสดง EIR print + auto-dismiss 15 วินาที
-- **WO กรองเฉพาะรอบปัจจุบัน**: ดูเฉพาะ Work Orders ที่สร้างหลัง gate_in_date — ไม่ดึง WO เก่ามาข้าม Phase
+- **Durable request guard**: ใช้ `GateOutRequests` ที่ active (`requested/moving/at_gate`) เป็น source-of-truth ของงานค้าง ไม่ใช้ WorkOrder notes/localStorage เป็นตัวตัดสิน phase อีกแล้ว
 
 #### แท็บ "ประวัติ Gate"
 - ตาราง transactions + ลิงก์ดู EIR ทุกรายการ

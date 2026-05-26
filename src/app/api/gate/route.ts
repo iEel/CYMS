@@ -160,6 +160,7 @@ const gateBodySchema = z.object({
   trucking_company_id: z.number().int().positive().optional().nullable(),
   driver_user_id: z.number().int().positive().optional().nullable(),
   billing_clearance_id: z.number().int().positive().optional().nullable(),
+  gate_out_request_id: z.number().int().positive().optional().nullable(),
   tare_weight_kg: z.coerce.number().int().positive().optional().nullable(),
   max_gross_weight_kg: z.coerce.number().int().positive().optional().nullable(),
   boxtech_group_st: z.string().max(10).optional().nullable(),
@@ -241,7 +242,7 @@ export async function POST(request: NextRequest) {
       damage_report,
       container_id,
       container_owner_id, booking_customer_id, billing_customer_id, trucking_company_id, driver_user_id,
-      billing_clearance_id,
+      billing_clearance_id, gate_out_request_id,
       tare_weight_kg, max_gross_weight_kg, boxtech_group_st, boxtech_source,
       actual_gross_weight_kg, weight_source,
     } = body;
@@ -518,6 +519,28 @@ export async function POST(request: NextRequest) {
       `);
 
     const gateTransaction = txResult.recordset[0];
+    if (transaction_type === 'gate_out' && gate_out_request_id) {
+      try {
+        await db.request()
+          .input('gateOutRequestId', sql.Int, gate_out_request_id)
+          .input('gateTransactionId', sql.Int, gateTransaction.transaction_id)
+          .input('eirNumber', sql.NVarChar, eirNumber)
+          .input('billingClearanceId', sql.Int, billing_clearance_id || null)
+          .query(`
+            UPDATE GateOutRequests
+            SET status = 'released',
+                gate_transaction_id = @gateTransactionId,
+                eir_number = @eirNumber,
+                billing_clearance_id = COALESCE(@billingClearanceId, billing_clearance_id),
+                completed_at = GETDATE(),
+                updated_at = GETDATE()
+            WHERE request_id = @gateOutRequestId
+          `);
+      } catch (requestUpdateError) {
+        console.error('⚠️ Gate-Out request release update failed:', requestUpdateError);
+      }
+    }
+
     await applyPortalGrants(db, buildGatePartyGrants({
       ...gateTransaction,
       transaction_id: gateTransaction.transaction_id,
