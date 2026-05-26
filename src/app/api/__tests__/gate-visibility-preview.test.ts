@@ -6,6 +6,9 @@ describe('Gate visibility preview', () => {
     const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gate/visibility-preview/route.ts'), 'utf8');
     expect(route).toContain('buildGatePartyGrants');
     expect(route).toContain('buildBookingPartyGrants');
+    expect(route).toContain('requireAnyPermission');
+    expect(route).toContain("'gate.in'");
+    expect(route).toContain("'gate.out'");
     expect(route).toContain('defaultPortalPermissionScope');
     expect(route).toContain('try');
     expect(route).toContain('invalid_request');

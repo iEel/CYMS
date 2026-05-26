@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { requirePermission } from '@/lib/apiAuth';
+import { requireAnyPermission } from '@/lib/apiAuth';
 import sql from 'mssql';
 import { buildBookingPartyGrants, buildGatePartyGrants, defaultPortalPermissionScope, type PortalGrantRule } from '@/lib/portalGrantRules';
 
@@ -21,7 +21,7 @@ function cleanString(value: unknown) {
 
 export async function POST(request: NextRequest) {
   const db = await getDb();
-  const actor = await requirePermission(request, db, 'gate.in', 'คุณไม่มีสิทธิ์ดู Portal Visibility Preview');
+  const actor = await requireAnyPermission(request, db, ['gate.in', 'gate.out'], 'คุณไม่มีสิทธิ์ดู Portal Visibility Preview');
   if (actor instanceof NextResponse) return actor;
 
   let body: Record<string, unknown>;

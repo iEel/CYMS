@@ -155,10 +155,10 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
         if (!res.ok || !json || !Array.isArray(json.preview)) {
           throw new Error('Visibility preview unavailable');
         }
-        setVisibilityPreview(json.preview);
+        if (!controller.signal.aborted) setVisibilityPreview(json.preview);
       })
       .catch(err => {
-        if (err.name !== 'AbortError') {
+        if (!controller.signal.aborted && err.name !== 'AbortError') {
           console.error('visibility preview error', err);
           setVisibilityPreview([]);
           setVisibilityPreviewError('Visibility preview unavailable');
