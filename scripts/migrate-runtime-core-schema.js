@@ -471,6 +471,10 @@ async function migrate() {
         CREATE INDEX IX_DocumentPrintLogs_Document
           ON DocumentPrintLogs (document_type, document_id, printed_at DESC);
 
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('DocumentPrintLogs') AND name = 'UX_DocumentPrintLogs_DocumentPrintNo')
+        CREATE UNIQUE INDEX UX_DocumentPrintLogs_DocumentPrintNo
+          ON DocumentPrintLogs (document_type, document_id, print_no);
+
       IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('DocumentTemplateVersions') AND name = 'IX_DocumentTemplateVersions_Code')
         CREATE INDEX IX_DocumentTemplateVersions_Code
           ON DocumentTemplateVersions (template_code, version_no, status);

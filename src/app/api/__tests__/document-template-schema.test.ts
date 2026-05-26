@@ -36,4 +36,11 @@ describe('document template schema', () => {
     expect(apiFiles).not.toMatch(/CREATE TABLE\s+DocumentPrintLogs/i);
     expect(apiFiles).not.toMatch(/ALTER TABLE\s+DocumentPrintLogs/i);
   });
+
+  it('guards print numbers with a unique document print index', () => {
+    expect(schema).toMatch(/CREATE\s+UNIQUE\s+INDEX\s+UX_DocumentPrintLogs_DocumentPrintNo/i);
+    expect(schema).toMatch(/ON\s+DocumentPrintLogs\s*\(\s*document_type\s*,\s*document_id\s*,\s*print_no\s*\)/i);
+    expect(migration).toMatch(/CREATE\s+UNIQUE\s+INDEX\s+UX_DocumentPrintLogs_DocumentPrintNo/i);
+    expect(migration).toMatch(/ON\s+DocumentPrintLogs\s*\(\s*document_type\s*,\s*document_id\s*,\s*print_no\s*\)/i);
+  });
 });

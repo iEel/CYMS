@@ -529,6 +529,9 @@ CREATE TABLE DocumentPrintSnapshots (
 CREATE INDEX IX_DocumentPrintLogs_Document
 ON DocumentPrintLogs (document_type, document_id, printed_at DESC);
 
+CREATE UNIQUE INDEX UX_DocumentPrintLogs_DocumentPrintNo
+ON DocumentPrintLogs (document_type, document_id, print_no);
+
 CREATE INDEX IX_DocumentTemplateVersions_Code
 ON DocumentTemplateVersions (template_code, version_no, status);
 

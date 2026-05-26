@@ -54,9 +54,7 @@ describe('document print log helper', () => {
     const queries: string[] = [];
     const inputs: Record<string, unknown>[] = [];
     const db = mockPrintLogDb([
-      { recordset: [{ print_count: 0 }] },
-      { recordset: [{ print_id: 101 }] },
-      { recordset: [] },
+      { recordset: [{ success: true, print_no: 1, is_reprint: false, reprint_count: 0 }] },
     ], queries, inputs);
 
     const result = await recordDocumentPrint(db, {
@@ -75,12 +73,15 @@ describe('document print log helper', () => {
     });
 
     expect(result).toEqual({ print_no: 1, is_reprint: false, reprint_count: 0 });
-    expect(queries.join('\n')).toMatch(/INSERT\s+INTO\s+DocumentPrintLogs/i);
-    expect(queries.join('\n')).toMatch(/OUTPUT\s+INSERTED\.print_id/i);
-    expect(queries.join('\n')).toMatch(/INSERT\s+INTO\s+DocumentPrintSnapshots/i);
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toMatch(/SET\s+XACT_ABORT\s+ON/i);
+    expect(queries[0]).toMatch(/SET\s+TRANSACTION\s+ISOLATION\s+LEVEL\s+SERIALIZABLE/i);
+    expect(queries[0]).toMatch(/BEGIN\s+TRAN/i);
+    expect(queries[0]).toMatch(/WITH\s*\(\s*UPDLOCK\s*,\s*HOLDLOCK\s*\)/i);
+    expect(queries[0]).toMatch(/INSERT\s+INTO\s+DocumentPrintLogs/i);
+    expect(queries[0]).toMatch(/INSERT\s+INTO\s+DocumentPrintSnapshots/i);
+    expect(queries[0]).toMatch(/COMMIT\s+TRAN/i);
     expect(inputs).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'printNo', value: 1 }),
-      expect.objectContaining({ name: 'isReprint', value: 0 }),
       expect.objectContaining({ name: 'snapshotJson', value: JSON.stringify({ document: { invoice_number: 'INV-42' } }) }),
     ]));
   });
@@ -89,7 +90,7 @@ describe('document print log helper', () => {
     const queries: string[] = [];
     const inputs: Record<string, unknown>[] = [];
     const invalidDb = mockPrintLogDb([
-      { recordset: [{ print_count: 1 }] },
+      { recordset: [{ success: false, error: 'reprint reason is required' }] },
     ], queries, inputs);
 
     await expect(recordDocumentPrint(invalidDb, {
@@ -106,9 +107,7 @@ describe('document print log helper', () => {
     })).rejects.toThrow('reprint reason is required');
 
     const db = mockPrintLogDb([
-      { recordset: [{ print_count: 1 }] },
-      { recordset: [{ print_id: 102 }] },
-      { recordset: [] },
+      { recordset: [{ success: true, print_no: 2, is_reprint: true, reprint_count: 1 }] },
     ], queries, inputs);
 
     const result = await recordDocumentPrint(db, {
@@ -133,11 +132,28 @@ describe('document print log helper', () => {
       reprint_label: 'พิมพ์ซ้ำครั้งที่ 1',
     });
     expect(inputs).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'printNo', value: 2 }),
-      expect.objectContaining({ name: 'isReprint', value: 1 }),
-      expect.objectContaining({ name: 'reprintCount', value: 1 }),
       expect.objectContaining({ name: 'reprintReason', value: 'customer requested copy' }),
     ]));
+  });
+
+  it('rejects unserializable snapshots before issuing SQL', async () => {
+    const queries: string[] = [];
+    const inputs: Record<string, unknown>[] = [];
+    const db = mockPrintLogDb([], queries, inputs);
+    const snapshot: Record<string, unknown> = {};
+    snapshot.self = snapshot;
+
+    await expect(recordDocumentPrint(db, {
+      documentType: 'tax_invoice_receipt',
+      documentId: 42,
+      templateCode: 'TAX-CTR',
+      templateVersion: 3,
+      snapshot,
+      mode: 'full',
+      copyMode: 'carbonless',
+    })).rejects.toThrow('snapshot_json is not serializable');
+    expect(queries).toHaveLength(0);
+    expect(inputs).toHaveLength(0);
   });
 });
 

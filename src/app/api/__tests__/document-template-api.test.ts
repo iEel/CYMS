@@ -612,9 +612,7 @@ describe('document template API', () => {
 
   it('records document print logs through the dedicated print-log route', async () => {
     const db = makeDb([
-      { recordset: [{ print_count: 0 }] },
-      { recordset: [{ print_id: 301 }] },
-      { recordset: [] },
+      { recordset: [{ success: true, print_no: 1, is_reprint: false, reprint_count: 0 }] },
     ]);
     mockedGetDb.mockResolvedValue(db);
     const request = makeRequest('/api/document-templates/print-log', {
@@ -653,5 +651,68 @@ describe('document template API', () => {
       entityId: 77,
     }));
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported print-log document types without writing', async () => {
+    const db = makeDb();
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/print-log', {
+      method: 'POST',
+      body: JSON.stringify({
+        document_type: 'sample',
+        document_id: 77,
+        template_code: 'SAMPLE',
+        template_version: 1,
+      }),
+    });
+
+    const response = await printLogTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('unsupported document_type');
+    expect(db.query).not.toHaveBeenCalled();
+    expect(mockedLogAudit).not.toHaveBeenCalled();
+  });
+
+  it('does not fail print-log response when audit throws after successful write', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const db = makeDb([
+      { recordset: [{ success: true, print_no: 2, is_reprint: true, reprint_count: 1 }] },
+    ]);
+    try {
+      mockedGetDb.mockResolvedValue(db);
+      mockedLogAudit.mockRejectedValueOnce(new Error('audit unavailable'));
+      const request = makeRequest('/api/document-templates/print-log', {
+        method: 'POST',
+        body: JSON.stringify({
+          document_type: 'receipt',
+          document_id: 77,
+          document_no: 'RCT-77',
+          template_code: 'RCT_CONTINUOUS',
+          template_version: 2,
+          snapshot: { document: { invoice_id: 77 } },
+          mode: 'full',
+          copy_mode: 'carbonless',
+          show_reprint_label: true,
+          reprint_label_template: 'พิมพ์ซ้ำครั้งที่ {reprint_count}',
+        }),
+      });
+
+      const response = await printLogTemplate(request);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({
+        print_no: 2,
+        is_reprint: true,
+        reprint_count: 1,
+        reprint_label: 'พิมพ์ซ้ำครั้งที่ 1',
+      });
+      expect(mockedLogAudit).toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith('document print audit failed:', expect.any(Error));
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

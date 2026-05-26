@@ -14,6 +14,7 @@ const PRINT_LOG_PERMISSIONS = [
 ];
 
 const PERMISSION_MESSAGE = 'คุณไม่มีสิทธิ์บันทึกประวัติการพิมพ์เอกสาร';
+const ALLOWED_DOCUMENT_TYPES = new Set(['receipt', 'tax_invoice_receipt']);
 
 type PrintLogBody = {
   document_type?: unknown;
@@ -90,6 +91,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!ALLOWED_DOCUMENT_TYPES.has(documentType)) {
+      return NextResponse.json({ error: 'unsupported document_type' }, { status: 400 });
+    }
+
     const result = await recordDocumentPrint(db, {
       documentType,
       documentId,
@@ -109,28 +114,35 @@ export async function POST(request: NextRequest) {
       requireReprintReason: booleanFrom(body.require_reprint_reason),
     });
 
-    await logAudit({
-      userId: actor.userId,
-      action: result.is_reprint ? 'document_reprint' : 'document_print',
-      entityType: documentType,
-      entityId: documentId,
-      details: {
-        document_type: documentType,
-        document_id: documentId,
-        document_no: optionalString(body.document_no),
-        template_code: templateCode,
-        template_version: templateVersion,
-        print_no: result.print_no,
-        is_reprint: result.is_reprint,
-        reprint_count: result.reprint_count,
-        mode: cleanString(body.mode) || 'full',
-        copy_mode: cleanString(body.copy_mode ?? body.copyMode) || 'carbonless',
-      },
-    });
+    try {
+      await logAudit({
+        userId: actor.userId,
+        action: result.is_reprint ? 'document_reprint' : 'document_print',
+        entityType: documentType,
+        entityId: documentId,
+        details: {
+          document_type: documentType,
+          document_id: documentId,
+          document_no: optionalString(body.document_no),
+          template_code: templateCode,
+          template_version: templateVersion,
+          print_no: result.print_no,
+          is_reprint: result.is_reprint,
+          reprint_count: result.reprint_count,
+          mode: cleanString(body.mode) || 'full',
+          copy_mode: cleanString(body.copy_mode ?? body.copyMode) || 'carbonless',
+        },
+      });
+    } catch (auditError) {
+      console.warn('document print audit failed:', auditError);
+    }
 
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === 'reprint reason is required') {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === 'snapshot_json is not serializable') {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
