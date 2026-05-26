@@ -42,6 +42,7 @@ export interface DocumentTemplateLineItemsSection {
   binding_source: string;
   x_mm: number;
   y_mm: number;
+  start_y_mm: number;
   width_mm: number;
   row_height_mm: number;
   max_rows: number;
