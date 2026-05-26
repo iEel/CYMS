@@ -482,6 +482,8 @@ describe('document template API', () => {
     expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
     expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+    expect(db.queries[0]).toContain("t.document_type IN ('receipt', 'tax_invoice_receipt')");
+    expect(db.queries[0]).not.toContain("OR @documentType IN ('tax_invoice_receipt', 'receipt')");
     expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
       userId: 7,
       action: 'document_template_preview',
@@ -565,6 +567,8 @@ describe('document template API', () => {
     expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
     expect(db.queries.join('\n')).not.toContain('DocumentPrintLogs');
+    expect(db.queries[0]).toContain("t.document_type IN ('receipt', 'tax_invoice_receipt')");
+    expect(db.queries[0]).not.toContain("OR @documentType IN ('tax_invoice_receipt', 'receipt')");
     expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
       userId: 7,
       action: 'document_template_test_print',
@@ -582,5 +586,26 @@ describe('document template API', () => {
     expect(body.config.copy_mode).toBe('separate');
     expect(body.config.print_policy.red_ref_source).toBe('receipt_number');
     expect(body.testPrint).toBe(true);
+  });
+
+  it('rejects malformed test print JSON after settings permission without auditing', async () => {
+    const db = makeDb();
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/test-print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{not-json',
+    });
+
+    const response = await testPrintTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'settings.manage', expect.any(String));
+    expect(body.error).toBe('JSON body ไม่ถูกต้อง');
+    expect(db.query).not.toHaveBeenCalled();
+    expect(mockedBuildSampleContinuousPrintPayload).not.toHaveBeenCalled();
+    expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+    expect(mockedLogAudit).not.toHaveBeenCalled();
   });
 });

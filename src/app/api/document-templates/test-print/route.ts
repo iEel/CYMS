@@ -42,11 +42,14 @@ function copyModeFrom(value: unknown): DocumentTemplateCopyMode | null {
   return value === 'carbonless' || value === 'separate' ? value : null;
 }
 
-async function optionalBody(request: NextRequest): Promise<TestPrintBody> {
+async function parseOptionalBody(request: NextRequest): Promise<TestPrintBody | NextResponse> {
+  const text = await request.text();
+  if (!text.trim()) return {};
+
   try {
-    return await request.json();
+    return JSON.parse(text) as TestPrintBody;
   } catch {
-    return {};
+    return NextResponse.json({ error: 'JSON body ไม่ถูกต้อง' }, { status: 400 });
   }
 }
 
@@ -74,7 +77,10 @@ async function currentTemplateConfig(
             @templateId IS NULL
             AND (
               t.document_type = @documentType
-              OR @documentType IN ('tax_invoice_receipt', 'receipt')
+              OR (
+                @documentType IN ('receipt', 'tax_invoice_receipt')
+                AND t.document_type IN ('receipt', 'tax_invoice_receipt')
+              )
             )
           )
         )
@@ -109,7 +115,9 @@ export async function POST(request: NextRequest) {
     const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
 
-    const body = await optionalBody(request);
+    const body = await parseOptionalBody(request);
+    if (body instanceof NextResponse) return body;
+
     const documentType = cleanString(body.document_type) || 'tax_invoice_receipt';
     const templateId = parsePositiveInt(body.template_id);
     const mode = modeFrom(body.mode);

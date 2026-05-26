@@ -58,7 +58,10 @@ async function currentTemplateConfig(db: Awaited<ReturnType<typeof getDb>>, docu
       WHERE t.status <> 'inactive'
         AND (
           t.document_type = @documentType
-          OR @documentType IN ('tax_invoice_receipt', 'receipt')
+          OR (
+            @documentType IN ('receipt', 'tax_invoice_receipt')
+            AND t.document_type IN ('receipt', 'tax_invoice_receipt')
+          )
         )
       ORDER BY
         CASE WHEN t.document_type = @documentType THEN 0 ELSE 1 END,
