@@ -242,6 +242,24 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     bookingDerivedContextRef.current = {};
   };
 
+  const resetGateInOwnerBillingContext = () => {
+    setContainerOwnerId(null);
+    setBillingCustomerId(null);
+    setBillingDiffFromOwner(false);
+    setOwnerSearch('');
+    setOwnerSearchOpen(false);
+    setBillingSearch('');
+    setBillingSearchOpen(false);
+    setManualCustomerId(null);
+    setSelectedBooking(null);
+    setBookingSearch('');
+    setBookingResults([]);
+    setShowBookingPicker(false);
+    setBookingSearchError('');
+    setTruckCompanySearch('');
+    bookingDerivedContextRef.current = {};
+  };
+
   const applyGateInBooking = (booking: GateBookingOption | null) => {
     clearBookingDerivedContext();
     setSelectedBooking(booking);
@@ -311,6 +329,17 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       clearBookingDerivedContext();
     }
     if (!value) setBookingResults([]);
+  };
+
+  const handleOwnerSearchChange = (value: string) => {
+    const selectedOwnerName = containerOwnerId ? customerList.find(c => c.customer_id === containerOwnerId)?.customer_name || '' : '';
+    const previousOwnerId = containerOwnerId;
+    setOwnerSearch(value);
+    setOwnerSearchOpen(true);
+    if (!value || (previousOwnerId && value !== selectedOwnerName)) {
+      setContainerOwnerId(null);
+      if (!billingDiffFromOwner && billingCustomerId === previousOwnerId) setBillingCustomerId(null);
+    }
   };
 
   // === Check Digit Validation + Boxtech Auto-Lookup ===
@@ -638,9 +667,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       if (isOfflineQueuedResponse(data)) {
         setGateInResult({ success: true, message: `บันทึก Gate-In ${gateInForm.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
-        setSelectedBooking(null);
-        setBookingSearch('');
-        setBookingResults([]);
+        resetGateInOwnerBillingContext();
         setGateInClearance(null);
         setInspectionReport(null);
         setBoxtechResult(null);
@@ -669,9 +696,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
 
         setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
-        setSelectedBooking(null);
-        setBookingSearch('');
-        setBookingResults([]);
+        resetGateInOwnerBillingContext();
         setGateInClearance(null);
         setInspectionReport(null);
         setBoxtechResult(null);
@@ -1016,14 +1041,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                         type="text"
                         placeholder="พิมพ์ชื่อสายเรือหรือเจ้าของตู้..."
                         value={ownerSearch || (containerOwnerId ? customerList.find(c => c.customer_id === containerOwnerId)?.customer_name || '' : resolvedCustomer?.customer_name || '')}
-                        onChange={e => {
-                          setOwnerSearch(e.target.value);
-                          setOwnerSearchOpen(true);
-                          if (!e.target.value) {
-                            setContainerOwnerId(null);
-                            if (!billingDiffFromOwner) setBillingCustomerId(null);
-                          }
-                        }}
+                        onChange={e => handleOwnerSearchChange(e.target.value)}
                         onFocus={() => setOwnerSearchOpen(true)}
                         className={`${inputClass} text-sm`}
                       />

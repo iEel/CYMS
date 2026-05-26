@@ -33,6 +33,20 @@ describe('Gate In business context UI', () => {
     expect(gateIn).toContain('!res.ok');
   });
 
+  it('clears stale owner and billing context when owner search changes or gate-in resets', () => {
+    expect(gateIn).toContain('const handleOwnerSearchChange = (value: string) =>');
+    expect(gateIn).toContain('const selectedOwnerName = containerOwnerId');
+    expect(gateIn).toContain('value !== selectedOwnerName');
+    expect(gateIn).toContain('billingCustomerId === previousOwnerId');
+    expect(gateIn).toContain('const resetGateInOwnerBillingContext = () =>');
+    expect(gateIn).toContain("setOwnerSearch('')");
+    expect(gateIn).toContain("setBillingSearch('')");
+    expect(gateIn).toContain('setBillingDiffFromOwner(false)');
+    expect(gateIn).toContain('setManualCustomerId(null)');
+    expect(gateIn).toContain('bookingDerivedContextRef.current = {};');
+    expect((gateIn.match(/resetGateInOwnerBillingContext\(\);/g) || []).length).toBeGreaterThanOrEqual(2);
+  });
+
   it('booking lookup returns party ids and names', () => {
     expect(bookings).toContain('booking_customer_id');
     expect(bookings).toContain('shipping_line_name');
