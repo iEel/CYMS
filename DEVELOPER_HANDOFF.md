@@ -54,6 +54,7 @@
 ### Booking / Gate Business Relationship UI
 
 - Booking create form captures Booking Customer, Shipping Line / Container Owner, Forwarder, Shipper, Consignee, Trucking Company, and Bill To Customer.
+- Booking create form uses searchable customer comboboxes for Business Relationship fields, with customer id/code/tax id/role/credit metadata and keyboard navigation for large customer lists.
 - Booking list/detail returns party names so Gate In and Gate Out can use Booking as source-of-truth.
 - Booking import template and row mapper support party id columns for `booking_customer_id`, `shipping_line_id`, `forwarder_id`, `shipper_id`, `consignee_id`, `trucking_company_id`, and `bill_to_customer_id`.
 - Gate In auto-fills Container Owner from Booking shipping line for COC and still supports manual owner selection.
@@ -1390,8 +1391,8 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
 
 ### 📥 Booking Import Template (✅ เสร็จ)
 - [x] ปุ่ม "ดาวน์โหลด Template (.xlsx)" ที่หน้า Booking → สร้าง/นำเข้า
-  - 13 คอลัมน์: `booking_number`, `booking_type`, `vessel_name`, `voyage_number`, `container_count`, `container_size`, `container_type`, `eta`, `seal_number`, `container_numbers`, `valid_from`, `valid_to`, `notes`
-  - ไฟล์ `.xlsx` พร้อม 2 แถวตัวอย่าง + auto-size columns
+  - 20 คอลัมน์ รวม business relationship: `booking_customer_id`, `shipping_line_id`, `forwarder_id`, `shipper_id`, `consignee_id`, `trucking_company_id`, `bill_to_customer_id`
+  - ไฟล์ `.xlsx` พร้อม 2 แถวตัวอย่างที่ใส่ party IDs ครบ + auto-size columns + sheet `Column Guide` อธิบายว่าต้องใช้ `customer_id` จากหน้า Settings > Customer Master
   - `container_numbers`: คั่นด้วย `,` ในช่องเดียว → split เป็น array → auto-link `BookingContainers`
 
 ### 🌐 Customer Portal (✅ เสร็จ)

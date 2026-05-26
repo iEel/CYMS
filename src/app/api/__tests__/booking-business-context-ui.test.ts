@@ -47,8 +47,42 @@ describe('Booking business relationship UI', () => {
     );
   });
 
+  it('template sample rows include complete customer party ids and column guidance', () => {
+    const templateBlock = bookingPage.match(/const downloadTemplate = \(\) => \{([\s\S]*?)\n  \};/)?.[1];
+
+    expect(templateBlock).toContain("[101, 201, 301, 401, 501, 601, 101");
+    expect(templateBlock).toContain("[102, 202, 302, 402, 502, 602, 102");
+    expect(templateBlock).toContain("const guideRows = [");
+    expect(templateBlock).toContain("ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า");
+    expect(templateBlock).toContain("XLSX.utils.book_append_sheet(wb, guideWs, 'Column Guide')");
+  });
+
+  it('upload helper copy lists the business relationship columns, not only the legacy booking fields', () => {
+    expect(bookingPage).toContain('booking_customer_id, shipping_line_id, forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id');
+    expect(bookingPage).toContain('ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า');
+  });
+
   it('keeps bill-to customer synced while it is still booking-customer derived', () => {
     expect(bookingPage).toContain('bill_to_customer_id: !prev.bill_to_customer_id || prev.bill_to_customer_id === prev.booking_customer_id ? value : prev.bill_to_customer_id');
+  });
+
+  it('uses searchable customer comboboxes for business relationship party selection', () => {
+    expect(bookingPage).toContain('function CustomerCombobox');
+    expect(bookingPage).toContain('role="combobox"');
+    expect(bookingPage).toContain('aria-expanded={open}');
+    expect(bookingPage).toContain('const filteredOptions = options.filter');
+    expect(bookingPage).toContain('customerRoleSummary(customer)');
+    expect(bookingPage).toContain('กดพิมพ์เพื่อค้นหาบริษัท');
+    expect(bookingPage).not.toContain('const PartySelect =');
+    expect(bookingPage).not.toContain('<PartySelect');
+  });
+
+  it('customer search uses id, code, name, tax id, and role metadata', () => {
+    expect(bookingPage).toContain('customer.customer_id.toString()');
+    expect(bookingPage).toContain('customer.customer_code');
+    expect(bookingPage).toContain('customer.tax_id');
+    expect(bookingPage).toContain('customerRoleSummary(customer)');
+    expect(bookingPage).toContain('onKeyDown={handleKeyDown}');
   });
 
   it('booking API route exposes party names for existing lookups', () => {

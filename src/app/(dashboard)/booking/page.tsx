@@ -40,7 +40,9 @@ interface BookingContainerRow {
 
 interface CustomerOption {
   customer_id: number;
+  customer_code?: string;
   customer_name: string;
+  tax_id?: string | null;
   is_line?: boolean | number;
   is_trucking?: boolean | number;
   is_forwarder?: boolean | number;
@@ -48,6 +50,152 @@ interface CustomerOption {
 }
 
 type CustomerOptionKind = 'any' | 'line' | 'forwarder' | 'trucking';
+
+const comboboxInputClass = "w-full h-10 px-3 pr-9 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
+const comboboxLabelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
+
+function customerRoleSummary(customer: CustomerOption) {
+  const roles = [
+    customer.is_line ? 'สายเรือ' : '',
+    customer.is_forwarder ? 'Forwarder' : '',
+    customer.is_trucking ? 'ขนส่ง' : '',
+  ].filter(Boolean);
+  return roles.length ? roles.join(' · ') : 'ลูกค้า';
+}
+
+function CustomerCombobox({
+  label,
+  value,
+  options,
+  required,
+  onChange,
+}: {
+  label: string;
+  value: number | null;
+  options: CustomerOption[];
+  required?: boolean;
+  onChange: (value: number | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const selectedCustomer = options.find(customer => customer.customer_id === value) || null;
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredOptions = options.filter(customer => {
+    const searchable = [
+      customer.customer_id.toString(),
+      customer.customer_code,
+      customer.customer_name,
+      customer.tax_id,
+      customerRoleSummary(customer),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return !normalizedQuery || searchable.includes(normalizedQuery);
+  }).slice(0, 40);
+  const listboxId = `customer-combobox-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [query, options.length]);
+
+  const chooseCustomer = (customer: CustomerOption | null) => {
+    onChange(customer?.customer_id || null);
+    setQuery('');
+    setOpen(false);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setOpen(true);
+      setHighlightedIndex(index => Math.min(index + 1, Math.max(filteredOptions.length - 1, 0)));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setOpen(true);
+      setHighlightedIndex(index => Math.max(index - 1, 0));
+    } else if (event.key === 'Enter' && open) {
+      event.preventDefault();
+      if (filteredOptions[highlightedIndex]) chooseCustomer(filteredOptions[highlightedIndex]);
+    } else if (event.key === 'Escape') {
+      setOpen(false);
+      setQuery('');
+    }
+  };
+
+  return (
+    <div className="relative">
+      <label className={comboboxLabelClass}>{label}{required ? ' *' : ''}</label>
+      <div className="relative">
+        <input
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          value={open ? query : selectedCustomer?.customer_name || ''}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+          onChange={event => { setQuery(event.target.value); setOpen(true); }}
+          onKeyDown={handleKeyDown}
+          className={comboboxInputClass}
+          placeholder={selectedCustomer ? selectedCustomer.customer_name : 'กดพิมพ์เพื่อค้นหาบริษัท'}
+        />
+        {(selectedCustomer || query) && (
+          <button
+            type="button"
+            onMouseDown={event => { event.preventDefault(); chooseCustomer(null); }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-1.5 py-1 text-[10px] font-semibold text-slate-400 hover:bg-slate-100 hover:text-rose-500 dark:hover:bg-slate-600"
+          >
+            ล้าง
+          </button>
+        )}
+      </div>
+      {selectedCustomer && !open && (
+        <p className="mt-1 truncate text-[10px] text-slate-400">
+          #{selectedCustomer.customer_id}{selectedCustomer.customer_code ? ` · ${selectedCustomer.customer_code}` : ''} · {customerRoleSummary(selectedCustomer)}
+          {selectedCustomer.credit_term ? ` · Credit ${selectedCustomer.credit_term} วัน` : ''}
+        </p>
+      )}
+      {open && (
+        <div
+          id={listboxId}
+          role="listbox"
+          className="absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+        >
+          {filteredOptions.length === 0 ? (
+            <div className="px-3 py-3 text-center text-xs text-slate-400">ไม่พบบริษัทที่ตรงกับคำค้น</div>
+          ) : filteredOptions.map((customer, index) => (
+            <button
+              key={customer.customer_id}
+              type="button"
+              role="option"
+              aria-selected={customer.customer_id === value}
+              onMouseDown={event => { event.preventDefault(); chooseCustomer(customer); }}
+              className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
+                index === highlightedIndex
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                  : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{customer.customer_name}</p>
+                  <p className="mt-0.5 truncate text-[10px] text-slate-400">
+                    #{customer.customer_id}{customer.customer_code ? ` · ${customer.customer_code}` : ''}{customer.tax_id ? ` · Tax ${customer.tax_id}` : ''}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                  {customerRoleSummary(customer)}
+                </span>
+              </div>
+              {customer.credit_term ? (
+                <p className="mt-1 text-[10px] text-blue-500">Credit {customer.credit_term} วัน</p>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const emptyCreateForm = {
   booking_number: '', booking_type: 'import', vessel_name: '', voyage_number: '',
@@ -163,7 +311,9 @@ export default function BookingPage() {
         const data = await res.json();
         setCustomerList(Array.isArray(data) ? data.map((customer: CustomerOption) => ({
           customer_id: customer.customer_id,
+          customer_code: customer.customer_code,
           customer_name: customer.customer_name,
+          tax_id: customer.tax_id,
           is_line: customer.is_line,
           is_trucking: customer.is_trucking,
           is_forwarder: customer.is_forwarder,
@@ -323,15 +473,43 @@ export default function BookingPage() {
   // Download Excel template
   const downloadTemplate = () => {
     const headers = ['booking_number', 'booking_type', 'booking_customer_id', 'shipping_line_id', 'forwarder_id', 'shipper_id', 'consignee_id', 'trucking_company_id', 'bill_to_customer_id', 'vessel_name', 'voyage_number', 'container_count', 'container_size', 'container_type', 'eta', 'seal_number', 'container_numbers', 'valid_from', 'valid_to', 'notes'];
+    const importExamplePartyIds = [101, 201, 301, 401, 501, 601, 101];
+    const exportExamplePartyIds = [102, 202, 302, 402, 502, 602, 102];
     const data = [
       headers,
-      ['BK-2025-0001', 'import', '', '', '', '', '', '', '', 'EVER GIVEN', 'V.001N', 5, '40', 'GP', '2025-04-01', 'SL12345', 'MSCU1234567, MSCU2345678', '2025-04-01', '2025-04-30', 'ตัวอย่าง'],
-      ['BK-2025-0002', 'export', '', '', '', '', '', '', '', 'MSC ANNA', 'V.120E', 3, '20', 'HC', '2025-04-05', '', 'TEMU9876543', '2025-04-05', '2025-05-05', ''],
+      ['BK-2025-0001', 'import', ...importExamplePartyIds, 'EVER GIVEN', 'V.001N', 5, '40', 'GP', '2025-04-01', 'SL12345', 'MSCU1234567, MSCU2345678', '2025-04-01', '2025-04-30', 'ตัวอย่าง import: เปลี่ยน party IDs ให้ตรงกับ customer_id จริง'],
+      ['BK-2025-0002', 'export', ...exportExamplePartyIds, 'MSC ANNA', 'V.120E', 3, '20', 'HC', '2025-04-05', '', 'TEMU9876543', '2025-04-05', '2025-05-05', 'ตัวอย่าง export: bill_to_customer_id มักเป็น booking_customer_id หรือผู้วางบิล'],
+    ];
+    const guideRows = [
+      ['column', 'required', 'description', 'example'],
+      ['booking_number', 'yes', 'เลข Booking ห้ามซ้ำ', 'BK-2025-0001'],
+      ['booking_type', 'no', 'ประเภทงาน: import, export, empty_pickup, empty_return', 'import'],
+      ['booking_customer_id', 'yes', 'ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า: ลูกค้าที่เป็นเจ้าของ booking/ผู้ขอ booking', '101'],
+      ['shipping_line_id', 'no', 'ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า: สายเรือหรือเจ้าของตู้ COC', '201'],
+      ['forwarder_id', 'no', 'ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า: Forwarder ที่เกี่ยวข้อง', '301'],
+      ['shipper_id', 'no', 'ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า: ผู้ส่งออก/เจ้าของสินค้า', '401'],
+      ['consignee_id', 'no', 'ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า: ผู้รับปลายทาง', '501'],
+      ['trucking_company_id', 'no', 'ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า: บริษัทขนส่ง', '601'],
+      ['bill_to_customer_id', 'no', 'ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า: ลูกค้าที่ต้องออกบิลให้ ถ้าว่างระบบใช้ booking_customer_id', '101'],
+      ['vessel_name', 'no', 'ชื่อเรือ', 'EVER GIVEN'],
+      ['voyage_number', 'no', 'Voyage No.', 'V.001N'],
+      ['container_count', 'no', 'จำนวนตู้ตาม booking', '5'],
+      ['container_size', 'no', 'ขนาดตู้ 20/40/45', '40'],
+      ['container_type', 'no', 'ประเภทตู้ GP/HC/RF/OT/FR/TK', 'GP'],
+      ['eta', 'no', 'วันที่ ETA รูปแบบ YYYY-MM-DD หรือ datetime', '2025-04-01'],
+      ['seal_number', 'no', 'เลขซีล ถ้ามี', 'SL12345'],
+      ['container_numbers', 'no', 'เลขตู้ล่วงหน้า คั่นด้วย comma', 'MSCU1234567, MSCU2345678'],
+      ['valid_from', 'no', 'วันที่เริ่มใช้ booking', '2025-04-01'],
+      ['valid_to', 'no', 'วันหมดอายุ booking', '2025-04-30'],
+      ['notes', 'no', 'หมายเหตุ', 'ตัวอย่าง'],
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
     ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 16) }));
+    const guideWs = XLSX.utils.aoa_to_sheet(guideRows);
+    guideWs['!cols'] = [{ wch: 24 }, { wch: 10 }, { wch: 84 }, { wch: 24 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Booking Template');
+    XLSX.utils.book_append_sheet(wb, guideWs, 'Column Guide');
     XLSX.writeFile(wb, 'booking_template.xlsx');
   };
 
@@ -431,30 +609,6 @@ export default function BookingPage() {
     { label: 'Trucking', value: booking.trucking_company_name },
     { label: 'Bill To', value: booking.bill_to_customer_name || booking.booking_customer_name || booking.customer_name },
   ];
-  const PartySelect = ({
-    label,
-    value,
-    options,
-    required,
-    onChange,
-  }: {
-    label: string;
-    value: number | null;
-    options: CustomerOption[];
-    required?: boolean;
-    onChange: (value: number | null) => void;
-  }) => (
-    <div>
-      <label className={labelClass}>{label}{required ? ' *' : ''}</label>
-      <select value={value ?? ''} onChange={e => onChange(e.target.value ? Number(e.target.value) : null)} className={inputClass}>
-        <option value="">เลือกบริษัท</option>
-        {options.map(customer => (
-          <option key={customer.customer_id} value={customer.customer_id}>{customer.customer_name}</option>
-        ))}
-      </select>
-    </div>
-  );
-
   const fmtDate = (d: string) => { if (!d) return '—'; const dt = new Date(d); return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`; };
 
   if (!canManageBookings) {
@@ -801,7 +955,8 @@ export default function BookingPage() {
                 className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all">
                 <FileSpreadsheet size={32} className="mx-auto text-slate-400 mb-2" />
                 <p className="text-sm font-medium text-slate-600 dark:text-slate-300">ลากไฟล์มาวางที่นี่ หรือ คลิกเพื่อเลือกไฟล์</p>
-                <p className="text-[10px] text-slate-400 mt-1">รองรับ .csv, .xlsx, .xls — คอลัมน์: booking_number, vessel_name, voyage_number, container_count, container_size, container_type, seal_number</p>
+                <p className="text-[10px] text-slate-400 mt-1">รองรับ .csv, .xlsx, .xls — คอลัมน์หลัก: booking_number, booking_customer_id, shipping_line_id, forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id</p>
+                <p className="text-[10px] text-slate-400 mt-1">ใช้ customer_id จากหน้า ตั้งค่าระบบ &gt; ลูกค้า; Template มีชีต Column Guide สำหรับคำอธิบายทุกคอลัมน์</p>
               </div>
               <div className="flex items-center justify-center gap-3 mt-2">
                 <button onClick={downloadTemplate}
@@ -888,19 +1043,19 @@ export default function BookingPage() {
                 <div><label className={labelClass}>Valid To</label><input type="date" value={createForm.valid_to} onChange={e => setCreateForm({ ...createForm, valid_to: e.target.value })} className={inputClass} /></div>
                 <div><label className={labelClass}>เลขซีล</label><input type="text" value={createForm.seal_number} onChange={e => setCreateForm({ ...createForm, seal_number: e.target.value })} className={inputClass} placeholder="SEAL123456" /></div>
               </div>
-              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3 overflow-visible">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-700 dark:text-white">Business Relationship</h4>
                   <p className="text-[10px] text-slate-400 mt-0.5">Party context for portal access grants and EIR visibility</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <PartySelect label="Booking Customer" required value={createForm.booking_customer_id} options={customerOptions('any')} onChange={value => setCreateForm(prev => ({ ...prev, booking_customer_id: value, bill_to_customer_id: !prev.bill_to_customer_id || prev.bill_to_customer_id === prev.booking_customer_id ? value : prev.bill_to_customer_id }))} />
-                  <PartySelect label="Shipping Line / Container Owner" value={createForm.shipping_line_id} options={customerOptions('line')} onChange={value => setPartyId('shipping_line_id', value)} />
-                  <PartySelect label="Forwarder" value={createForm.forwarder_id} options={customerOptions('forwarder')} onChange={value => setPartyId('forwarder_id', value)} />
-                  <PartySelect label="Shipper" value={createForm.shipper_id} options={customerOptions('any')} onChange={value => setPartyId('shipper_id', value)} />
-                  <PartySelect label="Consignee" value={createForm.consignee_id} options={customerOptions('any')} onChange={value => setPartyId('consignee_id', value)} />
-                  <PartySelect label="Trucking Company" value={createForm.trucking_company_id} options={customerOptions('trucking')} onChange={value => setPartyId('trucking_company_id', value)} />
-                  <PartySelect label="Bill To Customer" value={createForm.bill_to_customer_id} options={customerOptions('any')} onChange={value => setPartyId('bill_to_customer_id', value)} />
+                      <CustomerCombobox label="Booking Customer" required value={createForm.booking_customer_id} options={customerOptions('any')} onChange={value => setCreateForm(prev => ({ ...prev, booking_customer_id: value, bill_to_customer_id: !prev.bill_to_customer_id || prev.bill_to_customer_id === prev.booking_customer_id ? value : prev.bill_to_customer_id }))} />
+                      <CustomerCombobox label="Shipping Line / Container Owner" value={createForm.shipping_line_id} options={customerOptions('line')} onChange={value => setPartyId('shipping_line_id', value)} />
+                      <CustomerCombobox label="Forwarder" value={createForm.forwarder_id} options={customerOptions('forwarder')} onChange={value => setPartyId('forwarder_id', value)} />
+                      <CustomerCombobox label="Shipper" value={createForm.shipper_id} options={customerOptions('any')} onChange={value => setPartyId('shipper_id', value)} />
+                      <CustomerCombobox label="Consignee" value={createForm.consignee_id} options={customerOptions('any')} onChange={value => setPartyId('consignee_id', value)} />
+                      <CustomerCombobox label="Trucking Company" value={createForm.trucking_company_id} options={customerOptions('trucking')} onChange={value => setPartyId('trucking_company_id', value)} />
+                      <CustomerCombobox label="Bill To Customer" value={createForm.bill_to_customer_id} options={customerOptions('any')} onChange={value => setPartyId('bill_to_customer_id', value)} />
                   {createForm.bill_to_customer_id && (
                     <div className="flex items-end">
                       <p className="text-[10px] text-slate-400 pb-2">Billing: {customerName(createForm.bill_to_customer_id)}</p>
