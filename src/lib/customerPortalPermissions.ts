@@ -12,6 +12,10 @@ export type PortalAction =
   | 'portal.eir.view'
   | 'portal.eir.download'
   | 'portal.eir.grade.view'
+  | 'portal.reefer.view'
+  | 'portal.reefer.download'
+  | 'portal.reefer.exception.view'
+  | 'portal.reefer.exception.dispute'
   | 'portal.trucking.view'
   | 'portal.driver.view';
 
@@ -51,6 +55,10 @@ const ALL_PORTAL_ACTIONS: readonly PortalAction[] = [
   'portal.eir.view',
   'portal.eir.download',
   'portal.eir.grade.view',
+  'portal.reefer.view',
+  'portal.reefer.download',
+  'portal.reefer.exception.view',
+  'portal.reefer.exception.dispute',
   'portal.trucking.view',
   'portal.driver.view',
 ];
@@ -64,6 +72,8 @@ export const ROLE_ACTIONS = {
     'portal.eir.view',
     'portal.eir.download',
     'portal.trucking.view',
+    'portal.reefer.view',
+    'portal.reefer.exception.view',
   ],
   booking_user: [
     'portal.container.view',
@@ -85,6 +95,8 @@ export const ROLE_ACTIONS = {
     'portal.document.download',
     'portal.eir.view',
     'portal.eir.download',
+    'portal.reefer.view',
+    'portal.reefer.download',
   ],
   trucking_coordinator: [
     'portal.container.view',
@@ -102,6 +114,8 @@ export const ROLE_ACTIONS = {
     'portal.eir.view',
     'portal.trucking.view',
     'portal.driver.view',
+    'portal.reefer.view',
+    'portal.reefer.exception.view',
   ],
 } as const satisfies Record<CustomerPortalRole, readonly PortalAction[]>;
 

@@ -50,13 +50,13 @@ const ROLES = [
 
 const CUSTOMER_PORTAL_ROLES = [
   { code: 'customer_admin', label: 'Customer Admin', actions: ['ทุกสิทธิ์ของบริษัท'] },
-  { code: 'operations_user', label: 'Operations', actions: ['ดูตู้', 'ดู Booking', 'ดู EIR'] },
+  { code: 'operations_user', label: 'Operations', actions: ['ดูตู้', 'ดู Booking', 'ดู EIR', 'ดูตู้เย็น'] },
   { code: 'booking_user', label: 'Booking', actions: ['สร้าง/ติดตาม Booking'] },
   { code: 'billing_user', label: 'Billing', actions: ['ดู Invoice', 'ดาวน์โหลดเอกสารบัญชี'] },
-  { code: 'document_user', label: 'Document', actions: ['ดาวน์โหลด EIR/Bundle'] },
+  { code: 'document_user', label: 'Document', actions: ['ดาวน์โหลด EIR/Bundle', 'ดาวน์โหลด Temperature Log'] },
   { code: 'trucking_coordinator', label: 'Trucking Coordinator', actions: ['ดูงานรถที่เกี่ยวข้อง'] },
   { code: 'driver_user', label: 'Driver', actions: ['ดูงาน/EIR ของตัวเอง'] },
-  { code: 'read_only_viewer', label: 'Read-only', actions: ['ดูข้อมูลที่ได้รับ grant'] },
+  { code: 'read_only_viewer', label: 'Read-only', actions: ['ดูข้อมูลที่ได้รับ grant', 'ดูตู้เย็นถ้ามีสิทธิ์'] },
 ];
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
