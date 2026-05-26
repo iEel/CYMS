@@ -59,6 +59,7 @@ describe('Gate Out party grants', () => {
     expect(compatibilityBody).toContain('const billToCustomerId = booking.bill_to_customer_id || bookingCustomerId');
     expect(compatibilityBody).toContain('container?.container_owner_id');
     expect(compatibilityBody).toContain('billingData?.owner?.customer_id');
+    expect(compatibilityBody).toContain('acceptedCustomerIds.size > 0 && bookingCustomerId');
     expect(compatibilityBody).toContain('ลูกค้า Booking ไม่ตรง:');
     expect(compatibilityBody).toContain('Bill To ไม่ตรง:');
     expect(submitBody).toContain('selectedBooking?.bill_to_customer_id || selectedBooking?.booking_customer_id || selectedBooking?.customer_id');

@@ -200,7 +200,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     if (container && booking.container_type && booking.container_type !== container.type) {
       warnings.push(`ประเภทไม่ตรง: Booking ${booking.container_type} / ตู้ ${container.type}`);
     }
-    if (bookingCustomerId && !acceptedCustomerIds.has(bookingCustomerId)) {
+    if (acceptedCustomerIds.size > 0 && bookingCustomerId && !acceptedCustomerIds.has(bookingCustomerId)) {
       warnings.push(`ลูกค้า Booking ไม่ตรง: ${booking.booking_customer_name || booking.customer_name || bookingCustomerId}`);
     }
     if (resolvedCustomer?.customer_id && billToCustomerId && billToCustomerId !== resolvedCustomer.customer_id) {
