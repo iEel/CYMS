@@ -58,6 +58,8 @@
 - Gate Out submits owner, booking customer, billing customer, trucking, and future driver ids to `/api/gate`.
 - Gate In and Gate Out show Portal Visibility Preview with customer names, roles, and entity types. Field-level visibility policy remains in Settings/Customer Master.
 - Gate Out compatibility now checks `booking_customer_id` and `bill_to_customer_id` before falling back to legacy `customer_id`, while still allowing no-booking/no-policy gate work.
+- Gate Out primary search now accepts only container number or Booking No.; shipping line is no longer part of the primary search.
+- `/api/gate/out-search` returns container matches and booking matches scoped to current yard, with selectable in-yard containers for booking results.
 
 Default policy:
 - Customer Portal does not see `container_grade` unless the user has `portal.eir.grade.view` and the grant scope enables `eir.fields.container_grade`.
@@ -80,7 +82,7 @@ npx tsc --noEmit --pretty false
 npm run lint
 ```
 
-ผลล่าสุด: focused tests `100/100` ผ่าน, full tests `757/757` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+ผลล่าสุด: focused Gate Out search tests `7/7` ผ่าน, Gate/Gate-Out regression `17/17` ผ่าน, full tests `800/800` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
 
 ---
 
