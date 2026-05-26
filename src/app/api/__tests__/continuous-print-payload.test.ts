@@ -5,7 +5,11 @@ import {
 
 function makeDb(recordset: unknown[]) {
   const inputs: Array<[string, unknown, unknown]> = [];
-  const query = jest.fn().mockResolvedValue({ recordset });
+  const queries: string[] = [];
+  const query = jest.fn().mockImplementation((statement: string) => {
+    queries.push(statement);
+    return Promise.resolve({ recordset });
+  });
   const input = jest.fn().mockImplementation((name: string, type: unknown, value: unknown) => {
     inputs.push([name, type, value]);
     return chain;
@@ -15,6 +19,7 @@ function makeDb(recordset: unknown[]) {
   return {
     request: jest.fn(() => chain),
     inputs,
+    queries,
     query,
   };
 }
@@ -70,13 +75,25 @@ describe('continuous billing print payload', () => {
         yard_code: 'BKK',
         yard_branch_type: 'branch',
         yard_branch_number: '00001',
+        company_name: 'CYMS Co., Ltd.',
+        company_tax_id: '0105566000001',
+        company_address: '1 Port Road',
+        company_phone: '02-000-0000',
+        company_email: 'billing@example.test',
       },
     ]);
 
     const payload = await buildContinuousPrintPayload(db, { invoiceId: 7, type: 'receipt' });
 
     expect(db.inputs).toContainEqual(['invoiceId', expect.anything(), 7]);
-    expect(payload.company.company_name).toBeTruthy();
+    expect(db.queries.join('\n')).toContain('OUTER APPLY');
+    expect(db.queries.join('\n')).toContain('CompanyProfile');
+    expect(db.queries.join('\n')).toContain('cp.company_name AS company_name');
+    expect(payload.company.company_name).toBe('CYMS Co., Ltd.');
+    expect(payload.company.tax_id).toBe('0105566000001');
+    expect(payload.company.address).toBe('1 Port Road');
+    expect(payload.company.phone).toBe('02-000-0000');
+    expect(payload.company.email).toBe('billing@example.test');
     expect(payload.customer.customer_name).toBe('ACME Logistics');
     expect(payload.customer.branch_name).toBe('สำนักงานใหญ่');
     expect(payload.document.document_title).toContain('ใบเสร็จรับเงิน');
@@ -93,6 +110,36 @@ describe('continuous billing print payload', () => {
         amount: -100,
       }),
     ]));
+  });
+
+  it('falls back to the invoice row line when notes charges are malformed', async () => {
+    const db = makeDb([
+      {
+        invoice_id: 8,
+        invoice_number: 'INV-202605-000008',
+        status: 'issued',
+        charge_type: 'storage',
+        description: 'Fallback storage charge',
+        quantity: 3,
+        unit_price: 200,
+        total_amount: 600,
+        vat_amount: 42,
+        grand_total: 642,
+        created_at: '2026-05-21T03:00:00.000Z',
+        notes: JSON.stringify({ charges: [null, 'bad'] }),
+      },
+    ]);
+
+    const payload = await buildContinuousPrintPayload(db, { invoiceId: 8, type: 'invoice' });
+
+    expect(payload.lines).toEqual([
+      expect.objectContaining({
+        description: 'Fallback storage charge',
+        qty: 3,
+        unit_price: 200,
+        amount: 600,
+      }),
+    ]);
   });
 
   it('throws when the invoice is missing', async () => {

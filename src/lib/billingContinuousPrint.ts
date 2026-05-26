@@ -18,6 +18,7 @@ export type ContinuousPrintPayload = {
     address: string;
     phone: string;
     email: string;
+    logo_url: string;
     branch_type: string;
     branch_number: string;
     yard_name: string;
@@ -102,6 +103,7 @@ const DEFAULT_COMPANY = {
   address: '',
   phone: '',
   email: '',
+  logo_url: '',
   branch_type: 'head_office',
   branch_number: '00000',
   yard_name: '',
@@ -172,18 +174,29 @@ function lineFromCharge(charge: RawCharge, row: InvoiceRow): ContinuousPrintLine
   };
 }
 
-function buildLines(row: InvoiceRow, notes: ParsedNotes): ContinuousPrintLine[] {
-  if (Array.isArray(notes.charges) && notes.charges.length > 0) {
-    return notes.charges.map((charge) => lineFromCharge(charge as RawCharge, row));
-  }
+function isRawCharge(value: unknown): value is RawCharge {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
 
-  return [lineFromCharge({
+function fallbackLine(row: InvoiceRow): ContinuousPrintLine {
+  return lineFromCharge({
     description: row.description || row.charge_type,
     quantity: row.quantity,
     unit_price: row.unit_price,
     subtotal: row.total_amount,
     container_number: row.container_number,
-  }, row)];
+  }, row);
+}
+
+function buildLines(row: InvoiceRow, notes: ParsedNotes): ContinuousPrintLine[] {
+  if (Array.isArray(notes.charges) && notes.charges.length > 0) {
+    const lines = notes.charges
+      .filter(isRawCharge)
+      .map((charge) => lineFromCharge(charge, row));
+    return lines.length > 0 ? lines : [fallbackLine(row)];
+  }
+
+  return [fallbackLine(row)];
 }
 
 function documentTitle(type: string, row: InvoiceRow) {
@@ -219,6 +232,7 @@ function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload
       address: asString(row.company_address),
       phone: asString(row.company_phone),
       email: asString(row.company_email),
+      logo_url: asString(row.company_logo_url),
       branch_type: asString(row.yard_branch_type, DEFAULT_COMPANY.branch_type),
       branch_number: asString(row.yard_branch_number, DEFAULT_COMPANY.branch_number),
       yard_name: asString(row.yard_name),
@@ -312,13 +326,30 @@ export async function buildContinuousPrintPayload(
         y.yard_name,
         y.yard_code,
         ISNULL(y.branch_type, 'head_office') AS yard_branch_type,
-        ISNULL(y.branch_number, '00000') AS yard_branch_number
+        ISNULL(y.branch_number, '00000') AS yard_branch_number,
+        cp.company_name AS company_name,
+        cp.tax_id AS company_tax_id,
+        cp.address AS company_address,
+        cp.phone AS company_phone,
+        cp.email AS company_email,
+        cp.logo_url AS company_logo_url
       FROM Invoices i
       LEFT JOIN Invoices ref ON i.ref_invoice_id = ref.invoice_id
       LEFT JOIN Invoices repl ON i.replaces_invoice_id = repl.invoice_id
       LEFT JOIN Customers c ON i.customer_id = c.customer_id
       LEFT JOIN Containers ct ON i.container_id = ct.container_id
       LEFT JOIN Yards y ON i.yard_id = y.yard_id
+      OUTER APPLY (
+        SELECT TOP 1
+          company_name,
+          tax_id,
+          address,
+          phone,
+          email,
+          logo_url
+        FROM CompanyProfile
+        ORDER BY company_id ASC
+      ) cp
       WHERE i.invoice_id = @invoiceId
       ORDER BY i.created_at DESC
     `);
