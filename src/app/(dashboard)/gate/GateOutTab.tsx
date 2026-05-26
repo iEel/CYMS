@@ -185,14 +185,26 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
 
   const getBookingCompatibility = (booking: GateOutBooking, container = selectedContainer) => {
     const warnings: string[] = [];
+    const bookingCustomerId = booking.booking_customer_id || booking.customer_id || null;
+    const billToCustomerId = booking.bill_to_customer_id || bookingCustomerId;
+    const acceptedCustomerIds = new Set(
+      [
+        container?.container_owner_id,
+        billingData?.owner?.customer_id,
+        resolvedCustomer?.customer_id,
+      ].filter((customerId): customerId is number => !!customerId)
+    );
     if (container && booking.container_size && booking.container_size !== container.size) {
       warnings.push(`ขนาดไม่ตรง: Booking ${booking.container_size}' / ตู้ ${container.size}'`);
     }
     if (container && booking.container_type && booking.container_type !== container.type) {
       warnings.push(`ประเภทไม่ตรง: Booking ${booking.container_type} / ตู้ ${container.type}`);
     }
-    if (resolvedCustomer?.customer_id && booking.customer_id && booking.customer_id !== resolvedCustomer.customer_id) {
-      warnings.push(`ลูกค้าไม่ตรง: ${booking.customer_name || booking.customer_id}`);
+    if (bookingCustomerId && !acceptedCustomerIds.has(bookingCustomerId)) {
+      warnings.push(`ลูกค้า Booking ไม่ตรง: ${booking.booking_customer_name || booking.customer_name || bookingCustomerId}`);
+    }
+    if (resolvedCustomer?.customer_id && billToCustomerId && billToCustomerId !== resolvedCustomer.customer_id) {
+      warnings.push(`Bill To ไม่ตรง: ${booking.bill_to_customer_name || billToCustomerId}`);
     }
     if (['cancelled', 'completed'].includes(booking.status)) {
       warnings.push('Booking นี้ปิดหรือยกเลิกแล้ว');
@@ -316,8 +328,9 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     setBillingClearance(null);
     setBillingInvoiceNumber('');
     setBillingInvoiceId(null);
-    if (booking?.customer_id) setManualCustomerId(booking.customer_id);
-    if (container) await loadGateOutBilling(container, booking?.customer_id || manualCustomerId, bookingRef);
+    const bookingBillingCustomerId = booking?.bill_to_customer_id || booking?.booking_customer_id || booking?.customer_id || null;
+    if (bookingBillingCustomerId) setManualCustomerId(bookingBillingCustomerId);
+    if (container) await loadGateOutBilling(container, bookingBillingCustomerId || manualCustomerId, bookingRef);
   };
 
   const loadBookingByNumber = async (bookingNumber: string, container = selectedContainer) => {
@@ -500,7 +513,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           user_id: userId,
           container_id: selectedContainer.container_id,
           container_number: selectedContainer.container_number,
-          billing_customer_id: resolvedCustomer?.customer_id || undefined,
+          billing_customer_id: resolvedCustomer?.customer_id || selectedBooking?.bill_to_customer_id || selectedBooking?.booking_customer_id || selectedBooking?.customer_id || undefined,
           container_owner_id: selectedContainer.container_owner_id || billingData?.owner?.customer_id || undefined,
           booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || undefined,
           trucking_company_id: selectedBooking?.trucking_company_id || undefined,
