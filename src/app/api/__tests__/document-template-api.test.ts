@@ -5,10 +5,13 @@ import { PUT as updateTemplate } from '../document-templates/[templateId]/route'
 import { POST as publishTemplate } from '../document-templates/[templateId]/publish/route';
 import { POST as setDefaultTemplate } from '../document-templates/[templateId]/set-default/route';
 import { POST as deactivateTemplate } from '../document-templates/[templateId]/deactivate/route';
+import { GET as previewTemplate } from '../document-templates/preview/route';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { requirePermission } from '@/lib/apiAuth';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplates';
+import { buildContinuousPrintPayload, buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrint';
+import { nextDocumentNumber } from '@/lib/documentNumber';
 
 jest.mock('@/lib/db', () => ({
   getDb: jest.fn(),
@@ -22,9 +25,29 @@ jest.mock('@/lib/apiAuth', () => ({
   requirePermission: jest.fn().mockResolvedValue({ userId: 7, role: 'yard_manager' }),
 }));
 
+jest.mock('@/lib/billingContinuousPrint', () => ({
+  buildContinuousPrintPayload: jest.fn(async () => ({
+    document: { invoice_id: 77, document_type: 'tax_invoice_receipt' },
+    lines: [],
+    totals: { subtotal: 0, vat_rate: 0, vat_amount: 0, grand_total: 0, amount_text_th: 'ศูนย์บาทถ้วน' },
+  })),
+  buildSampleContinuousPrintPayload: jest.fn(() => ({
+    document: { invoice_id: 0, document_type: 'sample' },
+    lines: [],
+    totals: { subtotal: 0, vat_rate: 0, vat_amount: 0, grand_total: 0, amount_text_th: 'ศูนย์บาทถ้วน' },
+  })),
+}));
+
+jest.mock('@/lib/documentNumber', () => ({
+  nextDocumentNumber: jest.fn(async () => 'SHOULD-NOT-BE-CALLED'),
+}));
+
 const mockedGetDb = getDb as jest.Mock;
 const mockedLogAudit = logAudit as jest.Mock;
 const mockedRequirePermission = requirePermission as jest.Mock;
+const mockedBuildContinuousPrintPayload = buildContinuousPrintPayload as jest.Mock;
+const mockedBuildSampleContinuousPrintPayload = buildSampleContinuousPrintPayload as jest.Mock;
+const mockedNextDocumentNumber = nextDocumentNumber as jest.Mock;
 
 type QueryPlan = Array<{ recordset?: unknown[] }>;
 
@@ -55,6 +78,16 @@ describe('document template API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedRequirePermission.mockResolvedValue({ userId: 7, role: 'yard_manager' });
+    mockedBuildContinuousPrintPayload.mockResolvedValue({
+      document: { invoice_id: 77, document_type: 'tax_invoice_receipt' },
+      lines: [],
+      totals: { subtotal: 0, vat_rate: 0, vat_amount: 0, grand_total: 0, amount_text_th: 'ศูนย์บาทถ้วน' },
+    });
+    mockedBuildSampleContinuousPrintPayload.mockReturnValue({
+      document: { invoice_id: 0, document_type: 'sample' },
+      lines: [],
+      totals: { subtotal: 0, vat_rate: 0, vat_amount: 0, grand_total: 0, amount_text_th: 'ศูนย์บาทถ้วน' },
+    });
   });
 
   it('requires settings permission and lists templates with current version info', async () => {
@@ -88,6 +121,8 @@ describe('document template API', () => {
 
   it('creates a template with valid config, version 1 draft, and audit trail', async () => {
     const config = buildDefaultContinuousTemplateConfig();
+    config.print_policy.reprint_label_template = 'REPRINT {reprint_count}';
+    config.print_policy.red_ref_source = 'invoice_number';
     const created = {
       template_id: 12,
       template_code: 'TAX_CONTINUOUS',
@@ -139,6 +174,8 @@ describe('document template API', () => {
       { name: 'versionNo', value: 1 },
       { name: 'status', value: 'draft' },
       { name: 'configJson', value: JSON.stringify(config) },
+      { name: 'reprintLabelTemplate', value: 'REPRINT {reprint_count}' },
+      { name: 'redRefSource', value: 'invoice_number' },
     ]));
     expect(db.inputs).not.toEqual(expect.arrayContaining([
       { name: 'isDefault', value: 1 },
@@ -389,5 +426,80 @@ describe('document template API', () => {
     expect(db.query).toHaveBeenCalledTimes(1);
     expect(db.queries[0]).toContain('FROM DocumentTemplates');
     expect(mockedLogAudit).not.toHaveBeenCalled();
+  });
+
+  it('updates draft template print policy fields with config changes', async () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    config.print_policy.reprint_label_template = 'COPY {reprint_count}';
+    config.print_policy.red_ref_source = 'receipt_number';
+    const db = makeDb([
+      { recordset: [{
+        template_id: 12,
+        template_name: 'Tax invoice continuous',
+        description: null,
+        version_id: 22,
+        version_no: 2,
+        version_status: 'draft',
+      }] },
+      { recordset: [{ template_id: 12, template_name: 'Tax invoice continuous' }] },
+      { recordset: [{ version_id: 22, config_json: JSON.stringify(config) }] },
+    ]);
+    mockedGetDb.mockResolvedValue(db);
+
+    const response = await updateTemplate(makeRequest('/api/document-templates/12', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config }),
+    }), makeRouteContext('12'));
+
+    expect(response.status).toBe(200);
+    expect(db.queries[2]).toContain('reprint_label_template = @reprintLabelTemplate');
+    expect(db.queries[2]).toContain('red_ref_source = @redRefSource');
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'reprintLabelTemplate', value: 'COPY {reprint_count}' },
+      { name: 'redRefSource', value: 'receipt_number' },
+      { name: 'configJson', value: JSON.stringify(config) },
+    ]));
+  });
+
+  it('returns sample preview payload and current template config without numbering', async () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    config.print_policy.red_ref_source = 'invoice_number';
+    const db = makeDb([{ recordset: [{ config_json: JSON.stringify(config) }] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/preview?preview=sample&type=tax_invoice_receipt&mode=overlay&copyMode=separate');
+
+    const response = await previewTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'settings.manage', expect.any(String));
+    expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
+    expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
+    expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+    expect(body.payload.document.document_type).toBe('sample');
+    expect(body.config.mode).toBe('overlay');
+    expect(body.config.copy_mode).toBe('separate');
+    expect(body.config.print_policy.red_ref_source).toBe('invoice_number');
+  });
+
+  it('returns real invoice preview payload without allocating document numbers', async () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const db = makeDb([{ recordset: [{ config_json: JSON.stringify(config) }] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/preview?id=77&type=tax_invoice_receipt&preview=real');
+
+    const response = await previewTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockedBuildContinuousPrintPayload).toHaveBeenCalledWith(db, {
+      invoiceId: 77,
+      type: 'tax_invoice_receipt',
+    });
+    expect(mockedBuildSampleContinuousPrintPayload).not.toHaveBeenCalled();
+    expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+    expect(body.payload.document.invoice_id).toBe(77);
+    expect(body.config.print_policy.reprint_label_template).toBe('พิมพ์ซ้ำครั้งที่ {reprint_count}');
   });
 });

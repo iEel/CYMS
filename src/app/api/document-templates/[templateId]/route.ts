@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit';
 import { requirePermission } from '@/lib/apiAuth';
 import {
   bindTemplateVersionConfig,
+  applyStoredPrintPolicy,
   normalizeTemplateConfig,
   parseDocumentTemplateId,
   parseStoredTemplateConfig,
@@ -50,10 +51,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
         ORDER BY version_no DESC
       `);
 
-    const versions = versionsResult.recordset.map((version: Record<string, unknown>) => ({
-      ...version,
-      config: parseStoredTemplateConfig(version.config_json),
-    }));
+    const versions = versionsResult.recordset.map((version: Record<string, unknown>) => {
+      const config = parseStoredTemplateConfig(version.config_json);
+      return {
+        ...version,
+        config: config ? applyStoredPrintPolicy(config, version) : null,
+      };
+    });
 
     return NextResponse.json({ template, versions });
   } catch (error) {
@@ -137,6 +141,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
             paper_size_code = @paperSizeCode,
             mode = @mode,
             copy_mode = @copyMode,
+            reprint_label_template = @reprintLabelTemplate,
+            red_ref_source = @redRefSource,
             top_offset_mm = @topOffsetMm,
             left_offset_mm = @leftOffsetMm,
             font_size = @fontSize,

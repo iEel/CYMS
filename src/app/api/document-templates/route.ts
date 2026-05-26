@@ -46,6 +46,8 @@ function splitTemplateVersionRow(row: Record<string, unknown>) {
       paper_size_code: row.version_paper_size_code,
       mode: row.version_mode,
       copy_mode: row.version_copy_mode,
+      reprint_label_template: row.version_reprint_label_template,
+      red_ref_source: row.version_red_ref_source,
       created_by: row.version_created_by,
       created_at: row.version_created_at,
     }),
@@ -80,6 +82,8 @@ export async function GET(request: NextRequest) {
         v.paper_size_code,
         v.mode,
         v.copy_mode,
+        v.reprint_label_template,
+        v.red_ref_source,
         v.published_by,
         v.published_at
       FROM DocumentTemplates t
@@ -177,6 +181,7 @@ export async function POST(request: NextRequest) {
       INSERT INTO DocumentTemplateVersions (
         template_id, template_code, version_no, status,
         paper_width_mm, paper_height_mm, paper_size_code, mode, copy_mode,
+        reprint_label_template, red_ref_source,
         top_offset_mm, left_offset_mm, font_size, row_height, print_scale,
         config_json, created_by
       )
@@ -188,6 +193,7 @@ export async function POST(request: NextRequest) {
       VALUES (
             (SELECT TOP 1 template_id FROM @createdTemplate), @templateCode, @versionNo, @status,
         @paperWidthMm, @paperHeightMm, @paperSizeCode, @mode, @copyMode,
+        @reprintLabelTemplate, @redRefSource,
         @topOffsetMm, @leftOffsetMm, @fontSize, @rowHeight, @printScale,
         @configJson, @createdBy
       );
@@ -222,6 +228,8 @@ export async function POST(request: NextRequest) {
           v.paper_size_code AS version_paper_size_code,
           v.mode AS version_mode,
           v.copy_mode AS version_copy_mode,
+          v.reprint_label_template AS version_reprint_label_template,
+          v.red_ref_source AS version_red_ref_source,
           v.created_by AS version_created_by,
           v.created_at AS version_created_at
         FROM @createdTemplate t

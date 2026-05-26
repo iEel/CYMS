@@ -33,6 +33,10 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
     mode: 'full',
     copy_mode: 'carbonless',
     copy_labels: [...THAI_COPY_LABELS],
+    print_policy: {
+      reprint_label_template: 'พิมพ์ซ้ำครั้งที่ {reprint_count}',
+      red_ref_source: 'receipt_number',
+    },
     fields: [
       field({
         field_id: 'document-title',

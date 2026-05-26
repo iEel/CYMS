@@ -6,6 +6,7 @@ describe('continuous print UI', () => {
   const pagePath = path.join(root, 'src/app/billing/print/continuous/page.tsx');
   const componentPath = path.join(root, 'src/components/billing/ContinuousTaxReceipt.tsx');
   const settingsPath = path.join(root, 'src/app/(dashboard)/settings/page.tsx');
+  const previewRoutePath = path.join(root, 'src/app/api/document-templates/preview/route.ts');
 
   it('loads continuous print preview data from the planned preview route', () => {
     const source = fs.readFileSync(pagePath, 'utf8');
@@ -34,5 +35,15 @@ describe('continuous print UI', () => {
 
     expect(source).toContain('Document Templates');
     expect(source).toContain('DocumentTemplateManager');
+  });
+
+  it('provides the planned document template preview route used by the print page', () => {
+    expect(fs.existsSync(previewRoutePath)).toBe(true);
+
+    const source = fs.readFileSync(previewRoutePath, 'utf8');
+    expect(source).toContain('export async function GET');
+    expect(source).toContain('buildSampleContinuousPrintPayload');
+    expect(source).toContain('buildContinuousPrintPayload');
+    expect(source).not.toContain('nextDocumentNumber');
   });
 });

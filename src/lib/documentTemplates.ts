@@ -9,6 +9,11 @@ const THAI_COPY_LABELS = [
   'สำเนาสำหรับเก็บ',
 ];
 
+const DEFAULT_PRINT_POLICY = {
+  reprint_label_template: 'พิมพ์ซ้ำครั้งที่ {reprint_count}',
+  red_ref_source: 'receipt_number' as const,
+};
+
 function field(input: Omit<DocumentTemplateField, 'visible' | 'layer' | 'locked'>): DocumentTemplateField {
   return {
     ...input,
@@ -70,6 +75,7 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
     mode: 'full',
     copy_mode: 'carbonless',
     copy_labels: [...THAI_COPY_LABELS],
+    print_policy: { ...DEFAULT_PRINT_POLICY },
     fields: [
       field({
         field_id: 'document-title',
@@ -357,6 +363,16 @@ export function validateTemplateConfig(config: unknown): { valid: boolean; error
     errors.push('copy_mode must be carbonless or separate');
   }
 
+  if (root.print_policy !== undefined) {
+    const printPolicy = requireRecord(root.print_policy, 'print_policy', errors);
+    if (printPolicy) {
+      requireString(printPolicy.reprint_label_template, 'print_policy.reprint_label_template', errors);
+      if (!['receipt_number', 'invoice_number', 'tax_invoice_number', 'document_number'].includes(String(printPolicy.red_ref_source))) {
+        errors.push('print_policy.red_ref_source is invalid');
+      }
+    }
+  }
+
   const copyLabels = requireArray(root.copy_labels, 'copy_labels', errors);
   if (copyLabels.length === 0) errors.push('copy_labels must contain at least one label');
 
@@ -427,19 +443,49 @@ export function normalizeTemplateConfig(config: unknown): {
   config: DocumentTemplateConfig | null;
   errors: string[];
 } {
-  const validation = validateTemplateConfig(config);
+  const withDefaults = isRecord(config)
+    ? {
+      ...config,
+      print_policy: {
+        ...DEFAULT_PRINT_POLICY,
+        ...(isRecord(config.print_policy) ? config.print_policy : {}),
+      },
+    }
+    : config;
+  const validation = validateTemplateConfig(withDefaults);
   if (!validation.valid) return { config: null, errors: validation.errors };
-  return { config: config as DocumentTemplateConfig, errors: [] };
+  return { config: withDefaults as DocumentTemplateConfig, errors: [] };
 }
 
 export function parseStoredTemplateConfig(value: unknown): DocumentTemplateConfig | null {
   if (typeof value !== 'string') return null;
   try {
     const parsed = JSON.parse(value);
-    return validateTemplateConfig(parsed).valid ? parsed as DocumentTemplateConfig : null;
+    return normalizeTemplateConfig(parsed).config;
   } catch {
     return null;
   }
+}
+
+export function applyStoredPrintPolicy(
+  config: DocumentTemplateConfig,
+  values: { reprint_label_template?: unknown; red_ref_source?: unknown },
+): DocumentTemplateConfig {
+  const reprintLabel = typeof values.reprint_label_template === 'string' && values.reprint_label_template.trim()
+    ? values.reprint_label_template
+    : config.print_policy.reprint_label_template;
+  const redRefSource = typeof values.red_ref_source === 'string' && values.red_ref_source.trim()
+    ? values.red_ref_source
+    : config.print_policy.red_ref_source;
+
+  return normalizeTemplateConfig({
+    ...config,
+    print_policy: {
+      ...config.print_policy,
+      reprint_label_template: reprintLabel,
+      red_ref_source: redRefSource,
+    },
+  }).config || config;
 }
 
 function paperSizeCode(config: DocumentTemplateConfig): string {
@@ -464,6 +510,8 @@ export function bindTemplateVersionConfig<T extends TemplateVersionRequest<T>>(
     .input('paperSizeCode', sql.NVarChar(40), paperSizeCode(config))
     .input('mode', sql.NVarChar(20), config.mode)
     .input('copyMode', sql.NVarChar(20), config.copy_mode)
+    .input('reprintLabelTemplate', sql.NVarChar(120), config.print_policy.reprint_label_template)
+    .input('redRefSource', sql.NVarChar(50), config.print_policy.red_ref_source)
     .input('topOffsetMm', sql.Decimal(10, 2), config.paper.top_offset_mm)
     .input('leftOffsetMm', sql.Decimal(10, 2), config.paper.left_offset_mm)
     .input('fontSize', sql.Decimal(10, 2), firstFieldFontSize(config))

@@ -53,16 +53,7 @@ type TemplateListResponse = {
   error?: string;
 };
 
-type PrintPolicy = {
-  reprintLabel: string;
-  redRefSource: string;
-};
-
 const defaultConfig = buildDefaultContinuousTemplateConfig();
-const defaultPolicy: PrintPolicy = {
-  reprintLabel: 'สำเนาออกใหม่',
-  redRefSource: 'tax_invoice_number',
-};
 
 function cloneDefaultConfig(): DocumentTemplateConfig {
   return JSON.parse(JSON.stringify(defaultConfig)) as DocumentTemplateConfig;
@@ -94,7 +85,6 @@ export default function DocumentTemplateManager() {
   const [templates, setTemplates] = useState<DocumentTemplateRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [config, setConfig] = useState<DocumentTemplateConfig>(() => cloneDefaultConfig());
-  const [policy, setPolicy] = useState<PrintPolicy>(defaultPolicy);
   const [invoiceId, setInvoiceId] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -181,6 +171,16 @@ export default function DocumentTemplateManager() {
     }));
   };
 
+  const updatePrintPolicy = (key: keyof DocumentTemplateConfig['print_policy'], value: string) => {
+    setConfig(current => ({
+      ...current,
+      print_policy: {
+        ...current.print_policy,
+        [key]: value,
+      },
+    }));
+  };
+
   const saveDraft = async () => {
     if (!selectedTemplate) return;
     setSaving(true);
@@ -240,7 +240,7 @@ export default function DocumentTemplateManager() {
 
   const exportSelected = () => {
     if (!selectedTemplate) return;
-    const blob = new Blob([JSON.stringify({ template: selectedTemplate, config, print_policy: policy }, null, 2)], {
+    const blob = new Blob([JSON.stringify({ template: selectedTemplate, config }, null, 2)], {
       type: 'application/json',
     });
     const url = URL.createObjectURL(blob);
@@ -524,16 +524,17 @@ export default function DocumentTemplateManager() {
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="text-xs font-medium text-slate-500">
             Reprint label
-            <input value={policy.reprintLabel} onChange={event => setPolicy(current => ({ ...current, reprintLabel: event.target.value }))}
+            <input value={config.print_policy.reprint_label_template} onChange={event => updatePrintPolicy('reprint_label_template', event.target.value)}
               className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
           </label>
           <label className="text-xs font-medium text-slate-500">
             Red ref source
-            <select value={policy.redRefSource} onChange={event => setPolicy(current => ({ ...current, redRefSource: event.target.value }))}
+            <select value={config.print_policy.red_ref_source} onChange={event => updatePrintPolicy('red_ref_source', event.target.value)}
               className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
               <option value="tax_invoice_number">tax_invoice_number</option>
               <option value="receipt_number">receipt_number</option>
               <option value="invoice_number">invoice_number</option>
+              <option value="document_number">document_number</option>
             </select>
           </label>
         </div>

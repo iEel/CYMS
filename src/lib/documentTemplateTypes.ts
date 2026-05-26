@@ -17,6 +17,11 @@ export interface DocumentTemplatePaper {
   margin_left_mm: number;
 }
 
+export interface DocumentTemplatePrintPolicy {
+  reprint_label_template: string;
+  red_ref_source: 'receipt_number' | 'invoice_number' | 'tax_invoice_number' | 'document_number';
+}
+
 export interface DocumentTemplateField {
   field_id: string;
   field_key: string;
@@ -61,6 +66,7 @@ export interface DocumentTemplateConfig {
   mode: DocumentTemplateMode;
   copy_mode: DocumentTemplateCopyMode;
   copy_labels: string[];
+  print_policy: DocumentTemplatePrintPolicy;
   fields: DocumentTemplateField[];
   sections: {
     line_items: DocumentTemplateLineItemsSection;
