@@ -35,4 +35,20 @@ describe('customer portal defaults', () => {
     expect(ui).toContain('damage_photos');
     expect(ui).toContain('truck_plate_full');
   });
+
+  it('renders module and reefer portal settings in customer master', () => {
+    expect(ui).toContain('เปิดเมนูตู้เย็น Reefer ให้ลูกค้า');
+    expect(ui).toContain('แสดงรูปหลักฐานอุณหภูมิ');
+    expect(ui).toContain('แสดง Reefer Exception');
+    expect(ui).toContain('ดาวน์โหลด Temperature Log');
+    expect(ui).toContain('ให้ลูกค้าสอบถาม Reefer Exception');
+  });
+
+  it('normalizes portal module and reefer defaults in customer settings API', () => {
+    expect(api).toContain('modules');
+    expect(api).toContain('reefer');
+    expect(api).toContain('show_photo_evidence');
+    expect(api).toContain('show_exceptions');
+    expect(api).toContain('download_temperature_log');
+  });
 });

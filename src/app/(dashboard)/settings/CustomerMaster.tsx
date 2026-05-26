@@ -27,6 +27,20 @@ interface Branch {
 type PortalDefaultPermissionScope = {
   view: boolean;
   download: boolean;
+  modules: {
+    containers: boolean;
+    bookings: boolean;
+    invoices: boolean;
+    documents: boolean;
+    reefer: boolean;
+  };
+  reefer: {
+    show_temperature_history: boolean;
+    show_photo_evidence: boolean;
+    show_exceptions: boolean;
+    download_temperature_log: boolean;
+    allow_exception_dispute: boolean;
+  };
   eir: {
     fields: {
       container_grade: boolean;
@@ -109,6 +123,20 @@ type FormFields = {
 const defaultPortalPermissionScope: PortalDefaultPermissionScope = {
   view: true,
   download: true,
+  modules: {
+    containers: true,
+    bookings: true,
+    invoices: true,
+    documents: true,
+    reefer: false,
+  },
+  reefer: {
+    show_temperature_history: true,
+    show_photo_evidence: true,
+    show_exceptions: true,
+    download_temperature_log: false,
+    allow_exception_dispute: false,
+  },
   eir: {
     fields: {
       container_grade: false,
@@ -151,6 +179,14 @@ function normalizePortalDefaultScope(input: Customer['portal_default_permission_
   return {
     ...defaultPortalPermissionScope,
     ...input,
+    modules: {
+      ...defaultPortalPermissionScope.modules,
+      ...input?.modules,
+    },
+    reefer: {
+      ...defaultPortalPermissionScope.reefer,
+      ...input?.reefer,
+    },
     eir: {
       fields: {
         ...defaultPortalPermissionScope.eir.fields,
@@ -439,6 +475,70 @@ export default function CustomerMaster() {
             {form.portal_enabled ? 'เปิดใช้งาน Portal' : 'ปิด Portal'}
           </button>
         </div>
+        <div className="mt-4 rounded-lg border border-slate-200 bg-white/70 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+          <p className="mb-2 text-xs font-semibold text-slate-600 dark:text-slate-300">เมนูที่เปิดให้ลูกค้าเห็น</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {[
+              ['containers', 'ตู้คอนเทนเนอร์'],
+              ['bookings', 'Booking'],
+              ['invoices', 'ใบแจ้งหนี้'],
+              ['documents', 'เอกสาร'],
+              ['reefer', 'เปิดเมนูตู้เย็น Reefer ให้ลูกค้า'],
+            ].map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.portal_default_permission_scope.modules[key as keyof typeof form.portal_default_permission_scope.modules])}
+                  onChange={e => setForm(prev => ({
+                    ...prev,
+                    portal_default_permission_scope: {
+                      ...prev.portal_default_permission_scope,
+                      modules: {
+                        ...prev.portal_default_permission_scope.modules,
+                        [key]: e.target.checked,
+                      },
+                    },
+                  }))}
+                  className="accent-blue-600"
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        {form.portal_default_permission_scope.modules.reefer && (
+          <div className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
+            <p className="mb-2 text-xs font-semibold text-cyan-700 dark:text-cyan-300">การตั้งค่าตู้ Reefer ฝั่งลูกค้า</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {[
+                ['show_temperature_history', 'แสดงประวัติอุณหภูมิ'],
+                ['show_photo_evidence', 'แสดงรูปหลักฐานอุณหภูมิ'],
+                ['show_exceptions', 'แสดง Reefer Exception'],
+                ['download_temperature_log', 'ดาวน์โหลด Temperature Log'],
+                ['allow_exception_dispute', 'ให้ลูกค้าสอบถาม Reefer Exception'],
+              ].map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2 rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/60">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.portal_default_permission_scope.reefer[key as keyof typeof form.portal_default_permission_scope.reefer])}
+                    onChange={e => setForm(prev => ({
+                      ...prev,
+                      portal_default_permission_scope: {
+                        ...prev.portal_default_permission_scope,
+                        reefer: {
+                          ...prev.portal_default_permission_scope.reefer,
+                          [key]: e.target.checked,
+                        },
+                      },
+                    }))}
+                    className="accent-cyan-600"
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2">
           {[
             ['container_grade', 'แสดงเกรดตู้ใน EIR ให้ลูกค้า'],

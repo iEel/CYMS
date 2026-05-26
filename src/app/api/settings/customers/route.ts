@@ -22,11 +22,27 @@ async function generateCustomerCode(pool: Awaited<ReturnType<typeof getDb>>): Pr
 
 function normalizePortalDefaultScope(input: unknown) {
   const source = typeof input === 'object' && input !== null ? input as Record<string, unknown> : {};
+  const modules = typeof source.modules === 'object' && source.modules !== null ? source.modules as Record<string, unknown> : {};
+  const reefer = typeof source.reefer === 'object' && source.reefer !== null ? source.reefer as Record<string, unknown> : {};
   const eir = typeof source.eir === 'object' && source.eir !== null ? source.eir as Record<string, unknown> : {};
   const fields = typeof eir.fields === 'object' && eir.fields !== null ? eir.fields as Record<string, unknown> : {};
   return {
     view: true,
     download: Boolean(source.download ?? true),
+    modules: {
+      containers: modules.containers !== false,
+      bookings: modules.bookings !== false,
+      invoices: modules.invoices !== false,
+      documents: modules.documents !== false,
+      reefer: modules.reefer === true,
+    },
+    reefer: {
+      show_temperature_history: reefer.show_temperature_history !== false,
+      show_photo_evidence: reefer.show_photo_evidence !== false,
+      show_exceptions: reefer.show_exceptions !== false,
+      download_temperature_log: reefer.download_temperature_log === true,
+      allow_exception_dispute: reefer.allow_exception_dispute === true,
+    },
     eir: {
       fields: {
         container_grade: Boolean(fields.container_grade),
