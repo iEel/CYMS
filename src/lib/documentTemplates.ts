@@ -1,4 +1,5 @@
 import type { DocumentTemplateConfig, DocumentTemplateField } from './documentTemplateTypes';
+import sql from 'mssql';
 
 const THAI_COPY_LABELS = [
   'ต้นฉบับใบกำกับภาษี/ใบเสร็จรับเงิน',
@@ -415,4 +416,58 @@ export function validateTemplateConfig(config: unknown): { valid: boolean; error
   }
 
   return { valid: errors.length === 0, errors };
+}
+
+export function parseDocumentTemplateId(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function normalizeTemplateConfig(config: unknown): {
+  config: DocumentTemplateConfig | null;
+  errors: string[];
+} {
+  const validation = validateTemplateConfig(config);
+  if (!validation.valid) return { config: null, errors: validation.errors };
+  return { config: config as DocumentTemplateConfig, errors: [] };
+}
+
+export function parseStoredTemplateConfig(value: unknown): DocumentTemplateConfig | null {
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return validateTemplateConfig(parsed).valid ? parsed as DocumentTemplateConfig : null;
+  } catch {
+    return null;
+  }
+}
+
+function paperSizeCode(config: DocumentTemplateConfig): string {
+  return `${config.paper.width_mm}x${config.paper.height_mm}mm`;
+}
+
+function firstFieldFontSize(config: DocumentTemplateConfig): number {
+  return config.fields[0]?.font_size || 10;
+}
+
+type TemplateVersionRequest<T> = {
+  input(name: string, type: unknown, value: unknown): T;
+};
+
+export function bindTemplateVersionConfig<T extends TemplateVersionRequest<T>>(
+  request: T,
+  config: DocumentTemplateConfig,
+): T {
+  return request
+    .input('paperWidthMm', sql.Decimal(10, 2), config.paper.width_mm)
+    .input('paperHeightMm', sql.Decimal(10, 2), config.paper.height_mm)
+    .input('paperSizeCode', sql.NVarChar(40), paperSizeCode(config))
+    .input('mode', sql.NVarChar(20), config.mode)
+    .input('copyMode', sql.NVarChar(20), config.copy_mode)
+    .input('topOffsetMm', sql.Decimal(10, 2), config.paper.top_offset_mm)
+    .input('leftOffsetMm', sql.Decimal(10, 2), config.paper.left_offset_mm)
+    .input('fontSize', sql.Decimal(10, 2), firstFieldFontSize(config))
+    .input('rowHeight', sql.Decimal(10, 2), config.sections.line_items.row_height_mm)
+    .input('printScale', sql.Decimal(10, 3), config.paper.print_scale)
+    .input('configJson', sql.NVarChar(sql.MAX), JSON.stringify(config));
 }
