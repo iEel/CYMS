@@ -7,6 +7,10 @@ describe('continuous print UI', () => {
   const componentPath = path.join(root, 'src/components/billing/ContinuousTaxReceipt.tsx');
   const settingsPath = path.join(root, 'src/app/(dashboard)/settings/page.tsx');
   const previewRoutePath = path.join(root, 'src/app/api/document-templates/preview/route.ts');
+  const billingPagePath = path.join(root, 'src/app/(dashboard)/billing/page.tsx');
+  const billingClearanceTabPath = path.join(root, 'src/app/(dashboard)/billing/BillingClearanceTab.tsx');
+  const gateInTabPath = path.join(root, 'src/app/(dashboard)/gate/GateInTab.tsx');
+  const gateOutTabPath = path.join(root, 'src/app/(dashboard)/gate/GateOutTab.tsx');
 
   it('loads continuous print preview data from the planned preview route', () => {
     const source = fs.readFileSync(pagePath, 'utf8');
@@ -45,5 +49,18 @@ describe('continuous print UI', () => {
     expect(source).toContain('buildSampleContinuousPrintPayload');
     expect(source).toContain('buildContinuousPrintPayload');
     expect(source).not.toContain('nextDocumentNumber');
+  });
+
+  it('wires continuous print actions into billing and gate flows', () => {
+    [
+      billingPagePath,
+      billingClearanceTabPath,
+      gateInTabPath,
+      gateOutTabPath,
+    ].forEach((sourcePath) => {
+      const source = fs.readFileSync(sourcePath, 'utf8');
+
+      expect(source).toContain('/billing/print/continuous?id=');
+    });
   });
 });

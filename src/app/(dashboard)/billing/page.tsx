@@ -588,6 +588,8 @@ export default function BillingPage() {
                         {/* Print: invoice for unpaid, receipt for paid */}
                         <button onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=${inv.status === 'paid' ? 'receipt' : 'invoice'}`, '_blank')}
                           className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-100 flex items-center gap-1"><Printer size={10} /> พิมพ์</button>
+                        <button onClick={() => window.open(`/billing/print/continuous?id=${inv.invoice_id}&type=${inv.status === 'paid' ? 'receipt' : 'tax_invoice_receipt'}`, '_blank')}
+                          className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-100 flex items-center gap-1"><Printer size={10} /> ฟอร์มต่อเนื่อง</button>
                         {inv.container_number && (
                           <button onClick={() => setActiveTab('clearance')}
                             className="px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-medium hover:bg-indigo-100 flex items-center gap-1"><Eye size={10} /> Clearance</button>
@@ -1011,10 +1013,16 @@ export default function BillingPage() {
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">{inv.customer_name} • {inv.description} • ฿{inv.grand_total.toLocaleString()}</p>
                     </div>
-                    <button onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=receipt`, '_blank')}
-                      className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 flex items-center gap-1">
-                      <Printer size={12} /> พิมพ์ใบเสร็จ
-                    </button>
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <button onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=receipt`, '_blank')}
+                        className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 flex items-center gap-1">
+                        <Printer size={12} /> พิมพ์ใบเสร็จ
+                      </button>
+                      <button onClick={() => window.open(`/billing/print/continuous?id=${inv.invoice_id}&type=receipt`, '_blank')}
+                        className="px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-600 flex items-center gap-1">
+                        <Printer size={12} /> ฟอร์มต่อเนื่อง
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

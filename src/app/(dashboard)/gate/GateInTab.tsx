@@ -1614,10 +1614,16 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                       {gateInInvoiceNumber && <span className="text-xs font-mono text-emerald-500">({gateInInvoiceNumber})</span>}
                     </div>
                     {gateInInvoiceId && (
-                      <button onClick={() => window.open(`/billing/print?id=${gateInInvoiceId}&type=${gateInClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt'}`, '_blank')}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
-                        <Printer size={12} /> 🖨️ พิมพ์{gateInClearance?.clearance_type === 'credit' ? 'ใบแจ้งหนี้' : 'ใบเสร็จ'}
-                      </button>
+                      <div className="flex flex-wrap justify-end gap-1">
+                        <button onClick={() => window.open(`/billing/print?id=${gateInInvoiceId}&type=${gateInClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt'}`, '_blank')}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
+                          <Printer size={12} /> 🖨️ พิมพ์{gateInClearance?.clearance_type === 'credit' ? 'ใบแจ้งหนี้' : 'ใบเสร็จ'}
+                        </button>
+                        <button onClick={() => window.open(`/billing/print/continuous?id=${gateInInvoiceId}&type=${gateInClearance?.clearance_type === 'credit' ? 'tax_invoice_receipt' : 'receipt'}`, '_blank')}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white text-emerald-700 border border-emerald-200 text-xs font-bold hover:bg-emerald-50 transition-colors">
+                          <Printer size={12} /> ฟอร์มต่อเนื่อง
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
