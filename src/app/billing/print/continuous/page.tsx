@@ -16,10 +16,26 @@ import type {
 type PreviewResponse = {
   payload?: ContinuousPrintPayload;
   config?: DocumentTemplateConfig;
+  template?: {
+    template_code?: string;
+    template_version?: number;
+  };
   preview?: {
     payload?: ContinuousPrintPayload;
     config?: DocumentTemplateConfig;
+    template?: {
+      template_code?: string;
+      template_version?: number;
+    };
   };
+};
+
+type PrintLogResponse = {
+  print_no?: number;
+  is_reprint?: boolean;
+  reprint_count?: number;
+  reprint_label?: string;
+  error?: string;
 };
 
 function modeFrom(value: string | null): DocumentTemplateMode {
@@ -67,13 +83,18 @@ function ContinuousPrintContent() {
   const copyMode = copyModeFrom(searchParams.get('copyMode'));
   const copyIndex = copyIndexFrom(searchParams.get('copyIndex'));
   const testPrint = booleanFrom(searchParams.get('testPrint'));
-  const reprintLabel = booleanFrom(searchParams.get('preview')) ? 'PREVIEW' : null;
+  const previewLabel = booleanFrom(searchParams.get('preview')) ? 'PREVIEW' : null;
   const hasInvoiceId = Boolean(searchParams.get('id'));
   const fallback = useMemo(() => fallbackPreview(mode, copyMode), [mode, copyMode]);
   const [payload, setPayload] = useState<ContinuousPrintPayload>(fallback.payload);
   const [config, setConfig] = useState<DocumentTemplateConfig>(fallback.config);
+  const [templateCode, setTemplateCode] = useState('');
+  const [templateVersion, setTemplateVersion] = useState(1);
+  const [reprintLabel, setReprintLabel] = useState<string | null>(previewLabel);
   const [status, setStatus] = useState<'loading' | 'ready' | 'fallback' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  const [printError, setPrintError] = useState('');
+  const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,11 +109,15 @@ function ContinuousPrintContent() {
         const data = await response.json() as PreviewResponse;
         const nextPayload = data.payload || data.preview?.payload;
         const nextConfig = data.config || data.preview?.config;
+        const nextTemplate = data.template || data.preview?.template;
         if (!nextPayload || !nextConfig) throw new Error('Preview response missing payload or config');
 
         if (!cancelled) {
           setPayload(nextPayload);
           setConfig({ ...nextConfig, mode, copy_mode: copyMode });
+          setTemplateCode(nextTemplate?.template_code || nextPayload.document.document_type.toUpperCase());
+          setTemplateVersion(nextTemplate?.template_version || 1);
+          setReprintLabel(previewLabel);
           setStatus('ready');
         }
       } catch (error) {
@@ -113,7 +138,65 @@ function ContinuousPrintContent() {
     return () => {
       cancelled = true;
     };
-  }, [copyMode, fallback, hasInvoiceId, mode, searchParams]);
+  }, [copyMode, fallback, hasInvoiceId, mode, previewLabel, searchParams]);
+
+  async function postPrintLog(reprintReason?: string | null): Promise<PrintLogResponse> {
+    const policy = config.print_policy;
+    const response = await fetch('/api/document-templates/print-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_type: payload.document.document_type || searchParams.get('type') || 'tax_invoice_receipt',
+        type: searchParams.get('type') || payload.document.document_type || 'tax_invoice_receipt',
+        document_id: payload.document.invoice_id || Number(searchParams.get('id')),
+        id: Number(searchParams.get('id')),
+        document_no: payload.document.document_number || payload.document.invoice_number,
+        template_code: templateCode,
+        template_version: templateVersion,
+        snapshot: payload,
+        mode,
+        copy_mode: copyMode,
+        reprint_reason: reprintReason || null,
+        show_reprint_label: Boolean(policy?.reprint_label_template),
+        reprint_label_template: policy?.reprint_label_template,
+        require_reprint_reason: Boolean((policy as { require_reprint_reason?: boolean })?.require_reprint_reason),
+      }),
+    });
+    const data = await response.json().catch(() => ({})) as PrintLogResponse;
+    if (!response.ok) return { ...data, error: data.error || `Print log failed (${response.status})` };
+    return data;
+  }
+
+  async function handlePrint() {
+    setPrintError('');
+    if (!hasInvoiceId || testPrint) {
+      window.print();
+      return;
+    }
+
+    setPrinting(true);
+    try {
+      let result = await postPrintLog();
+      if (result.error === 'reprint reason is required') {
+        const reason = window.prompt('กรุณาระบุเหตุผลในการพิมพ์ซ้ำ');
+        if (!reason?.trim()) {
+          setPrintError('ต้องระบุเหตุผลในการพิมพ์ซ้ำ');
+          return;
+        }
+        result = await postPrintLog(reason);
+      }
+
+      if (result.error) {
+        setPrintError(result.error);
+        return;
+      }
+
+      setReprintLabel(result.reprint_label || null);
+      window.setTimeout(() => window.print(), 0);
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   return (
     <>
@@ -147,6 +230,7 @@ function ContinuousPrintContent() {
           padding: 8px 12px;
         }
         .continuous-print-status { color: #d1d5db; font-size: 12px; }
+        .continuous-print-error { color: #fecaca; font-size: 12px; margin-top: 2px; }
         .continuous-print-shell { padding: 76px 16px 24px; }
         @media print {
           .continuous-print-toolbar { display: none !important; }
@@ -165,10 +249,16 @@ function ContinuousPrintContent() {
                   ? 'Preview failed'
                   : 'Preview ready'}
           </div>
+          {printError ? <div className="continuous-print-error">{printError}</div> : null}
         </div>
-        <button type="button" onClick={() => window.print()} disabled={status === 'error'} aria-label="Print continuous receipt">
+        <button
+          type="button"
+          onClick={handlePrint}
+          disabled={status === 'error' || status === 'loading' || printing}
+          aria-label="Print continuous receipt"
+        >
           <Printer size={16} />
-          พิมพ์
+          {printing ? 'กำลังบันทึก' : 'พิมพ์'}
         </button>
       </div>
       <main className="continuous-print-shell">

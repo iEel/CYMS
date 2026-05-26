@@ -7,6 +7,7 @@ import { POST as setDefaultTemplate } from '../document-templates/[templateId]/s
 import { POST as deactivateTemplate } from '../document-templates/[templateId]/deactivate/route';
 import { GET as previewTemplate } from '../document-templates/preview/route';
 import { POST as testPrintTemplate } from '../document-templates/test-print/route';
+import { POST as printLogTemplate } from '../document-templates/print-log/route';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { requireAnyPermission, requirePermission } from '@/lib/apiAuth';
@@ -607,5 +608,50 @@ describe('document template API', () => {
     expect(mockedBuildSampleContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
     expect(mockedLogAudit).not.toHaveBeenCalled();
+  });
+
+  it('records document print logs through the dedicated print-log route', async () => {
+    const db = makeDb([
+      { recordset: [{ print_count: 0 }] },
+      { recordset: [{ print_id: 301 }] },
+      { recordset: [] },
+    ]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/print-log', {
+      method: 'POST',
+      body: JSON.stringify({
+        document_type: 'tax_invoice_receipt',
+        document_id: 77,
+        document_no: 'INV-77',
+        template_code: 'TAX_CONTINUOUS',
+        template_version: 2,
+        snapshot: { document: { invoice_id: 77 } },
+        mode: 'full',
+        copy_mode: 'carbonless',
+        show_reprint_label: true,
+        reprint_label_template: 'พิมพ์ซ้ำครั้งที่ {reprint_count}',
+      }),
+    });
+
+    const response = await printLogTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ print_no: 1, is_reprint: false, reprint_count: 0 });
+    expect(mockedRequireAnyPermission).toHaveBeenCalledWith(
+      request,
+      db,
+      ['settings.manage', 'billing.invoice.create', 'billing.payment.receive', 'gate.in', 'gate.out', 'reports.view'],
+      expect.any(String),
+    );
+    expect(db.queries.join('\n')).toMatch(/INSERT\s+INTO\s+DocumentPrintLogs/i);
+    expect(db.queries.join('\n')).toMatch(/INSERT\s+INTO\s+DocumentPrintSnapshots/i);
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 7,
+      action: 'document_print',
+      entityType: 'tax_invoice_receipt',
+      entityId: 77,
+    }));
+    expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
   });
 });

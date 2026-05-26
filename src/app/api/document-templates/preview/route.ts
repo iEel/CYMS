@@ -46,8 +46,16 @@ function copyModeFrom(value: string | null): DocumentTemplateCopyMode | null {
 async function currentTemplateConfig(db: Awaited<ReturnType<typeof getDb>>, documentType: string) {
   const result = await db.request()
     .input('documentType', sql.NVarChar(50), documentType)
-    .query<{ config_json?: string; reprint_label_template?: string; red_ref_source?: string }>(`
+    .query<{
+      config_json?: string;
+      reprint_label_template?: string;
+      red_ref_source?: string;
+      template_code?: string;
+      version_no?: number;
+    }>(`
       SELECT TOP 1
+        t.template_code,
+        v.version_no,
         v.config_json,
         v.reprint_label_template,
         v.red_ref_source
@@ -72,7 +80,11 @@ async function currentTemplateConfig(db: Awaited<ReturnType<typeof getDb>>, docu
 
   const row = result.recordset[0];
   const config = parseStoredTemplateConfig(row?.config_json);
-  return config && row ? applyStoredPrintPolicy(config, row) : buildDefaultContinuousTemplateConfig();
+  return {
+    config: config && row ? applyStoredPrintPolicy(config, row) : buildDefaultContinuousTemplateConfig(),
+    template_code: row?.template_code || documentType.toUpperCase(),
+    template_version: Number(row?.version_no || 1),
+  };
 }
 
 function applyPreviewOverrides(
@@ -101,7 +113,8 @@ export async function GET(request: NextRequest) {
     const documentType = searchParams.get('type') || 'tax_invoice_receipt';
     const mode = modeFrom(searchParams.get('mode'));
     const copyMode = copyModeFrom(searchParams.get('copyMode'));
-    const config = applyPreviewOverrides(await currentTemplateConfig(db, documentType), mode, copyMode);
+    const template = await currentTemplateConfig(db, documentType);
+    const config = applyPreviewOverrides(template.config, mode, copyMode);
     const payload = useSample
       ? buildSampleContinuousPrintPayload()
       : await buildContinuousPrintPayload(db, { invoiceId, type: documentType });
@@ -120,7 +133,14 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ payload, config });
+    return NextResponse.json({
+      payload,
+      config,
+      template: {
+        template_code: template.template_code,
+        template_version: template.template_version,
+      },
+    });
   } catch (error) {
     console.error('GET document template preview error:', error);
     return NextResponse.json({ error: 'ไม่สามารถ preview เทมเพลตเอกสารได้' }, { status: 500 });
