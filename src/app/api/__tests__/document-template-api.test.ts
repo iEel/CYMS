@@ -3,6 +3,7 @@ import { GET, POST } from '../document-templates/route';
 import { POST as duplicateTemplate } from '../document-templates/[templateId]/duplicate/route';
 import { PUT as updateTemplate } from '../document-templates/[templateId]/route';
 import { POST as publishTemplate } from '../document-templates/[templateId]/publish/route';
+import { POST as setDefaultTemplate } from '../document-templates/[templateId]/set-default/route';
 import { POST as deactivateTemplate } from '../document-templates/[templateId]/deactivate/route';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
@@ -255,6 +256,47 @@ describe('document template API', () => {
       entityId: 12,
     }));
     expect(body).toEqual({ success: true, template });
+  });
+
+  it('sets a template as default after clearing defaults for the same document type', async () => {
+    const existing = {
+      template_id: 12,
+      document_type: 'tax_invoice',
+    };
+    const updated = {
+      template_id: 12,
+      template_code: 'TAX_CONTINUOUS',
+      document_type: 'tax_invoice',
+      is_default: true,
+      status: 'active',
+    };
+    const db = makeDb([
+      { recordset: [existing] },
+      { recordset: [] },
+      { recordset: [updated] },
+    ]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/12/set-default', { method: 'POST' });
+
+    const response = await setDefaultTemplate(request, makeRouteContext('12'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      request,
+      db,
+      'settings.manage',
+      expect.any(String),
+    );
+    expect(db.queries[1]).toContain('is_default = 0');
+    expect(db.queries[2]).toContain('is_default = 1');
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 7,
+      action: 'document_template_set_default',
+      entityType: 'document_template',
+      entityId: 12,
+    }));
+    expect(body).toEqual({ success: true, template: updated });
   });
 
   it('rejects PUT updates when the current version is not draft before updating', async () => {
