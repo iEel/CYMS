@@ -10,8 +10,8 @@ describe('Gate In business context UI', () => {
     expect(gateIn).toContain('bookingSearchLoading');
     expect(gateIn).toContain('เลือก Booking');
     expect(gateIn).toContain('Booking Customer');
-    expect(gateIn).toContain('Container Owner');
-    expect(gateIn).toContain('Shipping Line / Container Owner');
+    expect(gateIn).toContain('Container owner');
+    expect(gateIn).toContain('Business relationship');
     expect(gateIn).toContain('Forwarder');
     expect(gateIn).toContain('Consignee');
     expect(gateIn).toContain('Bill To Customer');

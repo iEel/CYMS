@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 interface Props {
   title: string;
   snapshot: GateOperationalGuardrailsSnapshot;
+  compact?: boolean;
 }
 
 const severityClass = {
@@ -15,27 +16,27 @@ const severityClass = {
   info: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
 };
 
-export default function GateGuardrailPanel({ title, snapshot }: Props) {
+export default function GateGuardrailPanel({ title, snapshot, compact = false }: Props) {
   const visibleAlerts = snapshot.alerts.slice(0, 4);
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/20 overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+      <div className={`${compact ? 'px-3 py-2' : 'px-4 py-3'} border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3`}>
         <div>
           <h4 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center gap-2">
             <ShieldCheck size={16} /> {title}
           </h4>
-          <p className="text-[10px] text-slate-400 mt-0.5">duplicate alert, driver/truck master และ photo evidence check</p>
+          {!compact && <p className="text-[10px] text-slate-400 mt-0.5">duplicate alert, driver/truck master และ photo evidence check</p>}
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-300">
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-300">
           <StatusPill label="Driver" value={`${snapshot.driver_profile.completed}/${snapshot.driver_profile.total}`} ok={snapshot.driver_profile.status === 'complete'} />
           <StatusPill label="Photo" value={`${snapshot.photo_status.completed}/${snapshot.photo_status.required || 0}`} ok={snapshot.photo_status.ok} />
         </div>
       </div>
 
-      <div className="p-4">
+      <div className={compact ? 'p-3' : 'p-4'}>
         <div className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div className={`grid ${compact ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'} gap-2`}>
             <InfoBox icon={<Truck size={14} />} label="Driver master" value={driverStatusText(snapshot.driver_profile.status)} detail={snapshot.driver_profile.missing_fields.join(', ') || 'ข้อมูลครบ'} />
             <InfoBox icon={<Camera size={14} />} label="Photo evidence" value={snapshot.photo_status.ok ? 'ครบตามเงื่อนไข' : 'ยังมีจุดที่ควรเพิ่ม'} detail={snapshot.photo_status.missing_categories.join(', ') || 'พร้อมออกเอกสาร'} />
             <InfoBox icon={<BadgeCheck size={14} />} label="Preflight" value={snapshot.has_blocker ? 'มี blocker' : visibleAlerts.length ? 'มี warning' : 'พร้อม'} detail={visibleAlerts.length ? `${visibleAlerts.length} รายการต้องตรวจ` : 'ไม่พบความเสี่ยงเด่น'} />

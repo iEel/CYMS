@@ -48,6 +48,8 @@
 - Gate In sends party IDs for booking_customer, billing, trucking, and future driver grants.
 - Gate guardrail UI no longer renders Gate Pass QR. Gate pass/QR remains a future phase so gate users do not confuse the current EIR workflow with a released gate-pass module.
 - Gate decision bar now uses compact Thai labels and only shows ready state when the final workflow action is ready/done, preventing mixed signals such as "ready" while the container number or evidence is still invalid.
+- Gate In UI is now a workstation layout: guided workflow stays as the only top status band, the main form stays in the primary workspace, and readiness/Portal Visibility Preview/warnings move into a compact side rail.
+- Gate In guardrails render only when there is an alert to review, reducing the empty top-panel stack on normal transactions.
 
 ### Booking / Gate Business Relationship UI
 
@@ -82,7 +84,7 @@ npx tsc --noEmit --pretty false
 npm run lint
 ```
 
-ผลล่าสุด: focused Gate Out search tests `7/7` ผ่าน, Gate/Gate-Out regression `17/17` ผ่าน, full tests `800/800` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+ผลล่าสุด: focused Gate In workstation tests `22/22` ผ่าน, full tests `806/806` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
 
 ---
 

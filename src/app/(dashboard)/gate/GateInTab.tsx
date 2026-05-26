@@ -783,6 +783,33 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     sealPhoto,
   ]);
 
+  const portalVisibilityPreviewPanel = (
+    <div className="rounded-xl border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-800 dark:text-white">Portal Visibility Preview</p>
+          <p className="text-[10px] leading-4 text-slate-400">จะแสดง grant ที่ระบบจะสร้าง ไม่ได้ตั้ง field policy รายครั้ง</p>
+        </div>
+        {visibilityPreviewLoading && <Loader2 size={14} className="animate-spin text-cyan-600" />}
+      </div>
+      <div className="mt-3 space-y-2">
+        {visibilityPreviewError ? (
+          <p className="text-xs text-rose-500">{visibilityPreviewError}</p>
+        ) : visibilityPreview.length === 0 ? (
+          <p className="rounded-lg border border-cyan-100 bg-white/70 px-3 py-2 text-xs text-slate-400 dark:border-cyan-900/40 dark:bg-slate-800/70">
+            ยังไม่มี party ที่จะได้รับสิทธิ์
+          </p>
+        ) : visibilityPreview.map((row, index) => (
+          <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{row.customerName || `Customer #${row.customerId}`}</p>
+            <p className="mt-0.5 text-slate-400">{row.entityType} · {row.accessRole}</p>
+            <p className="mt-1 text-[10px] text-slate-400">Grade default: hidden</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -800,8 +827,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
 
         <div className="p-5 space-y-4">
           <GateWorkflowPanel title="Gate-In guided workflow" workflow={gateInWorkflow} />
-          <GateGuardrailPanel title="Gate-In operational guardrails" snapshot={gateInGuardrails} />
-          <GateDecisionBar signals={gateInDecisionSignals} />
+          <div className="gate-in-workstation-shell grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+            <div className="gate-in-primary-workspace space-y-4">
 
           {/* Container Info */}
           <div>
@@ -1037,10 +1064,10 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
 
             {/* Owner / Billing Customer Separator */}
             <div className="mt-4 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-800/30">
-                <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-2">&#x2696;&#xFE0F; เจ้าของตู้ / คนจ่ายเงิน</h4>
+                <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-2">Business relationship</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-slate-500 mb-1 block">&#x1F4E6; Shipping Line / Container Owner</label>
+                    <label className="text-xs text-slate-500 mb-1 block">Container owner</label>
                     <div className="relative" ref={ownerSearchRef}>
                       <input
                         type="text"
@@ -1095,7 +1122,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                   </div>
                   <div>
                     <label className="text-xs text-slate-500 mb-1 flex items-center gap-2">
-                      &#x1F4B0; คนจ่ายเงิน (Billing Customer)
+                      Billing customer
                       <label className="inline-flex items-center gap-1 cursor-pointer">
                         <input type="checkbox" checked={billingDiffFromOwner} onChange={e => {
                           setBillingDiffFromOwner(e.target.checked);
@@ -1161,29 +1188,6 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                     )}
                   </div>
                 </div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-white">Portal Visibility Preview</p>
-                <p className="text-[10px] text-slate-400">Gate In แสดงเฉพาะว่าจะสร้าง grant ให้ใคร ไม่ได้ตั้ง field policy รายครั้ง</p>
-              </div>
-              {visibilityPreviewLoading && <Loader2 size={14} className="animate-spin text-cyan-600" />}
-            </div>
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-              {visibilityPreviewError ? (
-                <p className="text-xs text-rose-500">{visibilityPreviewError}</p>
-              ) : visibilityPreview.length === 0 ? (
-                <p className="text-xs text-slate-400">ยังไม่มี party ที่จะได้รับสิทธิ์</p>
-              ) : visibilityPreview.map((row, index) => (
-                <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
-                  <p className="font-semibold text-slate-700 dark:text-slate-200">{row.customerName || `Customer #${row.customerId}`}</p>
-                  <p className="mt-0.5 text-slate-400">{row.entityType} · {row.accessRole}</p>
-                  <p className="mt-1 text-[10px] text-slate-400">Grade default: hidden</p>
-                </div>
-              ))}
             </div>
           </div>
 
@@ -1672,6 +1676,16 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
               </button>
             </div>
           )}
+            </div>
+
+            <aside className="gate-in-side-rail space-y-3 xl:sticky xl:top-20 xl:self-start">
+              <GateDecisionBar signals={gateInDecisionSignals} compact />
+              {gateInGuardrails.alerts.length > 0 && (
+                <GateGuardrailPanel title="Gate-In checks" snapshot={gateInGuardrails} compact />
+              )}
+              {portalVisibilityPreviewPanel}
+            </aside>
+          </div>
         </div>
       </div>
 
