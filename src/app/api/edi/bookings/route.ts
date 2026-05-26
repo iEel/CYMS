@@ -220,17 +220,7 @@ export async function GET(request: NextRequest) {
     reqData.input('limit', sql.Int, limit);
 
     const result = await reqData.query(`
-      SELECT b.*, c.customer_name,
-        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id) AS linked_containers,
-        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status IN ('received', 'released')) AS received_count,
-        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status = 'released') AS released_count,
-        (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status = 'pending') AS pending_count,
-        CASE WHEN ISNULL(b.container_count, 0) > 0
-          THEN CAST(ROUND(((SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status IN ('received', 'released')) * 100.0) / b.container_count, 0) AS INT)
-          ELSE 0 END AS receive_percent,
-        CASE WHEN ISNULL(b.container_count, 0) > 0
-          THEN CAST(ROUND(((SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status = 'released') * 100.0) / b.container_count, 0) AS INT)
-          ELSE 0 END AS release_percent,
+      SELECT ${bookingSummarySelect()},
         CASE
           WHEN (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status IN ('received', 'released')) > ISNULL(b.container_count, 0) THEN 'over_received'
           WHEN (SELECT COUNT(*) FROM BookingContainers bc WHERE bc.booking_id = b.booking_id AND bc.status = 'released') >= ISNULL(b.container_count, 0) AND ISNULL(b.container_count, 0) > 0 THEN 'fully_released'
@@ -240,6 +230,7 @@ export async function GET(request: NextRequest) {
         END AS utilization_status
       FROM Bookings b
       LEFT JOIN Customers c ON b.customer_id = c.customer_id
+      ${bookingPartyJoins()}
       ${where}
       ORDER BY b.created_at DESC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY

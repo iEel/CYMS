@@ -39,4 +39,13 @@ describe('Booking business relationship UI', () => {
     expect(bookingRoute).toContain('trucking_company_name');
     expect(bookingRoute).toContain('bill_to_customer_name');
   });
+
+  it('paginated booking list uses bookingSummarySelect so party names are returned', () => {
+    const paginatedListQuery = bookingRoute.match(/const result = await reqData\.query\(`([\s\S]*?)`\);/);
+
+    expect(paginatedListQuery?.[1]).toContain('SELECT ${bookingSummarySelect()}');
+    expect(paginatedListQuery?.[1]).toContain('${bookingPartyJoins()}');
+    expect(paginatedListQuery?.[1]).toMatch(/ORDER\s+BY\s+b\.created_at\s+DESC/);
+    expect(paginatedListQuery?.[1]).toMatch(/OFFSET\s+@offset\s+ROWS\s+FETCH\s+NEXT\s+@limit\s+ROWS\s+ONLY/);
+  });
 });
