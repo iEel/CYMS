@@ -53,6 +53,8 @@ interface GateBookingOption {
 
 interface BookingDerivedContext {
   manualCustomerId?: number | null;
+  containerOwnerId?: number | null;
+  ownerName?: string | null;
   billingCustomerId?: number | null;
   truckCompanyName?: string | null;
 }
@@ -147,6 +149,9 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [containerOwnerId, setContainerOwnerId] = useState<number | null>(null);
   const [billingCustomerId, setBillingCustomerId] = useState<number | null>(null);
   const [billingDiffFromOwner, setBillingDiffFromOwner] = useState(false);
+  const [ownerSearch, setOwnerSearch] = useState('');
+  const [ownerSearchOpen, setOwnerSearchOpen] = useState(false);
+  const ownerSearchRef = useRef<HTMLDivElement>(null);
   const [billingSearch, setBillingSearch] = useState('');
   const [billingSearchOpen, setBillingSearchOpen] = useState(false);
   const billingSearchRef = useRef<HTMLDivElement>(null);
@@ -156,6 +161,17 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [truckCompanySearch, setTruckCompanySearch] = useState('');
   const [truckCompanyOpen, setTruckCompanyOpen] = useState(false);
   const truckCompanyRef = useRef<HTMLDivElement>(null);
+
+  // Close owner search dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ownerSearchRef.current && !ownerSearchRef.current.contains(e.target as Node)) {
+        setOwnerSearchOpen(false);
+      }
+    };
+    if (ownerSearchOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [ownerSearchOpen]);
 
   // Close billing search dropdown on click outside
   useEffect(() => {
@@ -207,6 +223,12 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     if (context.manualCustomerId) {
       setManualCustomerId(prev => prev === context.manualCustomerId ? null : prev);
     }
+    if (context.containerOwnerId) {
+      setContainerOwnerId(prev => prev === context.containerOwnerId ? null : prev);
+    }
+    if (context.ownerName) {
+      setOwnerSearch(prev => prev === context.ownerName ? '' : prev);
+    }
     if (context.billingCustomerId) {
       setBillingCustomerId(prev => prev === context.billingCustomerId ? null : prev);
     }
@@ -232,16 +254,24 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       return;
     }
     const bookingCustomerId = booking.booking_customer_id || booking.customer_id || null;
+    const bookingBillingCustomerId = booking.bill_to_customer_id || (!billingDiffFromOwner && booking.shipping_line_id ? booking.shipping_line_id : null);
     setBookingSearch(booking.booking_number);
     if (bookingCustomerId) setManualCustomerId(bookingCustomerId);
     if (booking.bill_to_customer_id) setBillingCustomerId(booking.bill_to_customer_id);
+    if (booking.shipping_line_id) {
+      setContainerOwnerId(booking.shipping_line_id);
+      if (booking.shipping_line_name) setOwnerSearch(booking.shipping_line_name);
+      if (!billingDiffFromOwner && !booking.bill_to_customer_id) setBillingCustomerId(booking.shipping_line_id);
+    }
     if (booking.trucking_company_name) {
       setGateInForm(prev => ({ ...prev, truck_company: booking.trucking_company_name || prev.truck_company }));
       setTruckCompanySearch(booking.trucking_company_name || '');
     }
     bookingDerivedContextRef.current = {
       manualCustomerId: bookingCustomerId,
-      billingCustomerId: booking.bill_to_customer_id || null,
+      containerOwnerId: booking.shipping_line_id || null,
+      ownerName: booking.shipping_line_name || null,
+      billingCustomerId: bookingBillingCustomerId,
       truckCompanyName: booking.trucking_company_name || null,
     };
   };
@@ -329,6 +359,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         // Handle customer resolution
         if (data.customer) {
           setContainerOwnerId(data.customer.customer_id);
+          setOwnerSearch(data.customer.customer_name || '');
           if (!billingDiffFromOwner) setBillingCustomerId(data.customer.customer_id);
         }
         // HALT RULE: Multiple customers for same prefix → force popup
@@ -975,14 +1006,68 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
             </div>
 
             {/* Owner / Billing Customer Separator */}
-            {(containerOwnerId || billingCustomerId || resolvedCustomer) && (
-              <div className="mt-4 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-800/30">
+            <div className="mt-4 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-800/30">
                 <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-2">&#x2696;&#xFE0F; เจ้าของตู้ / คนจ่ายเงิน</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-slate-500 mb-1 block">&#x1F4E6; เจ้าของตู้ (Container Owner)</label>
-                    <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                      {containerOwnerId ? customerList.find(c => c.customer_id === containerOwnerId)?.customer_name || resolvedCustomer?.customer_name || '-' : resolvedCustomer?.customer_name || '-'}
+                    <label className="text-xs text-slate-500 mb-1 block">&#x1F4E6; Shipping Line / Container Owner</label>
+                    <div className="relative" ref={ownerSearchRef}>
+                      <input
+                        type="text"
+                        placeholder="พิมพ์ชื่อสายเรือหรือเจ้าของตู้..."
+                        value={ownerSearch || (containerOwnerId ? customerList.find(c => c.customer_id === containerOwnerId)?.customer_name || '' : resolvedCustomer?.customer_name || '')}
+                        onChange={e => {
+                          setOwnerSearch(e.target.value);
+                          setOwnerSearchOpen(true);
+                          if (!e.target.value) {
+                            setContainerOwnerId(null);
+                            if (!billingDiffFromOwner) setBillingCustomerId(null);
+                          }
+                        }}
+                        onFocus={() => setOwnerSearchOpen(true)}
+                        className={`${inputClass} text-sm`}
+                      />
+                      {containerOwnerId && !ownerSearchOpen && (
+                        <button onClick={() => {
+                          setContainerOwnerId(null);
+                          setOwnerSearch('');
+                          if (!billingDiffFromOwner) setBillingCustomerId(null);
+                          setOwnerSearchOpen(true);
+                        }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors">
+                          <X size={14} />
+                        </button>
+                      )}
+                      {ownerSearchOpen && (
+                        <div className="absolute z-30 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl">
+                          {customerList
+                            .filter(c => {
+                              const q = ownerSearch.toLowerCase();
+                              return !q || c.customer_name.toLowerCase().includes(q);
+                            })
+                            .slice(0, 15)
+                            .map(c => (
+                              <button key={c.customer_id}
+                                onClick={() => {
+                                  setContainerOwnerId(c.customer_id);
+                                  setOwnerSearch(c.customer_name);
+                                  if (!billingDiffFromOwner) setBillingCustomerId(c.customer_id);
+                                  setOwnerSearchOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center justify-between ${
+                                  containerOwnerId === c.customer_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-slate-700 dark:text-slate-200'
+                                }`}>
+                                <span>{c.customer_name}</span>
+                                <span className="text-[10px] text-slate-400">
+                                  {c.is_line ? 'สายเรือ' : c.is_forwarder ? 'ตัวแทน' : c.is_trucking ? 'รถบรรทุก' : ''}
+                                </span>
+                              </button>
+                            ))}
+                          {customerList.filter(c => !ownerSearch || c.customer_name.toLowerCase().includes(ownerSearch.toLowerCase())).length === 0 && (
+                            <div className="px-3 py-2 text-sm text-slate-400">ไม่พบลูกค้า</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div>
@@ -1053,8 +1138,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                     )}
                   </div>
                 </div>
-              </div>
-            )}
+            </div>
           </div>
 
           <div className="mt-4 rounded-xl border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
@@ -1593,6 +1677,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                 <button key={c.customer_id}
                   onClick={() => {
                     setContainerOwnerId(c.customer_id);
+                    setOwnerSearch(c.customer_name);
                     if (!billingDiffFromOwner) setBillingCustomerId(c.customer_id);
                     setManualCustomerId(c.customer_id);
                     setShowHaltPopup(false);

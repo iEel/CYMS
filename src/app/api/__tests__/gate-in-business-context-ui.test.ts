@@ -10,6 +10,8 @@ describe('Gate In business context UI', () => {
     expect(gateIn).toContain('bookingSearchLoading');
     expect(gateIn).toContain('เลือก Booking');
     expect(gateIn).toContain('Booking Customer');
+    expect(gateIn).toContain('Container Owner');
+    expect(gateIn).toContain('Shipping Line / Container Owner');
     expect(gateIn).toContain('Forwarder');
     expect(gateIn).toContain('Consignee');
     expect(gateIn).toContain('Bill To Customer');
@@ -19,6 +21,8 @@ describe('Gate In business context UI', () => {
     expect(gateIn).toContain('clearBookingDerivedContext');
     expect(gateIn).toContain('bookingDerivedContextRef');
     expect(gateIn).toContain('setGateInForm(prev => ({ ...prev, booking_ref');
+    expect(gateIn).toContain('ownerSearch');
+    expect(gateIn).toContain('setContainerOwnerId(booking.shipping_line_id)');
     expect(gateIn).toContain('onKeyDown');
     expect(gateIn).toContain('bookingSearchError');
     expect(gateIn).toContain('!res.ok');
