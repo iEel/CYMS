@@ -5,6 +5,7 @@ describe('continuous print UI', () => {
   const root = process.cwd();
   const pagePath = path.join(root, 'src/app/billing/print/continuous/page.tsx');
   const componentPath = path.join(root, 'src/components/billing/ContinuousTaxReceipt.tsx');
+  const settingsPath = path.join(root, 'src/app/(dashboard)/settings/page.tsx');
 
   it('loads continuous print preview data from the planned preview route', () => {
     const source = fs.readFileSync(pagePath, 'utf8');
@@ -26,5 +27,12 @@ describe('continuous print UI', () => {
     expect(source).toContain('ต้นฉบับใบกำกับภาษี/ใบเสร็จรับเงิน');
     expect(source).toContain('copyMode');
     expect(source).toContain('mode');
+  });
+
+  it('wires document template management into settings', () => {
+    const source = fs.readFileSync(settingsPath, 'utf8');
+
+    expect(source).toContain('Document Templates');
+    expect(source).toContain('DocumentTemplateManager');
   });
 });
