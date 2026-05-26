@@ -7,6 +7,22 @@ import {
   LayoutDashboard, Package, FileText, ClipboardList, LogOut, Menu, X, Ship, Thermometer,
 } from 'lucide-react';
 
+interface PortalCapabilities {
+  modules?: {
+    reefer?: {
+      visible: boolean;
+      reason: string;
+    };
+  };
+}
+
+interface PortalNavItem {
+  label: string;
+  href: string;
+  icon: React.ReactNode;
+  capability?: 'reefer';
+}
+
 // Global fetch interceptor — auto-attach JWT to API calls
 if (typeof window !== 'undefined') {
   const originalFetch = window.fetch.bind(window);
@@ -34,10 +50,10 @@ if (typeof window !== 'undefined') {
   };
 }
 
-const navItems = [
+const navItems: PortalNavItem[] = [
   { label: 'ภาพรวม', href: '/portal', icon: <LayoutDashboard size={18} /> },
   { label: 'ตู้คอนเทนเนอร์', href: '/portal/containers', icon: <Package size={18} /> },
-  { label: 'ตู้เย็น', href: '/portal/reefer', icon: <Thermometer size={18} /> },
+  { label: 'ตู้เย็น', href: '/portal/reefer', icon: <Thermometer size={18} />, capability: 'reefer' },
   { label: 'ใบแจ้งหนี้', href: '/portal/invoices', icon: <FileText size={18} /> },
   { label: 'Booking', href: '/portal/bookings', icon: <ClipboardList size={18} /> },
 ];
@@ -47,11 +63,28 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [capabilities, setCapabilities] = useState<PortalCapabilities | null>(null);
 
   useEffect(() => {
     if (!isLoading && !session) router.replace('/login');
     if (!isLoading && session && session.role !== 'customer') router.replace('/dashboard');
   }, [session, isLoading, router]);
+
+  useEffect(() => {
+    if (!session || session.role !== 'customer') return;
+
+    let mounted = true;
+    fetch('/api/portal/capabilities')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (mounted) setCapabilities(data);
+      })
+      .catch(() => {
+        if (mounted) setCapabilities({ modules: { reefer: { visible: false, reason: 'load_failed' } } });
+      });
+
+    return () => { mounted = false; };
+  }, [session]);
 
   if (isLoading) {
     return (
@@ -65,6 +98,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   }
 
   if (!session || session.role !== 'customer') return null;
+
+  const visibleNavItems = navItems.filter(item => {
+    if (item.capability === 'reefer') return capabilities?.modules?.reefer?.visible === true;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
@@ -82,7 +120,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       {/* Mobile Nav */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 top-[57px] z-40 bg-white/95 dark:bg-slate-800/95 backdrop-blur p-4 space-y-1">
-          {navItems.map(item => (
+          {visibleNavItems.map(item => (
             <button key={item.href} onClick={() => { router.push(item.href); setMobileOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 pathname === item.href
@@ -113,7 +151,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </div>
 
           <nav className="flex-1 space-y-1">
-            {navItems.map(item => (
+            {visibleNavItems.map(item => (
               <button key={item.href} onClick={() => router.push(item.href)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   pathname === item.href

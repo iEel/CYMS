@@ -38,6 +38,9 @@ describe('Reefer monitoring UI', () => {
 
     expect(layout).toContain('/portal/reefer');
     expect(layout).toContain('ตู้เย็น');
+    expect(layout).toContain('/api/portal/capabilities');
+    expect(layout).toContain('capabilities?.modules?.reefer?.visible');
+    expect(layout).toContain("href: '/portal/reefer'");
     expect(source).toContain('/api/portal/reefer');
     expect(source).toContain('read-only');
     expect(source).toContain('ประวัติตรวจอุณหภูมิ');
