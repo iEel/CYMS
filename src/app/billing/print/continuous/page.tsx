@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Printer } from 'lucide-react';
 import { ContinuousTaxReceipt } from '@/components/billing/ContinuousTaxReceipt';
-import { buildSampleContinuousPrintPayload, type ContinuousPrintPayload } from '@/lib/billingContinuousPrint';
-import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplates';
+import { buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrintSample';
+import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
+import type { ContinuousPrintPayload } from '@/lib/billingContinuousPrintTypes';
 import type {
   DocumentTemplateConfig,
   DocumentTemplateCopyMode,
@@ -60,7 +61,7 @@ function fallbackPreview(mode: DocumentTemplateMode, copyMode: DocumentTemplateC
   };
 }
 
-export default function ContinuousPrintPage() {
+function ContinuousPrintContent() {
   const searchParams = useSearchParams();
   const mode = modeFrom(searchParams.get('mode'));
   const copyMode = copyModeFrom(searchParams.get('copyMode'));
@@ -168,5 +169,13 @@ export default function ContinuousPrintPage() {
         />
       </main>
     </>
+  );
+}
+
+export default function ContinuousPrintPage() {
+  return (
+    <Suspense fallback={<div className="continuous-print-fallback">Loading continuous print preview...</div>}>
+      <ContinuousPrintContent />
+    </Suspense>
   );
 }

@@ -1,4 +1,4 @@
-import type { ContinuousPrintPayload } from '@/lib/billingContinuousPrint';
+import type { ContinuousPrintPayload } from '@/lib/billingContinuousPrintTypes';
 import type {
   DocumentTemplateConfig,
   DocumentTemplateCopyMode,
@@ -238,12 +238,17 @@ export function ContinuousTaxReceipt({
   const labels = config.copy_labels.length > 0 ? config.copy_labels : DEFAULT_COPY_LABELS;
   const indexes = copyIndexes(copyMode, copyIndex);
   const paper = config.paper;
+  const contentWidth = paper.width_mm - paper.margin_left_mm - paper.margin_right_mm;
+  const contentHeight = paper.height_mm - paper.margin_top_mm - paper.margin_bottom_mm;
 
   return (
     <div className="ctr-root" data-mode={mode} data-copy-mode={copyMode}>
       <style>{`
         .ctr-root { color: #111827; font-family: 'Sarabun', 'Noto Sans Thai', Arial, sans-serif; }
         .ctr-page { background: #fff; box-sizing: border-box; margin: 0 auto 8mm; overflow: hidden; position: relative; }
+        .ctr-page-content { box-sizing: border-box; position: absolute; transform-origin: top left; }
+        .ctr-page-content-full { height: ${contentHeight}mm; width: ${contentWidth}mm; }
+        .ctr-page-content-overlay { height: ${paper.height_mm}mm; width: ${paper.width_mm}mm; }
         .ctr-full { border: 0.35mm solid #111827; display: flex; flex-direction: column; height: 100%; padding: 5mm; }
         .ctr-header { align-items: flex-start; border-bottom: 0.25mm solid #111827; display: flex; justify-content: space-between; padding-bottom: 3mm; }
         .ctr-header h1 { font-size: 15pt; line-height: 1.15; margin: 0; }
@@ -289,25 +294,28 @@ export function ContinuousTaxReceipt({
           style={{
             width: mm(paper.width_mm),
             height: mm(paper.height_mm),
-            paddingTop: mm(paper.top_offset_mm + paper.margin_top_mm),
-            paddingRight: mm(paper.margin_right_mm),
-            paddingBottom: mm(paper.margin_bottom_mm),
-            paddingLeft: mm(paper.left_offset_mm + paper.margin_left_mm),
-            transform: `scale(${paper.print_scale})`,
-            transformOrigin: 'top center',
           }}
         >
-          {mode === 'overlay' ? (
-            <OverlayFields payload={payload} config={config} />
-          ) : (
-            <FullReceipt
-              payload={payload}
-              config={config}
-              copyLabel={labels[index] || labels[0] || DEFAULT_COPY_LABELS[0]}
-              reprintLabel={reprintLabel}
-            />
-          )}
-          {testPrint ? <CalibrationMarks /> : null}
+          <div
+            className={`ctr-page-content ${mode === 'overlay' ? 'ctr-page-content-overlay' : 'ctr-page-content-full'}`}
+            style={{
+              left: mm(paper.left_offset_mm + (mode === 'overlay' ? 0 : paper.margin_left_mm)),
+              top: mm(paper.top_offset_mm + (mode === 'overlay' ? 0 : paper.margin_top_mm)),
+              transform: `scale(${paper.print_scale})`,
+            }}
+          >
+            {mode === 'overlay' ? (
+              <OverlayFields payload={payload} config={config} />
+            ) : (
+              <FullReceipt
+                payload={payload}
+                config={config}
+                copyLabel={labels[index] || labels[0] || DEFAULT_COPY_LABELS[0]}
+                reprintLabel={reprintLabel}
+              />
+            )}
+            {testPrint ? <CalibrationMarks /> : null}
+          </div>
         </section>
       ))}
     </div>

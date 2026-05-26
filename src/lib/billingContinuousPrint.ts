@@ -1,69 +1,8 @@
 import sql from 'mssql';
 import { amountToThaiBahtText } from '@/lib/thaiBahtText';
-
-export type ContinuousPrintLine = {
-  description: string;
-  qty: number;
-  unit_price: number;
-  amount: number;
-  container_refs?: string[];
-  job_refs?: string[];
-};
-
-export type ContinuousPrintPayload = {
-  company: {
-    name: string;
-    company_name: string;
-    tax_id: string;
-    address: string;
-    phone: string;
-    email: string;
-    logo_url: string;
-    branch_type: string;
-    branch_number: string;
-    yard_name: string;
-    yard_code: string;
-  };
-  customer: {
-    name: string;
-    customer_name: string;
-    tax_id: string;
-    address: string;
-    branch_type: string;
-    branch_number: string;
-    branch_name: string;
-  };
-  document: {
-    document_title: string;
-    document_type: string;
-    invoice_id: number;
-    invoice_number: string;
-    tax_invoice_number: string;
-    receipt_number: string;
-    document_number: string;
-    issue_date: string;
-    document_date: string;
-    due_date: string;
-    paid_at: string;
-    status: string;
-    ref_invoice_number: string;
-    replaces_invoice_number: string;
-  };
-  lines: ContinuousPrintLine[];
-  totals: {
-    subtotal: number;
-    vat_rate: number;
-    vat_amount: number;
-    grand_total: number;
-    amount_text_th: string;
-  };
-  payment: {
-    method: string;
-    status: string;
-    receipt_number: string;
-    paid_at: string;
-  };
-};
+import type { ContinuousPrintLine, ContinuousPrintPayload } from './billingContinuousPrintTypes';
+export type { ContinuousPrintLine, ContinuousPrintPayload } from './billingContinuousPrintTypes';
+export { buildSampleContinuousPrintPayload } from './billingContinuousPrintSample';
 
 type RequestLike = {
   input(name: string, type: unknown, value: unknown): RequestLike;
@@ -278,32 +217,6 @@ function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload
       paid_at: dateText(row.paid_at),
     },
   };
-}
-
-export function buildSampleContinuousPrintPayload(): ContinuousPrintPayload {
-  return normalizePayload({
-    invoice_id: 7,
-    invoice_number: 'INV-202605-000007',
-    receipt_number: 'RCPT-202605-000007',
-    status: 'issued',
-    document_type: 'invoice',
-    description: 'Storage charge',
-    quantity: 2,
-    unit_price: 500,
-    total_amount: 1000,
-    vat_amount: 70,
-    grand_total: 1070,
-    created_at: '2026-05-26T00:00:00.000Z',
-    due_date: '2026-06-25T00:00:00.000Z',
-    customer_name: 'ACME Logistics',
-    customer_tax_id: '0105559000000',
-    customer_address: '99 Test Road, Bangkok',
-    customer_branch_type: 'head_office',
-    customer_branch_number: '00000',
-    container_number: 'TCLU1234567',
-    yard_name: 'Bangkok Yard',
-    yard_code: 'BKK',
-  }, 'invoice');
 }
 
 export async function buildContinuousPrintPayload(
