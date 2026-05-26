@@ -18,6 +18,12 @@ interface BookingRow {
   container_size: string; container_type: string; eta: string;
   valid_from: string; valid_to: string;
   status: string; seal_number: string; notes: string; customer_name: string;
+  booking_customer_id?: number | null; shipping_line_id?: number | null; forwarder_id?: number | null;
+  shipper_id?: number | null; consignee_id?: number | null; trucking_company_id?: number | null;
+  bill_to_customer_id?: number | null;
+  booking_customer_name?: string | null; shipping_line_name?: string | null; forwarder_name?: string | null;
+  shipper_name?: string | null; consignee_name?: string | null; trucking_company_name?: string | null;
+  bill_to_customer_name?: string | null;
   received_count: number; released_count: number; linked_containers: number;
   pending_count?: number; receive_percent?: number; release_percent?: number;
   utilization_status?: UtilizationStatus;
@@ -31,6 +37,30 @@ interface BookingContainerRow {
   size: string; type: string; container_status: string;
   shipping_line: string; zone_name: string;
 }
+
+interface CustomerOption {
+  customer_id: number;
+  customer_name: string;
+  is_line?: boolean | number;
+  is_trucking?: boolean | number;
+  is_forwarder?: boolean | number;
+  credit_term?: number | null;
+}
+
+type CustomerOptionKind = 'any' | 'line' | 'forwarder' | 'trucking';
+
+const emptyCreateForm = {
+  booking_number: '', booking_type: 'import', vessel_name: '', voyage_number: '',
+  container_count: 1, container_size: '20', container_type: 'GP',
+  eta: '', valid_from: '', valid_to: '', seal_number: '', notes: '',
+  booking_customer_id: null as number | null,
+  shipping_line_id: null as number | null,
+  forwarder_id: null as number | null,
+  shipper_id: null as number | null,
+  consignee_id: null as number | null,
+  trucking_company_id: null as number | null,
+  bill_to_customer_id: null as number | null,
+};
 
 export default function BookingPage() {
   const { session, hasPermission } = useAuth();
@@ -64,11 +94,8 @@ export default function BookingPage() {
   const [addContainerNumber, setAddContainerNumber] = useState('');
 
   // === Create Form ===
-  const [createForm, setCreateForm] = useState({
-    booking_number: '', booking_type: 'import', vessel_name: '', voyage_number: '',
-    container_count: 1, container_size: '20', container_type: 'GP',
-    eta: '', valid_from: '', valid_to: '', seal_number: '', notes: '',
-  });
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [customerList, setCustomerList] = useState<CustomerOption[]>([]);
   const [containerNumbers, setContainerNumbers] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -129,6 +156,24 @@ export default function BookingPage() {
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
   useEffect(() => { fetchSummaryStats(); }, [fetchSummaryStats]);
 
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const res = await fetch('/api/settings/customers');
+        const data = await res.json();
+        setCustomerList(Array.isArray(data) ? data.map((customer: CustomerOption) => ({
+          customer_id: customer.customer_id,
+          customer_name: customer.customer_name,
+          is_line: customer.is_line,
+          is_trucking: customer.is_trucking,
+          is_forwarder: customer.is_forwarder,
+          credit_term: customer.credit_term,
+        })) : []);
+      } catch (err) { console.error(err); }
+    };
+    fetchCustomers();
+  }, []);
+
   // Reset to page 1 when filter/search changes
   useEffect(() => { setBkPage(1); }, [bkFilter, bkSearch]);
 
@@ -179,17 +224,31 @@ export default function BookingPage() {
   const handleCreate = async () => {
     if (!canManageBookings) return;
     if (!createForm.booking_number) return;
+    if (!createForm.booking_customer_id) return;
     setCreateLoading(true); setCreateResult(null);
     try {
       const cns = containerNumbers.split(/[,\n]/).map(s => s.trim()).filter(s => s);
+      const payload = {
+        yard_id: yardId,
+        ...createForm,
+        customer_id: createForm.booking_customer_id || undefined,
+        booking_customer_id: createForm.booking_customer_id || undefined,
+        shipping_line_id: createForm.shipping_line_id || undefined,
+        forwarder_id: createForm.forwarder_id || undefined,
+        shipper_id: createForm.shipper_id || undefined,
+        consignee_id: createForm.consignee_id || undefined,
+        trucking_company_id: createForm.trucking_company_id || undefined,
+        bill_to_customer_id: createForm.bill_to_customer_id || createForm.booking_customer_id || undefined,
+        container_numbers: cns,
+      };
       const res = await fetch('/api/edi/bookings', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yard_id: yardId, ...createForm, container_numbers: cns }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
         setCreateResult({ success: true, message: `✅ สร้าง Booking ${data.booking.booking_number} สำเร็จ` });
-        setCreateForm({ ...createForm, booking_number: '', vessel_name: '', voyage_number: '', seal_number: '', notes: '', eta: '', valid_from: '', valid_to: '' });
+        setCreateForm(emptyCreateForm);
         setContainerNumbers('');
         fetchBookings();
       } else {
@@ -343,6 +402,52 @@ export default function BookingPage() {
   };
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
+  const customerOptions = (kind: CustomerOptionKind) => customerList.filter(customer => {
+    if (kind === 'line') return Boolean(customer.is_line);
+    if (kind === 'forwarder') return Boolean(customer.is_forwarder);
+    if (kind === 'trucking') return Boolean(customer.is_trucking);
+    return true;
+  });
+  const customerName = (customerId?: number | null) => customerList.find(customer => customer.customer_id === customerId)?.customer_name || '';
+  const setPartyId = (field: keyof typeof emptyCreateForm, value: number | null) => {
+    setCreateForm(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'booking_customer_id' && !prev.bill_to_customer_id) next.bill_to_customer_id = value;
+      return next;
+    });
+  };
+  const partySummaryRows = (booking: BookingRow) => [
+    { label: 'Booking Customer', value: booking.booking_customer_name || booking.customer_name },
+    { label: 'Shipping Line', value: booking.shipping_line_name },
+    { label: 'Forwarder', value: booking.forwarder_name },
+    { label: 'Shipper', value: booking.shipper_name },
+    { label: 'Consignee', value: booking.consignee_name },
+    { label: 'Trucking', value: booking.trucking_company_name },
+    { label: 'Bill To', value: booking.bill_to_customer_name || booking.booking_customer_name || booking.customer_name },
+  ];
+  const PartySelect = ({
+    label,
+    value,
+    options,
+    required,
+    onChange,
+  }: {
+    label: string;
+    value: number | null;
+    options: CustomerOption[];
+    required?: boolean;
+    onChange: (value: number | null) => void;
+  }) => (
+    <div>
+      <label className={labelClass}>{label}{required ? ' *' : ''}</label>
+      <select value={value ?? ''} onChange={e => onChange(e.target.value ? Number(e.target.value) : null)} className={inputClass}>
+        <option value="">เลือกบริษัท</option>
+        {options.map(customer => (
+          <option key={customer.customer_id} value={customer.customer_id}>{customer.customer_name}</option>
+        ))}
+      </select>
+    </div>
+  );
 
   const fmtDate = (d: string) => { if (!d) return '—'; const dt = new Date(d); return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`; };
 
@@ -591,10 +696,20 @@ export default function BookingPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                     <div><span className="text-[10px] text-slate-400 uppercase block">เรือ</span><span className="text-slate-700 dark:text-white">{selectedBooking.vessel_name || '—'} {selectedBooking.voyage_number || ''}</span></div>
                     <div><span className="text-[10px] text-slate-400 uppercase block">จำนวนตู้</span><span className="text-slate-700 dark:text-white">{selectedBooking.container_count}x{selectedBooking.container_size}&apos;{selectedBooking.container_type}</span></div>
-                    <div><span className="text-[10px] text-slate-400 uppercase block">ลูกค้า</span><span className="text-slate-700 dark:text-white">{selectedBooking.customer_name || '—'}</span></div>
                     <div><span className="text-[10px] text-slate-400 uppercase block">ETA</span><span className="text-slate-700 dark:text-white">{fmtDate(selectedBooking.eta)}</span></div>
                     <div><span className="text-[10px] text-slate-400 uppercase block">Valid From</span><span className="text-slate-700 dark:text-white">{fmtDate(selectedBooking.valid_from)}</span></div>
                     <div><span className="text-[10px] text-slate-400 uppercase block">Valid To</span><span className="text-slate-700 dark:text-white">{fmtDate(selectedBooking.valid_to)}</span></div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                    <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3">Business Relationship</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                      {partySummaryRows(selectedBooking).map(row => (
+                        <div key={row.label}>
+                          <span className="text-[10px] text-slate-400 uppercase block">{row.label}</span>
+                          <span className="text-slate-700 dark:text-white">{row.value || '—'}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Linked Containers */}
@@ -767,6 +882,26 @@ export default function BookingPage() {
                 <div><label className={labelClass}>Valid To</label><input type="date" value={createForm.valid_to} onChange={e => setCreateForm({ ...createForm, valid_to: e.target.value })} className={inputClass} /></div>
                 <div><label className={labelClass}>เลขซีล</label><input type="text" value={createForm.seal_number} onChange={e => setCreateForm({ ...createForm, seal_number: e.target.value })} className={inputClass} placeholder="SEAL123456" /></div>
               </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-white">Business Relationship</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Party context for portal access grants and EIR visibility</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <PartySelect label="Booking Customer" required value={createForm.booking_customer_id} options={customerOptions('any')} onChange={value => setPartyId('booking_customer_id', value)} />
+                  <PartySelect label="Shipping Line / Container Owner" value={createForm.shipping_line_id} options={customerOptions('line')} onChange={value => setPartyId('shipping_line_id', value)} />
+                  <PartySelect label="Forwarder" value={createForm.forwarder_id} options={customerOptions('forwarder')} onChange={value => setPartyId('forwarder_id', value)} />
+                  <PartySelect label="Shipper" value={createForm.shipper_id} options={customerOptions('any')} onChange={value => setPartyId('shipper_id', value)} />
+                  <PartySelect label="Consignee" value={createForm.consignee_id} options={customerOptions('any')} onChange={value => setPartyId('consignee_id', value)} />
+                  <PartySelect label="Trucking Company" value={createForm.trucking_company_id} options={customerOptions('trucking')} onChange={value => setPartyId('trucking_company_id', value)} />
+                  <PartySelect label="Bill To Customer" value={createForm.bill_to_customer_id} options={customerOptions('any')} onChange={value => setPartyId('bill_to_customer_id', value)} />
+                  {createForm.bill_to_customer_id && (
+                    <div className="flex items-end">
+                      <p className="text-[10px] text-slate-400 pb-2">Billing: {customerName(createForm.bill_to_customer_id)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
               <div><label className={labelClass}>เลขตู้ล่วงหน้า (ถ้ามี — คั่นด้วย , หรือ Enter)</label>
                 <textarea value={containerNumbers} onChange={e => setContainerNumbers(e.target.value)}
                   className="w-full h-20 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white font-mono outline-none focus:border-blue-500"
@@ -774,7 +909,7 @@ export default function BookingPage() {
               </div>
               <div><label className={labelClass}>หมายเหตุ</label><input type="text" value={createForm.notes} onChange={e => setCreateForm({ ...createForm, notes: e.target.value })} className={inputClass} placeholder="หมายเหตุ..." /></div>
 
-              <button onClick={handleCreate} disabled={createLoading || !canManageBookings || !createForm.booking_number}
+              <button onClick={handleCreate} disabled={createLoading || !canManageBookings || !createForm.booking_number || !createForm.booking_customer_id}
                 className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all">
                 {createLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} สร้าง Booking
               </button>
