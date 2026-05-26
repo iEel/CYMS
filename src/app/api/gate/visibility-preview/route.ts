@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requirePermission } from '@/lib/apiAuth';
-import { buildGatePartyGrants, defaultPortalPermissionScope } from '@/lib/portalGrantRules';
+import sql from 'mssql';
+import { buildBookingPartyGrants, buildGatePartyGrants, defaultPortalPermissionScope, type PortalGrantRule } from '@/lib/portalGrantRules';
 
 function positiveIntOrNull(value: unknown) {
   if (typeof value === 'number') {
@@ -39,6 +40,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'container_number_required', message: 'container_number is required' }, { status: 400 });
   }
 
+  const bookingId = positiveIntOrNull(body.booking_id);
+  const bookingGrants: PortalGrantRule[] = [];
+
+  if (bookingId) {
+    const bookingResult = await db.request()
+      .input('bookingId', sql.Int, bookingId)
+      .query(`
+        SELECT booking_id, booking_number, customer_id, booking_customer_id, shipping_line_id,
+          forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id
+        FROM Bookings
+        WHERE booking_id = @bookingId
+      `);
+    const booking = bookingResult.recordset[0];
+    if (booking) {
+      bookingGrants.push(...buildBookingPartyGrants(booking));
+    }
+  }
+
   const grants = buildGatePartyGrants({
     transaction_id: 0,
     eir_number: cleanString(body.eir_number) || null,
@@ -52,15 +71,47 @@ export async function POST(request: NextRequest) {
     validUntil: cleanString(body.valid_until) || null,
   });
 
-  const preview = grants.map(grant => ({
-    customerId: grant.customerId,
-    entityType: grant.entityType,
-    entityRef: grant.entityRef,
-    accessRole: grant.accessRole,
-    sourceTable: grant.sourceTable,
-    validUntil: grant.validUntil || null,
-    permissionScope: grant.permissionScope || defaultPortalPermissionScope(grant.accessRole),
-  }));
+  const allGrants = [...grants, ...bookingGrants];
+  const customerIds = Array.from(new Set(
+    allGrants
+      .map(grant => positiveIntOrNull(grant.customerId))
+      .filter((customerId): customerId is number => Boolean(customerId))
+  ));
+  const customerNames = new Map<number, string>();
+
+  if (customerIds.length > 0) {
+    const customerRequest = db.request();
+    const customerParams = customerIds.map((customerId, index) => {
+      const name = `customerId${index}`;
+      customerRequest.input(name, sql.Int, customerId);
+      return `@${name}`;
+    });
+    const customersResult = await customerRequest.query(`
+      SELECT customer_id, customer_name
+      FROM Customers
+      WHERE customer_id IN (${customerParams.join(', ')})
+    `);
+    for (const customer of customersResult.recordset) {
+      const customerId = positiveIntOrNull(customer.customer_id);
+      if (customerId && customer.customer_name) {
+        customerNames.set(customerId, String(customer.customer_name));
+      }
+    }
+  }
+
+  const preview = allGrants.map(grant => {
+    const customerId = positiveIntOrNull(grant.customerId);
+    return {
+      customerId: grant.customerId,
+      customerName: customerId ? customerNames.get(customerId) || null : null,
+      entityType: grant.entityType,
+      entityRef: grant.entityRef,
+      accessRole: grant.accessRole,
+      sourceTable: grant.sourceTable,
+      validUntil: grant.validUntil || null,
+      permissionScope: grant.permissionScope || defaultPortalPermissionScope(grant.accessRole),
+    };
+  });
 
   return NextResponse.json({ preview });
 }

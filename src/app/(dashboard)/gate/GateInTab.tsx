@@ -61,6 +61,7 @@ interface BookingDerivedContext {
 
 interface PortalVisibilityPreviewRow {
   customerId: number;
+  customerName?: string | null;
   entityType: string;
   entityRef?: string | null;
   accessRole: string;
@@ -459,6 +460,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       signal: controller.signal,
       body: JSON.stringify({
         container_number: normalizedContainerNumber,
+        booking_id: selectedBooking?.booking_id || null,
         container_owner_id: containerOwnerId,
         booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || manualCustomerId,
         billing_customer_id: billingCustomerId,
@@ -1176,7 +1178,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                 <p className="text-xs text-slate-400">ยังไม่มี party ที่จะได้รับสิทธิ์</p>
               ) : visibilityPreview.map((row, index) => (
                 <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
-                  <p className="font-semibold text-slate-700 dark:text-slate-200">Customer #{row.customerId}</p>
+                  <p className="font-semibold text-slate-700 dark:text-slate-200">{row.customerName || `Customer #${row.customerId}`}</p>
                   <p className="mt-0.5 text-slate-400">{row.entityType} · {row.accessRole}</p>
                   <p className="mt-1 text-[10px] text-slate-400">Grade default: hidden</p>
                 </div>
