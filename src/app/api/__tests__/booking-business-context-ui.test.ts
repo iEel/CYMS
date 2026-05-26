@@ -48,4 +48,22 @@ describe('Booking business relationship UI', () => {
     expect(paginatedListQuery?.[1]).toMatch(/ORDER\s+BY\s+b\.created_at\s+DESC/);
     expect(paginatedListQuery?.[1]).toMatch(/OFFSET\s+@offset\s+ROWS\s+FETCH\s+NEXT\s+@limit\s+ROWS\s+ONLY/);
   });
+
+  it('bookingSummarySelect preserves legacy booking fields used by list and detail UI', () => {
+    const summarySelect = bookingRoute.match(/function bookingSummarySelect\(\) \{\s*return `([\s\S]*?)`;\s*\}/);
+
+    [
+      'b.yard_id',
+      'b.eta',
+      'b.valid_from',
+      'b.valid_to',
+      'b.seal_number',
+      'b.notes',
+      'b.created_by_customer_user_id',
+      'b.created_at',
+      'b.updated_at',
+    ].forEach(field => {
+      expect(summarySelect?.[1]).toContain(field);
+    });
+  });
 });

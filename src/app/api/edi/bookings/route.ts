@@ -8,7 +8,8 @@ import { ensureReeferBookingPolicy } from '@/lib/reeferBookingPolicy';
 function bookingSummarySelect() {
   return `
     b.booking_number, b.booking_id, b.vessel_name, b.voyage_number,
-    b.booking_type, b.status, b.customer_id, c.customer_name,
+    b.booking_type, b.status, b.yard_id, b.customer_id, c.customer_name,
+    b.eta, b.valid_from, b.valid_to, b.seal_number, b.notes,
     b.booking_customer_id,
     b.shipping_line_id,
     b.forwarder_id,
@@ -16,6 +17,7 @@ function bookingSummarySelect() {
     b.consignee_id,
     b.trucking_company_id,
     b.bill_to_customer_id,
+    b.created_by_customer_user_id,
     bookingCustomer.customer_name AS booking_customer_name,
     shippingLine.customer_name AS shipping_line_name,
     forwarder.customer_name AS forwarder_name,
@@ -24,6 +26,7 @@ function bookingSummarySelect() {
     trucking.customer_name AS trucking_company_name,
     billTo.customer_name AS bill_to_customer_name,
     b.container_count, b.container_size, b.container_type,
+    b.created_at, b.updated_at,
     (SELECT COUNT(*) FROM BookingContainers bc2 WHERE bc2.booking_id = b.booking_id) AS linked_containers,
     (SELECT COUNT(*) FROM BookingContainers bc3 WHERE bc3.booking_id = b.booking_id AND bc3.status IN ('received', 'released')) AS received_count,
     (SELECT COUNT(*) FROM BookingContainers bc4 WHERE bc4.booking_id = b.booking_id AND bc4.status = 'released') AS released_count,
