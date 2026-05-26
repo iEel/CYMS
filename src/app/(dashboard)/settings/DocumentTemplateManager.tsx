@@ -287,7 +287,7 @@ export default function DocumentTemplateManager() {
     }
   };
 
-  const realPreview = (testPrint = false) => {
+  const realPreview = () => {
     if (!invoiceId.trim()) {
       setError('ระบุ invoice id ก่อน preview เอกสารจริง');
       return;
@@ -298,7 +298,6 @@ export default function DocumentTemplateManager() {
       preview: 'real',
       mode: config.mode,
       copyMode: config.copy_mode,
-      ...(testPrint ? { testPrint: '1' } : {}),
     });
   };
 
@@ -409,7 +408,7 @@ export default function DocumentTemplateManager() {
               className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700">
               <ExternalLink size={14} /> Sample preview
             </button>
-            <button type="button" onClick={() => realPreview(true)}
+            <button type="button" onClick={() => openPrintPreview({ preview: 'sample', mode: config.mode, copyMode: config.copy_mode, testPrint: '1' })}
               className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900">
               <Printer size={14} /> Test print
             </button>
@@ -422,7 +421,7 @@ export default function DocumentTemplateManager() {
               placeholder="Invoice ID for real preview"
               className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
-            <button type="button" onClick={() => realPreview(false)}
+            <button type="button" onClick={realPreview}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:text-slate-200">
               Real preview
             </button>

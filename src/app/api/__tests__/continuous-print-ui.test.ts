@@ -6,6 +6,7 @@ describe('continuous print UI', () => {
   const pagePath = path.join(root, 'src/app/billing/print/continuous/page.tsx');
   const componentPath = path.join(root, 'src/components/billing/ContinuousTaxReceipt.tsx');
   const settingsPath = path.join(root, 'src/app/(dashboard)/settings/page.tsx');
+  const templateManagerPath = path.join(root, 'src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
   const previewRoutePath = path.join(root, 'src/app/api/document-templates/preview/route.ts');
   const billingPagePath = path.join(root, 'src/app/(dashboard)/billing/page.tsx');
   const billingClearanceTabPath = path.join(root, 'src/app/(dashboard)/billing/BillingClearanceTab.tsx');
@@ -68,8 +69,16 @@ describe('continuous print UI', () => {
     const source = fs.readFileSync(pagePath, 'utf8');
 
     expect(source).toContain('isSamplePreview');
-    expect(source).toMatch(/if \(!realDocumentId \|\| testPrint \|\| isSamplePreview\)/);
+    expect(source).toMatch(/if \(!realDocumentId \|\| isSamplePreview\)/);
+    expect(source).not.toMatch(/if \(!realDocumentId \|\| testPrint \|\| isSamplePreview\)/);
     expect(source).toContain("searchParams.get('preview') === 'sample'");
     expect(source).toContain("payload.document.document_type === 'sample'");
+  });
+
+  it('opens settings test prints as sample-only without a real invoice id', () => {
+    const source = fs.readFileSync(templateManagerPath, 'utf8');
+
+    expect(source).toContain("openPrintPreview({ preview: 'sample', mode: config.mode, copyMode: config.copy_mode, testPrint: '1' })");
+    expect(source).not.toContain('realPreview(true)');
   });
 });

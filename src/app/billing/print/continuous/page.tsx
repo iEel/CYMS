@@ -104,6 +104,7 @@ function ContinuousPrintContent() {
   const realDocumentId = isSamplePreview
     ? null
     : positiveIntFrom(payload.document.invoice_id) || positiveIntFrom(searchParams.get('id'));
+  const effectiveTestPrint = testPrint && !realDocumentId;
 
   useEffect(() => {
     let cancelled = false;
@@ -178,7 +179,7 @@ function ContinuousPrintContent() {
 
   async function handlePrint() {
     setPrintError('');
-    if (!realDocumentId || testPrint || isSamplePreview) {
+    if (!realDocumentId || isSamplePreview) {
       window.print();
       return;
     }
@@ -284,7 +285,7 @@ function ContinuousPrintContent() {
             copyMode={copyMode}
             copyIndex={copyIndex}
             reprintLabel={reprintLabel}
-            testPrint={testPrint}
+            testPrint={effectiveTestPrint}
           />
         )}
       </main>

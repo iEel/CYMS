@@ -10,7 +10,7 @@ import { POST as testPrintTemplate } from '../document-templates/test-print/rout
 import { POST as printLogTemplate } from '../document-templates/print-log/route';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
-import { requireAnyPermission, requirePermission } from '@/lib/apiAuth';
+import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplates';
 import { buildContinuousPrintPayload, buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrint';
 import { nextDocumentNumber } from '@/lib/documentNumber';
@@ -26,6 +26,7 @@ jest.mock('@/lib/audit', () => ({
 jest.mock('@/lib/apiAuth', () => ({
   requireAnyPermission: jest.fn().mockResolvedValue({ userId: 7, role: 'yard_manager' }),
   requirePermission: jest.fn().mockResolvedValue({ userId: 7, role: 'yard_manager' }),
+  requireYardAccess: jest.fn().mockResolvedValue({ userId: 7, role: 'yard_manager' }),
 }));
 
 jest.mock('@/lib/billingContinuousPrint', () => ({
@@ -49,6 +50,7 @@ const mockedGetDb = getDb as jest.Mock;
 const mockedLogAudit = logAudit as jest.Mock;
 const mockedRequireAnyPermission = requireAnyPermission as jest.Mock;
 const mockedRequirePermission = requirePermission as jest.Mock;
+const mockedRequireYardAccess = requireYardAccess as jest.Mock;
 const mockedBuildContinuousPrintPayload = buildContinuousPrintPayload as jest.Mock;
 const mockedBuildSampleContinuousPrintPayload = buildSampleContinuousPrintPayload as jest.Mock;
 const mockedNextDocumentNumber = nextDocumentNumber as jest.Mock;
@@ -83,6 +85,7 @@ describe('document template API', () => {
     jest.clearAllMocks();
     mockedRequireAnyPermission.mockResolvedValue({ userId: 7, role: 'yard_manager' });
     mockedRequirePermission.mockResolvedValue({ userId: 7, role: 'yard_manager' });
+    mockedRequireYardAccess.mockResolvedValue({ userId: 7, role: 'yard_manager' });
     mockedBuildContinuousPrintPayload.mockResolvedValue({
       document: { invoice_id: 77, document_type: 'tax_invoice_receipt' },
       lines: [],
@@ -480,6 +483,7 @@ describe('document template API', () => {
     expect(response.status).toBe(200);
     expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'settings.manage', expect.any(String));
     expect(mockedRequireAnyPermission).not.toHaveBeenCalled();
+    expect(mockedRequireYardAccess).not.toHaveBeenCalled();
     expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
     expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
@@ -504,7 +508,10 @@ describe('document template API', () => {
 
   it('returns real invoice preview payload without allocating document numbers', async () => {
     const config = buildDefaultContinuousTemplateConfig();
-    const db = makeDb([{ recordset: [{ config_json: JSON.stringify(config) }] }]);
+    const db = makeDb([
+      { recordset: [{ invoice_id: 77, yard_id: 5, status: 'issued' }] },
+      { recordset: [{ config_json: JSON.stringify(config) }] },
+    ]);
     mockedGetDb.mockResolvedValue(db);
     const request = makeRequest('/api/document-templates/preview?id=77&type=tax_invoice_receipt&preview=real');
 
@@ -521,6 +528,7 @@ describe('document template API', () => {
       'gate.out',
     ], expect.any(String));
     expect(mockedRequirePermission).not.toHaveBeenCalled();
+    expect(mockedRequireYardAccess).toHaveBeenCalledWith(request, db, 5);
     expect(mockedBuildContinuousPrintPayload).toHaveBeenCalledWith(db, {
       invoiceId: 77,
       type: 'tax_invoice_receipt',
@@ -540,6 +548,22 @@ describe('document template API', () => {
     }));
     expect(body.payload.document.invoice_id).toBe(77);
     expect(body.config.print_policy.reprint_label_template).toBe('พิมพ์ซ้ำครั้งที่ {reprint_count}');
+  });
+
+  it('rejects real invoice preview when the invoice does not exist', async () => {
+    const db = makeDb([{ recordset: [] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/preview?id=999&type=tax_invoice_receipt&preview=real');
+
+    const response = await previewTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body.error).toBe('invoice not found');
+    expect(mockedRequireAnyPermission).toHaveBeenCalled();
+    expect(mockedRequireYardAccess).not.toHaveBeenCalled();
+    expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
+    expect(mockedLogAudit).not.toHaveBeenCalled();
   });
 
   it('returns sample test print payload with settings permission and no document numbering', async () => {
@@ -612,6 +636,8 @@ describe('document template API', () => {
 
   it('records document print logs through the dedicated print-log route', async () => {
     const db = makeDb([
+      { recordset: [{ invoice_id: 77, yard_id: 5, invoice_number: 'INV-DB-77', receipt_number: 'RCT-DB-77', status: 'paid' }] },
+      { recordset: [{ template_id: 12, version_id: 22 }] },
       { recordset: [{ success: true, print_no: 1, is_reprint: false, reprint_count: 0 }] },
     ]);
     mockedGetDb.mockResolvedValue(db);
@@ -642,15 +668,73 @@ describe('document template API', () => {
       ['settings.manage', 'billing.invoice.create', 'billing.payment.receive', 'gate.in', 'gate.out', 'reports.view'],
       expect.any(String),
     );
+    expect(mockedRequireYardAccess).toHaveBeenCalledWith(request, db, 5);
     expect(db.queries.join('\n')).toMatch(/INSERT\s+INTO\s+DocumentPrintLogs/i);
     expect(db.queries.join('\n')).toMatch(/INSERT\s+INTO\s+DocumentPrintSnapshots/i);
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'documentNo', value: 'INV-DB-77' },
+    ]));
     expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
       userId: 7,
       action: 'document_print',
       entityType: 'tax_invoice_receipt',
       entityId: 77,
+      details: expect.objectContaining({
+        document_no: 'INV-DB-77',
+      }),
     }));
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+  });
+
+  it('rejects print-log for unknown invoices before writing', async () => {
+    const db = makeDb([{ recordset: [] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/print-log', {
+      method: 'POST',
+      body: JSON.stringify({
+        document_type: 'tax_invoice_receipt',
+        document_id: 999,
+        document_no: 'CLIENT-FORGED',
+        template_code: 'TAX_CONTINUOUS',
+        template_version: 2,
+      }),
+    });
+
+    const response = await printLogTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body.error).toBe('invoice not found');
+    expect(mockedRequireYardAccess).not.toHaveBeenCalled();
+    expect(db.queries.join('\n')).not.toMatch(/INSERT\s+INTO\s+DocumentPrintLogs/i);
+    expect(mockedLogAudit).not.toHaveBeenCalled();
+  });
+
+  it('rejects print-log for unknown templates before writing', async () => {
+    const db = makeDb([
+      { recordset: [{ invoice_id: 77, yard_id: 5, invoice_number: 'INV-DB-77', receipt_number: null, status: 'issued' }] },
+      { recordset: [] },
+    ]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/print-log', {
+      method: 'POST',
+      body: JSON.stringify({
+        document_type: 'tax_invoice_receipt',
+        document_id: 77,
+        document_no: 'CLIENT-FORGED',
+        template_code: 'UNKNOWN',
+        template_version: 2,
+      }),
+    });
+
+    const response = await printLogTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('unknown or inactive template');
+    expect(mockedRequireYardAccess).toHaveBeenCalledWith(request, db, 5);
+    expect(db.queries.join('\n')).not.toMatch(/INSERT\s+INTO\s+DocumentPrintLogs/i);
+    expect(mockedLogAudit).not.toHaveBeenCalled();
   });
 
   it('rejects unsupported print-log document types without writing', async () => {
@@ -678,6 +762,8 @@ describe('document template API', () => {
   it('does not fail print-log response when audit throws after successful write', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const db = makeDb([
+      { recordset: [{ invoice_id: 77, yard_id: 5, invoice_number: 'INV-DB-77', receipt_number: 'RCT-DB-77', status: 'paid' }] },
+      { recordset: [{ template_id: 12, version_id: 22 }] },
       { recordset: [{ success: true, print_no: 2, is_reprint: true, reprint_count: 1 }] },
     ]);
     try {

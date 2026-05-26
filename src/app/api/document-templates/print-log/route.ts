@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
-import { requireAnyPermission } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 import { recordDocumentPrint } from '@/lib/documentPrintLog';
 
 const PRINT_LOG_PERMISSIONS = [
@@ -33,6 +34,14 @@ type PrintLogBody = {
   show_reprint_label?: unknown;
   reprint_label_template?: unknown;
   require_reprint_reason?: unknown;
+};
+
+type InvoicePrintScope = {
+  invoice_id: number;
+  yard_id: number;
+  invoice_number?: string | null;
+  receipt_number?: string | null;
+  status?: string | null;
 };
 
 function cleanString(value: unknown): string {
@@ -70,6 +79,67 @@ async function parseBody(request: NextRequest): Promise<PrintLogBody | NextRespo
   }
 }
 
+async function invoicePrintScope(
+  db: Awaited<ReturnType<typeof getDb>>,
+  documentId: number,
+): Promise<InvoicePrintScope | NextResponse> {
+  const result = await db.request()
+    .input('invoiceId', sql.Int, documentId)
+    .query<InvoicePrintScope>(`
+      SELECT TOP 1
+        invoice_id,
+        yard_id,
+        invoice_number,
+        receipt_number,
+        status
+      FROM Invoices
+      WHERE invoice_id = @invoiceId
+    `);
+
+  const invoice = result.recordset[0];
+  if (!invoice) return NextResponse.json({ error: 'invoice not found' }, { status: 404 });
+  return invoice;
+}
+
+async function validateTemplateVersion(
+  db: Awaited<ReturnType<typeof getDb>>,
+  documentType: string,
+  templateCode: string,
+  templateVersion: number,
+): Promise<boolean> {
+  const result = await db.request()
+    .input('documentType', sql.NVarChar(50), documentType)
+    .input('templateCode', sql.NVarChar(80), templateCode)
+    .input('templateVersion', sql.Int, templateVersion)
+    .query<{ template_id: number }>(`
+      SELECT TOP 1 t.template_id
+      FROM DocumentTemplates t
+      JOIN DocumentTemplateVersions v
+        ON v.template_id = t.template_id
+       AND v.version_no = @templateVersion
+      WHERE t.template_code = @templateCode
+        AND ISNULL(t.status, '') <> 'inactive'
+        AND ISNULL(v.status, '') <> 'inactive'
+        AND v.version_no = t.current_version_no
+        AND (
+          t.document_type = @documentType
+          OR (
+            @documentType IN ('receipt', 'tax_invoice_receipt')
+            AND t.document_type IN ('receipt', 'tax_invoice_receipt')
+          )
+        )
+    `);
+
+  return result.recordset.length > 0;
+}
+
+function documentNoFor(documentType: string, invoice: InvoicePrintScope): string | null {
+  const invoiceNumber = optionalString(invoice.invoice_number);
+  const receiptNumber = optionalString(invoice.receipt_number);
+  if (documentType === 'receipt') return receiptNumber || invoiceNumber;
+  return invoiceNumber || receiptNumber;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const db = await getDb();
@@ -95,10 +165,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'unsupported document_type' }, { status: 400 });
     }
 
+    const invoice = await invoicePrintScope(db, documentId);
+    if (invoice instanceof NextResponse) return invoice;
+
+    const yardAccess = await requireYardAccess(request, db, invoice.yard_id);
+    if (yardAccess instanceof NextResponse) return yardAccess;
+
+    const templateIsValid = await validateTemplateVersion(db, documentType, templateCode, templateVersion);
+    if (!templateIsValid) {
+      return NextResponse.json({ error: 'unknown or inactive template' }, { status: 400 });
+    }
+
+    const documentNo = documentNoFor(documentType, invoice);
+
     const result = await recordDocumentPrint(db, {
       documentType,
       documentId,
-      documentNo: optionalString(body.document_no),
+      documentNo,
       templateCode,
       templateVersion,
       reprintReason: optionalString(body.reprint_reason),
@@ -123,7 +206,7 @@ export async function POST(request: NextRequest) {
         details: {
           document_type: documentType,
           document_id: documentId,
-          document_no: optionalString(body.document_no),
+          document_no: documentNo,
           template_code: templateCode,
           template_version: templateVersion,
           print_no: result.print_no,

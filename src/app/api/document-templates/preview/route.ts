@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
-import { requireAnyPermission, requirePermission } from '@/lib/apiAuth';
+import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
 import {
   applyStoredPrintPolicy,
   buildDefaultContinuousTemplateConfig,
@@ -31,6 +31,23 @@ const REAL_INVOICE_PREVIEW_PERMISSIONS = [
 function parseInvoiceId(value: string | null) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function invoicePreviewScope(
+  db: Awaited<ReturnType<typeof getDb>>,
+  invoiceId: number,
+): Promise<{ yard_id: number; status?: string | null } | NextResponse> {
+  const result = await db.request()
+    .input('invoiceId', sql.Int, invoiceId)
+    .query<{ yard_id?: number; status?: string | null }>(`
+      SELECT TOP 1 yard_id, status
+      FROM Invoices
+      WHERE invoice_id = @invoiceId
+    `);
+
+  const row = result.recordset[0];
+  if (!row) return NextResponse.json({ error: 'invoice not found' }, { status: 404 });
+  return { yard_id: Number(row.yard_id), status: row.status };
 }
 
 function modeFrom(value: string | null): DocumentTemplateMode | null {
@@ -113,6 +130,14 @@ export async function GET(request: NextRequest) {
     const documentType = searchParams.get('type') || 'tax_invoice_receipt';
     const mode = modeFrom(searchParams.get('mode'));
     const copyMode = copyModeFrom(searchParams.get('copyMode'));
+    if (!useSample && invoiceId) {
+      const invoiceScope = await invoicePreviewScope(db, invoiceId);
+      if (invoiceScope instanceof NextResponse) return invoiceScope;
+
+      const yardAccess = await requireYardAccess(request, db, invoiceScope.yard_id);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
+
     const template = await currentTemplateConfig(db, documentType);
     const config = applyPreviewOverrides(template.config, mode, copyMode);
     const payload = useSample
