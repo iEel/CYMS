@@ -51,13 +51,23 @@ export default function PortalReeferPage() {
   const [selected, setSelected] = useState<PortalReeferItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/portal/reefer');
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || 'ไม่สามารถเปิดหน้าตู้เย็นได้');
+        setItems([]);
+        return;
+      }
+      setError(null);
       setItems(data.items || []);
+    } catch {
+      setError('ไม่สามารถเปิดหน้าตู้เย็นได้');
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -101,6 +111,12 @@ export default function PortalReeferPage() {
         <Summary label="มีผลตรวจล่าสุด" value={items.filter(item => item.latest_checked_at).length} tone="emerald" />
         <Summary label="นอกช่วงอุณหภูมิ" value={outOfRange} tone="rose" />
       </div>
+
+      {error && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+          {error}
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         {loading ? (

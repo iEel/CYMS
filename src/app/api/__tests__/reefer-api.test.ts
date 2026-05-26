@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 import { GET as getChecks, POST as postCheck } from '../reefer/checks/route';
 import { GET as getPortalReefer } from '../portal/reefer/route';
 import { getDb } from '@/lib/db';
@@ -28,6 +30,20 @@ function makeDb() {
     queries.push(statement);
     if (statement.includes('FROM Users')) {
       return Promise.resolve({ recordset: [{ customer_portal_role: 'customer_admin' }] });
+    }
+    if (statement.includes('portal_default_permission_scope')) {
+      return Promise.resolve({
+        recordset: [{
+          portal_enabled: true,
+          portal_default_permission_scope: JSON.stringify({
+            modules: { reefer: true },
+            reefer: { show_photo_evidence: true },
+          }),
+        }],
+      });
+    }
+    if (statement.includes('SUM(CASE WHEN c.container_id IS NOT NULL')) {
+      return Promise.resolve({ recordset: [{ rf_count: 1, reefer_grant_count: 0 }] });
     }
     if (statement.includes('FROM Containers c') && statement.includes('c.container_id = @containerId')) {
       return Promise.resolve({
@@ -189,6 +205,15 @@ describe('reefer monitoring API', () => {
 describe('GET /api/portal/reefer', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('requires the portal reefer action and customer reefer module before returning RF data', () => {
+    const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/portal/reefer/route.ts'), 'utf8');
+
+    expect(source).toContain("'portal.reefer.view'");
+    expect(source).toContain('parsePortalScope');
+    expect(source).toContain('resolveReeferCapability');
+    expect(source).toContain('show_photo_evidence');
   });
 
   it('uses PortalEntityAccess grants as the portal visibility policy', async () => {

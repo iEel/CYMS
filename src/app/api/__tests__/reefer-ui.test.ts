@@ -44,5 +44,7 @@ describe('Reefer monitoring UI', () => {
     expect(source).toContain('/api/portal/reefer');
     expect(source).toContain('read-only');
     expect(source).toContain('ประวัติตรวจอุณหภูมิ');
+    expect(source).toContain('setError');
+    expect(source).toContain('ไม่สามารถเปิดหน้าตู้เย็นได้');
   });
 });

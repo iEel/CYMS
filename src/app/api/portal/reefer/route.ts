@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { getPortalCustomerId, portalContainerVisibilitySql } from '@/lib/portalAccess';
 import { requirePortalAction } from '@/lib/customerPortalPermissions';
+import { parsePortalScope, resolveReeferCapability } from '@/lib/portalCapabilities';
 
 function parsePositiveInt(value: string | null) {
   const parsed = Number(value);
@@ -15,8 +16,62 @@ export async function GET(request: NextRequest) {
     if (cid instanceof NextResponse) return cid;
 
     const db = await getDb();
-    const portalActor = await requirePortalAction(request, db, 'portal.container.view');
+    const portalActor = await requirePortalAction(request, db, 'portal.reefer.view');
     if (portalActor instanceof NextResponse) return portalActor;
+
+    const customerResult = await db.request()
+      .input('cid', sql.Int, cid)
+      .query(`
+        SELECT ISNULL(portal_enabled, 1) AS portal_enabled, portal_default_permission_scope
+        FROM Customers
+        WHERE customer_id = @cid
+      `);
+    const customerRow = customerResult.recordset[0];
+    const portalScope = parsePortalScope(customerRow?.portal_default_permission_scope);
+
+    const accessCounts = await db.request()
+      .input('cid', sql.Int, cid)
+      .query(`
+        SELECT
+          SUM(CASE WHEN c.container_id IS NOT NULL THEN 1 ELSE 0 END) AS rf_count,
+          (
+            SELECT COUNT(1)
+            FROM PortalEntityAccess pea
+            WHERE pea.customer_id = @cid
+              AND pea.entity_type IN ('reefer_check', 'reefer_exception')
+              AND pea.is_active = 1
+              AND (pea.valid_from IS NULL OR pea.valid_from <= GETDATE())
+              AND (pea.valid_until IS NULL OR pea.valid_until >= GETDATE())
+          ) AS reefer_grant_count
+        FROM Containers c
+        WHERE c.type = 'RF'
+          AND ${portalContainerVisibilitySql('c')}
+      `);
+    const accessRow = accessCounts.recordset[0] || {};
+    const capability = resolveReeferCapability({
+      portalEnabled: customerRow?.portal_enabled !== false && customerRow?.portal_enabled !== 0,
+      scope: portalScope,
+      role: portalActor.customerPortalRole,
+      counts: {
+        rfCount: Number(accessRow.rf_count || 0),
+        reeferGrantCount: Number(accessRow.reefer_grant_count || 0),
+      },
+    });
+
+    if (!capability.visible && capability.reason !== 'no_reefer_access') {
+      return NextResponse.json({
+        error: 'ไม่เปิดใช้งานเมนูตู้เย็นสำหรับบัญชีนี้',
+        items: [],
+        history: [],
+        capability,
+      }, { status: 403 });
+    }
+
+    if (capability.reason === 'no_reefer_access') {
+      return NextResponse.json({ items: [], history: [], capability });
+    }
+
+    const canShowPhotoEvidence = portalScope.reefer?.show_photo_evidence !== false;
 
     const { searchParams } = new URL(request.url);
     const containerId = parsePositiveInt(searchParams.get('container_id'));
@@ -79,7 +134,16 @@ export async function GET(request: NextRequest) {
         ORDER BY rc.checked_at DESC, rc.check_id DESC
       `) : { recordset: [] };
 
-    return NextResponse.json({ items: result.recordset, history: historyResult.recordset });
+    const items = result.recordset.map(row => ({
+      ...row,
+      latest_photo_url: canShowPhotoEvidence ? row.latest_photo_url : null,
+    }));
+    const history = historyResult.recordset.map(row => ({
+      ...row,
+      photo_url: canShowPhotoEvidence ? row.photo_url : null,
+    }));
+
+    return NextResponse.json({ items, history, capability });
   } catch (error) {
     console.error('❌ Portal reefer error:', error);
     return NextResponse.json({ error: 'ไม่สามารถโหลดข้อมูลตู้เย็นได้' }, { status: 500 });
