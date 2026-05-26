@@ -12,7 +12,7 @@ function field(input: Omit<DocumentTemplateField, 'visible' | 'layer' | 'locked'
   return {
     ...input,
     visible: true,
-    layer: 'content',
+    layer: 'data',
     locked: false,
   };
 }
@@ -22,6 +22,9 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
     paper: {
       width_mm: 241.3,
       height_mm: 139.7,
+      top_offset_mm: 0,
+      left_offset_mm: 0,
+      print_scale: 1,
       margin_top_mm: 6,
       margin_right_mm: 6,
       margin_bottom_mm: 6,
@@ -266,6 +269,9 @@ export function validateTemplateConfig(config: DocumentTemplateConfig): { valid:
 
   if (config.paper.width_mm <= 0) errors.push('paper.width_mm must be greater than 0');
   if (config.paper.height_mm <= 0) errors.push('paper.height_mm must be greater than 0');
+  if (config.paper.top_offset_mm < 0) errors.push('paper.top_offset_mm must be 0 or greater');
+  if (config.paper.left_offset_mm < 0) errors.push('paper.left_offset_mm must be 0 or greater');
+  if (config.paper.print_scale <= 0) errors.push('paper.print_scale must be greater than 0');
   if (!['full', 'overlay'].includes(config.mode)) errors.push('mode must be full or overlay');
   if (!['carbonless', 'separate'].includes(config.copy_mode)) errors.push('copy_mode must be carbonless or separate');
   if (config.copy_labels.length === 0) errors.push('copy_labels must contain at least one label');

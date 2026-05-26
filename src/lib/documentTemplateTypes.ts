@@ -3,11 +3,14 @@ export type DocumentTemplateCopyMode = 'carbonless' | 'separate';
 
 export type DocumentTemplateTextAlign = 'left' | 'center' | 'right';
 export type DocumentTemplateFontWeight = 'normal' | 'medium' | 'semibold' | 'bold';
-export type DocumentTemplateFieldLayer = 'background' | 'content' | 'overlay';
+export type DocumentTemplateFieldLayer = 'form' | 'data' | 'calibration';
 
 export interface DocumentTemplatePaper {
   width_mm: number;
   height_mm: number;
+  top_offset_mm: number;
+  left_offset_mm: number;
+  print_scale: number;
   margin_top_mm: number;
   margin_right_mm: number;
   margin_bottom_mm: number;
