@@ -68,19 +68,22 @@ function ContinuousPrintContent() {
   const copyIndex = copyIndexFrom(searchParams.get('copyIndex'));
   const testPrint = booleanFrom(searchParams.get('testPrint'));
   const reprintLabel = booleanFrom(searchParams.get('preview')) ? 'PREVIEW' : null;
+  const hasInvoiceId = Boolean(searchParams.get('id'));
   const fallback = useMemo(() => fallbackPreview(mode, copyMode), [mode, copyMode]);
   const [payload, setPayload] = useState<ContinuousPrintPayload>(fallback.payload);
   const [config, setConfig] = useState<DocumentTemplateConfig>(fallback.config);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'fallback' | 'error'>('loading');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadPreview() {
       setStatus('loading');
+      setErrorMessage('');
       try {
         const response = await fetch(withPreviewParams(searchParams));
-        if (!response.ok) throw new Error('Preview route unavailable');
+        if (!response.ok) throw new Error(`Preview route unavailable (${response.status})`);
 
         const data = await response.json() as PreviewResponse;
         const nextPayload = data.payload || data.preview?.payload;
@@ -92,11 +95,16 @@ function ContinuousPrintContent() {
           setConfig({ ...nextConfig, mode, copy_mode: copyMode });
           setStatus('ready');
         }
-      } catch {
+      } catch (error) {
         if (!cancelled) {
-          setPayload(fallback.payload);
-          setConfig(fallback.config);
-          setStatus('fallback');
+          if (hasInvoiceId) {
+            setErrorMessage(error instanceof Error ? error.message : 'Preview route unavailable');
+            setStatus('error');
+          } else {
+            setPayload(fallback.payload);
+            setConfig(fallback.config);
+            setStatus('fallback');
+          }
         }
       }
     }
@@ -105,7 +113,7 @@ function ContinuousPrintContent() {
     return () => {
       cancelled = true;
     };
-  }, [copyMode, fallback, mode, searchParams]);
+  }, [copyMode, fallback, hasInvoiceId, mode, searchParams]);
 
   return (
     <>
@@ -149,24 +157,37 @@ function ContinuousPrintContent() {
         <div>
           <strong>Continuous Tax Invoice / Receipt</strong>
           <div className="continuous-print-status">
-            {status === 'loading' ? 'Loading preview...' : status === 'fallback' ? 'Using sample preview' : 'Preview ready'}
+            {status === 'loading'
+              ? 'Loading preview...'
+              : status === 'fallback'
+                ? 'Using sample preview'
+                : status === 'error'
+                  ? 'Preview failed'
+                  : 'Preview ready'}
           </div>
         </div>
-        <button type="button" onClick={() => window.print()} aria-label="Print continuous receipt">
+        <button type="button" onClick={() => window.print()} disabled={status === 'error'} aria-label="Print continuous receipt">
           <Printer size={16} />
           พิมพ์
         </button>
       </div>
       <main className="continuous-print-shell">
-        <ContinuousTaxReceipt
-          payload={payload}
-          config={config}
-          mode={mode}
-          copyMode={copyMode}
-          copyIndex={copyIndex}
-          reprintLabel={reprintLabel}
-          testPrint={testPrint}
-        />
+        {status === 'error' ? (
+          <div className="mx-auto max-w-xl bg-white p-6 text-slate-800 shadow">
+            <h1 className="text-lg font-bold">ไม่สามารถโหลดข้อมูลเอกสารได้</h1>
+            <p className="mt-2 text-sm text-slate-500">{errorMessage || 'กรุณาตรวจสอบสิทธิ์หรือข้อมูลใบแจ้งหนี้'}</p>
+          </div>
+        ) : (
+          <ContinuousTaxReceipt
+            payload={payload}
+            config={config}
+            mode={mode}
+            copyMode={copyMode}
+            copyIndex={copyIndex}
+            reprintLabel={reprintLabel}
+            testPrint={testPrint}
+          />
+        )}
       </main>
     </>
   );

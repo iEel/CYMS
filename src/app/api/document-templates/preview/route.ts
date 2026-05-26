@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
-import { requirePermission } from '@/lib/apiAuth';
+import { requireAnyPermission, requirePermission } from '@/lib/apiAuth';
 import {
   applyStoredPrintPolicy,
   buildDefaultContinuousTemplateConfig,
@@ -18,6 +18,14 @@ import type {
 } from '@/lib/documentTemplateTypes';
 
 const SETTINGS_MESSAGE = 'คุณไม่มีสิทธิ์ preview เทมเพลตเอกสาร';
+const REAL_INVOICE_PREVIEW_PERMISSIONS = [
+  'settings.manage',
+  'billing.invoice.create',
+  'billing.payment.receive',
+  'reports.view',
+  'gate.in',
+  'gate.out',
+];
 
 function parseInvoiceId(value: string | null) {
   const parsed = Number(value);
@@ -78,16 +86,18 @@ function applyPreviewOverrides(
 export async function GET(request: NextRequest) {
   try {
     const db = await getDb();
-    const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
-    if (actor instanceof NextResponse) return actor;
-
     const searchParams = request.nextUrl.searchParams;
     const invoiceId = parseInvoiceId(searchParams.get('id'));
+    const useSample = searchParams.get('preview') === 'sample' || !invoiceId;
+    const actor = useSample
+      ? await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE)
+      : await requireAnyPermission(request, db, REAL_INVOICE_PREVIEW_PERMISSIONS, SETTINGS_MESSAGE);
+    if (actor instanceof NextResponse) return actor;
+
     const documentType = searchParams.get('type') || 'tax_invoice_receipt';
     const mode = modeFrom(searchParams.get('mode'));
     const copyMode = copyModeFrom(searchParams.get('copyMode'));
     const config = applyPreviewOverrides(await currentTemplateConfig(db, documentType), mode, copyMode);
-    const useSample = searchParams.get('preview') === 'sample' || !invoiceId;
     const payload = useSample
       ? buildSampleContinuousPrintPayload()
       : await buildContinuousPrintPayload(db, { invoiceId, type: documentType });

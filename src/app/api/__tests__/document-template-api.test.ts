@@ -8,7 +8,7 @@ import { POST as deactivateTemplate } from '../document-templates/[templateId]/d
 import { GET as previewTemplate } from '../document-templates/preview/route';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
-import { requirePermission } from '@/lib/apiAuth';
+import { requireAnyPermission, requirePermission } from '@/lib/apiAuth';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplates';
 import { buildContinuousPrintPayload, buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrint';
 import { nextDocumentNumber } from '@/lib/documentNumber';
@@ -22,6 +22,7 @@ jest.mock('@/lib/audit', () => ({
 }));
 
 jest.mock('@/lib/apiAuth', () => ({
+  requireAnyPermission: jest.fn().mockResolvedValue({ userId: 7, role: 'yard_manager' }),
   requirePermission: jest.fn().mockResolvedValue({ userId: 7, role: 'yard_manager' }),
 }));
 
@@ -44,6 +45,7 @@ jest.mock('@/lib/documentNumber', () => ({
 
 const mockedGetDb = getDb as jest.Mock;
 const mockedLogAudit = logAudit as jest.Mock;
+const mockedRequireAnyPermission = requireAnyPermission as jest.Mock;
 const mockedRequirePermission = requirePermission as jest.Mock;
 const mockedBuildContinuousPrintPayload = buildContinuousPrintPayload as jest.Mock;
 const mockedBuildSampleContinuousPrintPayload = buildSampleContinuousPrintPayload as jest.Mock;
@@ -77,6 +79,7 @@ function makeRouteContext(templateId: string) {
 describe('document template API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedRequireAnyPermission.mockResolvedValue({ userId: 7, role: 'yard_manager' });
     mockedRequirePermission.mockResolvedValue({ userId: 7, role: 'yard_manager' });
     mockedBuildContinuousPrintPayload.mockResolvedValue({
       document: { invoice_id: 77, document_type: 'tax_invoice_receipt' },
@@ -474,6 +477,7 @@ describe('document template API', () => {
 
     expect(response.status).toBe(200);
     expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'settings.manage', expect.any(String));
+    expect(mockedRequireAnyPermission).not.toHaveBeenCalled();
     expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
     expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
@@ -493,6 +497,15 @@ describe('document template API', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(mockedRequireAnyPermission).toHaveBeenCalledWith(request, db, [
+      'settings.manage',
+      'billing.invoice.create',
+      'billing.payment.receive',
+      'reports.view',
+      'gate.in',
+      'gate.out',
+    ], expect.any(String));
+    expect(mockedRequirePermission).not.toHaveBeenCalled();
     expect(mockedBuildContinuousPrintPayload).toHaveBeenCalledWith(db, {
       invoiceId: 77,
       type: 'tax_invoice_receipt',
