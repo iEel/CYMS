@@ -26,6 +26,27 @@ describe('Booking business relationship UI', () => {
     expect(bookingPage).toContain('bill_to_customer_id: createForm.bill_to_customer_id || createForm.booking_customer_id || undefined');
   });
 
+  it('maps booking import party id columns and includes them in the template before vessel fields', () => {
+    const mapRowBody = bookingPage.match(/const mapRow = \(row: Record<string, string>\) => \{([\s\S]*?)\n  \};/)?.[1];
+    const templateHeaders = bookingPage.match(/const headers = \[([\s\S]*?)\];/)?.[1];
+
+    [
+      "booking_customer_id: Number(get('booking_customer_id', 'booking_customer')) || undefined",
+      "shipping_line_id: Number(get('shipping_line_id', 'shipping_line')) || undefined",
+      "forwarder_id: Number(get('forwarder_id', 'forwarder')) || undefined",
+      "shipper_id: Number(get('shipper_id', 'shipper')) || undefined",
+      "consignee_id: Number(get('consignee_id', 'consignee')) || undefined",
+      "trucking_company_id: Number(get('trucking_company_id', 'trucking_company')) || undefined",
+      "bill_to_customer_id: Number(get('bill_to_customer_id', 'bill_to_customer')) || undefined",
+    ].forEach(columnMapper => {
+      expect(mapRowBody).toContain(columnMapper);
+    });
+
+    expect(templateHeaders).toMatch(
+      /'booking_number', 'booking_type', 'booking_customer_id', 'shipping_line_id', 'forwarder_id', 'shipper_id', 'consignee_id', 'trucking_company_id', 'bill_to_customer_id', 'vessel_name', 'voyage_number'/
+    );
+  });
+
   it('keeps bill-to customer synced while it is still booking-customer derived', () => {
     expect(bookingPage).toContain('bill_to_customer_id: !prev.bill_to_customer_id || prev.bill_to_customer_id === prev.booking_customer_id ? value : prev.bill_to_customer_id');
   });

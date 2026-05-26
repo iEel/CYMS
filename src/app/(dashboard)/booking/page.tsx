@@ -299,6 +299,13 @@ export default function BookingPage() {
     return {
       booking_number: get('booking_number', 'booking', 'bk_number', 'booking_no'),
       booking_type: get('booking_type', 'type') || 'import',
+      booking_customer_id: Number(get('booking_customer_id', 'booking_customer')) || undefined,
+      shipping_line_id: Number(get('shipping_line_id', 'shipping_line')) || undefined,
+      forwarder_id: Number(get('forwarder_id', 'forwarder')) || undefined,
+      shipper_id: Number(get('shipper_id', 'shipper')) || undefined,
+      consignee_id: Number(get('consignee_id', 'consignee')) || undefined,
+      trucking_company_id: Number(get('trucking_company_id', 'trucking_company')) || undefined,
+      bill_to_customer_id: Number(get('bill_to_customer_id', 'bill_to_customer')) || undefined,
       vessel_name: get('vessel_name', 'vessel', 'ship'),
       voyage_number: get('voyage_number', 'voyage', 'voyage_no'),
       container_count: parseInt(get('container_count', 'count', 'qty')) || 1,
@@ -315,11 +322,11 @@ export default function BookingPage() {
 
   // Download Excel template
   const downloadTemplate = () => {
-    const headers = ['booking_number', 'booking_type', 'vessel_name', 'voyage_number', 'container_count', 'container_size', 'container_type', 'eta', 'seal_number', 'container_numbers', 'valid_from', 'valid_to', 'notes'];
+    const headers = ['booking_number', 'booking_type', 'booking_customer_id', 'shipping_line_id', 'forwarder_id', 'shipper_id', 'consignee_id', 'trucking_company_id', 'bill_to_customer_id', 'vessel_name', 'voyage_number', 'container_count', 'container_size', 'container_type', 'eta', 'seal_number', 'container_numbers', 'valid_from', 'valid_to', 'notes'];
     const data = [
       headers,
-      ['BK-2025-0001', 'import', 'EVER GIVEN', 'V.001N', 5, '40', 'GP', '2025-04-01', 'SL12345', 'MSCU1234567, MSCU2345678', '2025-04-01', '2025-04-30', 'ตัวอย่าง'],
-      ['BK-2025-0002', 'export', 'MSC ANNA', 'V.120E', 3, '20', 'HC', '2025-04-05', '', 'TEMU9876543', '2025-04-05', '2025-05-05', ''],
+      ['BK-2025-0001', 'import', '', '', '', '', '', '', '', 'EVER GIVEN', 'V.001N', 5, '40', 'GP', '2025-04-01', 'SL12345', 'MSCU1234567, MSCU2345678', '2025-04-01', '2025-04-30', 'ตัวอย่าง'],
+      ['BK-2025-0002', 'export', '', '', '', '', '', '', '', 'MSC ANNA', 'V.120E', 3, '20', 'HC', '2025-04-05', '', 'TEMU9876543', '2025-04-05', '2025-05-05', ''],
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
     ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 16) }));
