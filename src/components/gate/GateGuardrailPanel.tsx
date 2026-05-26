@@ -1,7 +1,6 @@
 'use client';
 
-import { AlertTriangle, BadgeCheck, Camera, QrCode, ShieldCheck, Truck } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { AlertTriangle, BadgeCheck, Camera, ShieldCheck, Truck } from 'lucide-react';
 import type { GateOperationalGuardrailsSnapshot } from '@/lib/gateOperationalGuardrails';
 import type { ReactNode } from 'react';
 
@@ -26,7 +25,7 @@ export default function GateGuardrailPanel({ title, snapshot }: Props) {
           <h4 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center gap-2">
             <ShieldCheck size={16} /> {title}
           </h4>
-          <p className="text-[10px] text-slate-400 mt-0.5">QR pass, duplicate alert, driver/truck master และ photo evidence check</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">duplicate alert, driver/truck master และ photo evidence check</p>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-300">
           <StatusPill label="Driver" value={`${snapshot.driver_profile.completed}/${snapshot.driver_profile.total}`} ok={snapshot.driver_profile.status === 'complete'} />
@@ -34,7 +33,7 @@ export default function GateGuardrailPanel({ title, snapshot }: Props) {
         </div>
       </div>
 
-      <div className="p-4 grid grid-cols-1 xl:grid-cols-[1fr_160px] gap-4">
+      <div className="p-4">
         <div className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <InfoBox icon={<Truck size={14} />} label="Driver master" value={driverStatusText(snapshot.driver_profile.status)} detail={snapshot.driver_profile.missing_fields.join(', ') || 'ข้อมูลครบ'} />
@@ -62,19 +61,6 @@ export default function GateGuardrailPanel({ title, snapshot }: Props) {
               ))}
             </div>
           )}
-        </div>
-
-        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 flex xl:flex-col items-center gap-3">
-          <div className="rounded bg-white p-2">
-            <QRCodeSVG value={snapshot.qr_pass.qr_text} size={84} />
-          </div>
-          <div className="min-w-0 text-center xl:text-left">
-            <div className="flex items-center justify-center xl:justify-start gap-1 text-[10px] font-semibold text-slate-400 uppercase">
-              <QrCode size={12} /> Gate Pass
-            </div>
-            <p className="font-mono text-[11px] font-bold text-slate-700 dark:text-slate-200 break-all mt-1">{snapshot.qr_pass.pass_id}</p>
-            <p className="text-[10px] text-slate-400 mt-1">หมดอายุ {new Date(snapshot.qr_pass.expires_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</p>
-          </div>
         </div>
       </div>
     </div>
