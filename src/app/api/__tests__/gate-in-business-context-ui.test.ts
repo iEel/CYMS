@@ -34,6 +34,7 @@ describe('Gate In business context UI', () => {
   });
 
   it('clears stale owner and billing context when owner search changes or gate-in resets', () => {
+    const resetHelper = gateIn.match(/const resetGateInOwnerBillingContext = \(\) => \{[\s\S]*?\n  \};/)?.[0] || '';
     expect(gateIn).toContain('const handleOwnerSearchChange = (value: string) =>');
     expect(gateIn).toContain('const selectedOwnerName = containerOwnerId');
     expect(gateIn).toContain('value !== selectedOwnerName');
@@ -44,6 +45,8 @@ describe('Gate In business context UI', () => {
     expect(gateIn).toContain('setBillingDiffFromOwner(false)');
     expect(gateIn).toContain('setManualCustomerId(null)');
     expect(gateIn).toContain('bookingDerivedContextRef.current = {};');
+    expect(resetHelper).toContain("setCustomerSearch('')");
+    expect(resetHelper).toContain('setShowCustomerPicker(false)');
     expect((gateIn.match(/resetGateInOwnerBillingContext\(\);/g) || []).length).toBeGreaterThanOrEqual(2);
   });
 

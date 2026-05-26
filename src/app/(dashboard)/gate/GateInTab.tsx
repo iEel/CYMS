@@ -251,6 +251,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     setBillingSearch('');
     setBillingSearchOpen(false);
     setManualCustomerId(null);
+    setCustomerSearch('');
+    setShowCustomerPicker(false);
     setSelectedBooking(null);
     setBookingSearch('');
     setBookingResults([]);
