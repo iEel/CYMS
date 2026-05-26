@@ -63,4 +63,13 @@ describe('continuous print UI', () => {
       expect(source).toContain('/billing/print/continuous?id=');
     });
   });
+
+  it('guards sample previews from real print-log posting', () => {
+    const source = fs.readFileSync(pagePath, 'utf8');
+
+    expect(source).toContain('isSamplePreview');
+    expect(source).toMatch(/if \(!realDocumentId \|\| testPrint \|\| isSamplePreview\)/);
+    expect(source).toContain("searchParams.get('preview') === 'sample'");
+    expect(source).toContain("payload.document.document_type === 'sample'");
+  });
 });

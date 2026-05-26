@@ -56,6 +56,11 @@ function copyIndexFrom(value: string | null) {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+function positiveIntFrom(value: unknown) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function withPreviewParams(searchParams: URLSearchParams) {
   const previewParams = new URLSearchParams();
   for (const key of ['id', 'type', 'mode', 'copyMode', 'copyIndex', 'preview', 'testPrint']) {
@@ -95,6 +100,10 @@ function ContinuousPrintContent() {
   const [errorMessage, setErrorMessage] = useState('');
   const [printError, setPrintError] = useState('');
   const [printing, setPrinting] = useState(false);
+  const isSamplePreview = searchParams.get('preview') === 'sample' || payload.document.document_type === 'sample';
+  const realDocumentId = isSamplePreview
+    ? null
+    : positiveIntFrom(payload.document.invoice_id) || positiveIntFrom(searchParams.get('id'));
 
   useEffect(() => {
     let cancelled = false;
@@ -140,7 +149,7 @@ function ContinuousPrintContent() {
     };
   }, [copyMode, fallback, hasInvoiceId, mode, previewLabel, searchParams]);
 
-  async function postPrintLog(reprintReason?: string | null): Promise<PrintLogResponse> {
+  async function postPrintLog(documentId: number, reprintReason?: string | null): Promise<PrintLogResponse> {
     const policy = config.print_policy;
     const response = await fetch('/api/document-templates/print-log', {
       method: 'POST',
@@ -148,8 +157,8 @@ function ContinuousPrintContent() {
       body: JSON.stringify({
         document_type: payload.document.document_type || searchParams.get('type') || 'tax_invoice_receipt',
         type: searchParams.get('type') || payload.document.document_type || 'tax_invoice_receipt',
-        document_id: payload.document.invoice_id || Number(searchParams.get('id')),
-        id: Number(searchParams.get('id')),
+        document_id: documentId,
+        id: documentId,
         document_no: payload.document.document_number || payload.document.invoice_number,
         template_code: templateCode,
         template_version: templateVersion,
@@ -169,21 +178,21 @@ function ContinuousPrintContent() {
 
   async function handlePrint() {
     setPrintError('');
-    if (!hasInvoiceId || testPrint) {
+    if (!realDocumentId || testPrint || isSamplePreview) {
       window.print();
       return;
     }
 
     setPrinting(true);
     try {
-      let result = await postPrintLog();
+      let result = await postPrintLog(realDocumentId);
       if (result.error === 'reprint reason is required') {
         const reason = window.prompt('กรุณาระบุเหตุผลในการพิมพ์ซ้ำ');
         if (!reason?.trim()) {
           setPrintError('ต้องระบุเหตุผลในการพิมพ์ซ้ำ');
           return;
         }
-        result = await postPrintLog(reason);
+        result = await postPrintLog(realDocumentId, reason);
       }
 
       if (result.error) {
