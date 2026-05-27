@@ -87,11 +87,12 @@ Verification รอบนี้:
 
 ```bash
 npm test -- src/app/api/__tests__/document-template-schema.test.ts src/app/api/__tests__/thai-baht-text.test.ts src/app/api/__tests__/document-template-helpers.test.ts src/app/api/__tests__/document-template-designer.test.ts src/app/api/__tests__/document-template-designer-ui.test.ts src/app/api/__tests__/continuous-print-payload.test.ts src/app/api/__tests__/document-print-log.test.ts src/app/api/__tests__/document-template-api.test.ts src/app/api/__tests__/continuous-print-ui.test.ts --runInBand --cacheDirectory ./.next/jest-cache
+npm test -- --runInBand --cacheDirectory ./.next/jest-cache
 npx tsc --noEmit --pretty false
 npm run lint
 ```
 
-ผลล่าสุด: focused Document Template / Designer tests `67/67` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning
+ผลล่าสุด: focused Document Template / Designer tests `67/67` ผ่าน, full suite `914/914` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning
 
 ### อัปเดตล่าสุดก่อนหน้า: Customer Portal Access Control + EIR Visibility Policy (25 พ.ค. 2569)
 
