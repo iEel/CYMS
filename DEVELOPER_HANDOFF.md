@@ -22,6 +22,30 @@
 | **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Continuous Tax Invoice/Receipt Template, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
 
+### อัปเดตล่าสุด: Read-side Policy Hardening + Portal Exact EIR Grants + Runtime Cleanup (27 พ.ค. 2569)
+
+รอบนี้ต่อยอด API Permission Hardening จาก mutation/config routes ไปยัง read-side routes และปิดช่อง policy ที่ยังอาจกว้างเกินไป:
+
+- **Sensitive read API hardening**: เพิ่ม route-level permission guard ให้ `containers/detail`, `containers/timeline`, `dashboard`, `search`, `reports/*`, `yard/stats`, `operations/stream`, `audit-trail/readable`, `boxtech`, `customers/360`, `documents/activity|consistency|lifecycle`, `entity-timeline`, `integrations/logs|mapping`, `mnr/eor-pdf`, และ `settings/data-quality|sop|status-model`
+- **Yard access จากข้อมูลที่ query ได้**: route ที่ `yard_id` optional เช่น `documents/activity` และ `entity-timeline` derive yard จาก rows ที่คืนมาแล้วตรวจ `requireYardAccess`; `customers/360`, `integrations/logs`, `audit-trail/readable` บังคับ non-`yard_manager` ต้องส่ง `yard_id` เพื่อกัน all-yard read
+- **Portal EIR/Gate exact grants**: `portalGateVisibilitySql()` / `portalEirVisibilitySql()` default เป็น exact grant เท่านั้น (`gate_transaction` หรือ `eir`); container fallback ต้อง opt-in ด้วย `{ allowContainerFallback: true }` และใช้เฉพาะ summary ที่ sanitize แล้ว
+- **Document bundle policy**: full EIR/Gate document bundle ไม่ถูก unlock จาก container-only grant; explicit `eir` grant และ `gate_transaction` grant ยังใช้ได้ผ่าน `portalEirExactVisibilitySql()`
+- **Permissions GET read-only**: ย้าย RBAC seed/upsert ออกจาก `GET /api/settings/permissions` ไป `src/lib/rbacSeeds.ts` และเพิ่ม `POST /api/settings/permissions/sync` ที่ `yard_manager` เท่านั้น พร้อม audit `permissions_seed_sync`
+- **Scheduler internal helpers**: `bookingScheduler` และ `ediScheduler` เลิก fetch local protected API; ใช้ `runBookingSummaryJob()` / `runCodecoSendJob()` ร่วมกับ API routes แทน โดย API manual trigger ยังมี permission + yard guard เหมือนเดิม
+- **Auth fetch patch cleanup**: `dashboard` และ `portal` layouts ใช้ `installAuthFetchPatch()` กลางจาก `src/lib/authFetch.ts` พร้อม stable symbol กัน HMR double wrapping และไม่ overwrite explicit `Authorization`
+- **Gate component split**: แตก `GateInTab` / `GateOutTab` เป็น section components ใต้ `src/app/(dashboard)/gate/components/*` โดยคง state/API flow ใน parent เพื่อลดขนาดไฟล์และให้ refactor ต่อได้ง่ายขึ้น
+- **Regression tests**: เพิ่ม/ปรับ `read-api-permission-hardening`, `container-detail-permissions`, `read-route-runtime-permissions`, `derived-yard-access`, `portal-eir-exact-grants`, `permissions-sync`, `scheduler-internal-jobs`, `authFetch` และ gate-focused tests
+- **Migration**: ไม่มี schema migration ใหม่ในรอบนี้ เป็น server-side guard/refactor/test cleanup เท่านั้น
+
+Verification รอบนี้:
+
+```bash
+npm test -- --cacheDirectory .tmp\jest --runInBand --runTestsByPath src/app/api/__tests__/read-api-permission-hardening.test.ts src/app/api/__tests__/container-detail-permissions.test.ts src/app/api/__tests__/read-route-runtime-permissions.test.ts src/app/api/__tests__/derived-yard-access.test.ts src/app/api/__tests__/portal-eir-exact-grants.test.ts src/app/api/__tests__/permissions-sync.test.ts src/app/api/__tests__/scheduler-internal-jobs.test.ts src/lib/__tests__/authFetch.test.ts
+npx tsc --noEmit --pretty false
+npm run lint
+npm test -- --cacheDirectory .tmp\jest --runInBand
+```
+
 ### อัปเดตล่าสุด: Remaining Operational API Permission Hardening Slice 4 (27 พ.ค. 2569)
 
 รอบนี้ปิดกลุ่ม route ที่เหลือจาก API Permission Hardening queue หลัง Billing/Settings/EDI slices โดยโฟกัส route ที่แตะ master data, yard operations, scheduler, running number และ rate setting:
