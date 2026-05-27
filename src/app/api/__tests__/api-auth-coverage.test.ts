@@ -20,10 +20,21 @@ const highRiskMutationRoutes = [
   'src/app/api/attachments/route.ts',
   'src/app/api/operations/route.ts',
   'src/app/api/containers/route.ts',
+  'src/app/api/settings/allocation-rules/route.ts',
+  'src/app/api/settings/company/route.ts',
+  'src/app/api/settings/customers/portal/route.ts',
+  'src/app/api/settings/email/route.ts',
+  'src/app/api/settings/photo-retention/route.ts',
+  'src/app/api/settings/prefix-mapping/route.ts',
+  'src/app/api/settings/rate-limit/route.ts',
+  'src/app/api/settings/security/route.ts',
+  'src/app/api/settings/yards/route.ts',
+  'src/app/api/settings/zones/route.ts',
 ];
 
 const spoofableActorPatterns = [
   /\bbody\.user_id\b/,
+  /\bbody\.admin_user_id\b/,
   /\bbody\.approved_by\b/,
   /\bbody\.uploaded_by\b/,
   /\buser_id\b\s*:\s*z\./,

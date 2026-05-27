@@ -2,10 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requirePermission, requireRequestActor } from '@/lib/apiAuth';
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // GET — ดึงรายชื่อลานทั้งหมด
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const requestActor = requireRequestActor(request);
+    if (requestActor instanceof Response) return requestActor;
+
     const db = await getDb();
     const result = await db.request().query(`
       SELECT y.yard_id, y.yard_name, y.yard_code, y.address,
@@ -29,6 +38,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์เพิ่มลาน');
+    if (actor instanceof Response) return actor;
 
     const result = await db.request()
       .input('yardName', sql.NVarChar, body.yard_name)
@@ -46,7 +57,7 @@ export async function POST(request: NextRequest) {
       `);
 
     const created = result.recordset[0];
-    await logAudit({ action: 'yard_create', entityType: 'yard', entityId: created.yard_id, details: { yard_name: body.yard_name, yard_code: body.yard_code } });
+    await logAudit({ userId: actor.userId, action: 'yard_create', entityType: 'yard', entityId: created.yard_id, details: { yard_name: body.yard_name, yard_code: body.yard_code } });
     return NextResponse.json({ success: true, data: created });
   } catch (error: unknown) {
     console.error('❌ POST yard error:', error);
@@ -60,10 +71,17 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
+    const yardId = parsePositiveInt(body.yard_id);
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไขลาน');
+    if (actor instanceof Response) return actor;
 
     await db.request()
-      .input('yardId', sql.Int, body.yard_id)
+      .input('yardId', sql.Int, yardId)
       .input('yardName', sql.NVarChar, body.yard_name)
       .input('yardCode', sql.NVarChar, body.yard_code)
       .input('address', sql.NVarChar, body.address || null)
@@ -82,7 +100,7 @@ export async function PUT(request: NextRequest) {
         WHERE yard_id = @yardId
       `);
 
-    await logAudit({ yardId: body.yard_id, action: 'yard_update', entityType: 'yard', entityId: body.yard_id, details: { yard_name: body.yard_name, yard_code: body.yard_code } });
+    await logAudit({ userId: actor.userId, yardId, action: 'yard_update', entityType: 'yard', entityId: yardId, details: { yard_name: body.yard_name, yard_code: body.yard_code } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT yard error:', error);
@@ -94,14 +112,16 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = searchParams.get('yard_id');
+    const yardId = parsePositiveInt(searchParams.get('yard_id'));
     if (!yardId) return NextResponse.json({ error: 'ต้องระบุ yard_id' }, { status: 400 });
 
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์ลบลาน');
+    if (actor instanceof Response) return actor;
 
     // ตรวจว่ามีตู้ในลานนี้ไหม
     const checkResult = await db.request()
-      .input('yardId', sql.Int, parseInt(yardId))
+      .input('yardId', sql.Int, yardId)
       .query('SELECT COUNT(*) as cnt FROM Containers WHERE yard_id = @yardId AND status = \'in_yard\'');
 
     if (checkResult.recordset[0].cnt > 0) {
@@ -110,14 +130,14 @@ export async function DELETE(request: NextRequest) {
 
     // ลบ zones ก่อน
     await db.request()
-      .input('yardId', sql.Int, parseInt(yardId))
+      .input('yardId', sql.Int, yardId)
       .query('DELETE FROM YardZones WHERE yard_id = @yardId');
 
     // ลบ yard
     await db.request()
-      .input('yardId', sql.Int, parseInt(yardId))
+      .input('yardId', sql.Int, yardId)
       .query('DELETE FROM Yards WHERE yard_id = @yardId');
-    await logAudit({ yardId: parseInt(yardId), action: 'yard_delete', entityType: 'yard', entityId: parseInt(yardId) });
+    await logAudit({ userId: actor.userId, yardId, action: 'yard_delete', entityType: 'yard', entityId: yardId });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ DELETE yard error:', error);

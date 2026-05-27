@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requirePermission, requireRequestActor, requireYardAccess } from '@/lib/apiAuth';
 
 function normalizePlugCapacity(value: unknown) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parsePositiveInt(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
@@ -12,15 +18,27 @@ function normalizePlugCapacity(value: unknown) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const yardId = searchParams.get('yard_id');
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = parsePositiveInt(rawYardId);
+    if (rawYardId && !yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
 
     const db = await getDb();
+    if (yardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ดูโซนของลานนี้');
+      if (yardAccess instanceof Response) return yardAccess;
+    } else {
+      const requestActor = requireRequestActor(request);
+      if (requestActor instanceof Response) return requestActor;
+    }
+
     let query = 'SELECT * FROM YardZones';
     const req = db.request();
 
     if (yardId) {
       query += ' WHERE yard_id = @yardId';
-      req.input('yardId', sql.Int, parseInt(yardId));
+      req.input('yardId', sql.Int, yardId);
     }
 
     query += ' ORDER BY zone_name';
@@ -36,11 +54,22 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const yardId = parsePositiveInt(body.yard_id);
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์เพิ่มโซน');
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์เพิ่มโซนในลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
+
     const plugCapacity = normalizePlugCapacity(body.plug_capacity);
 
     const result = await db.request()
-      .input('yardId', sql.Int, body.yard_id)
+      .input('yardId', sql.Int, yardId)
       .input('zoneName', sql.NVarChar, body.zone_name)
       .input('zoneType', sql.NVarChar, body.zone_type)
       .input('maxTier', sql.Int, body.max_tier || 5)
@@ -57,7 +86,7 @@ export async function POST(request: NextRequest) {
       `);
 
     const created = result.recordset[0];
-    await logAudit({ yardId: body.yard_id, action: 'zone_create', entityType: 'zone', entityId: created.zone_id, details: { zone_name: body.zone_name, zone_type: body.zone_type } });
+    await logAudit({ userId: actor.userId, yardId, action: 'zone_create', entityType: 'zone', entityId: created.zone_id, details: { zone_name: body.zone_name, zone_type: body.zone_type } });
     return NextResponse.json({ success: true, data: created });
   } catch (error) {
     console.error('❌ POST zone error:', error);
@@ -69,11 +98,30 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
+    const zoneId = parsePositiveInt(body.zone_id);
+    if (!zoneId) {
+      return NextResponse.json({ error: 'ต้องระบุ zone_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไขโซน');
+    if (actor instanceof Response) return actor;
+
+    const zoneResult = await db.request()
+      .input('zoneId', sql.Int, zoneId)
+      .query('SELECT TOP 1 zone_id, yard_id FROM YardZones WHERE zone_id = @zoneId');
+    const zone = zoneResult.recordset[0];
+    if (!zone) {
+      return NextResponse.json({ error: 'ไม่พบโซน' }, { status: 404 });
+    }
+
+    const yardAccess = await requireYardAccess(request, db, zone.yard_id, 'คุณไม่มีสิทธิ์แก้ไขโซนของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
+
     const plugCapacity = normalizePlugCapacity(body.plug_capacity);
 
     await db.request()
-      .input('zoneId', sql.Int, body.zone_id)
+      .input('zoneId', sql.Int, zoneId)
       .input('zoneName', sql.NVarChar, body.zone_name)
       .input('zoneType', sql.NVarChar, body.zone_type)
       .input('maxTier', sql.Int, body.max_tier || 5)
@@ -93,7 +141,7 @@ export async function PUT(request: NextRequest) {
           is_active = @isActive
         WHERE zone_id = @zoneId
       `);
-    await logAudit({ action: 'zone_update', entityType: 'zone', entityId: body.zone_id, details: { zone_name: body.zone_name, zone_type: body.zone_type } });
+    await logAudit({ userId: actor.userId, yardId: zone.yard_id, action: 'zone_update', entityType: 'zone', entityId: zoneId, details: { zone_name: body.zone_name, zone_type: body.zone_type } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT zone error:', error);
@@ -105,14 +153,27 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const zoneId = searchParams.get('zone_id');
+    const zoneId = parsePositiveInt(searchParams.get('zone_id'));
     if (!zoneId) return NextResponse.json({ error: 'ต้องระบุ zone_id' }, { status: 400 });
 
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์ลบโซน');
+    if (actor instanceof Response) return actor;
+
+    const zoneResult = await db.request()
+      .input('zoneId', sql.Int, zoneId)
+      .query('SELECT TOP 1 zone_id, yard_id FROM YardZones WHERE zone_id = @zoneId');
+    const zone = zoneResult.recordset[0];
+    if (!zone) {
+      return NextResponse.json({ error: 'ไม่พบโซน' }, { status: 404 });
+    }
+
+    const yardAccess = await requireYardAccess(request, db, zone.yard_id, 'คุณไม่มีสิทธิ์ลบโซนของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     // ตรวจว่ามีตู้ใน zone นี้ไหม
     const checkResult = await db.request()
-      .input('zoneId', sql.Int, parseInt(zoneId))
+      .input('zoneId', sql.Int, zoneId)
       .query('SELECT COUNT(*) as cnt FROM Containers WHERE zone_id = @zoneId AND status = \'in_yard\'');
 
     if (checkResult.recordset[0].cnt > 0) {
@@ -120,9 +181,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     await db.request()
-      .input('zoneId', sql.Int, parseInt(zoneId))
+      .input('zoneId', sql.Int, zoneId)
       .query('DELETE FROM YardZones WHERE zone_id = @zoneId');
-    await logAudit({ action: 'zone_delete', entityType: 'zone', entityId: parseInt(zoneId) });
+    await logAudit({ userId: actor.userId, yardId: zone.yard_id, action: 'zone_delete', entityType: 'zone', entityId: zoneId });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ DELETE zone error:', error);

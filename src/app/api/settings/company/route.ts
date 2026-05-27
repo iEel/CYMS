@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requirePermission, requireRequestActor } from '@/lib/apiAuth';
 
 // GET — ดึงข้อมูลบริษัท
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const actor = requireRequestActor(request);
+    if (actor instanceof Response) return actor;
+
     const db = await getDb();
     const result = await db.request().query(`
       SELECT company_id, company_name, tax_id, address, phone, email, logo_url,
@@ -25,6 +29,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไขข้อมูลบริษัท');
+    if (actor instanceof Response) return actor;
 
     // ตรวจว่ามี record อยู่แล้วหรือไม่
     const existing = await db.request().query('SELECT company_id FROM CompanyProfile');
@@ -72,7 +78,7 @@ export async function POST(request: NextRequest) {
              ISNULL(branch_number, '00000') as branch_number
       FROM CompanyProfile
     `);
-    await logAudit({ action: 'company_update', entityType: 'company', entityId: result.recordset[0]?.company_id, details: { company_name: body.company_name } });
+    await logAudit({ userId: actor.userId, action: 'company_update', entityType: 'company', entityId: result.recordset[0]?.company_id, details: { company_name: body.company_name } });
     return NextResponse.json({ success: true, data: result.recordset[0] });
   } catch (error) {
     console.error('❌ POST company error:', error);

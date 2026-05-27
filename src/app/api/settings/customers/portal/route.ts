@@ -3,17 +3,22 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { requireRole } from '@/lib/apiAuth';
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // POST — สร้างบัญชี Portal สำหรับลูกค้า
 export async function POST(request: NextRequest) {
   try {
-    const role = request.headers.get('x-user-role');
-    if (role !== 'yard_manager') {
-      return NextResponse.json({ error: 'เฉพาะ admin เท่านั้น' }, { status: 403 });
-    }
+    const actor = requireRole(request, ['yard_manager'], 'เฉพาะ admin เท่านั้น');
+    if (actor instanceof Response) return actor;
 
-    const { customer_id } = await request.json();
-    if (!customer_id) {
+    const body = await request.json();
+    const customerId = parsePositiveInt(body.customer_id);
+    if (!customerId) {
       return NextResponse.json({ error: 'กรุณาระบุ customer_id' }, { status: 400 });
     }
 
@@ -21,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     // Get customer info
     const custResult = await db.request()
-      .input('cid', sql.Int, customer_id)
+      .input('cid', sql.Int, customerId)
       .query(`SELECT customer_id, customer_name, contact_email FROM Customers WHERE customer_id = @cid`);
     const customer = custResult.recordset[0];
     if (!customer) {
@@ -30,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     // Check if portal account already exists
     const existResult = await db.request()
-      .input('cid', sql.Int, customer_id)
+      .input('cid', sql.Int, customerId)
       .query(`SELECT user_id, username FROM Users WHERE customer_id = @cid`);
     if (existResult.recordset.length > 0) {
       return NextResponse.json({
@@ -46,7 +51,7 @@ export async function POST(request: NextRequest) {
     const roleId = roleResult.recordset[0].role_id;
 
     // Generate username and password
-    const username = customer.contact_email || `customer_${customer_id}`;
+    const username = customer.contact_email || `customer_${customerId}`;
     const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 char random
     const passwordHash = await bcrypt.hash(tempPassword, 10);
 
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest) {
       .input('hash', sql.NVarChar, passwordHash)
       .input('fullName', sql.NVarChar, customer.customer_name)
       .input('roleId', sql.Int, roleId)
-      .input('cid', sql.Int, customer_id)
+      .input('cid', sql.Int, customerId)
       .query(`
         INSERT INTO Users (username, password_hash, full_name, role_id, customer_id, status)
         OUTPUT INSERTED.user_id
@@ -65,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     // Enable portal on customer
     await db.request()
-      .input('cid', sql.Int, customer_id)
+      .input('cid', sql.Int, customerId)
       .query(`UPDATE Customers SET is_portal_enabled = 1 WHERE customer_id = @cid`);
 
     // Give access to all yards
