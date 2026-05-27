@@ -177,3 +177,37 @@ describe('print history panel wiring', () => {
     expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('<PrintHistoryPanel');
   });
 });
+
+describe('publish diff dialog wiring', () => {
+  it('shows a diff dialog before publishing', () => {
+    expect(read('src/components/document-templates/PublishDiffDialog.tsx')).toContain('Publish this draft');
+    expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('<PublishDiffDialog');
+    expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('summarizeTemplateDiff');
+  });
+
+  it('compares publish diff against the published current version instead of the loaded draft', () => {
+    const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
+
+    expect(manager).toContain('function choosePublishedBaselineConfig');
+    expect(manager).toContain('version.version_no === detail.template.current_version_no');
+    expect(manager).toContain("version.status === 'published' || version.status === 'active'");
+    expect(manager).toContain('summarizeTemplateDiff(choosePublishedBaselineConfig(detail), config)');
+    expect(manager).not.toContain('loadedVersionConfig');
+  });
+
+  it('publishes the snapshotted draft context instead of live selection state', () => {
+    const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
+
+    expect(manager).toContain('type PublishDraftContext');
+    expect(manager).toContain('publishDraftContext');
+    expect(manager).toContain('config: cloneTemplateConfig(config)');
+    expect(manager).toContain('const context = publishDraftContext');
+    expect(manager).toContain('saveDraftForContext(context)');
+    expect(manager).toContain('`/api/document-templates/${context.templateId}/publish`');
+    expect(manager).toContain('JSON.stringify({ version_no: context.versionNo })');
+    expect(manager).toContain('if (publishInFlightRef.current) return');
+    expect(manager).not.toContain('const saved = await saveDraft();');
+    expect(manager).not.toContain('`/api/document-templates/${selectedTemplate.template_id}/publish`');
+    expect(manager).not.toContain('JSON.stringify({ version_no: editingVersion.version_no })');
+  });
+});

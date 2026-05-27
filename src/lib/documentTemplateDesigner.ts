@@ -535,6 +535,96 @@ export function redoDesignerHistory(history: DesignerHistory): DesignerHistory {
   };
 }
 
+function valuesChanged<T extends object>(before: T, after: T, keys: Array<keyof T>) {
+  return keys.some(key => before[key] !== after[key]);
+}
+
+function jsonChanged(before: unknown, after: unknown) {
+  return JSON.stringify(before) !== JSON.stringify(after);
+}
+
+function fieldDisplayName(field: DocumentTemplateField) {
+  return field.label || field.binding_source || field.field_key || field.field_id;
+}
+
+export function summarizeTemplateDiff(
+  before: DocumentTemplateConfig | null | undefined,
+  after: DocumentTemplateConfig,
+): string[] {
+  if (!before) return ['New template version will be published'];
+
+  const changes: string[] = [];
+  if (valuesChanged(before.paper, after.paper, [
+    'width_mm',
+    'height_mm',
+    'top_offset_mm',
+    'left_offset_mm',
+    'print_scale',
+  ])) {
+    changes.push('Paper size, offset, or scale changed');
+  }
+
+  const beforeLineItems = before.sections.line_items;
+  const afterLineItems = after.sections.line_items;
+  if (valuesChanged(beforeLineItems, afterLineItems, [
+    'x_mm',
+    'y_mm',
+    'start_y_mm',
+    'width_mm',
+    'row_height_mm',
+    'max_rows',
+  ])) {
+    changes.push('Line item section moved or resized');
+  }
+
+  if (jsonChanged(beforeLineItems.columns, afterLineItems.columns)) {
+    changes.push('Line item columns changed');
+  }
+
+  if (
+    jsonChanged(before.calibration_profiles || [], after.calibration_profiles || [])
+    || before.default_calibration_profile_id !== after.default_calibration_profile_id
+  ) {
+    changes.push('Calibration profiles changed');
+  }
+
+  const beforeFields = new Map(before.fields.map(field => [field.field_id, field]));
+  const afterFields = new Map(after.fields.map(field => [field.field_id, field]));
+  if (
+    after.fields.some(field => !beforeFields.has(field.field_id))
+    || before.fields.some(field => !afterFields.has(field.field_id))
+  ) {
+    changes.push('Field added/removed');
+  }
+
+  for (const field of after.fields) {
+    const previous = beforeFields.get(field.field_id);
+    if (!previous) continue;
+    if (valuesChanged(previous, field, ['x_mm', 'y_mm', 'width_mm', 'height_mm'])) {
+      changes.push(`Field moved/resized: ${fieldDisplayName(field)}`);
+      continue;
+    }
+    if (valuesChanged(previous, field, [
+      'label',
+      'field_key',
+      'binding_source',
+      'font_size',
+      'font_weight',
+      'text_align',
+      'visible',
+      'locked',
+      'layer',
+      'format',
+      'default_value',
+      'sample_value',
+    ])) {
+      changes.push(`Field details changed: ${fieldDisplayName(field)}`);
+    }
+  }
+
+  return changes.length > 0 ? changes : ['No layout changes detected'];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

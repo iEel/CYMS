@@ -12,6 +12,7 @@ import {
   pushDesignerHistory,
   redoDesignerHistory,
   snapMm,
+  summarizeTemplateDiff,
   undoDesignerHistory,
   validateDesignerTemplateConfig,
 } from '@/lib/documentTemplateDesigner';
@@ -520,5 +521,36 @@ describe('document template designer 2.1 validation', () => {
 
     expect(result.errors).toContain('calibration_profile missing-text profile_name is required');
     expect(result.errors).toContain('calibration_profile missing-text paper_label is required');
+  });
+});
+
+describe('document template publish diff', () => {
+  it('summarizes line item movement and field movement', () => {
+    const before = buildDefaultContinuousTemplateConfig();
+    const after = buildDefaultContinuousTemplateConfig();
+    after.sections.line_items.x_mm += 5;
+    after.fields[0].x_mm += 10;
+
+    expect(summarizeTemplateDiff(before, after)).toEqual(expect.arrayContaining([
+      'Line item section moved or resized',
+      `Field moved/resized: ${after.fields[0].label}`,
+    ]));
+  });
+
+  it('summarizes calibration profile changes', () => {
+    const before = buildDefaultContinuousTemplateConfig();
+    const after = buildDefaultContinuousTemplateConfig();
+    after.calibration_profiles = [{
+      profile_id: 'profile-a',
+      profile_name: 'Printer A',
+      paper_label: '9.5 x 5.5',
+      width_mm: 241.3,
+      height_mm: 139.7,
+      top_offset_mm: 0,
+      left_offset_mm: 0,
+      print_scale: 1,
+    }];
+
+    expect(summarizeTemplateDiff(before, after)).toContain('Calibration profiles changed');
   });
 });
