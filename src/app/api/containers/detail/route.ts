@@ -2,8 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { calcDwellDays } from '@/lib/utils';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 type ExceptionSeverity = 'info' | 'warning' | 'danger';
+
+const DETAIL_READ_PERMISSIONS = [
+  'gate.in',
+  'gate.out',
+  'yard.location.assign',
+  'yard.slot.move',
+  'billing.invoice.create',
+  'billing.payment.receive',
+  'mnr.eor.create',
+  'mnr.eor.update',
+  'reports.view',
+];
 
 interface LifecycleException {
   code: string;
@@ -148,6 +161,13 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const permission = await requireAnyPermission(
+      request,
+      db,
+      DETAIL_READ_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ดูรายละเอียดตู้'
+    );
+    if (permission instanceof NextResponse) return permission;
 
     // 1. Container info
     const containerResult = await db.request()
@@ -165,6 +185,13 @@ export async function GET(request: NextRequest) {
     }
 
     const container = containerResult.recordset[0];
+    const yardAccess = await requireYardAccess(
+      request,
+      db,
+      container.yard_id,
+      'คุณไม่มีสิทธิ์ดูรายละเอียดตู้ในลานนี้'
+    );
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     // 2. Gate-In transaction (ล่าสุด)
     const gateInResult = await db.request()

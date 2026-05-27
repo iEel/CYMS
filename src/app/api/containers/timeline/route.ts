@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const TIMELINE_READ_PERMISSIONS = [
+  'gate.in',
+  'gate.out',
+  'yard.location.assign',
+  'yard.slot.move',
+  'reports.view',
+];
 
 /**
  * GET /api/containers/timeline?container_id=X
@@ -17,18 +26,60 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const permission = await requireAnyPermission(
+      request,
+      db,
+      TIMELINE_READ_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ดู Timeline ตู้'
+    );
+    if (permission instanceof NextResponse) return permission;
 
-    // Resolve container_id from container_number if needed
+    // Resolve container and yard before reading timeline details.
     let cid = containerId ? parseInt(containerId) : 0;
-    if (!cid && containerNumber) {
-      const lookup = await db.request()
+    let containerResult;
+    if (cid) {
+      containerResult = await db.request()
+        .input('cid4', sql.Int, cid)
+        .query(`
+          SELECT c.container_id, c.container_number, c.size, c.type, c.status,
+                 c.shipping_line, c.gate_in_date, c.gate_out_date, c.is_laden,
+                 c.zone_id, c.bay, c.row, c.tier, c.yard_id,
+                 z.zone_name, y.yard_name,
+                 DATEDIFF(day, c.gate_in_date, ISNULL(c.gate_out_date, GETDATE())) as dwell_days
+          FROM Containers c
+          LEFT JOIN YardZones z ON c.zone_id = z.zone_id
+          LEFT JOIN Yards y ON c.yard_id = y.yard_id
+          WHERE c.container_id = @cid4
+        `);
+    } else {
+      containerResult = await db.request()
         .input('cn', sql.NVarChar, containerNumber)
-        .query('SELECT container_id FROM Containers WHERE container_number = @cn');
-      if (!lookup.recordset.length) {
-        return NextResponse.json({ error: 'ไม่พบตู้' }, { status: 404 });
-      }
-      cid = lookup.recordset[0].container_id;
+        .query(`
+          SELECT c.container_id, c.container_number, c.size, c.type, c.status,
+                 c.shipping_line, c.gate_in_date, c.gate_out_date, c.is_laden,
+                 c.zone_id, c.bay, c.row, c.tier, c.yard_id,
+                 z.zone_name, y.yard_name,
+                 DATEDIFF(day, c.gate_in_date, ISNULL(c.gate_out_date, GETDATE())) as dwell_days
+          FROM Containers c
+          LEFT JOIN YardZones z ON c.zone_id = z.zone_id
+          LEFT JOIN Yards y ON c.yard_id = y.yard_id
+          WHERE c.container_number = @cn
+        `);
     }
+
+    if (!containerResult.recordset.length) {
+      return NextResponse.json({ error: 'ไม่พบตู้' }, { status: 404 });
+    }
+
+    const containerRow = containerResult.recordset[0];
+    cid = containerRow.container_id;
+    const yardAccess = await requireYardAccess(
+      request,
+      db,
+      containerRow.yard_id,
+      'คุณไม่มีสิทธิ์ดู Timeline ของตู้ในลานนี้'
+    );
+    if (yardAccess instanceof NextResponse) return yardAccess;
 
     // 1. Gate Transactions (gate_in, gate_out)
     const gateResult = await db.request()
@@ -66,25 +117,6 @@ export async function GET(request: NextRequest) {
         WHERE container_id = @cid3
         ORDER BY created_at
       `);
-
-    // 4. Container info
-    const containerResult = await db.request()
-      .input('cid4', sql.Int, cid)
-      .query(`
-        SELECT c.container_id, c.container_number, c.size, c.type, c.status,
-               c.shipping_line, c.gate_in_date, c.gate_out_date, c.is_laden,
-               c.zone_id, c.bay, c.row, c.tier,
-               z.zone_name, y.yard_name,
-               DATEDIFF(day, c.gate_in_date, ISNULL(c.gate_out_date, GETDATE())) as dwell_days
-        FROM Containers c
-        LEFT JOIN YardZones z ON c.zone_id = z.zone_id
-        LEFT JOIN Yards y ON c.yard_id = y.yard_id
-        WHERE c.container_id = @cid4
-      `);
-
-    if (!containerResult.recordset.length) {
-      return NextResponse.json({ error: 'ไม่พบตู้' }, { status: 404 });
-    }
 
     // Build unified timeline
     interface TimelineEvent {
@@ -179,8 +211,12 @@ export async function GET(request: NextRequest) {
     // Sort by timestamp
     events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
+    const container = Object.fromEntries(
+      Object.entries(containerRow).filter(([key]) => key !== 'yard_id')
+    );
+
     return NextResponse.json({
-      container: containerResult.recordset[0],
+      container,
       events,
       total_events: events.length,
     });
