@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { installAuthFetchPatch } from '@/lib/authFetch';
 import {
   LayoutDashboard, Package, FileText, ClipboardList, LogOut, Menu, X, Ship, Thermometer,
 } from 'lucide-react';
@@ -23,33 +24,6 @@ interface PortalNavItem {
   capability?: 'reefer';
 }
 
-// Global fetch interceptor — auto-attach JWT to API calls
-if (typeof window !== 'undefined') {
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    if (url.startsWith('/api/') && !url.includes('/api/auth/login')) {
-      const headers = new Headers(init?.headers);
-      if (!headers.has('Authorization')) {
-        try {
-          const s = localStorage.getItem('cyms_session');
-          if (s) {
-            const session = JSON.parse(s);
-            if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
-          }
-        } catch { /* */ }
-      }
-      const response = await originalFetch(input, { ...init, headers });
-      if (response.status === 401 && !window.location.pathname.includes('/login')) {
-        localStorage.removeItem('cyms_session');
-        window.location.href = '/login';
-      }
-      return response;
-    }
-    return originalFetch(input, init);
-  };
-}
-
 const navItems: PortalNavItem[] = [
   { label: 'ภาพรวม', href: '/portal', icon: <LayoutDashboard size={18} /> },
   { label: 'ตู้คอนเทนเนอร์', href: '/portal/containers', icon: <Package size={18} /> },
@@ -64,6 +38,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [capabilities, setCapabilities] = useState<PortalCapabilities | null>(null);
+
+  useEffect(() => {
+    installAuthFetchPatch(window);
+  }, []);
 
   useEffect(() => {
     if (!isLoading && !session) router.replace('/login');
