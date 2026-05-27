@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (!templateId) return NextResponse.json({ error: 'templateId ไม่ถูกต้อง' }, { status: 400 });
 
     const db = await getDb();
-    const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
+    const actor = await requirePermission(request, db, 'document_templates.publish', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
 
     const body = await request.json().catch(() => ({}));

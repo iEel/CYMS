@@ -1,5 +1,6 @@
 import type { DocumentTemplateConfig, DocumentTemplateField } from './documentTemplateTypes';
 import sql from 'mssql';
+import { validateDesignerTemplateConfig } from './documentTemplateDesigner';
 
 const THAI_COPY_LABELS = [
   'ต้นฉบับใบกำกับภาษี/ใบเสร็จรับเงิน',
@@ -453,7 +454,9 @@ export function normalizeTemplateConfig(config: unknown): {
     }
     : config;
   const validation = validateTemplateConfig(withDefaults);
-  if (!validation.valid) return { config: null, errors: validation.errors };
+  const designerValidation = validateDesignerTemplateConfig(withDefaults);
+  const errors = [...validation.errors, ...designerValidation.errors];
+  if (errors.length > 0) return { config: null, errors };
   return { config: withDefaults as DocumentTemplateConfig, errors: [] };
 }
 

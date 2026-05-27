@@ -112,7 +112,7 @@ function applyTestPrintOverrides(
 export async function POST(request: NextRequest) {
   try {
     const db = await getDb();
-    const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
+    const actor = await requirePermission(request, db, 'document_templates.test_print', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
 
     const body = await parseOptionalBody(request);

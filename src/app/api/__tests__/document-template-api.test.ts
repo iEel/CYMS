@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GET, POST } from '../document-templates/route';
 import { POST as duplicateTemplate } from '../document-templates/[templateId]/duplicate/route';
+import { POST as createDraftTemplate } from '../document-templates/[templateId]/draft/route';
 import { PUT as updateTemplate } from '../document-templates/[templateId]/route';
 import { POST as publishTemplate } from '../document-templates/[templateId]/publish/route';
 import { POST as setDefaultTemplate } from '../document-templates/[templateId]/set-default/route';
@@ -98,7 +99,7 @@ describe('document template API', () => {
     });
   });
 
-  it('requires settings permission and lists templates with current version info', async () => {
+  it('requires document template view permission and lists templates with current version info', async () => {
     const template = {
       template_id: 11,
       template_code: 'TAX_CONTINUOUS',
@@ -118,7 +119,7 @@ describe('document template API', () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(
       request,
       db,
-      'settings.manage',
+      'document_templates.view',
       expect.any(String),
     );
     expect(db.query).toHaveBeenCalledTimes(1);
@@ -216,7 +217,7 @@ describe('document template API', () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(
       request,
       db,
-      'settings.manage',
+      'document_templates.create',
       expect.any(String),
     );
     expect(db.query).not.toHaveBeenCalled();
@@ -245,7 +246,7 @@ describe('document template API', () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(
       request,
       db,
-      'settings.manage',
+      'document_templates.create',
       expect.any(String),
     );
     expect(body.error).toBe('template config ไม่ถูกต้อง');
@@ -268,13 +269,13 @@ describe('document template API', () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(
       request,
       db,
-      'settings.manage',
+      'document_templates.create',
       expect.any(String),
     );
     expect(db.query).not.toHaveBeenCalled();
   });
 
-  it('publishes a template version after settings permission and records audit trail', async () => {
+  it('publishes a template version after publish permission and records audit trail', async () => {
     const template = {
       template_id: 12,
       template_code: 'TAX_CONTINUOUS',
@@ -296,7 +297,7 @@ describe('document template API', () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(
       request,
       db,
-      'settings.manage',
+      'document_templates.publish',
       expect.any(String),
     );
     expect(db.queries[0]).toContain('UPDATE DocumentTemplateVersions');
@@ -315,7 +316,7 @@ describe('document template API', () => {
     expect(body).toEqual({ success: true, template });
   });
 
-  it('deactivates a template with settings permission and clears default state', async () => {
+  it('deactivates a template with publish permission and clears default state', async () => {
     const template = {
       template_id: 12,
       template_code: 'TAX_CONTINUOUS',
@@ -333,7 +334,7 @@ describe('document template API', () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(
       request,
       db,
-      'settings.manage',
+      'document_templates.publish',
       expect.any(String),
     );
     expect(db.queries[0]).toContain("status = 'inactive'");
@@ -372,7 +373,7 @@ describe('document template API', () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(
       request,
       db,
-      'settings.manage',
+      'document_templates.publish',
       expect.any(String),
     );
     expect(db.queries[1]).toContain('BEGIN TRAN');
@@ -416,9 +417,9 @@ describe('document template API', () => {
         template_id: 12,
         template_name: 'Tax invoice continuous',
         description: null,
-        version_id: 22,
-        version_no: 2,
-        version_status: 'published',
+        version_id: null,
+        version_no: null,
+        version_status: null,
       }],
     }]);
     mockedGetDb.mockResolvedValue(db);
@@ -430,10 +431,44 @@ describe('document template API', () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(body.error).toBe('แก้ไขได้เฉพาะ version draft ปัจจุบัน');
+    expect(body.error).toBe('แก้ไข active template ต้องสร้าง draft version ก่อน');
     expect(db.query).toHaveBeenCalledTimes(1);
     expect(db.queries[0]).toContain('FROM DocumentTemplates');
     expect(mockedLogAudit).not.toHaveBeenCalled();
+  });
+
+  it('creates a draft version from the current published template before designer edits', async () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const draft = {
+      version_id: 23,
+      template_id: 12,
+      version_no: 3,
+      status: 'draft',
+      config_json: JSON.stringify(config),
+    };
+    const db = makeDb([{ recordset: [draft] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/12/draft', { method: 'POST' });
+
+    const response = await createDraftTemplate(request, makeRouteContext('12'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      request,
+      db,
+      'document_templates.update_draft',
+      expect.any(String),
+    );
+    expect(db.queries[0]).toContain('INSERT INTO DocumentTemplateVersions');
+    expect(db.queries[0]).not.toContain('current_version_no =');
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 7,
+      action: 'document_template_draft_create',
+      entityType: 'document_template',
+      entityId: 12,
+    }));
+    expect(body).toEqual({ success: true, version: draft });
   });
 
   it('updates draft template print policy fields with config changes', async () => {
@@ -447,6 +482,7 @@ describe('document template API', () => {
         description: null,
         version_id: 22,
         version_no: 2,
+        current_version_no: 1,
         version_status: 'draft',
       }] },
       { recordset: [{ template_id: 12, template_name: 'Tax invoice continuous' }] },
@@ -481,7 +517,7 @@ describe('document template API', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'settings.manage', expect.any(String));
+    expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'document_templates.view', expect.any(String));
     expect(mockedRequireAnyPermission).not.toHaveBeenCalled();
     expect(mockedRequireYardAccess).not.toHaveBeenCalled();
     expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
@@ -504,6 +540,25 @@ describe('document template API', () => {
     expect(body.config.mode).toBe('overlay');
     expect(body.config.copy_mode).toBe('separate');
     expect(body.config.print_policy.red_ref_source).toBe('invoice_number');
+  });
+
+  it('returns designer draft preview when template id and version are specified', async () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const db = makeDb([{ recordset: [{ template_code: 'TAX_CONTINUOUS', version_no: 3, status: 'draft', config_json: JSON.stringify(config) }] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/preview?preview=sample&type=tax_invoice_receipt&templateId=12&versionNo=3');
+
+    const response = await previewTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'templateId', value: 12 },
+      { name: 'versionNo', value: 3 },
+    ]));
+    expect(db.queries[0]).toContain('t.template_id = @templateId');
+    expect(db.queries[0]).toContain('v.version_no = @versionNo');
+    expect(body.template).toEqual({ template_code: 'TAX_CONTINUOUS', template_version: 3 });
   });
 
   it('returns real invoice preview payload without allocating document numbers', async () => {
@@ -586,7 +641,7 @@ describe('document template API', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'settings.manage', expect.any(String));
+    expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'document_templates.test_print', expect.any(String));
     expect(mockedRequireAnyPermission).not.toHaveBeenCalled();
     expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
     expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
@@ -626,7 +681,7 @@ describe('document template API', () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'settings.manage', expect.any(String));
+    expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'document_templates.test_print', expect.any(String));
     expect(body.error).toBe('JSON body ไม่ถูกต้อง');
     expect(db.query).not.toHaveBeenCalled();
     expect(mockedBuildSampleContinuousPrintPayload).not.toHaveBeenCalled();
@@ -684,6 +739,33 @@ describe('document template API', () => {
       }),
     }));
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+  });
+
+  it('allows print-log to validate an older published template version for reprints', async () => {
+    const db = makeDb([
+      { recordset: [{ invoice_id: 77, yard_id: 5, invoice_number: 'INV-DB-77', receipt_number: null, status: 'issued' }] },
+      { recordset: [{ template_id: 12, version_id: 21, version_no: 1 }] },
+      { recordset: [{ success: true, print_no: 3, is_reprint: true, reprint_count: 2 }] },
+    ]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/print-log', {
+      method: 'POST',
+      body: JSON.stringify({
+        document_type: 'tax_invoice_receipt',
+        document_id: 77,
+        template_code: 'TAX_CONTINUOUS',
+        template_version: 1,
+        snapshot: { document: { invoice_id: 77 } },
+      }),
+    });
+
+    const response = await printLogTemplate(request);
+
+    expect(response.status).toBe(200);
+    expect(db.queries[1]).not.toContain('v.version_no = t.current_version_no');
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'templateVersion', value: 1 },
+    ]));
   });
 
   it('rejects print-log for unknown invoices before writing', async () => {

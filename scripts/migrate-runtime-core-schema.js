@@ -1193,6 +1193,34 @@ async function migrate() {
         INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
         VALUES ('reefer.policy.manage', 'reefer', 'policy_manage', N'กำหนดรอบตรวจและช่วงอุณหภูมิตู้เย็น', 0, NULL, 'high');
 
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.view')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.view', 'document_templates', 'view', N'ดูรายการและ preview template เอกสาร', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.create')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.create', 'document_templates', 'create', N'สร้างหรือ duplicate template เอกสาร', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.update_draft')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.update_draft', 'document_templates', 'update_draft', N'แก้ไข draft version ของ template เอกสาร', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.publish')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.publish', 'document_templates', 'publish', N'publish, set default หรือ deactivate template เอกสาร', 0, NULL, 'high');
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.export')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.export', 'document_templates', 'export', N'export template JSON', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.import')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.import', 'document_templates', 'import', N'import template JSON', 0, NULL, 'high');
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.test_print')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.test_print', 'document_templates', 'test_print', N'ทดสอบพิมพ์ template เอกสาร', 0, NULL, NULL);
+
       INSERT INTO RolePermissions (role_id, permission_id)
       SELECT r.role_id, p.permission_id
       FROM Roles r
@@ -1232,6 +1260,40 @@ async function migrate() {
       CROSS JOIN Permissions p
       WHERE r.role_code IN ('yard_manager', 'supervisor')
         AND p.permission_code = 'reefer.policy.manage'
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code IN ('yard_manager', 'supervisor')
+        AND p.permission_code IN (
+          'document_templates.view',
+          'document_templates.create',
+          'document_templates.update_draft',
+          'document_templates.publish',
+          'document_templates.export',
+          'document_templates.import',
+          'document_templates.test_print'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code = 'billing_officer'
+        AND p.permission_code IN (
+          'document_templates.view',
+          'document_templates.export',
+          'document_templates.test_print'
+        )
         AND NOT EXISTS (
           SELECT 1 FROM RolePermissions rp
           WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id

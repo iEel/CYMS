@@ -57,7 +57,7 @@ function splitTemplateVersionRow(row: Record<string, unknown>) {
 export async function GET(request: NextRequest) {
   try {
     const db = await getDb();
-    const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
+    const actor = await requirePermission(request, db, 'document_templates.view', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
 
     const result = await db.request().query(`
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const db = await getDb();
-    const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
+    const actor = await requirePermission(request, db, 'document_templates.create', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
 
     const body = await request.json();

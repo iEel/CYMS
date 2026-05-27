@@ -119,8 +119,7 @@ async function validateTemplateVersion(
        AND v.version_no = @templateVersion
       WHERE t.template_code = @templateCode
         AND ISNULL(t.status, '') <> 'inactive'
-        AND ISNULL(v.status, '') <> 'inactive'
-        AND v.version_no = t.current_version_no
+        AND ISNULL(v.status, '') = 'published'
         AND (
           t.document_type = @documentType
           OR (

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (!templateId) return NextResponse.json({ error: 'templateId ไม่ถูกต้อง' }, { status: 400 });
 
     const db = await getDb();
-    const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
+    const actor = await requirePermission(request, db, 'document_templates.view', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
 
     const templateResult = await db.request()
@@ -73,7 +73,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (!templateId) return NextResponse.json({ error: 'templateId ไม่ถูกต้อง' }, { status: 400 });
 
     const db = await getDb();
-    const actor = await requirePermission(request, db, 'settings.manage', SETTINGS_MESSAGE);
+    const actor = await requirePermission(request, db, 'document_templates.update_draft', SETTINGS_MESSAGE);
     if (actor instanceof NextResponse) return actor;
 
     const body = await request.json();
@@ -83,16 +83,20 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       .query(`
         SELECT t.*, v.version_id, v.version_no, v.status AS version_status
         FROM DocumentTemplates t
-        LEFT JOIN DocumentTemplateVersions v
-          ON v.template_id = t.template_id
-         AND v.version_no = t.current_version_no
+        OUTER APPLY (
+          SELECT TOP 1 version_id, version_no, status
+          FROM DocumentTemplateVersions
+          WHERE template_id = t.template_id
+            AND status = 'draft'
+          ORDER BY version_no DESC
+        ) v
         WHERE t.template_id = @templateId
       `);
 
     const current = currentResult.recordset[0];
     if (!current) return NextResponse.json({ error: 'ไม่พบเทมเพลตเอกสาร' }, { status: 404 });
-    if (current.version_status !== 'draft') {
-      return NextResponse.json({ error: 'แก้ไขได้เฉพาะ version draft ปัจจุบัน' }, { status: 400 });
+    if (!current.version_id) {
+      return NextResponse.json({ error: 'แก้ไข active template ต้องสร้าง draft version ก่อน' }, { status: 400 });
     }
 
     const templateName = cleanOptionalString(body.template_name);

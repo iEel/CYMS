@@ -63,7 +63,7 @@ function positiveIntFrom(value: unknown) {
 
 function withPreviewParams(searchParams: URLSearchParams) {
   const previewParams = new URLSearchParams();
-  for (const key of ['id', 'type', 'mode', 'copyMode', 'copyIndex', 'preview', 'testPrint']) {
+  for (const key of ['id', 'type', 'mode', 'copyMode', 'copyIndex', 'preview', 'testPrint', 'templateId', 'versionNo']) {
     const value = searchParams.get(key);
     if (value !== null) previewParams.set(key, value);
   }

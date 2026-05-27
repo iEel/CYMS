@@ -1,4 +1,4 @@
-import { buildDefaultContinuousTemplateConfig, validateTemplateConfig } from '@/lib/documentTemplates';
+import { buildDefaultContinuousTemplateConfig, normalizeTemplateConfig, validateTemplateConfig } from '@/lib/documentTemplates';
 
 describe('document template helpers', () => {
   it('builds the default continuous tax invoice and receipt template config', () => {
@@ -77,5 +77,26 @@ describe('document template helpers', () => {
         },
       }).valid,
     ).toBe(false);
+  });
+
+  it('normalizes only designer-safe fields inside the paper bounds', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const invalidConfig = {
+      ...config,
+      fields: config.fields.map((field, index) => index === 0
+        ? {
+          ...field,
+          binding_source: 'document.cookie',
+          x_mm: config.paper.width_mm - 2,
+          width_mm: 10,
+        }
+        : field),
+    };
+
+    const result = normalizeTemplateConfig(invalidConfig);
+
+    expect(result.config).toBeNull();
+    expect(result.errors.join('\n')).toContain('binding_source document.cookie is not allowed');
+    expect(result.errors.join('\n')).toContain('document-title exceeds paper width');
   });
 });

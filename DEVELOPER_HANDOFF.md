@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 26 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 27 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer** (~100%)
 
 ---
 
@@ -50,6 +50,48 @@ npm run lint
 ```
 
 ผลล่าสุด: focused Document Template / Continuous Print tests `54/54` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+
+### อัปเดตล่าสุด: Document Template Visual Designer Phase 2 MVP (27 พ.ค. 2569)
+
+รอบนี้ต่อยอด Document Template Manager จาก form setting เป็น canvas designer สำหรับ Continuous Tax Invoice / Receipt โดยยังใช้ `DocumentTemplateField` และ `ContinuousTaxReceipt` renderer เดิม ไม่สร้าง renderer ใหม่ซ้ำ:
+
+- **Canvas Designer**: เพิ่ม `src/components/document-templates/DocumentTemplateDesigner.tsx` พร้อม paper canvas ที่แสดงขนาดจริงตาม `paper.width_mm` / `paper.height_mm`, origin top-left, ruler, grid, snap step, zoom, pointer drag และ resize
+- **Field Editing**: `TemplateCanvas.tsx` render field จาก `x_mm`, `y_mm`, `width_mm`, `height_mm`; `FieldInspector.tsx` แก้ label, binding, geometry, font size/weight, align, visible, locked, layer, format และ sample value
+- **Binding Palette + Layer List**: เพิ่ม allowlist binding สำหรับ `company.*`, `customer.*`, `document.*`, `payment.*`, `totals.*`, `lines[]`; drag/drop binding ลง canvas ได้ และจัดการ layer visibility/lock ได้
+- **Undo/Redo + Keyboard Nudge**: `src/lib/documentTemplateDesigner.ts` เพิ่ม helper สำหรับ snap mm, nudge, resize, add/delete field และ client-side history; Arrow = move ตาม snap, Shift = large move, Alt = fine move
+- **Draft Workflow**: Active template แก้ตรง ๆ ไม่ได้ ต้อง `POST /api/document-templates/[templateId]/draft` เพื่อ clone current published version เป็น draft ก่อน; `PUT` update เฉพาะ draft version และ `publish` จึงทำให้เอกสารใหม่ใช้ version ใหม่
+- **Preview/Test Print จาก draft**: `/billing/print/continuous` ส่ง `templateId` / `versionNo` ไป `/api/document-templates/preview` เพื่อ preview sample/real ด้วย draft config โดยไม่ consume เลขเอกสารจริง
+- **Import/Export Guardrail**: import JSON ใช้ `validateDesignerTemplateConfig()` ตรวจ binding allowlist, duplicate field id, field หลุดขอบกระดาษ และ text ที่เสี่ยง XSS ก่อนส่ง API
+- **Granular Permissions**: seed permission ใหม่ `document_templates.view/create/update_draft/publish/export/import/test_print`; `settings.manage` ไม่ใช่ permission เดียวของ module นี้แล้ว
+- **Reprint Compatibility**: print-log validate template version เก่าที่ published ได้ ไม่บังคับให้เป็น current version เพื่อให้ reprint เอกสารเก่ายังใช้ template version เดิม
+
+ไฟล์หลัก:
+
+- `src/components/document-templates/DocumentTemplateDesigner.tsx`
+- `src/components/document-templates/TemplateCanvas.tsx`
+- `src/components/document-templates/FieldInspector.tsx`
+- `src/components/document-templates/BindingPalette.tsx`
+- `src/components/document-templates/LayerList.tsx`
+- `src/components/document-templates/DesignerToolbar.tsx`
+- `src/components/document-templates/DesignerStatusBar.tsx`
+- `src/lib/documentTemplateDesigner.ts`
+- `src/app/api/document-templates/[templateId]/draft/route.ts`
+
+Migration ที่ต้องรันหลัง pull:
+
+```bash
+node scripts/migrate-runtime-core-schema.js
+```
+
+Verification รอบนี้:
+
+```bash
+npm test -- src/app/api/__tests__/document-template-schema.test.ts src/app/api/__tests__/thai-baht-text.test.ts src/app/api/__tests__/document-template-helpers.test.ts src/app/api/__tests__/document-template-designer.test.ts src/app/api/__tests__/document-template-designer-ui.test.ts src/app/api/__tests__/continuous-print-payload.test.ts src/app/api/__tests__/document-print-log.test.ts src/app/api/__tests__/document-template-api.test.ts src/app/api/__tests__/continuous-print-ui.test.ts --runInBand --cacheDirectory ./.next/jest-cache
+npx tsc --noEmit --pretty false
+npm run lint
+```
+
+ผลล่าสุด: focused Document Template / Designer tests `67/67` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning
 
 ### อัปเดตล่าสุดก่อนหน้า: Customer Portal Access Control + EIR Visibility Policy (25 พ.ค. 2569)
 
