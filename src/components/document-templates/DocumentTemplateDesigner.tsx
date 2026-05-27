@@ -9,6 +9,7 @@ import {
   createDesignerHistory,
   deleteField,
   nudgeField,
+  nudgeLineItems,
   pushDesignerHistory,
   redoDesignerHistory,
   undoDesignerHistory,
@@ -37,10 +38,29 @@ type DocumentTemplateDesignerProps = {
 
 type DesignerPanel = 'inspector' | 'bindings' | 'layers';
 
+type DesignerSelection =
+  | { type: 'field'; fieldId: string }
+  | { type: 'line_items' }
+  | null;
+
 const DEFAULT_LAYER_STATE: LayerState = {
   form: { visible: true, locked: false },
   data: { visible: true, locked: false },
   calibration: { visible: true, locked: false },
+};
+
+const firstSelection = (config: DocumentTemplateConfig): DesignerSelection =>
+  config.fields[0]?.field_id ? { type: 'field', fieldId: config.fields[0].field_id } : { type: 'line_items' };
+
+const preserveSelection = (
+  config: DocumentTemplateConfig,
+  current: DesignerSelection,
+): DesignerSelection => {
+  if (current?.type === 'field' && config.fields.some(field => field.field_id === current.fieldId)) {
+    return current;
+  }
+  if (current?.type === 'line_items') return current;
+  return firstSelection(config);
 };
 
 export function DocumentTemplateDesigner({
@@ -56,7 +76,7 @@ export function DocumentTemplateDesigner({
   onPublish,
 }: DocumentTemplateDesignerProps) {
   const [history, setHistory] = useState(() => createDesignerHistory(config));
-  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(config.fields[0]?.field_id || null);
+  const [selection, setSelection] = useState<DesignerSelection>(() => firstSelection(config));
   const [zoom, setZoom] = useState(0.92);
   const [snapStep, setSnapStep] = useState(1);
   const [layerState, setLayerState] = useState<LayerState>(DEFAULT_LAYER_STATE);
@@ -68,12 +88,17 @@ export function DocumentTemplateDesigner({
     if (incoming === currentSerializedRef.current) return;
     currentSerializedRef.current = incoming;
     setHistory(createDesignerHistory(config));
-    setSelectedFieldId(current => current && config.fields.some(field => field.field_id === current)
-      ? current
-      : config.fields[0]?.field_id || null);
+    setSelection(current => preserveSelection(config, current));
   }, [config]);
 
+  const selectedFieldId = selection?.type === 'field' ? selection.fieldId : null;
+  const selectedKind = selection?.type || null;
   const selectedField = history.current.fields.find(field => field.field_id === selectedFieldId) || null;
+  const selectedLabel = selectedKind === 'line_items'
+    ? 'Line items · lines[]'
+    : selectedField
+      ? `${selectedField.label} · ${selectedField.binding_source}`
+      : 'No field selected';
 
   const commit = (nextConfig: DocumentTemplateConfig) => {
     currentSerializedRef.current = JSON.stringify(nextConfig);
@@ -91,7 +116,7 @@ export function DocumentTemplateDesigner({
     const nextConfig = deleteField(history.current, selectedFieldId);
     if (nextConfig !== history.current) {
       commit(nextConfig);
-      setSelectedFieldId(nextConfig.fields[0]?.field_id || null);
+      setSelection(firstSelection(nextConfig));
     }
   };
 
@@ -99,13 +124,15 @@ export function DocumentTemplateDesigner({
     const nextConfig = addFieldFromBinding(history.current, bindingSource, { xMm: 12, yMm: 12 });
     if (nextConfig === history.current) return;
     commit(nextConfig);
-    setSelectedFieldId(nextConfig.fields[nextConfig.fields.length - 1]?.field_id || null);
+    const addedFieldId = nextConfig.fields[nextConfig.fields.length - 1]?.field_id;
+    setSelection(addedFieldId ? { type: 'field', fieldId: addedFieldId } : firstSelection(nextConfig));
   };
 
   const handleUndo = () => {
     const next = undoDesignerHistory(history);
     currentSerializedRef.current = JSON.stringify(next.current);
     setHistory(next);
+    setSelection(current => preserveSelection(next.current, current));
     onChange(next.current);
   };
 
@@ -113,6 +140,7 @@ export function DocumentTemplateDesigner({
     const next = redoDesignerHistory(history);
     currentSerializedRef.current = JSON.stringify(next.current);
     setHistory(next);
+    setSelection(current => preserveSelection(next.current, current));
     onChange(next.current);
   };
 
@@ -131,12 +159,19 @@ export function DocumentTemplateDesigner({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!canEdit || !selectedFieldId || !event.key.startsWith('Arrow')) return;
+    if (!canEdit || !selection || !event.key.startsWith('Arrow')) return;
     event.preventDefault();
     const step = event.altKey ? 0.1 : event.shiftKey ? Math.max(5, snapStep * 5) : snapStep;
     const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
     const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
-    commit(nudgeField(history.current, selectedFieldId, { dxMm: dx, dyMm: dy, snapMm: event.altKey ? 0.1 : snapStep }));
+    const nudge = { dxMm: dx, dyMm: dy, snapMm: event.altKey ? 0.1 : snapStep };
+    if (selection.type === 'line_items') {
+      if (layerState.data.locked) return;
+      commit(nudgeLineItems(history.current, nudge));
+      return;
+    }
+    if (!selectedField || selectedField.locked || layerState[selectedField.layer].locked) return;
+    commit(nudgeField(history.current, selection.fieldId, nudge));
   };
 
   return (
@@ -162,7 +197,7 @@ export function DocumentTemplateDesigner({
             {canEdit ? 'Draft editable' : 'Active read-only'}
           </span>
           <span className="truncate text-xs text-slate-500">
-            {selectedField ? `${selectedField.label} · ${selectedField.binding_source}` : 'No field selected'}
+            {selectedLabel}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -191,11 +226,14 @@ export function DocumentTemplateDesigner({
           <TemplateCanvas
             config={history.current}
             selectedFieldId={selectedFieldId}
+            selectedLineItems={selection?.type === 'line_items'}
             zoom={zoom}
             snapStep={snapStep}
             canEdit={canEdit}
             layerState={layerState}
-            onSelectField={setSelectedFieldId}
+            onSelectField={fieldId => setSelection({ type: 'field', fieldId })}
+            onSelectLineItems={() => setSelection({ type: 'line_items' })}
+            onClearSelection={() => setSelection(null)}
             onChange={commit}
           />
         </main>
@@ -236,9 +274,14 @@ export function DocumentTemplateDesigner({
               <LayerList
                 config={history.current}
                 selectedFieldId={selectedFieldId}
+                selectedLineItems={selection?.type === 'line_items'}
                 layerState={layerState}
                 onSelectField={fieldId => {
-                  setSelectedFieldId(fieldId);
+                  setSelection({ type: 'field', fieldId });
+                  setActivePanel('inspector');
+                }}
+                onSelectLineItems={() => {
+                  setSelection({ type: 'line_items' });
                   setActivePanel('inspector');
                 }}
                 onToggleLayerVisible={toggleLayerVisible}
@@ -254,6 +297,7 @@ export function DocumentTemplateDesigner({
         zoom={zoom}
         snapStep={snapStep}
         selectedFieldId={selectedFieldId}
+        selectedKind={selectedKind}
         canEdit={canEdit}
       />
     </div>

@@ -79,3 +79,40 @@ describe('document template visual designer UI', () => {
     });
   });
 });
+
+describe('document template designer line item UI wiring', () => {
+  it('uses a field-or-line-items selection model', () => {
+    const source = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+    expect(source).toContain("type DesignerSelection");
+    expect(source).toContain("type: 'line_items'");
+    expect(source).toContain('nudgeLineItems');
+  });
+
+  it('prevents keyboard nudges for locked line item and field layers', () => {
+    const source = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+    expect(source).toContain('layerState.data.locked');
+    expect(source).toContain('selectedField.locked');
+    expect(source).toContain('layerState[selectedField.layer].locked');
+  });
+
+  it('renders line items as a selectable table region instead of passive text', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+    expect(source).toContain('Line items · lines[]');
+    expect(source).toContain('beginLineItemsDrag');
+    expect(source).toContain('resizeLineItems');
+    expect(source).toContain('lineRegion.columns.map');
+  });
+
+  it('selects the line items region on focus and keyboard activation', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+    expect(source).toContain('onFocus={onSelectLineItems}');
+    expect(source).toContain("event.key === 'Enter'");
+    expect(source).toContain("event.key === ' '");
+    expect(source).toContain('event.preventDefault()');
+  });
+
+  it('shows line items in status and layer list', () => {
+    expect(read('src/components/document-templates/DesignerStatusBar.tsx')).toContain('selectedKind');
+    expect(read('src/components/document-templates/LayerList.tsx')).toContain('onSelectLineItems');
+  });
+});
