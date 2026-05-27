@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { Boxes, Layers3, SlidersHorizontal } from 'lucide-react';
 import {
   addFieldFromBinding,
   applyFieldPatch,
@@ -24,6 +25,7 @@ import { TemplateCanvas } from './TemplateCanvas';
 type DocumentTemplateDesignerProps = {
   config: DocumentTemplateConfig;
   canEdit: boolean;
+  canPreview?: boolean;
   saving?: boolean;
   onChange: (config: DocumentTemplateConfig) => void;
   onCreateDraft: () => void;
@@ -32,6 +34,8 @@ type DocumentTemplateDesignerProps = {
   onTestPrint: () => void;
   onPublish: () => void;
 };
+
+type DesignerPanel = 'inspector' | 'bindings' | 'layers';
 
 const DEFAULT_LAYER_STATE: LayerState = {
   form: { visible: true, locked: false },
@@ -42,6 +46,7 @@ const DEFAULT_LAYER_STATE: LayerState = {
 export function DocumentTemplateDesigner({
   config,
   canEdit,
+  canPreview = true,
   saving = false,
   onChange,
   onCreateDraft,
@@ -55,6 +60,7 @@ export function DocumentTemplateDesigner({
   const [zoom, setZoom] = useState(0.92);
   const [snapStep, setSnapStep] = useState(1);
   const [layerState, setLayerState] = useState<LayerState>(DEFAULT_LAYER_STATE);
+  const [activePanel, setActivePanel] = useState<DesignerPanel>('inspector');
   const currentSerializedRef = useRef(JSON.stringify(config));
 
   useEffect(() => {
@@ -137,6 +143,7 @@ export function DocumentTemplateDesigner({
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
       <DesignerToolbar
         canEdit={canEdit}
+        canPreview={canPreview}
         canUndo={history.past.length > 0}
         canRedo={history.future.length > 0}
         saving={saving}
@@ -149,35 +156,36 @@ export function DocumentTemplateDesigner({
         onRedo={handleRedo}
       />
 
-      <div className="grid min-h-[720px] grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
-        <aside className="space-y-5 border-r border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/70">
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs font-medium text-slate-500">
-              Zoom
-              <input type="range" min="0.45" max="1.35" step="0.05" value={zoom} onChange={event => setZoom(Number(event.target.value))}
-                className="mt-2 w-full" />
-            </label>
-            <label className="text-xs font-medium text-slate-500">
-              Snap
-              <select value={snapStep} onChange={event => setSnapStep(Number(event.target.value))}
-                className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-900">
-                <option value={0.5}>0.5 mm</option>
-                <option value={1}>1 mm</option>
-                <option value={2}>2 mm</option>
-                <option value={5}>5 mm</option>
-              </select>
-            </label>
-          </div>
-          <BindingPalette onAddBinding={handleAddBinding} disabled={!canEdit} />
-          <LayerList
-            config={history.current}
-            selectedFieldId={selectedFieldId}
-            layerState={layerState}
-            onSelectField={setSelectedFieldId}
-            onToggleLayerVisible={toggleLayerVisible}
-            onToggleLayerLocked={toggleLayerLocked}
-          />
-        </aside>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/70">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${canEdit ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+            {canEdit ? 'Draft editable' : 'Active read-only'}
+          </span>
+          <span className="truncate text-xs text-slate-500">
+            {selectedField ? `${selectedField.label} · ${selectedField.binding_source}` : 'No field selected'}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+            Zoom
+            <input type="range" min="0.45" max="1.35" step="0.05" value={zoom} onChange={event => setZoom(Number(event.target.value))}
+              className="w-32" />
+            <span className="w-10 text-right tabular-nums">{Math.round(zoom * 100)}%</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+            Snap
+            <select value={snapStep} onChange={event => setSnapStep(Number(event.target.value))}
+              className="h-8 w-24 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-900">
+              <option value={0.5}>0.5 mm</option>
+              <option value={1}>1 mm</option>
+              <option value={2}>2 mm</option>
+              <option value={5}>5 mm</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="grid min-h-[760px] grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_360px]">
 
         <main tabIndex={0} onKeyDown={handleKeyDown} className="min-w-0 outline-none">
           <TemplateCanvas
@@ -192,13 +200,52 @@ export function DocumentTemplateDesigner({
           />
         </main>
 
-        <aside className="border-l border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-          <FieldInspector
-            field={selectedField}
-            readOnly={!canEdit}
-            onPatch={patchSelected}
-            onDelete={handleDelete}
-          />
+        <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+          <div className="grid grid-cols-3 border-b border-slate-200 p-2 dark:border-slate-700">
+            {[
+              { id: 'inspector' as const, label: 'Inspector', icon: SlidersHorizontal },
+              { id: 'bindings' as const, label: 'Fields', icon: Boxes },
+              { id: 'layers' as const, label: 'Layers', icon: Layers3 },
+            ].map(item => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActivePanel(item.id)}
+                  className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg text-xs font-semibold ${activePanel === item.id ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                >
+                  <Icon size={14} /> {item.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto p-4">
+            {activePanel === 'inspector' ? (
+              <FieldInspector
+                field={selectedField}
+                readOnly={!canEdit}
+                onPatch={patchSelected}
+                onDelete={handleDelete}
+              />
+            ) : null}
+            {activePanel === 'bindings' ? (
+              <BindingPalette onAddBinding={handleAddBinding} disabled={!canEdit} />
+            ) : null}
+            {activePanel === 'layers' ? (
+              <LayerList
+                config={history.current}
+                selectedFieldId={selectedFieldId}
+                layerState={layerState}
+                onSelectField={fieldId => {
+                  setSelectedFieldId(fieldId);
+                  setActivePanel('inspector');
+                }}
+                onToggleLayerVisible={toggleLayerVisible}
+                onToggleLayerLocked={toggleLayerLocked}
+              />
+            ) : null}
+          </div>
         </aside>
       </div>
 

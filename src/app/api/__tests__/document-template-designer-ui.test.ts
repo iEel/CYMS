@@ -13,8 +13,11 @@ describe('document template visual designer UI', () => {
 
     expect(manager).toContain('DocumentTemplateDesigner');
     expect(manager).toContain('createDraft');
+    expect(manager).toContain('createDefaultTemplate');
+    expect(manager).toContain('ensurePreviewReady');
     expect(manager).toContain('/api/document-templates/');
     expect(manager).toContain('/draft');
+    expect(manager).toContain('ยังไม่มี template ให้แก้ไข');
   });
 
   it('provides the required designer panels and mm-based canvas interactions', () => {
@@ -28,6 +31,8 @@ describe('document template visual designer UI', () => {
     expect(designer).toContain('createDesignerHistory');
     expect(designer).toContain('undoDesignerHistory');
     expect(designer).toContain('redoDesignerHistory');
+    expect(designer).toContain("activePanel === 'bindings'");
+    expect(designer).toContain("activePanel === 'layers'");
     expect(canvas).toContain('onPointerDown');
     expect(canvas).toContain('resize');
     expect(canvas).toContain('mmToPx');
@@ -41,5 +46,14 @@ describe('document template visual designer UI', () => {
     expect(toolbar).toContain('Save Draft');
     expect(toolbar).toContain('Test Print');
     expect(toolbar).toContain('Publish');
+  });
+
+  it('keeps preview tied to the selected draft config instead of falling back to an unrelated sample', () => {
+    const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
+
+    expect(manager).toContain('const ensurePreviewReady = async ()');
+    expect(manager).toContain('await saveDraft()');
+    expect(manager).toContain("setError('เลือกหรือสร้าง document template ก่อน Preview')");
+    expect(manager).toContain('if (selectedTemplate) params.templateId');
   });
 });

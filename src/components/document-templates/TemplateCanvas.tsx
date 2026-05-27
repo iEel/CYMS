@@ -133,7 +133,7 @@ export function TemplateCanvas({
   const lineRegion = config.sections.line_items;
 
   return (
-    <div className="min-h-[620px] overflow-auto bg-slate-100 p-6 dark:bg-slate-950">
+    <div className="min-h-[700px] overflow-auto bg-slate-100 p-8 dark:bg-slate-950">
       <div
         ref={canvasRef}
         className="relative mx-auto bg-white shadow-sm outline outline-1 outline-slate-300 dark:outline-slate-700"

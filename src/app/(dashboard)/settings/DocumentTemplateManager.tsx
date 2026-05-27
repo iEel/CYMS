@@ -4,6 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Copy,
   Download,
+  FilePlus2,
   FileUp,
   RefreshCw,
   Star,
@@ -186,6 +187,34 @@ export default function DocumentTemplateManager() {
     }
   };
 
+  const createDefaultTemplate = async () => {
+    setActionId('create-default');
+    setError('');
+    setMessage('');
+    try {
+      const response = await fetch('/api/document-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template_code: `CONT_TAX_RECEIPT_${Date.now().toString().slice(-5)}`,
+          template_name: 'Continuous Tax Invoice / Receipt',
+          document_type: 'tax_invoice_receipt',
+          description: 'Default continuous tax invoice / receipt template',
+          config: cloneDefaultConfig(),
+        }),
+      });
+      const data = await response.json() as { error?: string; template?: DocumentTemplateRow };
+      if (!response.ok) throw new Error(data.error || 'Unable to create default template');
+      await loadTemplates();
+      if (data.template?.template_id) setSelectedId(data.template.template_id);
+      setMessage('สร้าง default continuous template แล้ว');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to create default template');
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const saveDraft = async () => {
     if (!selectedTemplate || !canEditDraft) return false;
     const validation = validateDesignerTemplateConfig(config);
@@ -342,21 +371,39 @@ export default function DocumentTemplateManager() {
       preview,
       mode: config.mode,
       copyMode: config.copy_mode,
-      templateId: selectedTemplate ? String(selectedTemplate.template_id) : '',
     };
+    if (selectedTemplate) params.templateId = String(selectedTemplate.template_id);
     if (editingVersion?.version_no) params.versionNo = String(editingVersion.version_no);
     if (testPrint) params.testPrint = '1';
     if (preview === 'real') params.id = invoiceId.trim();
     return params;
   };
 
-  const samplePreview = () => openPrintPreview(previewParams('sample'));
-  const testPrint = () => openPrintPreview(previewParams('sample', true));
-  const realPreview = () => {
+  const ensurePreviewReady = async () => {
+    if (!selectedTemplate || !editingVersion) {
+      setError('เลือกหรือสร้าง document template ก่อน Preview');
+      return false;
+    }
+    if (!canEditDraft) return true;
+    return saveDraft();
+  };
+
+  const samplePreview = async () => {
+    if (!await ensurePreviewReady()) return;
+    openPrintPreview(previewParams('sample'));
+  };
+
+  const testPrint = async () => {
+    if (!await ensurePreviewReady()) return;
+    openPrintPreview(previewParams('sample', true));
+  };
+
+  const realPreview = async () => {
     if (!invoiceId.trim()) {
       setError('ระบุ invoice id ก่อน preview เอกสารจริง');
       return;
     }
+    if (!await ensurePreviewReady()) return;
     openPrintPreview(previewParams('real'));
   };
 
@@ -402,7 +449,7 @@ export default function DocumentTemplateManager() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
           <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
             <p className="text-xs font-semibold uppercase text-slate-500">Templates</p>
@@ -412,7 +459,10 @@ export default function DocumentTemplateManager() {
             {loading ? (
               <p className="px-4 py-8 text-center text-xs text-slate-400">Loading templates...</p>
             ) : templates.length === 0 ? (
-              <p className="px-4 py-8 text-center text-xs text-slate-400">No document templates found</p>
+              <div className="px-4 py-8 text-center">
+                <p className="text-xs font-semibold text-slate-500">No document templates found</p>
+                <p className="mt-1 text-[11px] text-slate-400">สร้าง template เริ่มต้นก่อนเปิด designer</p>
+              </div>
             ) : templates.map(template => (
               <button
                 key={template.template_id}
@@ -434,6 +484,10 @@ export default function DocumentTemplateManager() {
             ))}
           </div>
           <div className="space-y-2 border-t border-slate-200 p-4 dark:border-slate-700">
+            <button type="button" onClick={createDefaultTemplate} disabled={actionId !== null}
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
+              <FilePlus2 size={14} /> Create Default Template
+            </button>
             <button type="button" onClick={() => runAction('duplicate')} disabled={!selectedTemplate || actionId !== null}
               className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300">
               <Copy size={14} /> Duplicate Template
@@ -450,82 +504,105 @@ export default function DocumentTemplateManager() {
         </aside>
 
         <main className="min-w-0 space-y-4">
-          <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs text-slate-400">Selected template</p>
-                <h4 className="truncate text-base font-semibold text-slate-800 dark:text-white">
-                  {selectedTemplate?.template_name || 'No template selected'}
-                </h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  Editing {editingVersion?.status || 'none'} version {editingVersion?.version_no || '-'} · Published version {detail?.template.current_version_no || '-'}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={invoiceId}
-                  onChange={event => setInvoiceId(event.target.value)}
-                  placeholder="Invoice ID for real preview"
-                  className="h-9 w-52 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                />
-                <button type="button" onClick={realPreview}
-                  className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:text-slate-200">
-                  Real Preview
+          {selectedTemplate && editingVersion ? (
+            <>
+              <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-400">Selected template</p>
+                    <h4 className="truncate text-base font-semibold text-slate-800 dark:text-white">
+                      {selectedTemplate.template_name}
+                    </h4>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Editing {editingVersion.status || 'none'} version {editingVersion.version_no || '-'} · Published version {detail?.template.current_version_no || '-'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={invoiceId}
+                      onChange={event => setInvoiceId(event.target.value)}
+                      placeholder="Invoice ID for real preview"
+                      className="h-9 w-52 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    />
+                    <button type="button" onClick={realPreview}
+                      className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:text-slate-200">
+                      Real Preview
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-6">
+                  <label className="text-xs font-medium text-slate-500">
+                    Width mm
+                    <input type="number" step="0.1" value={config.paper.width_mm} onChange={event => updatePaper('width_mm', Number(event.target.value))} disabled={!canEditDraft}
+                      className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                  </label>
+                  <label className="text-xs font-medium text-slate-500">
+                    Height mm
+                    <input type="number" step="0.1" value={config.paper.height_mm} onChange={event => updatePaper('height_mm', Number(event.target.value))} disabled={!canEditDraft}
+                      className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                  </label>
+                  <label className="text-xs font-medium text-slate-500">
+                    Mode
+                    <select value={config.mode} onChange={event => setConfig(current => ({ ...current, mode: event.target.value as DocumentTemplateMode }))} disabled={!canEditDraft}
+                      className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                      <option value="full">full</option>
+                      <option value="overlay">overlay</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-medium text-slate-500">
+                    Copy mode
+                    <select value={config.copy_mode} onChange={event => setConfig(current => ({ ...current, copy_mode: event.target.value as DocumentTemplateCopyMode }))} disabled={!canEditDraft}
+                      className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                      <option value="carbonless">carbonless</option>
+                      <option value="separate">separate</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-medium text-slate-500">
+                    Top offset
+                    <input type="number" step="0.1" value={config.paper.top_offset_mm} onChange={event => updatePaper('top_offset_mm', Number(event.target.value))} disabled={!canEditDraft}
+                      className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                  </label>
+                  <label className="text-xs font-medium text-slate-500">
+                    Left offset
+                    <input type="number" step="0.1" value={config.paper.left_offset_mm} onChange={event => updatePaper('left_offset_mm', Number(event.target.value))} disabled={!canEditDraft}
+                      className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                  </label>
+                </div>
+              </section>
+
+              <DocumentTemplateDesigner
+                config={config}
+                canEdit={canEditDraft}
+                canPreview={Boolean(selectedTemplate && editingVersion)}
+                saving={saving}
+                onChange={setConfig}
+                onCreateDraft={createDraft}
+                onSaveDraft={saveDraft}
+                onPreview={samplePreview}
+                onTestPrint={testPrint}
+                onPublish={publishDraft}
+              />
+            </>
+          ) : (
+            <section className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center dark:border-slate-700 dark:bg-slate-800">
+              <FilePlus2 size={28} className="mx-auto text-blue-500" />
+              <h4 className="mt-3 text-base font-semibold text-slate-800 dark:text-white">ยังไม่มี template ให้แก้ไข</h4>
+              <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
+                Designer จะเปิดได้เมื่อโหลด template/version จริงสำเร็จเท่านั้น เพื่อป้องกันการ Preview ด้วย sample layout คนละชุดกับ canvas
+              </p>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                <button type="button" onClick={loadTemplates}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-blue-300 dark:border-slate-700 dark:text-slate-300">
+                  <RefreshCw size={14} /> Refresh
+                </button>
+                <button type="button" onClick={createDefaultTemplate} disabled={actionId !== null}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
+                  <FilePlus2 size={14} /> Create Default Template
                 </button>
               </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-6">
-              <label className="text-xs font-medium text-slate-500">
-                Width mm
-                <input type="number" step="0.1" value={config.paper.width_mm} onChange={event => updatePaper('width_mm', Number(event.target.value))} disabled={!canEditDraft}
-                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-              </label>
-              <label className="text-xs font-medium text-slate-500">
-                Height mm
-                <input type="number" step="0.1" value={config.paper.height_mm} onChange={event => updatePaper('height_mm', Number(event.target.value))} disabled={!canEditDraft}
-                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-              </label>
-              <label className="text-xs font-medium text-slate-500">
-                Mode
-                <select value={config.mode} onChange={event => setConfig(current => ({ ...current, mode: event.target.value as DocumentTemplateMode }))} disabled={!canEditDraft}
-                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
-                  <option value="full">full</option>
-                  <option value="overlay">overlay</option>
-                </select>
-              </label>
-              <label className="text-xs font-medium text-slate-500">
-                Copy mode
-                <select value={config.copy_mode} onChange={event => setConfig(current => ({ ...current, copy_mode: event.target.value as DocumentTemplateCopyMode }))} disabled={!canEditDraft}
-                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
-                  <option value="carbonless">carbonless</option>
-                  <option value="separate">separate</option>
-                </select>
-              </label>
-              <label className="text-xs font-medium text-slate-500">
-                Top offset
-                <input type="number" step="0.1" value={config.paper.top_offset_mm} onChange={event => updatePaper('top_offset_mm', Number(event.target.value))} disabled={!canEditDraft}
-                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-              </label>
-              <label className="text-xs font-medium text-slate-500">
-                Left offset
-                <input type="number" step="0.1" value={config.paper.left_offset_mm} onChange={event => updatePaper('left_offset_mm', Number(event.target.value))} disabled={!canEditDraft}
-                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-              </label>
-            </div>
-          </section>
-
-          <DocumentTemplateDesigner
-            config={config}
-            canEdit={canEditDraft}
-            saving={saving}
-            onChange={setConfig}
-            onCreateDraft={createDraft}
-            onSaveDraft={saveDraft}
-            onPreview={samplePreview}
-            onTestPrint={testPrint}
-            onPublish={publishDraft}
-          />
+            </section>
+          )}
         </main>
       </div>
     </div>

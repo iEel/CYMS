@@ -4,6 +4,7 @@ import { CheckCircle2, Eye, FilePlus2, Printer, Redo2, Save, Undo2 } from 'lucid
 
 type DesignerToolbarProps = {
   canEdit: boolean;
+  canPreview?: boolean;
   canUndo: boolean;
   canRedo: boolean;
   saving?: boolean;
@@ -18,6 +19,7 @@ type DesignerToolbarProps = {
 
 export function DesignerToolbar({
   canEdit,
+  canPreview = true,
   canUndo,
   canRedo,
   saving = false,
@@ -73,14 +75,16 @@ export function DesignerToolbar({
         <button
           type="button"
           onClick={onPreview}
-          className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:text-slate-200"
+          disabled={!canPreview}
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:border-blue-300 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200"
         >
           <Eye size={15} /> Preview
         </button>
         <button
           type="button"
           onClick={onTestPrint}
-          className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:text-slate-200"
+          disabled={!canPreview}
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:border-blue-300 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200"
         >
           <Printer size={15} /> Test Print
         </button>

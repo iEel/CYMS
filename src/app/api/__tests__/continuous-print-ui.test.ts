@@ -78,7 +78,8 @@ describe('continuous print UI', () => {
   it('opens settings test prints as sample-only without a real invoice id', () => {
     const source = fs.readFileSync(templateManagerPath, 'utf8');
 
-    expect(source).toContain("const testPrint = () => openPrintPreview(previewParams('sample', true));");
+    expect(source).toContain('const testPrint = async () =>');
+    expect(source).toContain("openPrintPreview(previewParams('sample', true));");
     expect(source).toContain("params.testPrint = '1'");
     expect(source).not.toContain('realPreview(true)');
   });

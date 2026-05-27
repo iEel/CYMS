@@ -64,6 +64,7 @@ npm run lint
 - **Import/Export Guardrail**: import JSON ใช้ `validateDesignerTemplateConfig()` ตรวจ binding allowlist, duplicate field id, field หลุดขอบกระดาษ และ text ที่เสี่ยง XSS ก่อนส่ง API
 - **Granular Permissions**: seed permission ใหม่ `document_templates.view/create/update_draft/publish/export/import/test_print`; `settings.manage` ไม่ใช่ permission เดียวของ module นี้แล้ว
 - **Reprint Compatibility**: print-log validate template version เก่าที่ published ได้ ไม่บังคับให้เป็น current version เพื่อให้ reprint เอกสารเก่ายังใช้ template version เดิม
+- **UI/Preview Polish**: ปรับ designer เป็น 2-column workspace ให้ canvas กว้างขึ้น, ย้าย Binding Palette / Layer List เป็น right-side panel แบบ tab, เพิ่ม search binding, เพิ่ม empty state + Create Default Template และกัน Preview/Test Print ไม่ให้ fallback ไป sample layout คนละชุดเมื่อยังไม่มี template จริง; draft preview จะ save draft ก่อนเปิด print preview เพื่อให้หัวเอกสารตรงกับ canvas
 
 ไฟล์หลัก:
 
@@ -92,7 +93,7 @@ npx tsc --noEmit --pretty false
 npm run lint
 ```
 
-ผลล่าสุด: focused Document Template / Designer tests `67/67` ผ่าน, full suite `914/914` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning
+ผลล่าสุด: focused Document Template / Designer tests `68/68` ผ่าน, full suite `915/915` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning
 
 ### อัปเดตล่าสุดก่อนหน้า: Customer Portal Access Control + EIR Visibility Policy (25 พ.ค. 2569)
 
