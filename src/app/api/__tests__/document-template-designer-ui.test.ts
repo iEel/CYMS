@@ -57,6 +57,15 @@ describe('document template visual designer UI', () => {
     expect(manager).toContain('if (selectedTemplate) params.templateId');
   });
 
+  it('lets settings deep-link back into the document template designer tab', () => {
+    const settingsPage = read('src/app/(dashboard)/settings/page.tsx');
+
+    expect(settingsPage).toContain('urlTab');
+    expect(settingsPage).toContain("new URLSearchParams(window.location.search).get('tab')");
+    expect(settingsPage).toContain("url.searchParams.set('tab', tabId)");
+    expect(settingsPage).toContain("tab.id === 'portal-access'");
+  });
+
   it('keeps create and duplicate route response table variables aligned with selected output fields', () => {
     const createRoute = read('src/app/api/document-templates/route.ts');
     const duplicateRoute = read('src/app/api/document-templates/[templateId]/duplicate/route.ts');

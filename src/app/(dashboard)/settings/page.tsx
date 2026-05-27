@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   Building2,
@@ -96,6 +96,7 @@ export default function SettingsPage() {
   const { hasPermission, session } = useAuth();
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('');
+  const [urlTab, setUrlTab] = useState('');
   const [search, setSearch] = useState('');
   const canUsePortalAccess = session?.role === 'yard_manager';
   const visibleTabs = tabs.filter(tab => hasPermission(tab.permission) && (tab.id !== 'portal-access' || canUsePortalAccess));
@@ -116,19 +117,48 @@ export default function SettingsPage() {
     .map(id => visibleTabs.find(tab => tab.id === id))
     .filter(Boolean) as typeof visibleTabs;
 
+  const setSettingsUrlTab = (tabId: string) => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tabId);
+    window.history.replaceState(null, '', `${url.pathname}?${url.searchParams.toString()}`);
+    setUrlTab(tabId);
+  };
+
+  useEffect(() => {
+    const syncUrlTab = () => {
+      setUrlTab(new URLSearchParams(window.location.search).get('tab') || '');
+    };
+    syncUrlTab();
+    window.addEventListener('popstate', syncUrlTab);
+    return () => window.removeEventListener('popstate', syncUrlTab);
+  }, []);
+
+  useEffect(() => {
+    if (!urlTab) return;
+    const tab = tabs.find(item => item.id === urlTab);
+    if (!tab || !hasPermission(tab.permission) || (tab.id === 'portal-access' && !canUsePortalAccess)) return;
+    setActiveGroup(tab.group);
+    setActiveTab(tab.id);
+    setSearch('');
+  }, [canUsePortalAccess, hasPermission, urlTab]);
+
   const openTab = (tabId: string) => {
     const tab = visibleTabs.find(item => item.id === tabId);
     if (!tab) return;
     setActiveGroup(tab.group);
     setActiveTab(tab.id);
     setSearch('');
+    setSettingsUrlTab(tab.id);
   };
 
   const openGroup = (groupId: string) => {
     const group = visibleGroups.find(item => item.id === groupId);
+    const firstTabId = group?.items[0]?.id || '';
     setActiveGroup(groupId);
-    setActiveTab(group?.items[0]?.id || '');
+    setActiveTab(firstTabId);
     setSearch('');
+    if (firstTabId) setSettingsUrlTab(firstTabId);
   };
 
   const showHub = !activeGroup && !normalizedSearch;
