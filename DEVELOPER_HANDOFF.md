@@ -65,6 +65,7 @@ npm run lint
 - **Granular Permissions**: seed permission ใหม่ `document_templates.view/create/update_draft/publish/export/import/test_print`; `settings.manage` ไม่ใช่ permission เดียวของ module นี้แล้ว
 - **Reprint Compatibility**: print-log validate template version เก่าที่ published ได้ ไม่บังคับให้เป็น current version เพื่อให้ reprint เอกสารเก่ายังใช้ template version เดิม
 - **UI/Preview Polish**: ปรับ designer เป็น 2-column workspace ให้ canvas กว้างขึ้น, ย้าย Binding Palette / Layer List เป็น right-side panel แบบ tab, เพิ่ม search binding, เพิ่ม empty state + Create Default Template และกัน Preview/Test Print ไม่ให้ fallback ไป sample layout คนละชุดเมื่อยังไม่มี template จริง; draft preview จะ save draft ก่อนเปิด print preview เพื่อให้หัวเอกสารตรงกับ canvas
+- **Continuous Preview Polish**: หน้า `/billing/print/continuous` มีปุ่ม "กลับไปแก้ Template" บน toolbar และ renderer full-form normalize line item table columns ให้ไม่ล้นกรอบกระดาษ แม้ default column width จะมาจาก config หน่วย mm
 
 ไฟล์หลัก:
 
@@ -93,7 +94,7 @@ npx tsc --noEmit --pretty false
 npm run lint
 ```
 
-ผลล่าสุด: focused Document Template / Designer tests `68/68` ผ่าน, full suite `915/915` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning
+ผลล่าสุด: focused Document Template / Designer tests `68/68` ผ่าน, full suite `915/915` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning; รอบ Continuous Preview Polish ล่าสุดรัน `continuous-print-ui.test.ts` `10/10` ผ่าน, `/billing/print/continuous?...` ตอบ `200`, `tsc` ผ่าน, `eslint` ผ่าน
 
 ### อัปเดตล่าสุดก่อนหน้า: Customer Portal Access Control + EIR Visibility Policy (25 พ.ค. 2569)
 

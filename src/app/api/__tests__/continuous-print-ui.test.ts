@@ -35,6 +35,23 @@ describe('continuous print UI', () => {
     expect(source).toContain('mode');
   });
 
+  it('keeps the full-form continuous receipt table inside the paper frame', () => {
+    const source = fs.readFileSync(componentPath, 'utf8');
+
+    expect(source).toContain('box-sizing: border-box');
+    expect(source).toContain('const totalColumnWidthMm');
+    expect(source).toContain('<colgroup>');
+    expect(source).toContain('overflow-wrap: anywhere');
+  });
+
+  it('provides a back action from the print preview to the template designer', () => {
+    const source = fs.readFileSync(pagePath, 'utf8');
+
+    expect(source).toContain('handleBackToTemplate');
+    expect(source).toContain('กลับไปแก้ Template');
+    expect(source).toContain('/settings?tab=document-templates');
+  });
+
   it('wires document template management into settings', () => {
     const source = fs.readFileSync(settingsPath, 'utf8');
 

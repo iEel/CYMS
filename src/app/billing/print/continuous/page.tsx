@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Printer } from 'lucide-react';
+import { ArrowLeft, Printer } from 'lucide-react';
 import { ContinuousTaxReceipt } from '@/components/billing/ContinuousTaxReceipt';
 import { buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrintSample';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
@@ -208,6 +208,14 @@ function ContinuousPrintContent() {
     }
   }
 
+  function handleBackToTemplate() {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.href = '/settings?tab=document-templates';
+  }
+
   return (
     <>
       <style jsx global>{`
@@ -227,6 +235,15 @@ function ContinuousPrintContent() {
           top: 16px;
           z-index: 40;
         }
+        .continuous-print-toolbar-main {
+          align-items: center;
+          display: flex;
+          gap: 12px;
+          min-width: 0;
+        }
+        .continuous-print-toolbar-title {
+          min-width: 0;
+        }
         .continuous-print-toolbar button {
           align-items: center;
           background: #fff;
@@ -239,6 +256,10 @@ function ContinuousPrintContent() {
           gap: 8px;
           padding: 8px 12px;
         }
+        .continuous-print-toolbar button.secondary {
+          background: #1f2937;
+          color: #e5e7eb;
+        }
         .continuous-print-status { color: #d1d5db; font-size: 12px; }
         .continuous-print-error { color: #fecaca; font-size: 12px; margin-top: 2px; }
         .continuous-print-shell { padding: 76px 16px 24px; }
@@ -248,18 +269,29 @@ function ContinuousPrintContent() {
         }
       `}</style>
       <div className="continuous-print-toolbar">
-        <div>
-          <strong>Continuous Tax Invoice / Receipt</strong>
-          <div className="continuous-print-status">
-            {status === 'loading'
-              ? 'Loading preview...'
-              : status === 'fallback'
-                ? 'Using sample preview'
-                : status === 'error'
-                  ? 'Preview failed'
-                  : 'Preview ready'}
+        <div className="continuous-print-toolbar-main">
+          <button
+            type="button"
+            className="secondary"
+            onClick={handleBackToTemplate}
+            aria-label="Back to document template designer"
+          >
+            <ArrowLeft size={16} />
+            กลับไปแก้ Template
+          </button>
+          <div className="continuous-print-toolbar-title">
+            <strong>Continuous Tax Invoice / Receipt</strong>
+            <div className="continuous-print-status">
+              {status === 'loading'
+                ? 'Loading preview...'
+                : status === 'fallback'
+                  ? 'Using sample preview'
+                  : status === 'error'
+                    ? 'Preview failed'
+                    : 'Preview ready'}
+            </div>
+            {printError ? <div className="continuous-print-error">{printError}</div> : null}
           </div>
-          {printError ? <div className="continuous-print-error">{printError}</div> : null}
         </div>
         <button
           type="button"

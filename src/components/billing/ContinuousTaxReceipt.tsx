@@ -67,6 +67,11 @@ function mm(value: number) {
   return `${value}mm`;
 }
 
+function percent(value: number, total: number) {
+  if (!Number.isFinite(total) || total <= 0) return 'auto';
+  return `${(value / total) * 100}%`;
+}
+
 function fontWeightValue(weight: DocumentTemplateField['font_weight']) {
   if (weight === 'medium') return 500;
   if (weight === 'semibold') return 600;
@@ -130,14 +135,22 @@ function OverlayFields({
 function LineItems({ payload, config }: { payload: ContinuousPrintPayload; config: DocumentTemplateConfig }) {
   const section = config.sections.line_items;
   const rows = payload.lines.slice(0, section.max_rows);
+  const rowNumberWidthMm = 9;
+  const totalColumnWidthMm = rowNumberWidthMm + section.columns.reduce((sum, column) => sum + column.width_mm, 0);
 
   return (
     <table className="ctr-lines">
+      <colgroup>
+        <col style={{ width: percent(rowNumberWidthMm, totalColumnWidthMm) }} />
+        {section.columns.map((column) => (
+          <col key={column.column_id} style={{ width: percent(column.width_mm, totalColumnWidthMm) }} />
+        ))}
+      </colgroup>
       <thead>
         <tr>
-          <th style={{ width: '9mm' }}>#</th>
+          <th>#</th>
           {section.columns.map((column) => (
-            <th key={column.column_id} style={{ width: mm(column.width_mm), textAlign: column.text_align }}>
+            <th key={column.column_id} style={{ textAlign: column.text_align }}>
               {column.label}
             </th>
           ))}
@@ -249,7 +262,7 @@ export function ContinuousTaxReceipt({
         .ctr-page-content { box-sizing: border-box; position: absolute; transform-origin: top left; }
         .ctr-page-content-full { height: ${contentHeight}mm; width: ${contentWidth}mm; }
         .ctr-page-content-overlay { height: ${paper.height_mm}mm; width: ${paper.width_mm}mm; }
-        .ctr-full { border: 0.35mm solid #111827; display: flex; flex-direction: column; height: 100%; padding: 5mm; }
+        .ctr-full { border: 0.35mm solid #111827; box-sizing: border-box; display: flex; flex-direction: column; height: 100%; min-width: 0; padding: 5mm; width: 100%; }
         .ctr-header { align-items: flex-start; border-bottom: 0.25mm solid #111827; display: flex; justify-content: space-between; padding-bottom: 3mm; }
         .ctr-header h1 { font-size: 15pt; line-height: 1.15; margin: 0; }
         .ctr-copy-label { font-size: 9pt; font-weight: 700; margin: 1.5mm 0 0; }
@@ -262,8 +275,8 @@ export function ContinuousTaxReceipt({
         .ctr-parties h2 { font-size: 10pt; margin: 0 0 1mm; }
         .ctr-parties p, .ctr-payment p { font-size: 8pt; line-height: 1.35; margin: 0.5mm 0; }
         .ctr-lines { border-collapse: collapse; font-size: 8pt; table-layout: fixed; width: 100%; }
-        .ctr-lines th { background: #f3f4f6; border: 0.2mm solid #374151; font-weight: 700; padding: 1mm; }
-        .ctr-lines td { border: 0.2mm solid #9ca3af; height: ${config.sections.line_items.row_height_mm}mm; padding: 0.8mm 1mm; vertical-align: top; }
+        .ctr-lines th { background: #f3f4f6; border: 0.2mm solid #374151; font-weight: 700; overflow-wrap: anywhere; padding: 1mm; }
+        .ctr-lines td { border: 0.2mm solid #9ca3af; height: ${config.sections.line_items.row_height_mm}mm; overflow-wrap: anywhere; padding: 0.8mm 1mm; vertical-align: top; }
         .ctr-summary { display: grid; gap: 4mm; grid-template-columns: 1fr 58mm; margin-top: 3mm; }
         .ctr-total { border-top: 0.25mm solid #111827; margin-top: 1mm; padding-top: 1mm; }
         .ctr-total dt, .ctr-total dd { font-size: 10pt; font-weight: 700; }
