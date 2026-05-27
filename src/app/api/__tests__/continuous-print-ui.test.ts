@@ -1,5 +1,100 @@
 import fs from 'fs';
 import path from 'path';
+import { lineItemsBoxStyle, lineItemValue } from '@/components/billing/ContinuousTaxReceipt';
+import type { DocumentTemplateConfig } from '@/lib/documentTemplateTypes';
+
+const source = fs.readFileSync(path.join(process.cwd(), 'src/components/billing/ContinuousTaxReceipt.tsx'), 'utf8');
+type LineItemColumn = DocumentTemplateConfig['sections']['line_items']['columns'][number];
+
+describe('continuous tax receipt section-driven line items', () => {
+  it('reads line item geometry from template config', () => {
+    expect(source).toContain('const lineItemsSection = config.sections.line_items');
+    expect(source).toContain('lineItemsSection.x_mm');
+    expect(source).toContain('lineItemsSection.row_height_mm');
+    expect(source).toContain('lineItemsSection.max_rows');
+  });
+
+  it('renders configured columns proportionally without letting the table escape the page', () => {
+    expect(source).toContain('lineItemsSection.columns.map');
+    expect(source).toContain('tableLayout:');
+    expect(source).toContain('overflow:');
+  });
+
+  it('clips the full-form line item box to the configured section height', () => {
+    expect(source).toContain('height: `${heightMm}mm`');
+    expect(source).not.toContain('minHeight: `${heightMm}mm`');
+  });
+
+  it('includes the configured header band in the line item section height', () => {
+    expect(source).toContain('const headerHeightMm = Math.max(0, lineItemsSection.start_y_mm - lineItemsSection.y_mm)');
+    expect(source).toContain('const heightMm = headerHeightMm + lineItemsSection.row_height_mm * lineItemsSection.max_rows');
+    expect(source).toContain('height: `${headerHeightMm}mm`');
+  });
+
+  it('formats line item values from configured column formats', () => {
+    expect(source).toContain("function lineItemValue(line: ContinuousPrintLine, column: LineItemColumn)");
+    expect(source).toContain("if (column.format === 'currency:THB')");
+    expect(source).toContain("if (column.format === 'number')");
+    expect(source).toContain("if (key === 'amount') return line.amount");
+    expect(source).toContain('money(numericValue)');
+    expect(source).toContain('lineItemValue(line, column)');
+  });
+
+  it('computes line item box styles from header and body height', () => {
+    const section = {
+      section_id: 'line-items',
+      binding_source: 'lines',
+      x_mm: 10,
+      y_mm: 55,
+      start_y_mm: 61,
+      width_mm: 120,
+      row_height_mm: 6,
+      max_rows: 7,
+      columns: [],
+    } satisfies DocumentTemplateConfig['sections']['line_items'];
+
+    expect(lineItemsBoxStyle(section, 'full')).toMatchObject({
+      width: '120mm',
+      height: '48mm',
+      overflow: 'hidden',
+    });
+    expect(lineItemsBoxStyle(section, 'overlay')).toMatchObject({
+      position: 'absolute',
+      left: '10mm',
+      top: '55mm',
+      width: '120mm',
+      height: '48mm',
+      overflow: 'hidden',
+    });
+  });
+
+  it('formats line item values using the column format', () => {
+    const line = {
+      description: 'Refund',
+      qty: 2,
+      unit_price: 150,
+      amount: -300,
+    };
+    const column = (field_key: string, format: LineItemColumn['format']): LineItemColumn => ({
+      column_id: `${field_key}-${format}`,
+      field_key,
+      label: field_key,
+      width_mm: 20,
+      text_align: 'right',
+      format,
+    });
+
+    expect(lineItemValue(line, column('lines[].amount', 'currency:THB'))).toBe('-300.00');
+    expect(lineItemValue(line, column('lines[].amount', 'number'))).toBe('-300');
+    expect(lineItemValue(line, column('lines[].description', 'text'))).toBe('Refund');
+  });
+
+  it('uses border-box sizing for configured line item row heights', () => {
+    expect(source).toContain('.ctr-lines, .ctr-lines tr, .ctr-lines th, .ctr-lines td { box-sizing: border-box; }');
+    expect(source).toContain('line-height: 1.1');
+    expect(source).toContain('padding: 0.2mm 0.8mm');
+  });
+});
 
 describe('continuous print UI', () => {
   const root = process.cwd();
@@ -17,6 +112,11 @@ describe('continuous print UI', () => {
     const source = fs.readFileSync(pagePath, 'utf8');
 
     expect(source).toContain('/api/document-templates/preview');
+    expect(source).toContain('/api/document-templates/test-print');
+    expect(source).toContain("method: 'POST'");
+    expect(source).toContain('calibrationProfileId');
+    expect(source).toContain('versionNo');
+    expect(source).toContain('version_no: versionNo');
   });
 
   it('keeps the continuous print page safe for the client bundle', () => {
@@ -95,9 +195,10 @@ describe('continuous print UI', () => {
   it('opens settings test prints as sample-only without a real invoice id', () => {
     const source = fs.readFileSync(templateManagerPath, 'utf8');
 
-    expect(source).toContain('const testPrint = async () =>');
-    expect(source).toContain("openPrintPreview(previewParams('sample', true));");
+    expect(source).toContain('const testPrint = async (options?: PreviewParamOptions) =>');
+    expect(source).toContain("openPrintPreview(previewParams('sample', true, options));");
     expect(source).toContain("params.testPrint = '1'");
+    expect(source).toContain('calibrationProfileId');
     expect(source).not.toContain('realPreview(true)');
   });
 });

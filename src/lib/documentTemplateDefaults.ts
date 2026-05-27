@@ -256,7 +256,7 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
         binding_source: 'lines',
         x_mm: 9,
         y_mm: 55,
-        start_y_mm: 55,
+        start_y_mm: 61,
         width_mm: 222,
         row_height_mm: 6,
         max_rows: 7,

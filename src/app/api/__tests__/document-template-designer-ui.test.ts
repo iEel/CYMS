@@ -79,3 +79,135 @@ describe('document template visual designer UI', () => {
     });
   });
 });
+
+describe('document template designer line item UI wiring', () => {
+  it('uses a field-or-line-items selection model', () => {
+    const source = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+    expect(source).toContain("type DesignerSelection");
+    expect(source).toContain("type: 'line_items'");
+    expect(source).toContain('nudgeLineItems');
+  });
+
+  it('prevents keyboard nudges for locked line item and field layers', () => {
+    const source = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+    expect(source).toContain('layerState.data.locked');
+    expect(source).toContain('selectedField.locked');
+    expect(source).toContain('layerState[selectedField.layer].locked');
+  });
+
+  it('renders line items as a selectable table region instead of passive text', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+    expect(source).toContain('Line items · lines[]');
+    expect(source).toContain('beginLineItemsDrag');
+    expect(source).toContain('resizeLineItems');
+    expect(source).toContain('lineRegion.columns.map');
+  });
+
+  it('measures line item canvas height with header plus body rows', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(source).toContain('const lineItemsHeaderHeightMm = Math.max(0, lineRegion.start_y_mm - lineRegion.y_mm)');
+    expect(source).toContain('const lineItemsCanvasHeightMm = Math.max(0, lineRegion.start_y_mm - lineRegion.y_mm) + lineRegion.row_height_mm * lineRegion.max_rows');
+    expect(source).toContain('height: mmToPx(lineItemsCanvasHeightMm, zoom)');
+    expect(source).toContain('heightMm: snapMm(lineItemsCanvasHeightMm + dyMm, snapStep)');
+  });
+
+  it('keeps line item chrome outside the measured canvas rows', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(source).toContain('height: mmToPx(lineItemsHeaderHeightMm, zoom)');
+    expect(source).toContain('pointer-events-none absolute');
+    expect(source).not.toContain('className="flex h-5 items-center border-b border-slate-300 bg-slate-100/90 px-1 font-semibold text-slate-600"');
+  });
+
+  it('selects the line items region on focus and keyboard activation', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+    expect(source).toContain('onFocus={onSelectLineItems}');
+    expect(source).toContain("event.key === 'Enter'");
+    expect(source).toContain("event.key === ' '");
+    expect(source).toContain('event.preventDefault()');
+  });
+
+  it('shows line items in status and layer list', () => {
+    expect(read('src/components/document-templates/DesignerStatusBar.tsx')).toContain('selectedKind');
+    expect(read('src/components/document-templates/LayerList.tsx')).toContain('onSelectLineItems');
+  });
+});
+
+describe('line item inspector source wiring', () => {
+  it('provides a dedicated inspector for line item geometry and columns', () => {
+    const source = read('src/components/document-templates/LineItemsInspector.tsx');
+    expect(source).toContain('Line items');
+    expect(source).toContain('row_height_mm');
+    expect(source).toContain('max_rows');
+    expect(source).toContain('Number.isFinite');
+    expect(source).toContain('addLineItemColumn');
+    expect(source).toContain('moveLineItemColumn');
+    expect(source).toContain('removeLineItemColumn');
+  });
+
+  it('shows LineItemsInspector for line item selection', () => {
+    const source = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+    expect(source).toContain('<LineItemsInspector');
+    expect(source).toContain("selection?.type === 'line_items'");
+  });
+});
+
+describe('calibration profile UI wiring', () => {
+  it('exposes create, apply, update, delete, and test print actions', () => {
+    const source = read('src/components/document-templates/CalibrationProfilesPanel.tsx');
+    expect(source).toContain('Create profile from current paper');
+    expect(source).toContain('Apply profile');
+    expect(source).toContain('Update profile');
+    expect(source).toContain('Delete profile');
+    expect(source).toContain('Test Print with marks');
+    expect(source).toContain('formToProfile(nextForm,');
+    expect(source).toContain('profiles.map(profile => profile.profile_id === selectedProfile?.profile_id ? nextProfile : profile)');
+    expect(source).not.toContain('formWithCurrentPaper');
+  });
+
+  it('renders calibration panel from manager', () => {
+    expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('<CalibrationProfilesPanel');
+  });
+});
+
+describe('print history panel wiring', () => {
+  it('renders recent print history for selected template version', () => {
+    expect(read('src/components/document-templates/PrintHistoryPanel.tsx')).toContain('Recent prints');
+    expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('<PrintHistoryPanel');
+  });
+});
+
+describe('publish diff dialog wiring', () => {
+  it('shows a diff dialog before publishing', () => {
+    expect(read('src/components/document-templates/PublishDiffDialog.tsx')).toContain('Publish this draft');
+    expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('<PublishDiffDialog');
+    expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('summarizeTemplateDiff');
+  });
+
+  it('compares publish diff against the published current version instead of the loaded draft', () => {
+    const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
+
+    expect(manager).toContain('function choosePublishedBaselineConfig');
+    expect(manager).toContain('version.version_no === detail.template.current_version_no');
+    expect(manager).toContain("version.status === 'published' || version.status === 'active'");
+    expect(manager).toContain('summarizeTemplateDiff(choosePublishedBaselineConfig(detail), config)');
+    expect(manager).not.toContain('loadedVersionConfig');
+  });
+
+  it('publishes the snapshotted draft context instead of live selection state', () => {
+    const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
+
+    expect(manager).toContain('type PublishDraftContext');
+    expect(manager).toContain('publishDraftContext');
+    expect(manager).toContain('config: cloneTemplateConfig(config)');
+    expect(manager).toContain('const context = publishDraftContext');
+    expect(manager).toContain('saveDraftForContext(context)');
+    expect(manager).toContain('`/api/document-templates/${context.templateId}/publish`');
+    expect(manager).toContain('JSON.stringify({ version_no: context.versionNo })');
+    expect(manager).toContain('if (publishInFlightRef.current) return');
+    expect(manager).not.toContain('const saved = await saveDraft();');
+    expect(manager).not.toContain('`/api/document-templates/${selectedTemplate.template_id}/publish`');
+    expect(manager).not.toContain('JSON.stringify({ version_no: editingVersion.version_no })');
+  });
+});

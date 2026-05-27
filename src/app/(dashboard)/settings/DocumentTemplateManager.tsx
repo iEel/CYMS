@@ -10,9 +10,12 @@ import {
   Star,
   XCircle,
 } from 'lucide-react';
+import { CalibrationProfilesPanel } from '@/components/document-templates/CalibrationProfilesPanel';
 import { DocumentTemplateDesigner } from '@/components/document-templates/DocumentTemplateDesigner';
+import { PrintHistoryPanel } from '@/components/document-templates/PrintHistoryPanel';
+import { PublishDiffDialog } from '@/components/document-templates/PublishDiffDialog';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
-import { validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
+import { summarizeTemplateDiff, validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
 import type {
   DocumentTemplateConfig,
   DocumentTemplateCopyMode,
@@ -55,10 +58,27 @@ type TemplateListResponse = {
   error?: string;
 };
 
+type PreviewParamOptions = {
+  calibrationProfileId?: string;
+};
+
+type PublishDraftContext = {
+  templateId: number;
+  templateName: string;
+  templateCode: string;
+  versionNo: number;
+  config: DocumentTemplateConfig;
+  changes: string[];
+};
+
 const defaultConfig = buildDefaultContinuousTemplateConfig();
 
 function cloneDefaultConfig(): DocumentTemplateConfig {
   return JSON.parse(JSON.stringify(defaultConfig)) as DocumentTemplateConfig;
+}
+
+function cloneTemplateConfig(config: DocumentTemplateConfig): DocumentTemplateConfig {
+  return JSON.parse(JSON.stringify(config)) as DocumentTemplateConfig;
 }
 
 function statusTone(status?: string | null) {
@@ -83,8 +103,20 @@ function chooseEditableVersion(detail: TemplateDetail) {
     || null;
 }
 
+function choosePublishedBaselineConfig(detail: TemplateDetail | null) {
+  if (!detail?.template.current_version_no) return null;
+  const currentVersions = detail.versions.filter(version => (
+    version.version_no === detail.template.current_version_no && version.config
+  ));
+  const publishedVersion = currentVersions.find(version => (
+    version.status === 'published' || version.status === 'active'
+  ));
+  return publishedVersion?.config || currentVersions[0]?.config || null;
+}
+
 export default function DocumentTemplateManager() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const publishInFlightRef = useRef(false);
   const [templates, setTemplates] = useState<DocumentTemplateRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<TemplateDetail | null>(null);
@@ -94,6 +126,8 @@ export default function DocumentTemplateManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishDraftContext, setPublishDraftContext] = useState<PublishDraftContext | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -102,6 +136,7 @@ export default function DocumentTemplateManager() {
     [selectedId, templates],
   );
   const canEditDraft = editingVersion?.status === 'draft';
+  const selectedTemplateVersion = editingVersion?.version_no || selectedTemplate?.current_version_no || selectedTemplate?.version_no || undefined;
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -129,9 +164,10 @@ export default function DocumentTemplateManager() {
     if (!response.ok) throw new Error(nextDetail.error || 'Unable to load template detail');
 
     const version = chooseEditableVersion(nextDetail);
+    const versionConfig = version?.config ? cloneTemplateConfig(version.config) : cloneDefaultConfig();
     setDetail(nextDetail);
     setEditingVersion(version);
-    setConfig(version?.config || cloneDefaultConfig());
+    setConfig(versionConfig);
   };
 
   useEffect(() => {
@@ -166,6 +202,11 @@ export default function DocumentTemplateManager() {
       cancelled = true;
     };
   }, [selectedTemplate]);
+
+  useEffect(() => {
+    setPublishDialogOpen(false);
+    setPublishDraftContext(null);
+  }, [selectedId, detail?.template.current_version_no]);
 
   const createDraft = async () => {
     if (!selectedTemplate) return;
@@ -246,35 +287,94 @@ export default function DocumentTemplateManager() {
     }
   };
 
-  const publishDraft = async () => {
-    if (!selectedTemplate || !editingVersion || !canEditDraft) return;
-    const summary = [
-      `Publish ${selectedTemplate.template_name}`,
-      `Version: ${editingVersion.version_no}`,
-      `Fields: ${config.fields.length}`,
-      `Paper: ${config.paper.width_mm} x ${config.paper.height_mm} mm`,
-    ].join('\n');
-    if (!window.confirm(`${summary}\n\nเอกสารใหม่จะใช้ version นี้หลัง publish`)) return;
+  const saveDraftForContext = async (context: PublishDraftContext) => {
+    const validation = validateDesignerTemplateConfig(context.config);
+    if (!validation.valid) {
+      setError(validation.errors[0] || 'Template config ไม่ถูกต้อง');
+      return false;
+    }
 
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const response = await fetch(`/api/document-templates/${context.templateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: context.config }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Unable to save template');
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save template');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const publishDraft = () => {
+    if (!selectedTemplate || !editingVersion || !canEditDraft) return;
+    const versionNo = editingVersion.version_no;
+    if (!versionNo) {
+      setError('ไม่พบ version สำหรับ publish');
+      return;
+    }
+    const validation = validateDesignerTemplateConfig(config);
+    if (!validation.valid) {
+      setError(validation.errors[0] || 'Template config ไม่ถูกต้อง');
+      return;
+    }
+
+    const changes = summarizeTemplateDiff(choosePublishedBaselineConfig(detail), config);
+    setError('');
+    setMessage('');
+    setPublishDraftContext({
+      templateId: selectedTemplate.template_id,
+      templateName: selectedTemplate.template_name,
+      templateCode: selectedTemplate.template_code,
+      versionNo,
+      config: cloneTemplateConfig(config),
+      changes,
+    });
+    setPublishDialogOpen(true);
+  };
+
+  const cancelPublish = () => {
+    if (actionId === 'publish' || saving) return;
+    setPublishDialogOpen(false);
+    setPublishDraftContext(null);
+  };
+
+  const confirmPublishDraft = async () => {
+    const context = publishDraftContext;
+    if (!context) return;
+    if (publishInFlightRef.current) return;
+    if (actionId === 'publish') return;
+    publishInFlightRef.current = true;
+    setPublishDialogOpen(false);
     setActionId('publish');
     setError('');
     setMessage('');
     try {
-      const saved = await saveDraft();
+      const saved = await saveDraftForContext(context);
       if (!saved) return;
-      const response = await fetch(`/api/document-templates/${selectedTemplate.template_id}/publish`, {
+      const response = await fetch(`/api/document-templates/${context.templateId}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version_no: editingVersion.version_no }),
+        body: JSON.stringify({ version_no: context.versionNo }),
       });
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error || 'Unable to publish template');
       await loadTemplates();
-      await loadDetail(selectedTemplate.template_id);
+      await loadDetail(context.templateId);
+      setPublishDraftContext(null);
       setMessage('Publish template version แล้ว');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to publish template');
     } finally {
+      publishInFlightRef.current = false;
       setActionId(null);
     }
   };
@@ -365,7 +465,7 @@ export default function DocumentTemplateManager() {
     }
   };
 
-  const previewParams = (preview: 'sample' | 'real', testPrint = false) => {
+  const previewParams = (preview: 'sample' | 'real', testPrint = false, options?: PreviewParamOptions) => {
     const params: Record<string, string> = {
       type: selectedTemplate?.document_type || 'tax_invoice_receipt',
       preview,
@@ -375,6 +475,7 @@ export default function DocumentTemplateManager() {
     if (selectedTemplate) params.templateId = String(selectedTemplate.template_id);
     if (editingVersion?.version_no) params.versionNo = String(editingVersion.version_no);
     if (testPrint) params.testPrint = '1';
+    if (options?.calibrationProfileId) params.calibrationProfileId = options.calibrationProfileId;
     if (preview === 'real') params.id = invoiceId.trim();
     return params;
   };
@@ -385,7 +486,7 @@ export default function DocumentTemplateManager() {
       return false;
     }
     if (!canEditDraft) return true;
-    return saveDraft();
+    return await saveDraft();
   };
 
   const samplePreview = async () => {
@@ -393,9 +494,9 @@ export default function DocumentTemplateManager() {
     openPrintPreview(previewParams('sample'));
   };
 
-  const testPrint = async () => {
+  const testPrint = async (options?: PreviewParamOptions) => {
     if (!await ensurePreviewReady()) return;
-    openPrintPreview(previewParams('sample', true));
+    openPrintPreview(previewParams('sample', true, options));
   };
 
   const realPreview = async () => {
@@ -408,6 +509,7 @@ export default function DocumentTemplateManager() {
   };
 
   const updatePaper = (key: keyof DocumentTemplateConfig['paper'], value: number) => {
+    if (!Number.isFinite(value)) return;
     setConfig(current => ({
       ...current,
       paper: {
@@ -571,6 +673,18 @@ export default function DocumentTemplateManager() {
                 </div>
               </section>
 
+              <CalibrationProfilesPanel
+                config={config}
+                readOnly={!canEditDraft}
+                onChange={setConfig}
+                onTestPrint={calibrationProfileId => testPrint({ calibrationProfileId })}
+              />
+
+              <PrintHistoryPanel
+                templateCode={selectedTemplate?.template_code}
+                templateVersion={selectedTemplateVersion}
+              />
+
               <DocumentTemplateDesigner
                 config={config}
                 canEdit={canEditDraft}
@@ -605,6 +719,14 @@ export default function DocumentTemplateManager() {
           )}
         </main>
       </div>
+
+      <PublishDiffDialog
+        open={publishDialogOpen}
+        changes={publishDraftContext?.changes || []}
+        saving={saving || actionId === 'publish'}
+        onCancel={cancelPublish}
+        onConfirm={confirmPublishDraft}
+      />
     </div>
   );
 }

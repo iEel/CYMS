@@ -12,6 +12,7 @@ import {
   buildContinuousPrintPayload,
   buildSampleContinuousPrintPayload,
 } from '@/lib/billingContinuousPrint';
+import { applyCalibrationProfileToConfig } from '@/lib/documentTemplateDesigner';
 import type {
   DocumentTemplateConfig,
   DocumentTemplateCopyMode,
@@ -58,6 +59,10 @@ function modeFrom(value: string | null): DocumentTemplateMode | null {
 function copyModeFrom(value: string | null): DocumentTemplateCopyMode | null {
   if (value === 'carbonless' || value === 'separate') return value;
   return null;
+}
+
+function cleanString(value: string | null): string {
+  return value?.trim() || '';
 }
 
 async function currentTemplateConfig(
@@ -126,12 +131,14 @@ function applyPreviewOverrides(
   config: DocumentTemplateConfig,
   mode: DocumentTemplateMode | null,
   copyMode: DocumentTemplateCopyMode | null,
+  calibrationProfileId: string,
 ) {
-  return {
+  const nextConfig = {
     ...config,
     mode: mode || config.mode,
     copy_mode: copyMode || config.copy_mode,
   };
+  return calibrationProfileId ? applyCalibrationProfileToConfig(nextConfig, calibrationProfileId) : nextConfig;
 }
 
 export async function GET(request: NextRequest) {
@@ -150,6 +157,7 @@ export async function GET(request: NextRequest) {
     const versionNo = parseInvoiceId(searchParams.get('versionNo'));
     const mode = modeFrom(searchParams.get('mode'));
     const copyMode = copyModeFrom(searchParams.get('copyMode'));
+    const calibrationProfileId = cleanString(searchParams.get('calibrationProfileId'));
     if (!useSample && invoiceId) {
       const invoiceScope = await invoicePreviewScope(db, invoiceId);
       if (invoiceScope instanceof NextResponse) return invoiceScope;
@@ -159,7 +167,7 @@ export async function GET(request: NextRequest) {
     }
 
     const template = await currentTemplateConfig(db, documentType, templateId, versionNo);
-    const config = applyPreviewOverrides(template.config, mode, copyMode);
+    const config = applyPreviewOverrides(template.config, mode, copyMode, calibrationProfileId);
     const payload = useSample
       ? buildSampleContinuousPrintPayload()
       : await buildContinuousPrintPayload(db, { invoiceId, type: documentType });
@@ -175,6 +183,7 @@ export async function GET(request: NextRequest) {
         invoice_id: invoiceId,
         mode: config.mode,
         copy_mode: config.copy_mode,
+        ...(calibrationProfileId ? { calibration_profile_id: calibrationProfileId } : {}),
       },
     });
 

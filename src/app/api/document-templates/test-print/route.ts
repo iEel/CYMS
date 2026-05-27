@@ -9,6 +9,7 @@ import {
   parseStoredTemplateConfig,
 } from '@/lib/documentTemplates';
 import { buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrint';
+import { applyCalibrationProfileToConfig } from '@/lib/documentTemplateDesigner';
 import type {
   DocumentTemplateConfig,
   DocumentTemplateCopyMode,
@@ -22,7 +23,11 @@ type TestPrintBody = {
   mode?: unknown;
   copyMode?: unknown;
   copy_mode?: unknown;
+  calibrationProfileId?: unknown;
+  calibration_profile_id?: unknown;
   template_id?: unknown;
+  versionNo?: unknown;
+  version_no?: unknown;
 };
 
 function cleanString(value: unknown): string {
@@ -57,10 +62,12 @@ async function currentTemplateConfig(
   db: Awaited<ReturnType<typeof getDb>>,
   documentType: string,
   templateId: number | null,
+  versionNo: number | null,
 ) {
   const result = await db.request()
     .input('documentType', sql.NVarChar(50), documentType)
     .input('templateId', sql.Int, templateId)
+    .input('versionNo', sql.Int, versionNo)
     .query<{ config_json?: string; reprint_label_template?: string; red_ref_source?: string }>(`
       SELECT TOP 1
         v.config_json,
@@ -69,7 +76,10 @@ async function currentTemplateConfig(
       FROM DocumentTemplates t
       JOIN DocumentTemplateVersions v
         ON v.template_id = t.template_id
-       AND v.version_no = t.current_version_no
+       AND (
+          (@templateId IS NULL AND v.version_no = t.current_version_no)
+          OR (@templateId IS NOT NULL AND (@versionNo IS NULL OR v.version_no = @versionNo))
+       )
       WHERE t.status <> 'inactive'
         AND (
           (@templateId IS NOT NULL AND t.template_id = @templateId)
@@ -86,6 +96,7 @@ async function currentTemplateConfig(
         )
       ORDER BY
         CASE WHEN @templateId IS NOT NULL AND t.template_id = @templateId THEN 0 ELSE 1 END,
+        CASE WHEN @versionNo IS NOT NULL AND v.version_no = @versionNo THEN 0 ELSE 1 END,
         CASE WHEN t.document_type = @documentType THEN 0 ELSE 1 END,
         t.is_default DESC,
         CASE WHEN v.status = 'published' THEN 0 ELSE 1 END,
@@ -101,12 +112,14 @@ function applyTestPrintOverrides(
   config: DocumentTemplateConfig,
   mode: DocumentTemplateMode | null,
   copyMode: DocumentTemplateCopyMode | null,
+  calibrationProfileId: string,
 ) {
-  return {
+  const nextConfig = {
     ...config,
     mode: mode || config.mode,
     copy_mode: copyMode || config.copy_mode,
   };
+  return calibrationProfileId ? applyCalibrationProfileToConfig(nextConfig, calibrationProfileId) : nextConfig;
 }
 
 export async function POST(request: NextRequest) {
@@ -120,12 +133,15 @@ export async function POST(request: NextRequest) {
 
     const documentType = cleanString(body.document_type) || 'tax_invoice_receipt';
     const templateId = parsePositiveInt(body.template_id);
+    const versionNo = parsePositiveInt(body.versionNo ?? body.version_no);
     const mode = modeFrom(body.mode);
     const copyMode = copyModeFrom(body.copyMode ?? body.copy_mode);
+    const calibrationProfileId = cleanString(body.calibrationProfileId ?? body.calibration_profile_id);
     const config = applyTestPrintOverrides(
-      await currentTemplateConfig(db, documentType, templateId),
+      await currentTemplateConfig(db, documentType, templateId, versionNo),
       mode,
       copyMode,
+      calibrationProfileId,
     );
     const payload = buildSampleContinuousPrintPayload();
 
@@ -137,8 +153,10 @@ export async function POST(request: NextRequest) {
       details: {
         document_type: documentType,
         template_id: templateId,
+        ...(versionNo ? { version_no: versionNo } : {}),
         mode: config.mode,
         copy_mode: config.copy_mode,
+        ...(calibrationProfileId ? { calibration_profile_id: calibrationProfileId } : {}),
         test_print: true,
       },
     });

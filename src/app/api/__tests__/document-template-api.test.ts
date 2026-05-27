@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 import { GET, POST } from '../document-templates/route';
 import { POST as duplicateTemplate } from '../document-templates/[templateId]/duplicate/route';
 import { POST as createDraftTemplate } from '../document-templates/[templateId]/draft/route';
@@ -9,6 +11,7 @@ import { POST as deactivateTemplate } from '../document-templates/[templateId]/d
 import { GET as previewTemplate } from '../document-templates/preview/route';
 import { POST as testPrintTemplate } from '../document-templates/test-print/route';
 import { POST as printLogTemplate } from '../document-templates/print-log/route';
+import { GET as printHistoryTemplate } from '../document-templates/print-history/route';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
@@ -672,6 +675,41 @@ describe('document template API', () => {
     expect(body.testPrint).toBe(true);
   });
 
+  it('returns sample test print payload from a selected draft version when versionNo is provided', async () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    config.paper.top_offset_mm = 4;
+    const db = makeDb([{ recordset: [{ config_json: JSON.stringify(config) }] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/test-print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_type: 'tax_invoice_receipt',
+        template_id: 12,
+        versionNo: 3,
+      }),
+    });
+
+    const response = await testPrintTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'templateId', value: 12 },
+      { name: 'versionNo', value: 3 },
+    ]));
+    expect(db.queries[0]).toContain('@versionNo IS NULL OR v.version_no = @versionNo');
+    expect(db.queries[0]).toContain('v.version_no = t.current_version_no');
+    expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        template_id: 12,
+        version_no: 3,
+      }),
+    }));
+    expect(body.config.paper.top_offset_mm).toBe(4);
+  });
+
   it('rejects malformed test print JSON after settings permission without auditing', async () => {
     const db = makeDb();
     mockedGetDb.mockResolvedValue(db);
@@ -886,5 +924,131 @@ describe('document template API', () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+});
+
+describe('document template calibration API flow', () => {
+  it('preview accepts calibration profile id without consuming document number', () => {
+    const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/document-templates/preview/route.ts'), 'utf8');
+    expect(source).toContain('calibrationProfileId');
+    expect(source).toContain('applyCalibrationProfileToConfig');
+  });
+
+  it('test print accepts calibration settings and does not write print logs', () => {
+    const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/document-templates/test-print/route.ts'), 'utf8');
+    expect(source).toContain('calibrationProfileId');
+    expect(source).not.toContain('DocumentPrintLogs');
+  });
+});
+
+describe('document template print history endpoint', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedRequirePermission.mockResolvedValue({ userId: 7, role: 'yard_manager' });
+    mockedRequireYardAccess.mockResolvedValue({ userId: 7, role: 'yard_manager' });
+  });
+
+  it('reads from existing print logs and snapshots', () => {
+    const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/document-templates/print-history/route.ts'), 'utf8');
+    expect(source).toContain('DocumentPrintLogs');
+    expect(source).toContain('DocumentPrintSnapshots');
+    expect(source).toContain('templateCode');
+    expect(source).toContain('templateVersion');
+    expect(source).toContain('limit');
+  });
+
+  it('does not join snapshots in a way that can duplicate print rows', () => {
+    const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/document-templates/print-history/route.ts'), 'utf8');
+    expect(source).not.toMatch(/LEFT\s+JOIN\s+DocumentPrintSnapshots\s+\w+\s+ON\s+\w+\.print_id\s*=\s*l\.print_id/i);
+    expect(source).toMatch(/EXISTS|OUTER\s+APPLY|GROUP\s+BY/i);
+  });
+
+  it('requires view permission, filters inputs, and returns recent print history', async () => {
+    const row = {
+      print_id: 91,
+      document_type: 'tax_invoice_receipt',
+      document_id: 77,
+      document_no: 'INV-77',
+      template_code: 'TAX_CONTINUOUS',
+      template_version: 2,
+      print_no: 3,
+      is_reprint: true,
+      reprint_count: 2,
+      reprint_reason: 'customer copy',
+      manual_preprinted_form_no: 'FORM-9',
+      mode: 'overlay',
+      copy_mode: 'separate',
+      printed_by: 7,
+      printed_by_name: 'Ada Lovelace',
+      printed_at: '2026-05-27T08:00:00.000Z',
+      has_snapshot: true,
+    };
+    const db = makeDb([
+      { recordset: [{ yard_id: 5 }] },
+      { recordset: [row] },
+    ]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/print-history?templateCode=TAX_CONTINUOUS&templateVersion=2&documentType=tax_invoice_receipt&documentId=77&limit=150');
+
+    const response = await printHistoryTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      request,
+      db,
+      'document_templates.view',
+      'คุณไม่มีสิทธิ์ดูประวัติการพิมพ์เทมเพลตเอกสาร',
+    );
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'templateCode', value: 'TAX_CONTINUOUS' },
+      { name: 'templateVersion', value: 2 },
+      { name: 'documentType', value: 'tax_invoice_receipt' },
+      { name: 'documentId', value: 77 },
+      { name: 'limit', value: 100 },
+      { name: 'actorUserId', value: 7 },
+      { name: 'isYardManager', value: 1 },
+    ]));
+    expect(mockedRequireYardAccess).toHaveBeenCalledWith(request, db, 5);
+    expect(db.queries[1]).toContain('DocumentPrintSnapshots');
+    expect(db.queries[1]).not.toMatch(/LEFT\s+JOIN\s+DocumentPrintSnapshots\s+\w+\s+ON\s+\w+\.print_id\s*=\s*l\.print_id/i);
+    expect(db.queries[1]).toMatch(/EXISTS|OUTER\s+APPLY|GROUP\s+BY/i);
+    expect(db.queries[1]).toContain('JOIN Invoices');
+    expect(db.queries[1]).toContain('LEFT JOIN UserYardAccess');
+    expect(db.queries[1]).toContain('@isYardManager = 1 OR uya.user_id IS NOT NULL');
+    expect(db.queries[1]).toContain('LEFT JOIN Users');
+    expect(body).toEqual({ prints: [row] });
+    expect(mockedLogAudit).not.toHaveBeenCalled();
+  });
+
+  it('scopes print history lists to the actor accessible yards', async () => {
+    const db = makeDb([{ recordset: [] }]);
+    mockedGetDb.mockResolvedValue(db);
+    mockedRequirePermission.mockResolvedValue({ userId: 9, role: 'billing_officer' });
+    const request = makeRequest('/api/document-templates/print-history?templateCode=TAX_CONTINUOUS&templateVersion=2');
+
+    const response = await printHistoryTemplate(request);
+
+    expect(response.status).toBe(200);
+    expect(mockedRequireYardAccess).not.toHaveBeenCalled();
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'actorUserId', value: 9 },
+      { name: 'isYardManager', value: 0 },
+    ]));
+    expect(db.queries[0]).toContain('JOIN Invoices');
+    expect(db.queries[0]).toContain('LEFT JOIN UserYardAccess');
+    expect(db.queries[0]).toContain('@isYardManager = 1 OR uya.user_id IS NOT NULL');
+  });
+
+  it('rejects invalid print history params before querying', async () => {
+    const db = makeDb();
+    mockedGetDb.mockResolvedValue(db);
+
+    const response = await printHistoryTemplate(makeRequest('/api/document-templates/print-history?templateCode=TAX_CONTINUOUS&templateVersion=2&documentId=abc'));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('documentId must be a positive integer');
+    expect(db.query).not.toHaveBeenCalled();
   });
 });

@@ -8,8 +8,10 @@ type LayerState = Record<DocumentTemplateFieldLayer, { visible: boolean; locked:
 type LayerListProps = {
   config: DocumentTemplateConfig;
   selectedFieldId: string | null;
+  selectedLineItems: boolean;
   layerState: LayerState;
   onSelectField: (fieldId: string) => void;
+  onSelectLineItems: () => void;
   onToggleLayerVisible: (layer: DocumentTemplateFieldLayer) => void;
   onToggleLayerLocked: (layer: DocumentTemplateFieldLayer) => void;
 };
@@ -19,8 +21,10 @@ const LAYERS: DocumentTemplateFieldLayer[] = ['form', 'data', 'calibration'];
 export function LayerList({
   config,
   selectedFieldId,
+  selectedLineItems,
   layerState,
   onSelectField,
+  onSelectLineItems,
   onToggleLayerVisible,
   onToggleLayerLocked,
 }: LayerListProps) {
@@ -48,6 +52,15 @@ export function LayerList({
               </div>
             </header>
             <div className="max-h-36 overflow-auto p-1">
+              {layer === 'data' ? (
+                <button
+                  type="button"
+                  onClick={onSelectLineItems}
+                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px] ${selectedLineItems ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                >
+                  <span className="truncate">Line items region</span>
+                </button>
+              ) : null}
               {fields.length === 0 ? (
                 <p className="px-2 py-2 text-[11px] text-slate-400">No fields</p>
               ) : fields.map(field => (
