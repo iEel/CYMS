@@ -76,7 +76,7 @@ npm run lint
 - **LineItemsInspector**: เพิ่ม `LineItemsInspector.tsx` สำหรับแก้ตำแหน่ง ขนาด row height จำนวนแถว และ column ของ `lines[]`; field text ทั่วไปยังใช้ `FieldInspector.tsx` ตามเดิม
 - **Calibration Profiles**: เพิ่ม `CalibrationProfilesPanel.tsx` และ `DocumentTemplateConfig.calibration_profiles` สำหรับเก็บ profile ของเครื่องพิมพ์/กระดาษ เช่น width/height/offset/scale; preview/test print apply profile ได้โดยไม่ consume document number
 - **Dedicated Test Print Flow**: sample test print ที่มี `testPrint=1` ใช้ `/api/document-templates/test-print` โดยส่ง `templateId`, `versionNo`, `mode`, `copyMode`, และ `calibrationProfileId` เพื่อให้ทดสอบ draft version ได้ตรงกับ canvas
-- **Print History Panel**: เพิ่ม `GET /api/document-templates/print-history` และ `PrintHistoryPanel.tsx` อ่านประวัติจาก `DocumentPrintLogs` / `DocumentPrintSnapshots` เดิมแบบ read-only, กัน snapshot join duplicate ด้วย `EXISTS`
+- **Print History Panel**: เพิ่ม `GET /api/document-templates/print-history` และ `PrintHistoryPanel.tsx` อ่านประวัติจาก `DocumentPrintLogs` / `DocumentPrintSnapshots` เดิมแบบ read-only, กัน snapshot join duplicate ด้วย `EXISTS` และ scope รายการตาม `Invoices.yard_id` + `UserYardAccess` เพื่อกันดูประวัติพิมพ์ข้ามลาน
 - **Publish Diff Dialog**: เพิ่ม `PublishDiffDialog.tsx` และ `summarizeTemplateDiff()` เพื่อแสดง diff ก่อน publish draft โดยเทียบกับ current published version; confirm ใช้ snapshot ของ template/version/config เพื่อกัน publish ผิดชุดถ้า selection เปลี่ยน
 - **Renderer/Preview Guardrails**: line-item table ใน print preview ถูกบังคับให้อยู่ใน paper frame, test print ไม่เขียน print log และไม่ออกเลขเอกสาร, reprint ยังใช้ template version/snapshot เดิม
 - **No new numbering system**: งานนี้ยัง reuse `DocumentFormats` / `DocumentSequences` และ print log เดิม ไม่เพิ่มระบบเลขเอกสารซ้ำ
@@ -119,7 +119,7 @@ npx tsc --noEmit --pretty false
 npm run lint
 ```
 
-ผลล่าสุด: focused Document Template / Designer tests `68/68` ผ่าน, full suite `915/915` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning; รอบ Continuous Preview Polish ล่าสุดรัน `continuous-print-ui.test.ts` `10/10` ผ่าน, `/billing/print/continuous?...` ตอบ `200`, `tsc` ผ่าน, `eslint` ผ่าน; รอบ Settings deep-link ล่าสุดรัน `document-template-designer-ui.test.ts` `5/5` ผ่าน, `/settings?tab=document-templates` ตอบ `200`, `tsc` ผ่าน, `eslint` ผ่าน; รอบ Designer 2.1 ล่าสุดครอบคลุม line-items/calibration/print-history/publish-diff โดย focused tests `116/116` ผ่าน, `tsc` ผ่าน, และ `eslint` ผ่านก่อนส่งมอบ
+ผลล่าสุด: focused Document Template / Designer tests `68/68` ผ่าน, full suite `915/915` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning; รอบ Continuous Preview Polish ล่าสุดรัน `continuous-print-ui.test.ts` `10/10` ผ่าน, `/billing/print/continuous?...` ตอบ `200`, `tsc` ผ่าน, `eslint` ผ่าน; รอบ Settings deep-link ล่าสุดรัน `document-template-designer-ui.test.ts` `5/5` ผ่าน, `/settings?tab=document-templates` ตอบ `200`, `tsc` ผ่าน, `eslint` ผ่าน; รอบ Designer 2.1 ล่าสุดครอบคลุม line-items/calibration/print-history/publish-diff โดย focused tests `117/117` ผ่าน, `tsc` ผ่าน, และ `eslint` ผ่านก่อนส่งมอบ
 
 ### อัปเดตล่าสุดก่อนหน้า: Customer Portal Access Control + EIR Visibility Policy (25 พ.ค. 2569)
 

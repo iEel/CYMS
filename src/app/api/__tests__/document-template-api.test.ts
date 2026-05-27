@@ -945,6 +945,7 @@ describe('document template print history endpoint', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedRequirePermission.mockResolvedValue({ userId: 7, role: 'yard_manager' });
+    mockedRequireYardAccess.mockResolvedValue({ userId: 7, role: 'yard_manager' });
   });
 
   it('reads from existing print logs and snapshots', () => {
@@ -982,7 +983,10 @@ describe('document template print history endpoint', () => {
       printed_at: '2026-05-27T08:00:00.000Z',
       has_snapshot: true,
     };
-    const db = makeDb([{ recordset: [row] }]);
+    const db = makeDb([
+      { recordset: [{ yard_id: 5 }] },
+      { recordset: [row] },
+    ]);
     mockedGetDb.mockResolvedValue(db);
     const request = makeRequest('/api/document-templates/print-history?templateCode=TAX_CONTINUOUS&templateVersion=2&documentType=tax_invoice_receipt&documentId=77&limit=150');
 
@@ -1002,13 +1006,38 @@ describe('document template print history endpoint', () => {
       { name: 'documentType', value: 'tax_invoice_receipt' },
       { name: 'documentId', value: 77 },
       { name: 'limit', value: 100 },
+      { name: 'actorUserId', value: 7 },
+      { name: 'isYardManager', value: 1 },
     ]));
-    expect(db.queries[0]).toContain('DocumentPrintSnapshots');
-    expect(db.queries[0]).not.toMatch(/LEFT\s+JOIN\s+DocumentPrintSnapshots\s+\w+\s+ON\s+\w+\.print_id\s*=\s*l\.print_id/i);
-    expect(db.queries[0]).toMatch(/EXISTS|OUTER\s+APPLY|GROUP\s+BY/i);
-    expect(db.queries[0]).toContain('LEFT JOIN Users');
+    expect(mockedRequireYardAccess).toHaveBeenCalledWith(request, db, 5);
+    expect(db.queries[1]).toContain('DocumentPrintSnapshots');
+    expect(db.queries[1]).not.toMatch(/LEFT\s+JOIN\s+DocumentPrintSnapshots\s+\w+\s+ON\s+\w+\.print_id\s*=\s*l\.print_id/i);
+    expect(db.queries[1]).toMatch(/EXISTS|OUTER\s+APPLY|GROUP\s+BY/i);
+    expect(db.queries[1]).toContain('JOIN Invoices');
+    expect(db.queries[1]).toContain('LEFT JOIN UserYardAccess');
+    expect(db.queries[1]).toContain('@isYardManager = 1 OR uya.user_id IS NOT NULL');
+    expect(db.queries[1]).toContain('LEFT JOIN Users');
     expect(body).toEqual({ prints: [row] });
     expect(mockedLogAudit).not.toHaveBeenCalled();
+  });
+
+  it('scopes print history lists to the actor accessible yards', async () => {
+    const db = makeDb([{ recordset: [] }]);
+    mockedGetDb.mockResolvedValue(db);
+    mockedRequirePermission.mockResolvedValue({ userId: 9, role: 'billing_officer' });
+    const request = makeRequest('/api/document-templates/print-history?templateCode=TAX_CONTINUOUS&templateVersion=2');
+
+    const response = await printHistoryTemplate(request);
+
+    expect(response.status).toBe(200);
+    expect(mockedRequireYardAccess).not.toHaveBeenCalled();
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'actorUserId', value: 9 },
+      { name: 'isYardManager', value: 0 },
+    ]));
+    expect(db.queries[0]).toContain('JOIN Invoices');
+    expect(db.queries[0]).toContain('LEFT JOIN UserYardAccess');
+    expect(db.queries[0]).toContain('@isYardManager = 1 OR uya.user_id IS NOT NULL');
   });
 
   it('rejects invalid print history params before querying', async () => {
