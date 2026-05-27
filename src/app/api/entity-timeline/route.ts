@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { ensureAttachmentCenter } from '@/lib/attachmentCenter';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const ENTITY_TIMELINE_READ_PERMISSIONS = [
+  'reports.view',
+  'audit_trail.read',
+  'gate.in',
+  'gate.out',
+  'yard.location.assign',
+  'yard.slot.move',
+  'billing.invoice.create',
+  'mnr.eor.create',
+];
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +28,13 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, ENTITY_TIMELINE_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ดู Entity Timeline');
+    if (actor instanceof NextResponse) return actor;
+    if (yardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
+
     await ensureAttachmentCenter(db);
 
     const req = db.request()
@@ -26,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     const result = await req.query(`
       SELECT event_type, event_name, entity_type, entity_id, entity_number,
-        status, description, actor_name, created_at, details
+        status, description, actor_name, created_at, details, yard_id
       FROM (
         SELECT
           'audit' AS event_type,
@@ -38,7 +57,8 @@ export async function GET(request: NextRequest) {
           a.action AS description,
           ISNULL(u.full_name, u.username) AS actor_name,
           a.created_at,
-          a.details
+          a.details,
+          a.yard_id
         FROM AuditLog a
         LEFT JOIN Users u ON a.user_id = u.user_id
         WHERE a.entity_type = @entityType
@@ -57,7 +77,8 @@ export async function GET(request: NextRequest) {
           dl.reason AS description,
           ISNULL(u.full_name, u.username) AS actor_name,
           dl.created_at,
-          dl.details
+          dl.details,
+          dl.yard_id
         FROM DocumentLifecycle dl
         LEFT JOIN Users u ON dl.user_id = u.user_id
         WHERE dl.document_type = @entityType
@@ -79,7 +100,8 @@ export async function GET(request: NextRequest) {
           dl.reason AS description,
           ISNULL(u.full_name, u.username) AS actor_name,
           dl.created_at,
-          dl.details
+          dl.details,
+          dl.yard_id
         FROM DocumentLifecycle dl
         LEFT JOIN Users u ON dl.user_id = u.user_id
         WHERE @entityType = 'container'
@@ -115,7 +137,8 @@ export async function GET(request: NextRequest) {
           JSON_QUERY((
             SELECT ea.file_url AS file_url, ea.file_name AS file_name, ea.category AS category
             FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-          )) AS details
+          )) AS details,
+          ea.yard_id
         FROM EntityAttachments ea
         LEFT JOIN Users u ON ea.uploaded_by = u.user_id
         WHERE ea.entity_type = @entityType
@@ -123,11 +146,29 @@ export async function GET(request: NextRequest) {
             (@entityId IS NOT NULL AND ea.entity_id = @entityId)
             OR (@entityNumber IS NOT NULL AND ea.entity_number = @entityNumber)
           )
+          AND (@yardId IS NULL OR ea.yard_id = @yardId)
       ) t
       ORDER BY created_at DESC
     `);
 
-    return NextResponse.json({ timeline: result.recordset });
+    if (!yardId) {
+      const yardIds = Array.from(new Set(
+        result.recordset
+          .map((row: Record<string, unknown>) => Number(row.yard_id))
+          .filter((value) => Number.isInteger(value) && value > 0)
+      ));
+      for (const scopedYardId of yardIds) {
+        const yardAccess = await requireYardAccess(request, db, scopedYardId);
+        if (yardAccess instanceof NextResponse) return yardAccess;
+      }
+    }
+
+    const timeline = result.recordset.map((row: Record<string, unknown>) => {
+      const { yard_id: _yardId, ...event } = row;
+      return event;
+    });
+
+    return NextResponse.json({ timeline });
   } catch (error) {
     console.error('GET entity timeline error:', error);
     return NextResponse.json({ error: 'ไม่สามารถดึง timeline ได้' }, { status: 500 });

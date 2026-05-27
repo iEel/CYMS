@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { ensureDocumentLifecycle } from '@/lib/documentLifecycle';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const DOCUMENT_READ_PERMISSIONS = [
+  'audit_trail.read',
+  'reports.view',
+  'document_templates.view',
+  'billing.invoice.create',
+  'billing.payment.receive',
+];
 
 type Severity = 'info' | 'warning' | 'critical';
 
@@ -56,6 +65,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const yardId = searchParams.get('yard_id') ? Number(searchParams.get('yard_id')) : null;
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, DOCUMENT_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ตรวจสอบความสอดคล้องเอกสาร');
+    if (actor instanceof NextResponse) return actor;
+    if (yardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
+
     await ensureDocumentLifecycle(db);
 
     const checks = await Promise.all([

@@ -2,18 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { getCustomerCreditSnapshot } from '@/lib/customerCredit';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const CUSTOMER_360_READ_PERMISSIONS = [
+  'reports.view',
+  'billing.invoice.create',
+  'settings.manage',
+];
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = Number(searchParams.get('customer_id'));
-    const yardId = searchParams.get('yard_id') ? Number(searchParams.get('yard_id')) : null;
+    const rawYardId = searchParams.get('yard_id');
+    const yardId = rawYardId ? Number(rawYardId) : null;
 
     if (!customerId) {
       return NextResponse.json({ error: 'customer_id required' }, { status: 400 });
     }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, CUSTOMER_360_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ดู Customer 360');
+    if (actor instanceof NextResponse) return actor;
+    if (!rawYardId && actor.role !== 'yard_manager') {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id เพื่อดู Customer 360 ทุกลาน' }, { status: 400 });
+    }
+    if (rawYardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
 
     const customerResult = await db.request()
       .input('customerId', sql.Int, customerId)

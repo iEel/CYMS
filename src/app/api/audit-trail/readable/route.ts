@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { formatAuditLogs, type RawAuditLog } from '@/lib/auditFormatter';
+import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,6 +18,16 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'audit_trail.read', 'คุณไม่มีสิทธิ์ดู Audit Trail');
+    if (actor instanceof NextResponse) return actor;
+    if (!yardId && actor.role !== 'yard_manager') {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id เพื่อดู Audit Trail ทุกลาน' }, { status: 400 });
+    }
+    if (yardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
+
     const hasBillingClearances = await db.request()
       .query("SELECT CASE WHEN OBJECT_ID('BillingClearances', 'U') IS NULL THEN 0 ELSE 1 END AS exists_flag");
     const includeBillingClearances = hasBillingClearances.recordset[0]?.exists_flag === 1;

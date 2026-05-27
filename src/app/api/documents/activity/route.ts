@@ -3,6 +3,15 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { ensureDocumentLifecycle } from '@/lib/documentLifecycle';
 import { formatDocumentActivity } from '@/lib/documentActivity';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const DOCUMENT_READ_PERMISSIONS = [
+  'audit_trail.read',
+  'reports.view',
+  'document_templates.view',
+  'billing.invoice.create',
+  'billing.payment.receive',
+];
 
 function inferDocumentType(documentNumber: string | null) {
   const value = (documentNumber || '').toUpperCase();
@@ -27,6 +36,13 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, DOCUMENT_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ดู Activity Feed เอกสาร');
+    if (actor instanceof NextResponse) return actor;
+    if (yardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
+
     await ensureDocumentLifecycle(db);
 
     const result = await db.request()
@@ -38,7 +54,7 @@ export async function GET(request: NextRequest) {
       .query(`
         SELECT TOP (@limit)
           dl.lifecycle_id, dl.document_type, dl.document_id, dl.document_number,
-          dl.event_type, dl.metadata, dl.created_at,
+          dl.yard_id, dl.event_type, dl.metadata, dl.created_at,
           u.full_name as user_name, y.yard_name
         FROM DocumentLifecycle dl
         LEFT JOIN Users u ON dl.user_id = u.user_id
@@ -51,6 +67,18 @@ export async function GET(request: NextRequest) {
           )
         ORDER BY dl.created_at ASC, dl.lifecycle_id ASC
       `);
+
+    if (!yardId) {
+      const yardIds = Array.from(new Set(
+        result.recordset
+          .map((row: Record<string, unknown>) => Number(row.yard_id))
+          .filter((value) => Number.isInteger(value) && value > 0)
+      ));
+      for (const scopedYardId of yardIds) {
+        const yardAccess = await requireYardAccess(request, db, scopedYardId);
+        if (yardAccess instanceof NextResponse) return yardAccess;
+      }
+    }
 
     return NextResponse.json({
       document_type: documentType,
