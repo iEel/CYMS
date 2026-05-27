@@ -15,7 +15,12 @@ jest.mock('@/lib/rateLimit', () => ({
 
 const mockedGetDb = getDb as jest.Mock;
 
-type QueryHandler = (statement: string, inputs: Record<string, unknown>) => { recordset: unknown[] };
+type QueryResult = { recordset: unknown[] };
+type QueryHandler = (statement: string, inputs: Record<string, unknown>) => QueryResult;
+type MockDbRequest = {
+  input: (name: string, _type: unknown, value: unknown) => MockDbRequest;
+  query: (statement: string) => Promise<QueryResult>;
+};
 
 function makeRequest(url: string, role = 'operations_viewer') {
   return new NextRequest(url, {
@@ -37,12 +42,12 @@ function makeDb(handleQuery: QueryHandler, options: { allowYardAccess?: boolean 
     yardAccessChecks,
     request: jest.fn(() => {
       const inputs: Record<string, unknown> = {};
-      const request = {
-        input: jest.fn((name: string, _type: unknown, value: unknown) => {
+      const request: MockDbRequest = {
+        input: jest.fn((name: string, _type: unknown, value: unknown): MockDbRequest => {
           inputs[name] = value;
           return request;
         }),
-        query: jest.fn(async (statement: string) => {
+        query: jest.fn(async (statement: string): Promise<QueryResult> => {
           statements.push(statement);
           if (statement.includes('FROM Roles r')) {
             return { recordset: [{ granted: 1 }] };
