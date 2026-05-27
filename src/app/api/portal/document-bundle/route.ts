@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { buildPortalDocumentBundleEntries } from '@/lib/portalDocumentBundle';
-import { getPortalCustomerId, portalGateVisibilitySql, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
+import { getPortalCustomerId, portalEirExactVisibilitySql, portalInvoiceVisibilitySql } from '@/lib/portalAccess';
 import { createZipArchive } from '@/lib/zipArchive';
 import { requirePortalAction } from '@/lib/customerPortalPermissions';
 
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
         FROM GateTransactions g
         JOIN Containers c ON g.container_id = c.container_id
         WHERE g.eir_number IS NOT NULL
-          AND ${portalGateVisibilitySql('g', 'c')}
+          AND ${portalEirExactVisibilitySql('g')}
         ORDER BY g.created_at DESC
       `);
 

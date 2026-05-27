@@ -3,8 +3,10 @@ import {
   getPortalCustomerId,
   portalBookingVisibilitySql,
   portalContainerVisibilitySql,
+  portalEirExactVisibilitySql,
   portalEirVisibilitySql,
   portalEntityAccessSql,
+  portalGateExactVisibilitySql,
   portalGateVisibilitySql,
   portalVisibilityReasonSql,
 } from '../portalAccess';
@@ -64,19 +66,47 @@ describe('portal access policy helpers', () => {
     expect(sql).not.toContain('b.customer_id = @cid');
   });
 
-  it('builds gate visibility from gate transaction grants plus container policy', () => {
+  it('builds exact gate visibility from gate transaction grants only', () => {
+    const sql = portalGateExactVisibilitySql('g');
+
+    expect(sql).toContain("pea.entity_type = 'gate_transaction'");
+    expect(sql).toContain('pea.entity_id = g.transaction_id');
+    expect(sql).toContain('pea.entity_ref = g.eir_number');
+    expect(sql).not.toContain("pea.entity_type = 'container'");
+  });
+
+  it('builds gate visibility from exact grants by default', () => {
     const sql = portalGateVisibilitySql('g', 'c');
 
     expect(sql).toContain("pea.entity_type = 'gate_transaction'");
     expect(sql).toContain('pea.entity_id = g.transaction_id');
     expect(sql).toContain('pea.entity_ref = g.eir_number');
-    expect(sql).toContain("pea.entity_type = 'container'");
+    expect(sql).not.toContain("pea.entity_type = 'container'");
     expect(sql).not.toContain('g.container_owner_id = @cid');
     expect(sql).not.toContain('g.billing_customer_id = @cid');
     expect(sql).not.toContain('c.customer_id');
   });
 
-  it('builds eir visibility from active valid-window eir grants or gate policy', () => {
+  it('can explicitly include container fallback in gate visibility for summaries', () => {
+    const sql = portalGateVisibilitySql('g', 'c', { allowContainerFallback: true });
+
+    expect(sql).toContain("pea.entity_type = 'gate_transaction'");
+    expect(sql).toContain("pea.entity_type = 'container'");
+  });
+
+  it('builds exact eir visibility from active valid-window eir or gate grants only', () => {
+    const sql = portalEirExactVisibilitySql('g');
+
+    expect(sql).toContain("pea.entity_type = 'eir'");
+    expect(sql).toContain('pea.entity_id = g.transaction_id');
+    expect(sql).toContain('pea.entity_ref = g.eir_number');
+    expect(sql).toContain('pea.valid_from IS NULL OR pea.valid_from <= GETDATE()');
+    expect(sql).toContain('pea.valid_until IS NULL OR pea.valid_until >= GETDATE()');
+    expect(sql).toContain("pea.entity_type = 'gate_transaction'");
+    expect(sql).not.toContain("pea.entity_type = 'container'");
+  });
+
+  it('builds eir visibility from exact grants by default', () => {
     const sql = portalEirVisibilitySql('g', 'c');
 
     expect(sql).toContain("pea.entity_type = 'eir'");
@@ -84,6 +114,14 @@ describe('portal access policy helpers', () => {
     expect(sql).toContain('pea.entity_ref = g.eir_number');
     expect(sql).toContain('pea.valid_from IS NULL OR pea.valid_from <= GETDATE()');
     expect(sql).toContain('pea.valid_until IS NULL OR pea.valid_until >= GETDATE()');
+    expect(sql).toContain("pea.entity_type = 'gate_transaction'");
+    expect(sql).not.toContain("pea.entity_type = 'container'");
+  });
+
+  it('can explicitly include container fallback in eir visibility for summaries', () => {
+    const sql = portalEirVisibilitySql('g', 'c', { allowContainerFallback: true });
+
+    expect(sql).toContain("pea.entity_type = 'eir'");
     expect(sql).toContain("pea.entity_type = 'gate_transaction'");
     expect(sql).toContain("pea.entity_type = 'container'");
   });

@@ -66,13 +66,10 @@ export async function GET(request: NextRequest) {
                 AND (pea.entity_id = g.transaction_id OR (pea.entity_ref IS NOT NULL AND pea.entity_ref = g.eir_number)))
               OR (pea.entity_type = 'gate_transaction'
                 AND (pea.entity_id = g.transaction_id OR (pea.entity_ref IS NOT NULL AND pea.entity_ref = g.eir_number)))
-              OR (pea.entity_type = 'container'
-                AND (pea.entity_id = c.container_id OR (pea.entity_ref IS NOT NULL AND pea.entity_ref = c.container_number)))
             )
           ORDER BY CASE pea.entity_type
             WHEN 'eir' THEN 1
             WHEN 'gate_transaction' THEN 2
-            WHEN 'container' THEN 3
             ELSE 9
           END
         ) portal_access

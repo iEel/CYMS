@@ -88,16 +88,47 @@ export function portalContainerVisibilitySql(containerAlias = 'c') {
   return portalEntityAccessSql('container', `${containerAlias}.container_id`, `${containerAlias}.container_number`);
 }
 
-export function portalGateVisibilitySql(gateAlias = 'g', containerAlias = 'c') {
+type PortalDetailVisibilityOptions = {
+  allowContainerFallback?: boolean;
+};
+
+export function portalGateExactVisibilitySql(gateAlias = 'g') {
+  return portalEntityAccessSql('gate_transaction', `${gateAlias}.transaction_id`, `${gateAlias}.eir_number`);
+}
+
+export function portalEirExactVisibilitySql(gateAlias = 'g') {
   return `(
-    ${portalEntityAccessSql('gate_transaction', `${gateAlias}.transaction_id`, `${gateAlias}.eir_number`)}
+    ${portalEntityAccessSql('eir', `${gateAlias}.transaction_id`, `${gateAlias}.eir_number`)}
+    OR ${portalGateExactVisibilitySql(gateAlias)}
+  )`;
+}
+
+export function portalGateVisibilitySql(
+  gateAlias = 'g',
+  containerAlias = 'c',
+  options: PortalDetailVisibilityOptions = {},
+) {
+  if (!options.allowContainerFallback) {
+    return portalGateExactVisibilitySql(gateAlias);
+  }
+
+  return `(
+    ${portalGateExactVisibilitySql(gateAlias)}
     OR ${portalContainerVisibilitySql(containerAlias)}
   )`;
 }
 
-export function portalEirVisibilitySql(gateAlias = 'g', containerAlias = 'c') {
+export function portalEirVisibilitySql(
+  gateAlias = 'g',
+  containerAlias = 'c',
+  options: PortalDetailVisibilityOptions = {},
+) {
+  if (!options.allowContainerFallback) {
+    return portalEirExactVisibilitySql(gateAlias);
+  }
+
   return `(
-    ${portalEntityAccessSql('eir', `${gateAlias}.transaction_id`, `${gateAlias}.eir_number`)}
-    OR ${portalGateVisibilitySql(gateAlias, containerAlias)}
+    ${portalEirExactVisibilitySql(gateAlias)}
+    OR ${portalContainerVisibilitySql(containerAlias)}
   )`;
 }
