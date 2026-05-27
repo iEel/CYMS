@@ -136,6 +136,10 @@ function clampMm(value: number, min: number, max: number) {
   return roundMm(Math.min(Math.max(value, min), max));
 }
 
+function finiteOr(value: unknown, fallback: number) {
+  return finiteNumber(value) ? value : fallback;
+}
+
 export function canUseTemplateBinding(bindingSource: string): bindingSource is DesignerBinding {
   return DESIGNER_BINDINGS.includes(bindingSource as DesignerBinding);
 }
@@ -241,14 +245,16 @@ function safeLineItemColumnPatch(patch: LineItemColumnPatch, sectionWidthMm: num
 
 function clampLineItemsToPaper(config: DocumentTemplateConfig): DocumentTemplateConfig['sections']['line_items'] {
   const lineItems = config.sections.line_items;
-  const width = clampMm(lineItems.width_mm, 20, config.paper.width_mm);
-  const rowHeight = clampMm(lineItems.row_height_mm, 3, 20);
-  const requestedMaxRows = Math.round(clampMm(lineItems.max_rows, 1, 50));
-  const rowsThatFitOnPaper = Math.max(1, Math.floor(config.paper.height_mm / rowHeight));
+  const paperWidth = finiteOr(config.paper.width_mm, 20);
+  const paperHeight = finiteOr(config.paper.height_mm, 60);
+  const width = clampMm(finiteOr(lineItems.width_mm, 20), 20, paperWidth);
+  const rowHeight = clampMm(finiteOr(lineItems.row_height_mm, 6), 3, 20);
+  const requestedMaxRows = Math.round(clampMm(finiteOr(lineItems.max_rows, 1), 1, 50));
+  const rowsThatFitOnPaper = Math.max(1, Math.floor(paperHeight / rowHeight));
   const maxRows = Math.min(requestedMaxRows, rowsThatFitOnPaper);
-  const x = clampMm(lineItems.x_mm, 0, Math.max(0, config.paper.width_mm - width));
+  const x = clampMm(finiteOr(lineItems.x_mm, 0), 0, Math.max(0, paperWidth - width));
   const totalHeight = rowHeight * maxRows;
-  const y = clampMm(lineItems.y_mm, 0, Math.max(0, config.paper.height_mm - totalHeight));
+  const y = clampMm(finiteOr(lineItems.y_mm, 0), 0, Math.max(0, paperHeight - totalHeight));
 
   return {
     ...lineItems,
@@ -280,13 +286,19 @@ function clampFieldToPaper(config: DocumentTemplateConfig, field: DocumentTempla
 
 export function applyLineItemsPatch(config: DocumentTemplateConfig, patch: LineItemsPatch): DocumentTemplateConfig {
   const next = cloneConfig(config);
+  const safePatch: LineItemsPatch = {};
+  for (const key of ['x_mm', 'y_mm', 'width_mm', 'row_height_mm', 'max_rows'] as const) {
+    if (finiteNumber(patch[key])) {
+      safePatch[key] = patch[key];
+    }
+  }
   next.sections.line_items = clampLineItemsToPaper({
     ...next,
     sections: {
       ...next.sections,
       line_items: {
         ...next.sections.line_items,
-        ...patch,
+        ...safePatch,
       },
     },
   });

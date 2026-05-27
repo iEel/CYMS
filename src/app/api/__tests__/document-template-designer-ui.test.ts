@@ -116,3 +116,22 @@ describe('document template designer line item UI wiring', () => {
     expect(read('src/components/document-templates/LayerList.tsx')).toContain('onSelectLineItems');
   });
 });
+
+describe('line item inspector source wiring', () => {
+  it('provides a dedicated inspector for line item geometry and columns', () => {
+    const source = read('src/components/document-templates/LineItemsInspector.tsx');
+    expect(source).toContain('Line items');
+    expect(source).toContain('row_height_mm');
+    expect(source).toContain('max_rows');
+    expect(source).toContain('Number.isFinite');
+    expect(source).toContain('addLineItemColumn');
+    expect(source).toContain('moveLineItemColumn');
+    expect(source).toContain('removeLineItemColumn');
+  });
+
+  it('shows LineItemsInspector for line item selection', () => {
+    const source = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+    expect(source).toContain('<LineItemsInspector');
+    expect(source).toContain("selection?.type === 'line_items'");
+  });
+});

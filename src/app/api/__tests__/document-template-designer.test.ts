@@ -309,6 +309,25 @@ describe('document template designer 2.1 validation', () => {
     expect(moved.sections.line_items.y_mm + moved.sections.line_items.row_height_mm * moved.sections.line_items.max_rows).toBeLessThanOrEqual(moved.paper.height_mm);
   });
 
+  it('preserves valid line item geometry when patches contain non-finite numbers', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const next = applyLineItemsPatch(config, {
+      x_mm: Number.NaN,
+      row_height_mm: Number.NaN,
+      max_rows: Number.NaN,
+    });
+
+    expect(next.sections.line_items.x_mm).toBe(config.sections.line_items.x_mm);
+    expect(next.sections.line_items.row_height_mm).toBe(config.sections.line_items.row_height_mm);
+    expect(next.sections.line_items.max_rows).toBe(config.sections.line_items.max_rows);
+    expect(Number.isNaN(next.sections.line_items.x_mm)).toBe(false);
+    expect(Number.isNaN(next.sections.line_items.y_mm)).toBe(false);
+    expect(Number.isNaN(next.sections.line_items.width_mm)).toBe(false);
+    expect(Number.isNaN(next.sections.line_items.row_height_mm)).toBe(false);
+    expect(Number.isNaN(next.sections.line_items.max_rows)).toBe(false);
+    expect(Number.isNaN(next.sections.line_items.start_y_mm)).toBe(false);
+  });
+
   it('clamps line item row count to keep the section inside paper bounds', () => {
     const config = buildDefaultContinuousTemplateConfig();
     const resized = applyLineItemsPatch(config, { row_height_mm: 20, max_rows: 50 });

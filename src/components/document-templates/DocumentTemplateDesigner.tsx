@@ -21,6 +21,7 @@ import { DesignerStatusBar } from './DesignerStatusBar';
 import { DesignerToolbar } from './DesignerToolbar';
 import { FieldInspector } from './FieldInspector';
 import { LayerList, type LayerState } from './LayerList';
+import { LineItemsInspector } from './LineItemsInspector';
 import { TemplateCanvas } from './TemplateCanvas';
 
 type DocumentTemplateDesignerProps = {
@@ -259,7 +260,14 @@ export function DocumentTemplateDesigner({
             })}
           </div>
           <div className="min-h-0 flex-1 overflow-auto p-4">
-            {activePanel === 'inspector' ? (
+            {activePanel === 'inspector' && selection?.type === 'line_items' ? (
+              <LineItemsInspector
+                config={history.current}
+                readOnly={!canEdit}
+                onChange={commit}
+              />
+            ) : null}
+            {activePanel === 'inspector' && selection?.type !== 'line_items' ? (
               <FieldInspector
                 field={selectedField}
                 readOnly={!canEdit}
