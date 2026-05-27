@@ -1,16 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import sql from 'mssql';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const AUTO_CALCULATE_PERMISSIONS = [
+  'billing.invoice.create',
+  'billing.payment.receive',
+  'gate.out',
+  'reports.view',
+];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // FR6.2 — Auto-Billing Engine: Calculate storage charges from Dwell Time
 export async function POST(req: NextRequest) {
   try {
     const { yard_id, container_id } = await req.json();
+    const yardId = parsePositiveInt(yard_id);
+    const containerId = parsePositiveInt(container_id);
+    if (!yardId || !containerId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id และ container_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const pool = await getDb();
+    const permission = await requireAnyPermission(
+      req,
+      pool,
+      AUTO_CALCULATE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์คำนวณค่าบริการ'
+    );
+    if (permission instanceof Response) return permission;
+
+    const yardAccess = await requireYardAccess(req, pool, yardId, 'คุณไม่มีสิทธิ์คำนวณค่าบริการของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     // Get container info with gate_in_date
     const cResult = await pool.request()
-      .input('container_id', container_id)
-      .input('yard_id', yard_id)
+      .input('container_id', sql.Int, containerId)
+      .input('yard_id', sql.Int, yardId)
       .query(`
         SELECT c.container_id, c.container_number, c.size, c.type, c.status,
                c.gate_in_date, c.shipping_line, c.is_laden,
@@ -28,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     // Get applicable tariffs
     const tResult = await pool.request()
-      .input('yard_id', yard_id)
+      .input('yard_id', sql.Int, yardId)
       .query(`
         SELECT t.tariff_id, t.charge_type, t.description, t.rate, t.unit, t.free_days,
                c.customer_name

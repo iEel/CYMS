@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { buildPromptPayPayload, sanitizePromptPayId } from '@/lib/promptPay';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 const SETTING_KEY = 'payment_promptpay';
+const PAYMENT_QR_PERMISSIONS = [
+  'billing.payment.receive',
+  'billing.invoice.create',
+  'reports.view',
+];
 
 interface PaymentConfig {
   enabled: boolean;
@@ -46,6 +52,14 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const permission = await requireAnyPermission(
+      request,
+      db,
+      PAYMENT_QR_PERMISSIONS,
+      'คุณไม่มีสิทธิ์สร้าง QR ชำระเงิน'
+    );
+    if (permission instanceof Response) return permission;
+
     const settingResult = await db.request()
       .input('key', sql.NVarChar, SETTING_KEY)
       .query('SELECT setting_value FROM SystemSettings WHERE setting_key = @key');
@@ -58,7 +72,7 @@ export async function GET(request: NextRequest) {
     const invoiceResult = await db.request()
       .input('invoiceId', sql.Int, invoiceId)
       .query(`
-        SELECT i.invoice_id, i.invoice_number, i.status, i.grand_total, c.customer_name
+        SELECT i.invoice_id, i.yard_id, i.invoice_number, i.status, i.grand_total, c.customer_name
         FROM Invoices i
         LEFT JOIN Customers c ON i.customer_id = c.customer_id
         WHERE i.invoice_id = @invoiceId
@@ -68,6 +82,10 @@ export async function GET(request: NextRequest) {
     if (!invoice) {
       return NextResponse.json({ error: 'ไม่พบใบแจ้งหนี้' }, { status: 404 });
     }
+
+    const yardAccess = await requireYardAccess(request, db, invoice.yard_id, 'คุณไม่มีสิทธิ์สร้าง QR ของใบแจ้งหนี้ลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
+
     if (invoice.status === 'paid' || invoice.status === 'cancelled' || invoice.status === 'credit_note') {
       return NextResponse.json({ error: 'ใบแจ้งหนี้นี้ไม่อยู่ในสถานะรอชำระ' }, { status: 400 });
     }

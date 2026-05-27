@@ -6,8 +6,12 @@ const repoRoot = path.resolve(__dirname, '../../../..');
 const highRiskMutationRoutes = [
   'src/app/api/approval-reviews/route.ts',
   'src/app/api/billing/clearance/route.ts',
+  'src/app/api/billing/auto-calculate/route.ts',
+  'src/app/api/billing/gate-check/route.ts',
+  'src/app/api/billing/gate-in-check/route.ts',
   'src/app/api/billing/invoices/route.ts',
   'src/app/api/billing/payment-settings/route.ts',
+  'src/app/api/billing/tariffs/route.ts',
   'src/app/api/gate/route.ts',
   'src/app/api/gate/transfer/route.ts',
   'src/app/api/gate/transfer/receive/route.ts',
