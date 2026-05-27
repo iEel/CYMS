@@ -164,7 +164,8 @@ export async function GET(request: NextRequest) {
     }
 
     const timeline = result.recordset.map((row: Record<string, unknown>) => {
-      const { yard_id: _yardId, ...event } = row;
+      const event = { ...row };
+      delete event.yard_id;
       return event;
     });
 

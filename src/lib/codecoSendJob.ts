@@ -13,7 +13,7 @@ import { uploadFTP } from '@/lib/ftpClient';
 
 interface DbRequest {
   input(name: string, type: unknown, value: unknown): DbRequest;
-  query(statement: string): Promise<{ recordset: any[] }>;
+  query<T = Record<string, unknown>>(statement: string): Promise<{ recordset: T[] }>;
 }
 
 interface DbPool {
@@ -35,6 +35,25 @@ export interface CodecoSendJobResult {
   status?: number;
 }
 
+type EDIEndpointRow = {
+  endpoint_id: number;
+  name: string;
+  type: string;
+  host: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  remote_path: string;
+  shipping_line?: string | null;
+  is_active: boolean | number;
+  format?: string | null;
+  template_id?: number | null;
+};
+
+type CompanyProfileRow = {
+  company_name: string;
+};
+
 export async function runCodecoSendJob(
   input: CodecoSendJobInput,
   dbPool?: DbPool
@@ -47,7 +66,7 @@ export async function runCodecoSendJob(
 
   const epResult = await db.request()
     .input('epId', sql.Int, endpointId)
-    .query('SELECT * FROM EDIEndpoints WHERE endpoint_id = @epId');
+    .query<EDIEndpointRow>('SELECT * FROM EDIEndpoints WHERE endpoint_id = @epId');
 
   if (epResult.recordset.length === 0) {
     return { body: { error: 'ไม่พบ Endpoint' }, status: 404 };
@@ -96,8 +115,8 @@ export async function runCodecoSendJob(
     req.input('dt', sql.NVarChar, date_to);
   }
   query += ` ORDER BY g.created_at DESC`;
-  const txResult = await req.query(query);
-  const transactions = txResult.recordset as CODECOTransaction[];
+  const txResult = await req.query<CODECOTransaction>(query);
+  const transactions = txResult.recordset;
 
   if (transactions.length === 0) {
     return { body: { error: 'ไม่มีรายการ Gate ในช่วงที่เลือก' }, status: 400 };
@@ -105,7 +124,7 @@ export async function runCodecoSendJob(
 
   let companyName = 'CYMS';
   try {
-    const cr = await db.request().query('SELECT TOP 1 company_name FROM CompanyProfile');
+    const cr = await db.request().query<CompanyProfileRow>('SELECT TOP 1 company_name FROM CompanyProfile');
     if (cr.recordset[0]) companyName = cr.recordset[0].company_name;
   } catch { /* keep default company name */ }
 
@@ -114,9 +133,9 @@ export async function runCodecoSendJob(
     try {
       const tplResult = await db.request()
         .input('tplId', sql.Int, ep.template_id)
-        .query('SELECT * FROM EDITemplates WHERE template_id = @tplId');
+        .query<EDITemplate>('SELECT * FROM EDITemplates WHERE template_id = @tplId');
       if (tplResult.recordset[0]) {
-        template = tplResult.recordset[0] as EDITemplate;
+        template = tplResult.recordset[0];
       }
     } catch { /* fallback to legacy format */ }
   }
