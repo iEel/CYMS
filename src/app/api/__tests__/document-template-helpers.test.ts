@@ -1,4 +1,11 @@
-import { buildDefaultContinuousTemplateConfig, normalizeTemplateConfig, validateTemplateConfig } from '@/lib/documentTemplates';
+import {
+  buildDefaultContinuousTemplateConfig,
+  normalizeTemplateConfig,
+  parseStoredTemplateConfig,
+  validateTemplateConfig,
+} from '@/lib/documentTemplates';
+import { buildDefaultContinuousTemplateConfig as buildDefaultFallbackTemplateConfig } from '@/lib/documentTemplateDefaults';
+import { validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
 
 describe('document template helpers', () => {
   it('builds the default continuous tax invoice and receipt template config', () => {
@@ -44,6 +51,59 @@ describe('document template helpers', () => {
   it('returns validation errors for malformed parsed JSON without throwing', () => {
     expect(() => validateTemplateConfig({})).not.toThrow();
     expect(validateTemplateConfig({}).valid).toBe(false);
+  });
+
+  it('keeps the preview fallback default compatible with designer validation', () => {
+    const config = buildDefaultFallbackTemplateConfig();
+
+    expect(config.sections.line_items.start_y_mm).toBe(
+      config.sections.line_items.y_mm + config.sections.line_items.row_height_mm,
+    );
+    expect(validateDesignerTemplateConfig(config)).toEqual({ valid: true, errors: [] });
+  });
+
+  it('normalizes legacy stored line item start position before designer validation', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const legacy = {
+      ...config,
+      sections: {
+        ...config.sections,
+        line_items: {
+          ...config.sections.line_items,
+          y_mm: 55.1,
+          row_height_mm: 6.2,
+          start_y_mm: 55.1,
+        },
+      },
+      calibration_profiles: undefined,
+      default_calibration_profile_id: undefined,
+    };
+
+    const parsed = parseStoredTemplateConfig(JSON.stringify(legacy));
+
+    expect(parsed).not.toBeNull();
+    expect(parsed?.sections.line_items.start_y_mm).toBe(61.3);
+    expect(parsed?.calibration_profiles).toEqual([]);
+    expect(parsed?.default_calibration_profile_id).toBeUndefined();
+  });
+
+  it('keeps raw config normalization strict for legacy line item start positions', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const legacy = {
+      ...config,
+      sections: {
+        ...config.sections,
+        line_items: {
+          ...config.sections.line_items,
+          start_y_mm: config.sections.line_items.y_mm,
+        },
+      },
+    };
+
+    const result = normalizeTemplateConfig(legacy);
+
+    expect(result.config).toBeNull();
+    expect(result.errors).toContain('sections.line_items.start_y_mm must equal y_mm + row_height_mm');
   });
 
   it('allows duplicate field keys when field ids differ', () => {

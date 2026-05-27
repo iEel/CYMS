@@ -4,6 +4,19 @@ export type DocumentTemplateCopyMode = 'carbonless' | 'separate';
 export type DocumentTemplateTextAlign = 'left' | 'center' | 'right';
 export type DocumentTemplateFontWeight = 'normal' | 'medium' | 'semibold' | 'bold';
 export type DocumentTemplateFieldLayer = 'form' | 'data' | 'calibration';
+export type DocumentTemplateLineItemFormat = 'text' | 'number' | 'currency:THB';
+
+export interface DocumentTemplateCalibrationProfile {
+  profile_id: string;
+  profile_name: string;
+  paper_label: string;
+  width_mm: number;
+  height_mm: number;
+  top_offset_mm: number;
+  left_offset_mm: number;
+  print_scale: number;
+  notes?: string;
+}
 
 export interface DocumentTemplatePaper {
   width_mm: number;
@@ -57,7 +70,7 @@ export interface DocumentTemplateLineItemsSection {
     label: string;
     width_mm: number;
     text_align: DocumentTemplateTextAlign;
-    format: string;
+    format: DocumentTemplateLineItemFormat;
   }>;
 }
 
@@ -71,4 +84,6 @@ export interface DocumentTemplateConfig {
   sections: {
     line_items: DocumentTemplateLineItemsSection;
   };
+  calibration_profiles?: DocumentTemplateCalibrationProfile[];
+  default_calibration_profile_id?: string;
 }

@@ -60,6 +60,41 @@ function requireNumber(value: unknown, path: string, errors: string[]): number |
   return value;
 }
 
+function roundMm(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function repairStoredLineItemsSection(config: Record<string, unknown>) {
+  const sections = isRecord(config.sections) ? config.sections : null;
+  const lineItems = sections && isRecord(sections.line_items) ? sections.line_items : null;
+  if (!sections || !lineItems) return config.sections;
+
+  const yMm = lineItems.y_mm;
+  const rowHeightMm = lineItems.row_height_mm;
+  const startYMm = lineItems.start_y_mm;
+  const shouldRepairStartY = typeof yMm === 'number'
+    && Number.isFinite(yMm)
+    && typeof rowHeightMm === 'number'
+    && Number.isFinite(rowHeightMm)
+    && (startYMm === undefined || startYMm === yMm);
+
+  return {
+    ...sections,
+    line_items: {
+      ...lineItems,
+      start_y_mm: shouldRepairStartY ? roundMm(yMm + rowHeightMm) : startYMm,
+    },
+  };
+}
+
+function repairStoredTemplateConfig(config: unknown) {
+  if (!isRecord(config)) return config;
+  return {
+    ...config,
+    sections: repairStoredLineItemsSection(config),
+  };
+}
+
 export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
   return {
     paper: {
@@ -296,7 +331,7 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
         binding_source: 'lines',
         x_mm: 9,
         y_mm: 55,
-        start_y_mm: 55,
+        start_y_mm: 61,
         width_mm: 222,
         row_height_mm: 6,
         max_rows: 7,
@@ -336,6 +371,8 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
         ],
       },
     },
+    calibration_profiles: [],
+    default_calibration_profile_id: undefined,
   };
 }
 
@@ -451,6 +488,10 @@ export function normalizeTemplateConfig(config: unknown): {
         ...DEFAULT_PRINT_POLICY,
         ...(isRecord(config.print_policy) ? config.print_policy : {}),
       },
+      calibration_profiles: Array.isArray(config.calibration_profiles) ? config.calibration_profiles : [],
+      default_calibration_profile_id: typeof config.default_calibration_profile_id === 'string'
+        ? config.default_calibration_profile_id
+        : undefined,
     }
     : config;
   const validation = validateTemplateConfig(withDefaults);
@@ -464,7 +505,7 @@ export function parseStoredTemplateConfig(value: unknown): DocumentTemplateConfi
   if (typeof value !== 'string') return null;
   try {
     const parsed = JSON.parse(value);
-    return normalizeTemplateConfig(parsed).config;
+    return normalizeTemplateConfig(repairStoredTemplateConfig(parsed)).config;
   } catch {
     return null;
   }
