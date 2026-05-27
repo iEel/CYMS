@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
     const db = await getDb();
     const yardAccess = await requireYardAccess(request, db, rawYardId);
     if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requirePermission(request, db, 'reports.view', 'คุณไม่มีสิทธิ์ดูรายงาน');
+    if (actor instanceof NextResponse) return actor;
 
     // ─── By Shipping Line ───
     const byShippingLine = await db.request()

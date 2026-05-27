@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { z } from 'zod';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 // ─── Query param schema ───
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
@@ -66,6 +66,8 @@ export async function GET(request: NextRequest) {
     const db = await getDb();
     const yardAccess = await requireYardAccess(request, db, yardId);
     if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requirePermission(request, db, 'reports.view', 'คุณไม่มีสิทธิ์ดูรายงาน');
+    if (actor instanceof NextResponse) return actor;
 
     // ─────────────── DAILY IN / OUT ───────────────
     if (type === 'daily_in' || type === 'daily_out') {
