@@ -96,6 +96,7 @@ export type FieldNudge = {
 
 const LINE_ITEM_FIELD_KEYS = ['description', 'qty', 'unit_price', 'amount'] as const;
 const LINE_ITEM_FORMATS = ['text', 'number', 'currency:THB'] as const;
+const LINE_ITEM_MIN_ROW_HEIGHT_MM = 4;
 
 type LineItemFieldKey = typeof LINE_ITEM_FIELD_KEYS[number];
 const LINE_ITEM_BINDINGS = LINE_ITEM_FIELD_KEYS.map(fieldKey => `lines[].${fieldKey}`) as Array<`lines[].${LineItemFieldKey}`>;
@@ -220,6 +221,10 @@ function lineItemColumnId(config: DocumentTemplateConfig, fieldKey: LineItemFiel
   return candidate;
 }
 
+function lineItemsHeaderHeight(startYMm: number, yMm: number) {
+  return roundMm(Math.max(0, startYMm - yMm));
+}
+
 function safeLineItemColumnPatch(patch: LineItemColumnPatch, sectionWidthMm: number): LineItemColumnPatch {
   const next = { ...patch };
   const fieldKey = normalizeLineItemFieldKey(next.field_key);
@@ -248,13 +253,16 @@ function clampLineItemsToPaper(config: DocumentTemplateConfig): DocumentTemplate
   const paperWidth = finiteOr(config.paper.width_mm, 20);
   const paperHeight = finiteOr(config.paper.height_mm, 60);
   const width = clampMm(finiteOr(lineItems.width_mm, 20), 20, paperWidth);
-  const rowHeight = clampMm(finiteOr(lineItems.row_height_mm, 6), 3, 20);
+  const rowHeight = clampMm(finiteOr(lineItems.row_height_mm, 6), LINE_ITEM_MIN_ROW_HEIGHT_MM, 20);
+  const rawY = finiteOr(lineItems.y_mm, 0);
+  const rawStartY = roundMm(rawY + rowHeight);
+  const headerHeight = lineItemsHeaderHeight(rawStartY, rawY);
   const requestedMaxRows = Math.round(clampMm(finiteOr(lineItems.max_rows, 1), 1, 50));
-  const rowsThatFitOnPaper = Math.max(1, Math.floor(paperHeight / rowHeight));
+  const rowsThatFitOnPaper = Math.max(1, Math.floor(Math.max(0, paperHeight - headerHeight) / rowHeight));
   const maxRows = Math.min(requestedMaxRows, rowsThatFitOnPaper);
   const x = clampMm(finiteOr(lineItems.x_mm, 0), 0, Math.max(0, paperWidth - width));
-  const totalHeight = rowHeight * maxRows;
-  const y = clampMm(finiteOr(lineItems.y_mm, 0), 0, Math.max(0, paperHeight - totalHeight));
+  const totalHeight = headerHeight + rowHeight * maxRows;
+  const y = clampMm(rawY, 0, Math.max(0, paperHeight - totalHeight));
 
   return {
     ...lineItems,
@@ -310,9 +318,10 @@ export function resizeLineItems(
   size: { widthMm: number; heightMm: number; snapMm: number },
 ): DocumentTemplateConfig {
   const rowHeight = config.sections.line_items.row_height_mm || 1;
+  const headerHeight = lineItemsHeaderHeight(config.sections.line_items.start_y_mm, config.sections.line_items.y_mm);
   return applyLineItemsPatch(config, {
     width_mm: snapMm(size.widthMm, size.snapMm),
-    max_rows: Math.round(snapMm(size.heightMm, size.snapMm) / rowHeight),
+    max_rows: Math.round((snapMm(size.heightMm, size.snapMm) - headerHeight) / rowHeight),
   });
 }
 
@@ -627,8 +636,8 @@ export function validateDesignerTemplateConfig(config: unknown): { valid: boolea
     if (!finiteNumber(lineItems.width_mm) || widthMm < 20 || widthMm > paperWidth) {
       errors.push('sections.line_items.width_mm must be between 20 and paper width');
     }
-    if (!finiteNumber(lineItems.row_height_mm) || rowHeightMm < 3 || rowHeightMm > 20) {
-      errors.push('sections.line_items.row_height_mm must be between 3 and 20');
+    if (!finiteNumber(lineItems.row_height_mm) || rowHeightMm < LINE_ITEM_MIN_ROW_HEIGHT_MM || rowHeightMm > 20) {
+      errors.push('sections.line_items.row_height_mm must be between 4 and 20');
     }
     if (!finiteNumber(lineItems.max_rows) || !Number.isInteger(maxRows) || maxRows < 1 || maxRows > 50) {
       errors.push('sections.line_items.max_rows must be an integer between 1 and 50');
@@ -644,8 +653,8 @@ export function validateDesignerTemplateConfig(config: unknown): { valid: boolea
     if (finiteNumber(lineItems.x_mm) && finiteNumber(lineItems.width_mm) && xMm + widthMm > paperWidth) {
       errors.push('sections.line_items exceeds paper width');
     }
-    if (finiteNumber(lineItems.y_mm) && finiteNumber(lineItems.max_rows) && finiteNumber(lineItems.row_height_mm)
-      && yMm + (maxRows * rowHeightMm) > paperHeight) {
+    if (finiteNumber(lineItems.y_mm) && finiteNumber(lineItems.start_y_mm) && finiteNumber(lineItems.max_rows) && finiteNumber(lineItems.row_height_mm)
+      && yMm + roundMm(lineItemsHeaderHeight(startYMm, yMm) + maxRows * rowHeightMm) > paperHeight) {
       errors.push('sections.line_items exceeds paper height');
     }
     if (columns.length === 0) errors.push('sections.line_items.columns must contain at least one column');

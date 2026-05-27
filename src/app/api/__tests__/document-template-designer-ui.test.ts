@@ -103,6 +103,23 @@ describe('document template designer line item UI wiring', () => {
     expect(source).toContain('lineRegion.columns.map');
   });
 
+  it('measures line item canvas height with header plus body rows', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(source).toContain('const lineItemsHeaderHeightMm = Math.max(0, lineRegion.start_y_mm - lineRegion.y_mm)');
+    expect(source).toContain('const lineItemsCanvasHeightMm = Math.max(0, lineRegion.start_y_mm - lineRegion.y_mm) + lineRegion.row_height_mm * lineRegion.max_rows');
+    expect(source).toContain('height: mmToPx(lineItemsCanvasHeightMm, zoom)');
+    expect(source).toContain('heightMm: snapMm(lineItemsCanvasHeightMm + dyMm, snapStep)');
+  });
+
+  it('keeps line item chrome outside the measured canvas rows', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(source).toContain('height: mmToPx(lineItemsHeaderHeightMm, zoom)');
+    expect(source).toContain('pointer-events-none absolute');
+    expect(source).not.toContain('className="flex h-5 items-center border-b border-slate-300 bg-slate-100/90 px-1 font-semibold text-slate-600"');
+  });
+
   it('selects the line items region on focus and keyboard activation', () => {
     const source = read('src/components/document-templates/TemplateCanvas.tsx');
     expect(source).toContain('onFocus={onSelectLineItems}');

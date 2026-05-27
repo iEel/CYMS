@@ -208,8 +208,16 @@ describe('document template designer 2.1 validation', () => {
     const errors = validateDesignerTemplateConfig(config).errors;
 
     expect(errors).toContain('sections.line_items.width_mm must be between 20 and paper width');
-    expect(errors).toContain('sections.line_items.row_height_mm must be between 3 and 20');
+    expect(errors).toContain('sections.line_items.row_height_mm must be between 4 and 20');
     expect(errors).toContain('sections.line_items.max_rows must be an integer between 1 and 50');
+  });
+
+  it('clamps line item row height to the print-safe minimum', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const next = applyLineItemsPatch(config, { row_height_mm: 3 });
+
+    expect(next.sections.line_items.row_height_mm).toBe(4);
+    expect(next.sections.line_items.start_y_mm).toBe(next.sections.line_items.y_mm + 4);
   });
 
   it('rejects string paper metrics', () => {
@@ -304,9 +312,38 @@ describe('document template designer 2.1 validation', () => {
   it('clamps line item movement to paper bounds', () => {
     const config = buildDefaultContinuousTemplateConfig();
     const moved = applyLineItemsPatch(config, { x_mm: 400, y_mm: 400 });
+    const lineItemsHeight = (moved.sections.line_items.start_y_mm - moved.sections.line_items.y_mm)
+      + moved.sections.line_items.row_height_mm * moved.sections.line_items.max_rows;
 
     expect(moved.sections.line_items.x_mm + moved.sections.line_items.width_mm).toBeLessThanOrEqual(moved.paper.width_mm);
-    expect(moved.sections.line_items.y_mm + moved.sections.line_items.row_height_mm * moved.sections.line_items.max_rows).toBeLessThanOrEqual(moved.paper.height_mm);
+    expect(moved.sections.line_items.y_mm + lineItemsHeight).toBeLessThanOrEqual(moved.paper.height_mm);
+  });
+
+  it('clamps line item movement using header plus row height', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    config.paper.height_mm = 64;
+    config.sections.line_items.y_mm = 0;
+    config.sections.line_items.row_height_mm = 10;
+    config.sections.line_items.start_y_mm = 10;
+    config.sections.line_items.max_rows = 5;
+
+    const moved = applyLineItemsPatch(config, { y_mm: 10 });
+
+    expect(moved.sections.line_items.y_mm).toBe(4);
+    expect(moved.sections.line_items.y_mm
+      + (moved.sections.line_items.start_y_mm - moved.sections.line_items.y_mm)
+      + moved.sections.line_items.row_height_mm * moved.sections.line_items.max_rows).toBe(64);
+  });
+
+  it('rejects line item geometry outside paper using header plus row height', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    config.paper.height_mm = 64;
+    config.sections.line_items.y_mm = 5;
+    config.sections.line_items.row_height_mm = 10;
+    config.sections.line_items.start_y_mm = 15;
+    config.sections.line_items.max_rows = 5;
+
+    expect(validateDesignerTemplateConfig(config).errors).toContain('sections.line_items exceeds paper height');
   });
 
   it('preserves valid line item geometry when patches contain non-finite numbers', () => {
@@ -331,8 +368,22 @@ describe('document template designer 2.1 validation', () => {
   it('clamps line item row count to keep the section inside paper bounds', () => {
     const config = buildDefaultContinuousTemplateConfig();
     const resized = applyLineItemsPatch(config, { row_height_mm: 20, max_rows: 50 });
+    const lineItemsHeight = (resized.sections.line_items.start_y_mm - resized.sections.line_items.y_mm)
+      + resized.sections.line_items.row_height_mm * resized.sections.line_items.max_rows;
 
-    expect(resized.sections.line_items.y_mm + resized.sections.line_items.row_height_mm * resized.sections.line_items.max_rows).toBeLessThanOrEqual(resized.paper.height_mm);
+    expect(resized.sections.line_items.y_mm + lineItemsHeight).toBeLessThanOrEqual(resized.paper.height_mm);
+  });
+
+  it('caps max rows using available height after the header band', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    config.paper.height_mm = 64;
+    config.sections.line_items.y_mm = 0;
+    config.sections.line_items.row_height_mm = 10;
+    config.sections.line_items.start_y_mm = 10;
+
+    const resized = applyLineItemsPatch(config, { max_rows: 50 });
+
+    expect(resized.sections.line_items.max_rows).toBe(5);
   });
 
   it('applies a calibration profile to paper settings without changing profile data', () => {
@@ -399,7 +450,7 @@ describe('document template designer 2.1 validation', () => {
     expect(calibrated.fields.every(field => field.x_mm + field.width_mm <= calibrated.paper.width_mm)).toBe(true);
     expect(calibrated.fields.every(field => field.y_mm + field.height_mm <= calibrated.paper.height_mm)).toBe(true);
     expect(lineItems.x_mm + lineItems.width_mm).toBeLessThanOrEqual(calibrated.paper.width_mm);
-    expect(lineItems.y_mm + lineItems.row_height_mm * lineItems.max_rows).toBeLessThanOrEqual(calibrated.paper.height_mm);
+    expect(lineItems.y_mm + (lineItems.start_y_mm - lineItems.y_mm) + lineItems.row_height_mm * lineItems.max_rows).toBeLessThanOrEqual(calibrated.paper.height_mm);
   });
 
   it('keeps usable field size when calibration moves fields onto smaller paper', () => {

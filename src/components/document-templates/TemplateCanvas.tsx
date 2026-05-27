@@ -71,12 +71,12 @@ function fieldStyle(field: DocumentTemplateField, zoom: number): CSSProperties {
   };
 }
 
-function lineItemsStyle(lineRegion: DocumentTemplateLineItemsSection, zoom: number): CSSProperties {
+function lineItemsStyle(lineRegion: DocumentTemplateLineItemsSection, zoom: number, lineItemsCanvasHeightMm: number): CSSProperties {
   return {
     left: mmToPx(lineRegion.x_mm, zoom),
     top: mmToPx(lineRegion.y_mm, zoom),
     width: mmToPx(lineRegion.width_mm, zoom),
-    height: mmToPx(lineRegion.row_height_mm * lineRegion.max_rows, zoom),
+    height: mmToPx(lineItemsCanvasHeightMm, zoom),
   };
 }
 
@@ -136,9 +136,10 @@ export function TemplateCanvas({
 
     if (drag.kind === 'line_items') {
       if (drag.mode === 'resize') {
+        const lineItemsCanvasHeightMm = Math.max(0, drag.lineRegion.start_y_mm - drag.lineRegion.y_mm) + drag.lineRegion.row_height_mm * drag.lineRegion.max_rows;
         onChange(resizeLineItems(config, {
           widthMm: snapMm(drag.lineRegion.width_mm + dxMm, snapStep),
-          heightMm: snapMm(drag.lineRegion.row_height_mm * drag.lineRegion.max_rows + dyMm, snapStep),
+          heightMm: snapMm(lineItemsCanvasHeightMm + dyMm, snapStep),
           snapMm: snapStep,
         }));
         return;
@@ -195,6 +196,8 @@ export function TemplateCanvas({
   const lineItemsGridTemplate = lineRegion.columns
     .map(column => `${mmToPx(column.width_mm, zoom)}px`)
     .join(' ');
+  const lineItemsHeaderHeightMm = Math.max(0, lineRegion.start_y_mm - lineRegion.y_mm);
+  const lineItemsCanvasHeightMm = Math.max(0, lineRegion.start_y_mm - lineRegion.y_mm) + lineRegion.row_height_mm * lineRegion.max_rows;
 
   return (
     <div className="min-h-[700px] overflow-auto bg-slate-100 p-8 dark:bg-slate-950">
@@ -224,7 +227,7 @@ export function TemplateCanvas({
         {lineItemsVisible ? (
           <div
             className={`absolute overflow-hidden rounded-sm border bg-white/70 text-[10px] shadow-sm ${selectedLineItems ? 'border-blue-500 ring-2 ring-blue-400/60' : 'border-dashed border-slate-400'} ${lineItemsLocked ? 'cursor-not-allowed opacity-75' : 'cursor-move'}`}
-            style={lineItemsStyle(lineRegion, zoom)}
+            style={lineItemsStyle(lineRegion, zoom, lineItemsCanvasHeightMm)}
             onClick={event => event.stopPropagation()}
             onPointerDown={event => beginLineItemsDrag(event, 'move')}
             onPointerMove={moveDrag}
@@ -237,12 +240,15 @@ export function TemplateCanvas({
             tabIndex={0}
             title="Line items · lines[]"
           >
-            <div className="flex h-5 items-center border-b border-slate-300 bg-slate-100/90 px-1 font-semibold text-slate-600">
+            <span className="pointer-events-none absolute left-1 top-1 z-10 rounded-sm bg-white/90 px-1 py-0.5 font-semibold text-slate-600 shadow-sm">
               Line items · lines[]
-            </div>
+            </span>
             <div
               className="grid border-b border-slate-300 bg-slate-50/90 text-slate-600"
-              style={{ gridTemplateColumns: lineItemsGridTemplate }}
+              style={{
+                gridTemplateColumns: lineItemsGridTemplate,
+                height: mmToPx(lineItemsHeaderHeightMm, zoom),
+              }}
             >
               {lineRegion.columns.map(column => (
                 <div

@@ -1,4 +1,5 @@
-import type { ContinuousPrintPayload } from '@/lib/billingContinuousPrintTypes';
+import type { CSSProperties } from 'react';
+import type { ContinuousPrintLine, ContinuousPrintPayload } from '@/lib/billingContinuousPrintTypes';
 import type {
   DocumentTemplateConfig,
   DocumentTemplateCopyMode,
@@ -23,6 +24,8 @@ type ContinuousTaxReceiptProps = {
   reprintLabel?: string | null;
   testPrint?: boolean;
 };
+
+type LineItemColumn = DocumentTemplateConfig['sections']['line_items']['columns'][number];
 
 function money(value: number) {
   return new Intl.NumberFormat('th-TH', {
@@ -61,6 +64,53 @@ function formatFieldValue(payload: ContinuousPrintPayload, field: DocumentTempla
   if (field.format.startsWith('date')) return dateText(String(value));
   if (field.format === 'number') return String(Number(value || 0));
   return String(value);
+}
+
+function lineItemColumnTotal(section: DocumentTemplateConfig['sections']['line_items']) {
+  return Math.max(1, section.columns.reduce((sum, column) => sum + Math.max(0, column.width_mm), 0));
+}
+
+function lineItemRawValue(line: ContinuousPrintLine, fieldKey: string) {
+  const key = fieldKey.replace(/^lines\[\]\./, '');
+  if (key === 'description') return line.description;
+  if (key === 'qty') return line.qty;
+  if (key === 'unit_price') return line.unit_price;
+  if (key === 'amount') return line.amount;
+  return '';
+}
+
+export function lineItemValue(line: ContinuousPrintLine, column: LineItemColumn) {
+  const value = lineItemRawValue(line, column.field_key);
+  if (column.format === 'currency:THB') {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? money(numericValue) : '';
+  }
+  if (column.format === 'number') return String(value);
+  return String(value);
+}
+
+export function lineItemsBoxStyle(
+  lineItemsSection: DocumentTemplateConfig['sections']['line_items'],
+  mode: DocumentTemplateMode,
+): CSSProperties {
+  const headerHeightMm = Math.max(0, lineItemsSection.start_y_mm - lineItemsSection.y_mm);
+  const heightMm = headerHeightMm + lineItemsSection.row_height_mm * lineItemsSection.max_rows;
+  if (mode === 'overlay') {
+    return {
+      position: 'absolute',
+      left: `${lineItemsSection.x_mm}mm`,
+      top: `${lineItemsSection.y_mm}mm`,
+      width: `${lineItemsSection.width_mm}mm`,
+      height: `${heightMm}mm`,
+      overflow: 'hidden',
+    };
+  }
+  return {
+    width: `${lineItemsSection.width_mm}mm`,
+    maxWidth: '100%',
+    height: `${heightMm}mm`,
+    overflow: 'hidden',
+  };
 }
 
 function mm(value: number) {
@@ -132,59 +182,85 @@ function OverlayFields({
   );
 }
 
-function LineItems({ payload, config }: { payload: ContinuousPrintPayload; config: DocumentTemplateConfig }) {
-  const section = config.sections.line_items;
-  const rows = payload.lines.slice(0, section.max_rows);
-  const rowNumberWidthMm = 9;
-  const totalColumnWidthMm = rowNumberWidthMm + section.columns.reduce((sum, column) => sum + column.width_mm, 0);
+function LineItems({
+  lineItemsSection,
+  lineItemTotal,
+  visibleLines,
+  mode,
+}: {
+  lineItemsSection: DocumentTemplateConfig['sections']['line_items'];
+  lineItemTotal: number;
+  visibleLines: ContinuousPrintLine[];
+  mode: DocumentTemplateMode;
+}) {
+  const totalColumnWidthMm = lineItemTotal;
+  const headerHeightMm = Math.max(0, lineItemsSection.start_y_mm - lineItemsSection.y_mm);
 
   return (
-    <table className="ctr-lines">
-      <colgroup>
-        <col style={{ width: percent(rowNumberWidthMm, totalColumnWidthMm) }} />
-        {section.columns.map((column) => (
-          <col key={column.column_id} style={{ width: percent(column.width_mm, totalColumnWidthMm) }} />
-        ))}
-      </colgroup>
-      <thead>
-        <tr>
-          <th>#</th>
-          {section.columns.map((column) => (
-            <th key={column.column_id} style={{ textAlign: column.text_align }}>
-              {column.label}
-            </th>
+    <div className="ctr-lines-box" style={lineItemsBoxStyle(lineItemsSection, mode)}>
+      <table
+        className="ctr-lines"
+        style={{
+          tableLayout: 'fixed',
+          width: '100%',
+        }}
+      >
+        <colgroup>
+          {lineItemsSection.columns.map((column) => (
+            <col key={column.column_id} style={{ width: percent(Math.max(0, column.width_mm), totalColumnWidthMm) }} />
           ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((line, index) => (
-          <tr key={`${line.description}-${index}`}>
-            <td>{index + 1}</td>
-            {section.columns.map((column) => {
-              const key = column.field_key.replace('lines[].', '') as keyof typeof line;
-              const value = line[key];
-              const display = column.format.startsWith('currency') ? money(Number(value)) : String(value ?? '');
-              return (
-                <td key={column.column_id} style={{ textAlign: column.text_align }}>
-                  {display}
-                </td>
-              );
-            })}
+        </colgroup>
+        <thead>
+          <tr style={{ height: `${headerHeightMm}mm` }}>
+            {lineItemsSection.columns.map((column) => (
+              <th
+                key={column.column_id}
+                style={{
+                  height: `${headerHeightMm}mm`,
+                  textAlign: column.text_align,
+                }}
+              >
+                {column.label}
+              </th>
+            ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {visibleLines.map((line, index) => (
+            <tr key={`${line.description}-${index}`}>
+              {lineItemsSection.columns.map((column) => (
+                <td
+                  key={column.column_id}
+                  style={{
+                    height: `${lineItemsSection.row_height_mm}mm`,
+                    textAlign: column.text_align,
+                  }}
+                >
+                  {lineItemValue(line, column)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 function FullReceipt({
   payload,
   config,
+  lineItemsSection,
+  lineItemTotal,
+  visibleLines,
   copyLabel,
   reprintLabel,
 }: {
   payload: ContinuousPrintPayload;
   config: DocumentTemplateConfig;
+  lineItemsSection: DocumentTemplateConfig['sections']['line_items'];
+  lineItemTotal: number;
+  visibleLines: ContinuousPrintLine[];
   copyLabel: string;
   reprintLabel?: string | null;
 }) {
@@ -217,7 +293,12 @@ function FullReceipt({
         </div>
       </section>
 
-      <LineItems payload={payload} config={config} />
+      <LineItems
+        lineItemsSection={lineItemsSection}
+        lineItemTotal={lineItemTotal}
+        visibleLines={visibleLines}
+        mode="full"
+      />
 
       <section className="ctr-summary">
         <div className="ctr-payment">
@@ -253,6 +334,9 @@ export function ContinuousTaxReceipt({
   const paper = config.paper;
   const contentWidth = paper.width_mm - paper.margin_left_mm - paper.margin_right_mm;
   const contentHeight = paper.height_mm - paper.margin_top_mm - paper.margin_bottom_mm;
+  const lineItemsSection = config.sections.line_items;
+  const lineItemTotal = lineItemColumnTotal(lineItemsSection);
+  const visibleLines = payload.lines.slice(0, lineItemsSection.max_rows);
 
   return (
     <div className="ctr-root" data-mode={mode} data-copy-mode={copyMode}>
@@ -274,9 +358,11 @@ export function ContinuousTaxReceipt({
         .ctr-parties { display: grid; gap: 5mm; grid-template-columns: 1fr 1fr; padding: 3mm 0; }
         .ctr-parties h2 { font-size: 10pt; margin: 0 0 1mm; }
         .ctr-parties p, .ctr-payment p { font-size: 8pt; line-height: 1.35; margin: 0.5mm 0; }
-        .ctr-lines { border-collapse: collapse; font-size: 8pt; table-layout: fixed; width: 100%; }
-        .ctr-lines th { background: #f3f4f6; border: 0.2mm solid #374151; font-weight: 700; overflow-wrap: anywhere; padding: 1mm; }
-        .ctr-lines td { border: 0.2mm solid #9ca3af; height: ${config.sections.line_items.row_height_mm}mm; overflow-wrap: anywhere; padding: 0.8mm 1mm; vertical-align: top; }
+        .ctr-lines-box { box-sizing: border-box; }
+        .ctr-lines { border-collapse: collapse; font-size: 8pt; line-height: 1.1; width: 100%; }
+        .ctr-lines, .ctr-lines tr, .ctr-lines th, .ctr-lines td { box-sizing: border-box; }
+        .ctr-lines th { background: #f3f4f6; border: 0.2mm solid #374151; font-weight: 700; overflow-wrap: anywhere; padding: 0.2mm 0.8mm; }
+        .ctr-lines td { border: 0.2mm solid #9ca3af; overflow-wrap: anywhere; padding: 0.2mm 0.8mm; vertical-align: top; }
         .ctr-summary { display: grid; gap: 4mm; grid-template-columns: 1fr 58mm; margin-top: 3mm; }
         .ctr-total { border-top: 0.25mm solid #111827; margin-top: 1mm; padding-top: 1mm; }
         .ctr-total dt, .ctr-total dd { font-size: 10pt; font-weight: 700; }
@@ -318,11 +404,22 @@ export function ContinuousTaxReceipt({
             }}
           >
             {mode === 'overlay' ? (
-              <OverlayFields payload={payload} config={config} />
+              <>
+                <OverlayFields payload={payload} config={config} />
+                <LineItems
+                  lineItemsSection={lineItemsSection}
+                  lineItemTotal={lineItemTotal}
+                  visibleLines={visibleLines}
+                  mode={mode}
+                />
+              </>
             ) : (
               <FullReceipt
                 payload={payload}
                 config={config}
+                lineItemsSection={lineItemsSection}
+                lineItemTotal={lineItemTotal}
+                visibleLines={visibleLines}
                 copyLabel={labels[index] || labels[0] || DEFAULT_COPY_LABELS[0]}
                 reprintLabel={reprintLabel}
               />
