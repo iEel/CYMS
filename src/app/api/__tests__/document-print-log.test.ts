@@ -157,6 +157,18 @@ describe('document print log helper', () => {
   });
 });
 
+describe('document print history shape', () => {
+  it('keeps fields needed by the template history panel', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/document-templates/print-history/route.ts'), 'utf8');
+    expect(source).toContain('print_no');
+    expect(source).toContain('reprint_count');
+    expect(source).toContain('manual_preprinted_form_no');
+    expect(source).toContain('has_snapshot');
+  });
+});
+
 function mockPrintLogDb(
   responses: Array<{ recordset?: Array<Record<string, unknown>> }>,
   queries: string[],

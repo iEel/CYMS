@@ -170,3 +170,10 @@ describe('calibration profile UI wiring', () => {
     expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('<CalibrationProfilesPanel');
   });
 });
+
+describe('print history panel wiring', () => {
+  it('renders recent print history for selected template version', () => {
+    expect(read('src/components/document-templates/PrintHistoryPanel.tsx')).toContain('Recent prints');
+    expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('<PrintHistoryPanel');
+  });
+});

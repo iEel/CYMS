@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { CalibrationProfilesPanel } from '@/components/document-templates/CalibrationProfilesPanel';
 import { DocumentTemplateDesigner } from '@/components/document-templates/DocumentTemplateDesigner';
+import { PrintHistoryPanel } from '@/components/document-templates/PrintHistoryPanel';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
 import { validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
 import type {
@@ -107,6 +108,7 @@ export default function DocumentTemplateManager() {
     [selectedId, templates],
   );
   const canEditDraft = editingVersion?.status === 'draft';
+  const selectedTemplateVersion = editingVersion?.version_no || selectedTemplate?.current_version_no || selectedTemplate?.version_no || undefined;
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -583,6 +585,11 @@ export default function DocumentTemplateManager() {
                 readOnly={!canEditDraft}
                 onChange={setConfig}
                 onTestPrint={calibrationProfileId => testPrint({ calibrationProfileId })}
+              />
+
+              <PrintHistoryPanel
+                templateCode={selectedTemplate?.template_code}
+                templateVersion={selectedTemplateVersion}
               />
 
               <DocumentTemplateDesigner
