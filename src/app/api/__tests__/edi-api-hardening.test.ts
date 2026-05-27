@@ -54,7 +54,7 @@ describe('EDI and booking API hardening', () => {
     expect(source).toContain('requirePermission');
     expect(source).toContain('integration.send');
     expect(source).toContain('requireYardAccess');
-    expect(source).toContain('userId: actor.userId');
+    expect(source).toContain('actorUserId: actor.userId');
     expect(source).not.toContain('yard_id || 1');
     expect(source).not.toContain('userId: null');
   });

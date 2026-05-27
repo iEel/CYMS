@@ -1,4 +1,5 @@
 import cron, { ScheduledTask } from 'node-cron';
+import { runBookingSummaryJob } from '@/lib/bookingSummaryJob';
 
 // Booking Daily Summary Scheduler
 let summaryJob: ScheduledTask | null = null;
@@ -7,9 +8,7 @@ let currentCronExpr: string | null = null;
 async function executeDailySummary(): Promise<void> {
   console.log('⏰ [Booking Scheduler] Sending daily summary...');
   try {
-    const baseUrl = `http://localhost:${process.env.PORT || 3005}`;
-    const res = await fetch(`${baseUrl}/api/cron/booking-summary`);
-    const data = await res.json();
+    const data = await runBookingSummaryJob();
 
     if (data.success) {
       console.log(`  ✅ [Booking Scheduler] Summary sent to ${data.recipients} recipient(s)`);
