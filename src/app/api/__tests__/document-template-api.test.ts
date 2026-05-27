@@ -177,6 +177,10 @@ describe('document template API', () => {
     expect(db.queries.join('\n')).toContain('INSERT INTO DocumentTemplateVersions');
     expect(db.queries[0]).toContain('BEGIN TRAN');
     expect(db.queries[0]).toContain('COMMIT TRAN');
+    expect(db.queries[0]).toContain('reprint_label_template NVARCHAR(120)');
+    expect(db.queries[0]).toContain('red_ref_source NVARCHAR(50)');
+    expect(db.queries[0]).toContain('INSERTED.reprint_label_template');
+    expect(db.queries[0]).toContain('INSERTED.red_ref_source');
     expect(db.inputs).toEqual(expect.arrayContaining([
       { name: 'templateCode', value: 'TAX_CONTINUOUS' },
       { name: 'isDefault', value: 0 },

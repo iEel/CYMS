@@ -157,6 +157,8 @@ export async function POST(request: NextRequest) {
           paper_size_code NVARCHAR(40),
           mode NVARCHAR(20),
           copy_mode NVARCHAR(20),
+          reprint_label_template NVARCHAR(120),
+          red_ref_source NVARCHAR(50),
           created_by INT,
           created_at DATETIME2
         );
@@ -188,7 +190,8 @@ export async function POST(request: NextRequest) {
           OUTPUT INSERTED.version_id, INSERTED.template_id, INSERTED.template_code,
             INSERTED.version_no, INSERTED.status, INSERTED.paper_width_mm,
             INSERTED.paper_height_mm, INSERTED.paper_size_code, INSERTED.mode,
-            INSERTED.copy_mode, INSERTED.created_by, INSERTED.created_at
+            INSERTED.copy_mode, INSERTED.reprint_label_template, INSERTED.red_ref_source,
+            INSERTED.created_by, INSERTED.created_at
           INTO @createdVersion
       VALUES (
             (SELECT TOP 1 template_id FROM @createdTemplate), @templateCode, @versionNo, @status,

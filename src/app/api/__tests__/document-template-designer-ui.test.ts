@@ -56,4 +56,17 @@ describe('document template visual designer UI', () => {
     expect(manager).toContain("setError('เลือกหรือสร้าง document template ก่อน Preview')");
     expect(manager).toContain('if (selectedTemplate) params.templateId');
   });
+
+  it('keeps create and duplicate route response table variables aligned with selected output fields', () => {
+    const createRoute = read('src/app/api/document-templates/route.ts');
+    const duplicateRoute = read('src/app/api/document-templates/[templateId]/duplicate/route.ts');
+
+    [createRoute, duplicateRoute].forEach(source => {
+      expect(source).toContain('reprint_label_template NVARCHAR(120)');
+      expect(source).toContain('red_ref_source NVARCHAR(50)');
+      expect(source).toContain('INSERTED.reprint_label_template');
+      expect(source).toContain('INSERTED.red_ref_source');
+      expect(source).toContain('v.red_ref_source AS version_red_ref_source');
+    });
+  });
 });
