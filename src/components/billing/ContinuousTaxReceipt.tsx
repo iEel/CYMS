@@ -249,7 +249,6 @@ function LineItems({
 
 function FullReceipt({
   payload,
-  config,
   lineItemsSection,
   lineItemTotal,
   visibleLines,
@@ -257,7 +256,6 @@ function FullReceipt({
   reprintLabel,
 }: {
   payload: ContinuousPrintPayload;
-  config: DocumentTemplateConfig;
   lineItemsSection: DocumentTemplateConfig['sections']['line_items'];
   lineItemTotal: number;
   visibleLines: ContinuousPrintLine[];
@@ -416,7 +414,6 @@ export function ContinuousTaxReceipt({
             ) : (
               <FullReceipt
                 payload={payload}
-                config={config}
                 lineItemsSection={lineItemsSection}
                 lineItemTotal={lineItemTotal}
                 visibleLines={visibleLines}

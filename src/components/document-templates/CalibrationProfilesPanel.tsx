@@ -97,7 +97,7 @@ export function CalibrationProfilesPanel({
   onChange,
   onTestPrint,
 }: CalibrationProfilesPanelProps) {
-  const profiles = config.calibration_profiles || [];
+  const profiles = useMemo(() => config.calibration_profiles || [], [config.calibration_profiles]);
   const [selectedProfileId, setSelectedProfileId] = useState(
     config.default_calibration_profile_id || profiles[0]?.profile_id || '',
   );
