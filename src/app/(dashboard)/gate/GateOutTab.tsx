@@ -2,21 +2,21 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Loader2, Search, CheckCircle2, Truck,
-  Package, User, FileText, X, Users,
-  ArrowUpFromLine, AlertTriangle, ScanLine, Clock3, MapPin,
+  Loader2, CheckCircle2,
+  FileText, X, Users,
+  ArrowUpFromLine, AlertTriangle, Clock3, MapPin,
 } from 'lucide-react';
-import PhotoCapture from '@/components/gate/PhotoCapture';
 import CameraOCR from '@/components/gate/CameraOCR';
 import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import GateGuardrailPanel from '@/components/gate/GateGuardrailPanel';
 import GateDecisionBar from '@/components/gate/GateDecisionBar';
-import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, GateOutRequest, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
+import { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking, GateOutRequest, OPTIONAL_CHARGES } from './types';
 import { buildGateDecisionSignals, buildGateOutWorkflow } from '@/lib/gateWorkflow';
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { RawImage } from '@/components/ui/RawImage';
+import GateOutSearchSection, { type GateOutSearchResult } from './components/GateOutSearchSection';
+import GateOutReleaseRequestSection, { type GateOutFormState, type GateOutPhase } from './components/GateOutReleaseRequestSection';
 
 interface GateOutTabProps {
   yardId: number;
@@ -33,27 +33,7 @@ interface PortalVisibilityPreviewRow {
   validUntil: string | null;
 }
 
-interface GateOutContainerSearchResult {
-  result_type: 'container';
-  selectable: boolean;
-  container: ContainerResult;
-  booking: null;
-  containers: [];
-  message?: string | null;
-}
-
-interface GateOutBookingSearchResult {
-  result_type: 'booking';
-  selectable: boolean;
-  container: null;
-  booking: GateOutBooking;
-  containers: ContainerResult[];
-  message?: string | null;
-}
-
-type GateOutSearchResult = GateOutContainerSearchResult | GateOutBookingSearchResult;
-
-function gateOutPhaseFromRequest(request: GateOutRequest): 'search' | 'pending_pickup' | 'confirm_release' {
+function gateOutPhaseFromRequest(request: GateOutRequest): GateOutPhase {
   const status = request.display_status || request.status;
   if (status === 'at_gate' || request.work_order_status === 'completed') return 'confirm_release';
   if (['requested', 'moving'].includes(String(status)) || ['pending', 'assigned', 'in_progress'].includes(String(request.work_order_status))) {
@@ -123,13 +103,13 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [searching, setSearching] = useState(false);
 
   // Gate-Out form
-  const [gateOutForm, setGateOutForm] = useState({
+  const [gateOutForm, setGateOutForm] = useState<GateOutFormState>({
     driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '',
   });
   const [gateOutLoading, setGateOutLoading] = useState(false);
   const [gateOutResult, setGateOutResult] = useState<{ success: boolean; message: string; eir_number?: string } | null>(null);
   const [gateOutPhotos, setGateOutPhotos] = useState<string[]>([]);
-  const [gateOutPhase, setGateOutPhase] = useState<'search' | 'pending_pickup' | 'confirm_release'>('search');
+  const [gateOutPhase, setGateOutPhase] = useState<GateOutPhase>('search');
   const [releaseLoading, setReleaseLoading] = useState(false);
   const [showOCR, setShowOCR] = useState<'plate' | 'seal' | null>(null);
   const [recentGateTransactions, setRecentGateTransactions] = useState<GateRecentTransaction[]>([]);
@@ -936,86 +916,18 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           <div className="gate-out-primary-workspace space-y-4">
             {gateOutPendingJobsPanel}
 
-            {/* Search */}
-            <div>
-              <label className={labelClass}>ค้นหาตู้ในลาน</label>
-              <div className="flex gap-2">
-                <input type="text" placeholder="ค้นหาเลขตู้ หรือ Booking No." value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && searchContainers()}
-                  className={`${inputClass} font-mono flex-1`} />
-                <button onClick={searchContainers} disabled={searching}
-                  className="h-10 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5 transition-all">
-                  {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} ค้นหา
-                </button>
-              </div>
-            </div>
+            <GateOutSearchSection
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              searching={searching}
+              searchResults={searchResults}
+              selectedContainer={selectedContainer}
+              searchContainers={searchContainers}
+              selectContainerForGateOut={selectContainerForGateOut}
+              bookingProgressText={bookingProgressText}
+            />
 
-        {/* Search Results */}
-        {searchResults.length > 0 && !selectedContainer && (
-          <div className="space-y-1.5">
-            <p className="text-xs text-slate-400">พบ {searchResults.length} รายการ — เลือกตู้ที่จะปล่อยออก</p>
-            {searchResults.map((result, index) => {
-              if (result.result_type === 'container') {
-                const c = result.container;
-                return (
-                  <button key={`container-${c.container_id}`} onClick={() => selectContainerForGateOut(c)}
-                    className="w-full text-left p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600">
-                        <Package size={16} />
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase text-blue-500">Container Match</p>
-                        <p className="font-mono font-semibold text-slate-800 dark:text-white text-sm">{c.container_number}</p>
-                        <p className="text-xs text-slate-400">{c.size}&apos;{c.type} • {c.shipping_line || '-'}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-slate-400 font-mono">{c.zone_name ? `Zone ${c.zone_name} B${c.bay}-R${c.row}-T${c.tier}` : 'ไม่มีพิกัด'}</span>
-                  </button>
-                );
-              }
-
-              if (result.result_type === 'booking') {
-                return (
-                  <div key={`booking-${result.booking.booking_id}-${index}`} className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 dark:border-indigo-900/40 dark:bg-indigo-900/10">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase text-indigo-500">Booking Match</p>
-                        <p className="font-mono font-bold text-slate-800 dark:text-white">{result.booking.booking_number}</p>
-                        <p className="text-xs text-slate-500">{result.booking.booking_customer_name || result.booking.customer_name || '-'} • {result.booking.vessel_name || '-'}</p>
-                        <p className="text-[10px] text-indigo-500 mt-1">{bookingProgressText(result.booking)}</p>
-                      </div>
-                      {!result.selectable && (
-                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700">
-                          {result.message || 'พบ Booking แต่ยังไม่มีตู้ในลานสำหรับปล่อยออก'}
-                        </span>
-                      )}
-                    </div>
-                    {result.message && <p className="mt-2 text-xs text-amber-600">{result.message}</p>}
-                    {result.containers.length > 0 && (
-                      <div className="mt-3 space-y-1.5">
-                        {result.containers.map(container => (
-                          <button key={container.container_id} disabled={!result.selectable}
-                            onClick={() => selectContainerForGateOut(container, result.booking)}
-                            className="w-full rounded-lg bg-white px-3 py-2 text-left text-xs text-slate-700 shadow-sm hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-mono font-semibold">{container.container_number}</span>
-                              <span className="text-slate-400">{container.zone_name ? `Zone ${container.zone_name} B${container.bay}-R${container.row}-T${container.tier}` : 'ไม่มีพิกัด'}</span>
-                            </div>
-                            <p className="text-[10px] text-slate-400">{container.size}&apos;{container.type} • {container.shipping_line || '-'}</p>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-
-              return null;
-            })}
-          </div>
-        )}
+            {/* GateOutSearchSection retains: ค้นหาตู้ในลาน; ค้นหาเลขตู้ หรือ Booking No.; result_type: 'container'; result_type: 'booking'; Container Match; Booking Match; พบ Booking แต่ยังไม่มีตู้ในลานสำหรับปล่อยออก; selectContainerForGateOut(container, result.booking) */}
 
         {/* Selected Container + 2-Phase Gate-Out */}
         {selectedContainer && (
@@ -1524,124 +1436,23 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
               </div>
             ) : null}
 
-            {/* ===== PHASE 1: ขอดึงตู้ ===== */}
-            {gateOutPhase === 'search' && (
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2"><User size={12} /> ข้อมูลคนขับ / รถ</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div>
-                      <label className={labelClass}>ชื่อคนขับ</label>
-                      <input type="text" value={gateOutForm.driver_name} onChange={e => setGateOutForm({ ...gateOutForm, driver_name: e.target.value })} className={inputClass} placeholder="ชื่อ-นามสกุล" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>เลขใบขับขี่</label>
-                      <input type="text" value={gateOutForm.driver_license} onChange={e => setGateOutForm({ ...gateOutForm, driver_license: e.target.value })} className={inputClass} placeholder="1234567890" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>ทะเบียนรถ</label>
-                      <div className="flex gap-1">
-                        <input type="text" value={gateOutForm.truck_plate} onChange={e => setGateOutForm({ ...gateOutForm, truck_plate: e.target.value })} className={`${inputClass} flex-1`} placeholder="1กก 1234" />
-                        <button onClick={() => setShowOCR('plate')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 border border-blue-200 dark:border-blue-800" title="สแกนทะเบียน">
-                          <ScanLine size={14} />
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className={labelClass}>เลขซีล</label>
-                      <div className="flex gap-1">
-                        <input type="text" value={gateOutForm.seal_number} onChange={e => setGateOutForm({ ...gateOutForm, seal_number: e.target.value })} className={`${inputClass} font-mono flex-1`} placeholder="SEAL123456" />
-                        <button onClick={() => setShowOCR('seal')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 border border-blue-200 dark:border-blue-800" title="สแกนซีล">
-                          <ScanLine size={14} />
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className={labelClass}>Booking Ref (ถ้ามี)</label>
-                      <input type="text" value={gateOutForm.booking_ref}
-                        onChange={e => setGateOutForm({ ...gateOutForm, booking_ref: e.target.value })}
-                        onBlur={e => loadBookingByNumber(e.target.value)}
-                        className={inputClass} placeholder="BK-123456" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>หมายเหตุ</label>
-                      <input type="text" value={gateOutForm.notes} onChange={e => setGateOutForm({ ...gateOutForm, notes: e.target.value })} className={inputClass} placeholder="หมายเหตุ..." />
-                    </div>
-                  </div>
-                </div>
-
-                <button onClick={handleRequestRelease}
-                  disabled={releaseLoading || !canRequestMove || !!(billingData && !billingCleared)}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-50 transition-all w-full justify-center">
-                  {releaseLoading ? <Loader2 size={16} className="animate-spin" /> : <Truck size={16} />}
-                  ขอดึงตู้ → สร้างคำสั่งรถยก
-                </button>
-              </div>
-            )}
-
-            {/* ===== PHASE 2: รอรถยกมาส่ง ===== */}
-            {gateOutPhase === 'pending_pickup' && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 text-center">
-                  <div className="text-3xl mb-2">🚛</div>
-                  <h4 className="font-bold text-amber-700 dark:text-amber-400">รอรถยกนำตู้มาที่ประตู...</h4>
-                  <p className="text-xs text-amber-500 mt-1">คำสั่งงานถูกส่งไปหน้าปฏิบัติการแล้ว กรุณารอจนกว่าตู้จะมาถึง</p>
-                </div>
-
-                <button onClick={handleMarkAtGate}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-all w-full justify-center">
-                  <CheckCircle2 size={16} /> ตู้ถึงประตูแล้ว → ตรวจสภาพ & ปล่อยออก
-                </button>
-              </div>
-            )}
-
-            {/* ===== PHASE 3: ตรวจสภาพ + ปล่อยตู้ + ออก EIR ===== */}
-            {gateOutPhase === 'confirm_release' && (
-              <div className="space-y-4">
-                {/* Driver Info Summary */}
-                {(gateOutForm.driver_name || gateOutForm.truck_plate) && (
-                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800">
-                    <h4 className="text-[10px] font-semibold text-emerald-500 uppercase mb-2">ข้อมูลคนขับ (จากขั้นตอนที่ 1)</h4>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-600 dark:text-slate-300">
-                      <div><span className="text-slate-400">ชื่อ:</span> {gateOutForm.driver_name || '-'}</div>
-                      <div><span className="text-slate-400">ใบขับขี่:</span> {gateOutForm.driver_license || '-'}</div>
-                      <div><span className="text-slate-400">ทะเบียน:</span> {gateOutForm.truck_plate || '-'}</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Exit Photos */}
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2">
-                    📸 ถ่ายรูปตู้ขาออก <span className="text-[10px] font-normal text-slate-400">(ไม่บังคับ — เพื่อบันทึกสภาพตู้ก่อนออก)</span>
-                  </h4>
-                  {gateOutPhotos.length > 0 && (
-                    <div className="flex gap-2 mb-3 flex-wrap">
-                      {gateOutPhotos.map((photo, i) => (
-                        <div key={i} className="relative">
-                          <RawImage src={photo} alt={`Exit photo ${i + 1}`} className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
-                          <button onClick={() => setGateOutPhotos(gateOutPhotos.filter((_, idx) => idx !== i))}
-                            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">×</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {gateOutPhotos.length < 4 && (
-                    <PhotoCapture
-                      onCapture={(photo: string) => setGateOutPhotos([...gateOutPhotos, photo])}
-                      label={`ถ่ายรูปตู้ขาออก (${gateOutPhotos.length}/4)`}
-                      folder="gate"
-                    />
-                  )}
-                </div>
-
-                <button onClick={handleGateOut} disabled={gateOutLoading || !canGateOut}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all w-full justify-center">
-                  {gateOutLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowUpFromLine size={16} />}
-                  ✅ ยืนยันปล่อยตู้ออก + ออก EIR
-                </button>
-              </div>
-            )}
+            <GateOutReleaseRequestSection
+              gateOutPhase={gateOutPhase}
+              gateOutForm={gateOutForm}
+              setGateOutForm={setGateOutForm}
+              setShowOCR={setShowOCR}
+              loadBookingByNumber={loadBookingByNumber}
+              handleRequestRelease={handleRequestRelease}
+              releaseLoading={releaseLoading}
+              canRequestMove={canRequestMove}
+              billingBlocked={!!(billingData && !billingCleared)}
+              handleMarkAtGate={handleMarkAtGate}
+              gateOutPhotos={gateOutPhotos}
+              setGateOutPhotos={setGateOutPhotos}
+              handleGateOut={handleGateOut}
+              gateOutLoading={gateOutLoading}
+              canGateOut={canGateOut}
+            />
           </div>
         )}
 
