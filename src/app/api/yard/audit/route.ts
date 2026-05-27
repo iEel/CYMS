@@ -1,31 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 import sql from 'mssql';
+
+type SystemAuditContainer = {
+  container_id: number;
+  container_number: string;
+  bay: number;
+  row: number;
+  tier: number;
+};
+
+type AuditedContainer = {
+  container_number: string;
+  bay: number;
+  row: number;
+  tier: number;
+  found?: boolean;
+  correct_position?: boolean;
+};
+
+const YARD_AUDIT_PERMISSIONS = ['yard.location.assign', 'yard.slot.move', 'reports.view'];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // POST — ตรวจนับตู้ (Yard Audit)
 // Body: { zone_id, yard_id, audited_containers: [{ container_number, bay, row, tier, found: boolean }] }
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { zone_id, yard_id, audited_containers } = body;
+    const zoneId = parsePositiveInt(body.zone_id);
+    const yardId = parsePositiveInt(body.yard_id);
+    const auditedContainers: AuditedContainer[] = Array.isArray(body.audited_containers) ? body.audited_containers : [];
+
+    if (!zoneId || !yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ zone_id และ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      YARD_AUDIT_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ตรวจนับลาน'
+    );
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ตรวจนับลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
+
     const results = { matched: 0, misplaced: 0, missing: 0, corrected: 0 };
 
     // ดึงตู้จริงตาม zone (ในระบบ)
     const systemResult = await db.request()
-      .input('zoneId', sql.Int, zone_id)
-      .input('yardId', sql.Int, yard_id)
+      .input('zoneId', sql.Int, zoneId)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT container_id, container_number, bay, [row], tier
         FROM Containers
         WHERE zone_id = @zoneId AND yard_id = @yardId AND status = 'in_yard'
       `);
-    const systemContainers = systemResult.recordset;
+    const systemContainers = systemResult.recordset as SystemAuditContainer[];
     const systemMap = new Map(systemContainers.map(c => [c.container_number, c]));
 
     // ตรวจสอบแต่ละตู้ที่ตรวจนับ
-    for (const audit of (audited_containers || [])) {
+    for (const audit of auditedContainers) {
       const sys = systemMap.get(audit.container_number);
 
       if (!sys) {
@@ -58,6 +101,15 @@ export async function POST(request: NextRequest) {
     // ตู้ที่อยู่ในระบบแต่ไม่พบในการตรวจนับ
     const notFound = Array.from(systemMap.values()).map(c => c.container_number);
 
+    await logAudit({
+      userId: actor.userId,
+      yardId,
+      action: 'yard_audit_submit',
+      entityType: 'yard_audit',
+      entityId: zoneId,
+      details: { zone_id: zoneId, results, not_found_count: notFound.length },
+    });
+
     return NextResponse.json({
       success: true,
       results,
@@ -74,13 +126,28 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const zoneId = searchParams.get('zone_id');
-    const yardId = searchParams.get('yard_id');
+    const zoneId = parsePositiveInt(searchParams.get('zone_id'));
+    const yardId = parsePositiveInt(searchParams.get('yard_id'));
+
+    if (!zoneId || !yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ zone_id และ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      YARD_AUDIT_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ดูข้อมูลตรวจนับลาน'
+    );
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ดูข้อมูลตรวจนับของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
+
     const result = await db.request()
-      .input('zoneId', sql.Int, parseInt(zoneId || '0'))
-      .input('yardId', sql.Int, parseInt(yardId || '1'))
+      .input('zoneId', sql.Int, zoneId)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT c.container_id, c.container_number, c.size, c.type, c.bay, c.[row], c.tier,
           c.shipping_line, c.status, z.zone_name

@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
+
+const STORAGE_RATE_READ_PERMISSIONS = [
+  'settings.manage',
+  'billing.invoice.create',
+  'billing.payment.receive',
+  'reports.view',
+];
 
 type StorageRateTier = {
   customer_id: number | null;
@@ -11,6 +18,11 @@ type StorageRateTier = {
 
 function normalizeCargoStatus(value: unknown): 'any' | 'laden' | 'empty' {
   return value === 'laden' || value === 'empty' ? value : 'any';
+}
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function chooseTierSet<T extends StorageRateTier>(
@@ -57,14 +69,24 @@ function chooseTierSet<T extends StorageRateTier>(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const rawYardId = searchParams.get('yard_id');
-    const yardId = Number(rawYardId);
+    const yardId = parsePositiveInt(searchParams.get('yard_id'));
     const customerId = searchParams.get('customer_id') ? parseInt(searchParams.get('customer_id')!) : null;
     const cargoStatus = normalizeCargoStatus(searchParams.get('cargo_status')); // any/laden/empty
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
 
     const db = await getDb();
-    const yardAccess = await requireYardAccess(request, db, rawYardId);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      STORAGE_RATE_READ_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ดูอัตราค่าฝาก'
+    );
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ดูอัตราค่าฝากของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     let query = `
       SELECT tier_id, yard_id, tier_name, from_day, to_day,
@@ -120,25 +142,34 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const { yard_id, tiers, customer_id, cargo_status } = await request.json();
-    if (!yard_id || !Array.isArray(tiers)) {
+    const yardId = parsePositiveInt(yard_id);
+    if (!yardId || !Array.isArray(tiers)) {
       return NextResponse.json({ error: 'Missing yard_id or tiers' }, { status: 400 });
     }
 
     const db = await getDb();
-    const yardAccess = await requireYardAccess(request, db, yard_id);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requirePermission(
+      request,
+      db,
+      'settings.manage',
+      'คุณไม่มีสิทธิ์จัดการอัตราค่าฝาก'
+    );
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์จัดการอัตราค่าฝากของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
     const selectedCargoStatus = normalizeCargoStatus(cargo_status);
 
     // Soft-delete only this yard + customer + cargo status combination.
     if (customer_id) {
       await db.request()
-        .input('yardId', sql.Int, yard_id)
+        .input('yardId', sql.Int, yardId)
         .input('customerId', sql.Int, customer_id)
         .input('cargoStatus', sql.VarChar, selectedCargoStatus)
         .query('UPDATE StorageRateTiers SET is_active = 0, updated_at = GETDATE() WHERE yard_id = @yardId AND customer_id = @customerId AND ISNULL(cargo_status, \'any\') = @cargoStatus');
     } else {
       await db.request()
-        .input('yardId', sql.Int, yard_id)
+        .input('yardId', sql.Int, yardId)
         .input('cargoStatus', sql.VarChar, selectedCargoStatus)
         .query('UPDATE StorageRateTiers SET is_active = 0, updated_at = GETDATE() WHERE yard_id = @yardId AND customer_id IS NULL AND ISNULL(cargo_status, \'any\') = @cargoStatus');
     }
@@ -147,7 +178,7 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < tiers.length; i++) {
       const t = tiers[i];
       await db.request()
-        .input('yardId', sql.Int, yard_id)
+        .input('yardId', sql.Int, yardId)
         .input('tierName', sql.NVarChar, t.tier_name || `ขั้นที่ ${i + 1}`)
         .input('fromDay', sql.Int, t.from_day || 1)
         .input('toDay', sql.Int, t.to_day || 999)
@@ -165,10 +196,11 @@ export async function POST(request: NextRequest) {
     }
 
     await logAudit({
-      yardId: yard_id,
+      userId: actor.userId,
+      yardId,
       action: 'storage_rates_update',
       entityType: 'storage_rate',
-      details: { yard_id, customer_id: customer_id || 'default', cargo_status: selectedCargoStatus, tier_count: tiers.length },
+      details: { yard_id: yardId, customer_id: customer_id || 'default', cargo_status: selectedCargoStatus, tier_count: tiers.length },
     });
     return NextResponse.json({ success: true, message: `บันทึก ${tiers.length} ขั้นอัตราสำเร็จ` });
   } catch (error) {

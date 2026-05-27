@@ -1,24 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 import sql from 'mssql';
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // POST — คำนวณ Shifting Plan (LIFO)
 // ดึงตู้ล่าง → ต้องยกตู้บนออกก่อน
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { container_id, yard_id } = body;
+    const containerId = parsePositiveInt(body.container_id);
+    const yardId = parsePositiveInt(body.yard_id);
+
+    if (!containerId || !yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ container_id และ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
 
     const db = await getDb();
+    const permission = await requireAnyPermission(
+      request,
+      db,
+      ['yard.slot.move', 'yard.location.assign'],
+      'คุณไม่มีสิทธิ์คำนวณแผนย้ายตู้'
+    );
+    if (permission instanceof Response) return permission;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์คำนวณแผนย้ายตู้ของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     // Get target container position
     const target = await db.request()
-      .input('containerId', sql.Int, container_id)
+      .input('containerId', sql.Int, containerId)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT c.*, z.zone_name
         FROM Containers c
         LEFT JOIN YardZones z ON c.zone_id = z.zone_id
         WHERE c.container_id = @containerId
+          AND c.yard_id = @yardId
       `);
 
     if (target.recordset.length === 0) {
@@ -43,11 +66,13 @@ export async function POST(request: NextRequest) {
       .input('bay', sql.Int, targetContainer.bay)
       .input('row', sql.Int, targetContainer.row)
       .input('tier', sql.Int, targetContainer.tier)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT c.*, z.zone_name
         FROM Containers c
         LEFT JOIN YardZones z ON c.zone_id = z.zone_id
         WHERE c.zone_id = @zoneId
+          AND c.yard_id = @yardId
           AND c.bay = @bay
           AND c.[row] = @row
           AND c.tier > @tier
@@ -59,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     // Find empty spots to temporarily place shifted containers
     const emptySpots = await db.request()
-      .input('yardId', sql.Int, yard_id)
+      .input('yardId', sql.Int, yardId)
       .input('zoneId', sql.Int, targetContainer.zone_id)
       .query(`
         SELECT z.zone_id, z.zone_name, z.max_bay, z.max_row, z.max_tier
@@ -70,10 +95,11 @@ export async function POST(request: NextRequest) {
     // Suggest temporary positions (find unused bay/row/tier=1 in same zone)
     const usedPositions = await db.request()
       .input('zoneId2', sql.Int, targetContainer.zone_id)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT bay, [row], tier
         FROM Containers
-        WHERE zone_id = @zoneId2 AND status = 'in_yard'
+        WHERE zone_id = @zoneId2 AND yard_id = @yardId AND status = 'in_yard'
       `);
 
     const usedSet = new Set(

@@ -1,12 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
+
+const EDI_SCHEDULE_READ_PERMISSIONS = ['settings.manage', 'integration.send', 'integration.logs.view'];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // GET — Get scheduler status for all endpoints
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      EDI_SCHEDULE_READ_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ดูตารางส่ง EDI'
+    );
+    if (actor instanceof Response) return actor;
+
     const result = await db.request().query(`
       SELECT endpoint_id, name, schedule_enabled, schedule_cron, schedule_yard_id, schedule_last_run
       FROM EDIEndpoints
@@ -24,9 +39,14 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const { endpoint_id, schedule_enabled, schedule_cron, schedule_yard_id } = body;
+    const endpointId = parsePositiveInt(endpoint_id);
+    const scheduleYardId = parsePositiveInt(schedule_yard_id);
 
-    if (!endpoint_id) {
+    if (!endpointId) {
       return NextResponse.json({ error: 'Missing endpoint_id' }, { status: 400 });
+    }
+    if (!scheduleYardId) {
+      return NextResponse.json({ error: 'ต้องระบุ schedule_yard_id ที่ถูกต้อง' }, { status: 400 });
     }
 
     // Validate cron expression
@@ -38,13 +58,21 @@ export async function PUT(request: NextRequest) {
     }
 
     const db = await getDb();
-    const yardAccess = await requireYardAccess(request, db, schedule_yard_id);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requirePermission(
+      request,
+      db,
+      'settings.manage',
+      'คุณไม่มีสิทธิ์จัดการตารางส่ง EDI'
+    );
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, scheduleYardId, 'คุณไม่มีสิทธิ์จัดการตารางส่ง EDI ของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
     await db.request()
-      .input('epId', sql.Int, endpoint_id)
+      .input('epId', sql.Int, endpointId)
       .input('enabled', sql.Bit, schedule_enabled ? 1 : 0)
       .input('cronExpr', sql.NVarChar, schedule_cron || '0 18 * * *')
-      .input('yardId', sql.Int, schedule_yard_id)
+      .input('yardId', sql.Int, scheduleYardId)
       .query(`
         UPDATE EDIEndpoints SET
           schedule_enabled = @enabled,
@@ -57,7 +85,7 @@ export async function PUT(request: NextRequest) {
     // Reload this endpoint's cron job
     try {
       const { reloadEndpointSchedule } = await import('@/lib/ediScheduler');
-      await reloadEndpointSchedule(endpoint_id);
+      await reloadEndpointSchedule(endpointId);
     } catch { /* scheduler might not be initialized yet */ }
 
     return NextResponse.json({ success: true });
@@ -68,8 +96,17 @@ export async function PUT(request: NextRequest) {
 }
 
 // POST — Reload all schedules (manual trigger)
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const db = await getDb();
+    const actor = await requirePermission(
+      request,
+      db,
+      'settings.manage',
+      'คุณไม่มีสิทธิ์ reload ตารางส่ง EDI'
+    );
+    if (actor instanceof Response) return actor;
+
     const { reloadAllSchedules } = await import('@/lib/ediScheduler');
     await reloadAllSchedules();
     return NextResponse.json({ success: true, message: 'Scheduler reloaded' });
