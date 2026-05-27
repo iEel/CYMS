@@ -136,7 +136,7 @@ describe('GET /api/gate (history)', () => {
 describe('gate portal grant source rules', () => {
   it('uses gate-out booking_customer_id before legacy customer_id for booking grants', () => {
     const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gate/route.ts'), 'utf8');
-    const validateGateOutBooking = source.match(/async function validateGateOutBooking[\s\S]*?\n}\n\nconst gateBodySchema/);
+    const validateGateOutBooking = source.match(/async function validateGateOutBooking[\s\S]*?\r?\n}\r?\n\r?\nconst gateBodySchema/);
 
     expect(validateGateOutBooking).not.toBeNull();
     expect(validateGateOutBooking?.[0]).toContain('b.booking_customer_id');

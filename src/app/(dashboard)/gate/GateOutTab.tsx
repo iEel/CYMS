@@ -1491,13 +1491,22 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
                       }{billingInvoiceNumber ? ` — ${billingInvoiceNumber}` : ''}
                     </span>
                     {(billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id) && (
-                      <button onClick={() => {
-                        const invId = billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id;
-                        const printType = billingClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt';
-                        window.open(`/billing/print?id=${invId}&type=${printType}`, '_blank');
-                      }}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"
-                      >🖨️ {billingData.is_credit ? 'พิมพ์ใบแจ้งหนี้' : 'พิมพ์ใบเสร็จ'}</button>
+                      <div className="flex flex-wrap justify-end gap-1">
+                        <button onClick={() => {
+                          const invId = billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id;
+                          const printType = billingClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt';
+                          window.open(`/billing/print?id=${invId}&type=${printType}`, '_blank');
+                        }}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"
+                        >🖨️ {billingData.is_credit ? 'พิมพ์ใบแจ้งหนี้' : 'พิมพ์ใบเสร็จ'}</button>
+                        <button onClick={() => {
+                          const invId = billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id;
+                          const printType = billingClearance?.clearance_type === 'credit' ? 'tax_invoice_receipt' : 'receipt';
+                          window.open(`/billing/print/continuous?id=${invId}&type=${printType}`, '_blank');
+                        }}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white text-emerald-700 border border-emerald-200 text-xs font-medium hover:bg-emerald-50"
+                        >ฟอร์มต่อเนื่อง</button>
+                      </div>
                     )}
                   </div>
                 )}

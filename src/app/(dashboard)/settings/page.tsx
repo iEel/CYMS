@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Search,
   Star,
+  Files,
 } from 'lucide-react';
 import CompanySettings from './CompanySettings';
 import YardsSettings from './YardsSettings';
@@ -34,6 +35,7 @@ import EmailSettingsTab from './EmailSettings';
 import PhotoRetentionSettings from './PhotoRetentionSettings';
 import SecuritySettings from './SecuritySettings';
 import DocumentNumberSettings from './DocumentNumberSettings';
+import DocumentTemplateManager from './DocumentTemplateManager';
 import SystemStandardsOverview from './SystemStandardsOverview';
 import PortalAccessControl from './PortalAccessControl';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -46,6 +48,7 @@ const tabs = [
   { id: 'customers', group: 'customer_finance', label: 'ลูกค้า', description: 'ข้อมูลลูกค้า บทบาท สาขา และเครดิต', keywords: 'customer ลูกค้า credit วงเงิน สาขา', icon: <Receipt size={18} />, color: '#EC4899', permission: 'settings.manage' },
   { id: 'storage', group: 'customer_finance', label: 'ค่าฝาก', description: 'เรทค่าฝากแบบขั้นบันไดและแยกขนาดตู้', keywords: 'storage rate tariff ค่าฝาก เรท', icon: <TrendingUp size={18} />, color: '#06B6D4', permission: 'settings.manage' },
   { id: 'documents', group: 'customer_finance', label: 'เลขเอกสาร', description: 'เลข EIR, Invoice, Receipt, Credit Note และ EOR', keywords: 'document number eir invoice receipt credit note เลขเอกสาร', icon: <FileText size={18} />, color: '#3B82F6', permission: 'settings.manage' },
+  { id: 'document-templates', group: 'customer_finance', label: 'Document Templates', description: 'จัดการ template พิมพ์เอกสารและ continuous form', keywords: 'document template continuous print tax invoice receipt', icon: <Files size={18} />, color: '#2563EB', permission: 'document_templates.view' },
   { id: 'portal-access', group: 'customer_finance', label: 'Portal Access', description: 'จัดการ grants และ field visibility ของ Customer Portal', keywords: 'portal grant visibility customer eir สิทธิ์', icon: <Shield size={18} />, color: '#0EA5E9', permission: 'settings.manage' },
   { id: 'prefix', group: 'customer_finance', label: 'Prefix', description: 'จับคู่ BIC prefix กับลูกค้า/สายเรือ', keywords: 'prefix bic container code owner', icon: <Link size={18} />, color: '#06B6D4', permission: 'settings.manage' },
   { id: 'allocation', group: 'yard_operations', label: 'จัดตู้', description: 'กฎแนะนำตำแหน่งวางตู้ในลาน', keywords: 'allocation จัดตู้ วางตู้ zone rule', icon: <Layers size={18} />, color: '#10B981', permission: 'settings.manage' },
@@ -141,6 +144,7 @@ export default function SettingsPage() {
       {effectiveTab === 'allocation' && <AutoAllocationRules />}
       {effectiveTab === 'prefix' && <PrefixMapping />}
       {effectiveTab === 'documents' && <DocumentNumberSettings />}
+      {effectiveTab === 'document-templates' && <DocumentTemplateManager />}
       {effectiveTab === 'portal-access' && <PortalAccessControl />}
       {effectiveTab === 'standards' && <SystemStandardsOverview />}
       {effectiveTab === 'ratelimit' && <RateLimitSettings />}

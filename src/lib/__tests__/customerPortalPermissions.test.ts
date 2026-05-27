@@ -33,6 +33,10 @@ describe('customer portal action policy', () => {
       'portal.eir.view',
       'portal.eir.download',
       'portal.eir.grade.view',
+      'portal.reefer.view',
+      'portal.reefer.download',
+      'portal.reefer.exception.view',
+      'portal.reefer.exception.dispute',
       'portal.trucking.view',
       'portal.driver.view',
     ]));

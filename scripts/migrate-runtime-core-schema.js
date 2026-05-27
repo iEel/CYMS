@@ -367,6 +367,117 @@ async function migrate() {
       IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('DocumentLifecycle') AND name = 'IX_DocumentLifecycle_Related')
         CREATE INDEX IX_DocumentLifecycle_Related
           ON DocumentLifecycle (related_document_type, related_document_id, related_document_number, created_at);
+
+      IF OBJECT_ID('DocumentTemplates', 'U') IS NULL
+      BEGIN
+        CREATE TABLE DocumentTemplates (
+          template_id INT PRIMARY KEY IDENTITY(1,1),
+          template_code NVARCHAR(80) NOT NULL UNIQUE,
+          template_name NVARCHAR(200) NOT NULL,
+          document_type NVARCHAR(50) NOT NULL,
+          description NVARCHAR(500) NULL,
+          status NVARCHAR(20) NOT NULL DEFAULT 'draft',
+          is_default BIT NOT NULL DEFAULT 0,
+          current_version_no INT NOT NULL DEFAULT 1,
+          created_by INT NULL,
+          updated_by INT NULL,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          updated_at DATETIME2 NULL
+        );
+      END;
+
+      IF OBJECT_ID('DocumentTemplateVersions', 'U') IS NULL
+      BEGIN
+        CREATE TABLE DocumentTemplateVersions (
+          version_id INT PRIMARY KEY IDENTITY(1,1),
+          template_id INT NOT NULL REFERENCES DocumentTemplates(template_id),
+          template_code NVARCHAR(80) NOT NULL,
+          version_no INT NOT NULL,
+          status NVARCHAR(20) NOT NULL DEFAULT 'draft',
+          paper_width_mm DECIMAL(10,2) NOT NULL,
+          paper_height_mm DECIMAL(10,2) NOT NULL,
+          paper_size_code NVARCHAR(40) NOT NULL,
+          mode NVARCHAR(20) NOT NULL DEFAULT 'full',
+          copy_mode NVARCHAR(20) NOT NULL DEFAULT 'carbonless',
+          top_offset_mm DECIMAL(10,2) NOT NULL DEFAULT 0,
+          left_offset_mm DECIMAL(10,2) NOT NULL DEFAULT 0,
+          font_size DECIMAL(10,2) NOT NULL DEFAULT 10,
+          line_height DECIMAL(10,2) NOT NULL DEFAULT 1.25,
+          row_height DECIMAL(10,2) NOT NULL DEFAULT 6,
+          print_scale DECIMAL(10,3) NOT NULL DEFAULT 1,
+          show_reprint_label BIT NOT NULL DEFAULT 1,
+          reprint_label_template NVARCHAR(120) NOT NULL DEFAULT N'พิมพ์ซ้ำครั้งที่ {reprint_count}',
+          reprint_label_position NVARCHAR(30) NOT NULL DEFAULT 'top-right',
+          reprint_label_x_mm DECIMAL(10,2) NULL,
+          reprint_label_y_mm DECIMAL(10,2) NULL,
+          reprint_label_font_size DECIMAL(10,2) NOT NULL DEFAULT 10,
+          reprint_label_color NVARCHAR(30) NOT NULL DEFAULT '#B91C1C',
+          require_reprint_reason BIT NOT NULL DEFAULT 1,
+          print_red_ref BIT NOT NULL DEFAULT 1,
+          red_ref_source NVARCHAR(50) NOT NULL DEFAULT 'receipt_number',
+          manual_preprinted_form_no_required BIT NOT NULL DEFAULT 0,
+          invoice_number_source NVARCHAR(50) NOT NULL DEFAULT 'invoice_number',
+          receipt_number_source NVARCHAR(50) NOT NULL DEFAULT 'receipt_number',
+          tax_invoice_number_source NVARCHAR(50) NOT NULL DEFAULT 'invoice_number',
+          top_reference_source NVARCHAR(50) NOT NULL DEFAULT 'invoice_number',
+          config_json NVARCHAR(MAX) NOT NULL,
+          published_by INT NULL,
+          published_at DATETIME2 NULL,
+          created_by INT NULL,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT UQ_DocumentTemplateVersions UNIQUE (template_id, version_no)
+        );
+      END;
+
+      IF OBJECT_ID('DocumentPrintLogs', 'U') IS NULL
+      BEGIN
+        CREATE TABLE DocumentPrintLogs (
+          print_id BIGINT PRIMARY KEY IDENTITY(1,1),
+          document_type NVARCHAR(50) NOT NULL,
+          document_id INT NOT NULL,
+          document_no NVARCHAR(100) NULL,
+          template_code NVARCHAR(80) NOT NULL,
+          template_version INT NOT NULL,
+          print_no INT NOT NULL,
+          is_reprint BIT NOT NULL DEFAULT 0,
+          reprint_count INT NOT NULL DEFAULT 0,
+          reprint_reason NVARCHAR(500) NULL,
+          manual_preprinted_form_no NVARCHAR(100) NULL,
+          mode NVARCHAR(20) NOT NULL,
+          copy_mode NVARCHAR(20) NOT NULL,
+          printed_by INT NULL,
+          printed_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+          ip_address NVARCHAR(100) NULL,
+          user_agent NVARCHAR(500) NULL
+        );
+      END;
+
+      IF OBJECT_ID('DocumentPrintSnapshots', 'U') IS NULL
+      BEGIN
+        CREATE TABLE DocumentPrintSnapshots (
+          snapshot_id BIGINT PRIMARY KEY IDENTITY(1,1),
+          print_id BIGINT NOT NULL REFERENCES DocumentPrintLogs(print_id),
+          document_type NVARCHAR(50) NOT NULL,
+          document_id INT NOT NULL,
+          document_no NVARCHAR(100) NULL,
+          template_code NVARCHAR(80) NOT NULL,
+          template_version INT NOT NULL,
+          snapshot_json NVARCHAR(MAX) NOT NULL,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE()
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('DocumentPrintLogs') AND name = 'IX_DocumentPrintLogs_Document')
+        CREATE INDEX IX_DocumentPrintLogs_Document
+          ON DocumentPrintLogs (document_type, document_id, printed_at DESC);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('DocumentPrintLogs') AND name = 'UX_DocumentPrintLogs_DocumentPrintNo')
+        CREATE UNIQUE INDEX UX_DocumentPrintLogs_DocumentPrintNo
+          ON DocumentPrintLogs (document_type, document_id, print_no);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('DocumentTemplateVersions') AND name = 'IX_DocumentTemplateVersions_Code')
+        CREATE INDEX IX_DocumentTemplateVersions_Code
+          ON DocumentTemplateVersions (template_code, version_no, status);
     `);
 
     await runStep(pool, 'Attachment, approval, and integration support tables', `
@@ -1082,6 +1193,34 @@ async function migrate() {
         INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
         VALUES ('reefer.policy.manage', 'reefer', 'policy_manage', N'กำหนดรอบตรวจและช่วงอุณหภูมิตู้เย็น', 0, NULL, 'high');
 
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.view')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.view', 'document_templates', 'view', N'ดูรายการและ preview template เอกสาร', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.create')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.create', 'document_templates', 'create', N'สร้างหรือ duplicate template เอกสาร', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.update_draft')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.update_draft', 'document_templates', 'update_draft', N'แก้ไข draft version ของ template เอกสาร', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.publish')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.publish', 'document_templates', 'publish', N'publish, set default หรือ deactivate template เอกสาร', 0, NULL, 'high');
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.export')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.export', 'document_templates', 'export', N'export template JSON', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.import')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.import', 'document_templates', 'import', N'import template JSON', 0, NULL, 'high');
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.test_print')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('document_templates.test_print', 'document_templates', 'test_print', N'ทดสอบพิมพ์ template เอกสาร', 0, NULL, NULL);
+
       INSERT INTO RolePermissions (role_id, permission_id)
       SELECT r.role_id, p.permission_id
       FROM Roles r
@@ -1121,6 +1260,40 @@ async function migrate() {
       CROSS JOIN Permissions p
       WHERE r.role_code IN ('yard_manager', 'supervisor')
         AND p.permission_code = 'reefer.policy.manage'
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code IN ('yard_manager', 'supervisor')
+        AND p.permission_code IN (
+          'document_templates.view',
+          'document_templates.create',
+          'document_templates.update_draft',
+          'document_templates.publish',
+          'document_templates.export',
+          'document_templates.import',
+          'document_templates.test_print'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code = 'billing_officer'
+        AND p.permission_code IN (
+          'document_templates.view',
+          'document_templates.export',
+          'document_templates.test_print'
+        )
         AND NOT EXISTS (
           SELECT 1 FROM RolePermissions rp
           WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id

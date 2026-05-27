@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 26 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 27 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer** (~100%)
 
 ---
 
@@ -19,10 +19,84 @@
 | **เฟส 5** | ปฏิบัติการ, Job Queue, Smart Shifting, **Tablet-optimized buttons** | ✅ เสร็จ |
 | **เฟส 6** | EDI, Booking/Manifest, Seal Validation, **CSV/Excel file import**, **CODECO Outbound (EDIFACT/CSV/JSON)**, **SFTP auto-upload**, **📧 Email delivery**, **⏰ Auto-Schedule (node-cron)** | ✅ เสร็จ |
 | **เฟส 7** | ซ่อมบำรุง M&R, EOR, CEDEX, **Audit Trail, Zod Validation, Actual Cost Modal, CEDEX ภาษาไทย** | ✅ เสร็จ |
-| **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
+| **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Continuous Tax Invoice/Receipt Template, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
 
-### อัปเดตล่าสุด: Customer Portal Access Control + EIR Visibility Policy (25 พ.ค. 2569)
+### อัปเดตล่าสุด: Document Template Manager + Continuous Tax Invoice/Receipt (26 พ.ค. 2569)
+
+รอบนี้เพิ่ม Phase 1 ของระบบจัดการแบบฟอร์มเอกสาร โดยไม่สร้างระบบเลขเอกสารใหม่ซ้ำกับ `DocumentFormats` / `DocumentSequences`:
+
+- **Document Template Manager**: Settings > Document Templates มีรายการ template, sample/real preview, test print, duplicate, publish, set default, deactivate, import/export JSON และตั้ง paper size, full/overlay mode, carbonless/separate copy mode, offset, reprint label, red reference source
+- **Continuous Tax Invoice / Receipt**: เพิ่มหน้า `/billing/print/continuous?id={invoice_id}&type=receipt|tax_invoice_receipt` สำหรับฟอร์มกระดาษต่อเนื่อง 9.5in x 5.5in รองรับ full form, pre-printed overlay, carbonless 5-copy และ separate 5 pages
+- **Client-safe renderer**: `ContinuousTaxReceipt.tsx` ใช้ payload/config ที่ sanitize จาก backend; preview/test print ไม่ consume running number จริง และ real invoice preview ไม่ fallback เป็น sample เมื่อไม่มีสิทธิ์หรือโหลดผิดพลาด
+- **Billing/Gate integration**: Billing invoice list, Receipt section, Billing Clearance audit, Gate-In และ Gate-Out มีปุ่ม "ฟอร์มต่อเนื่อง" ถัดจากปุ่ม A4 เดิม โดยใช้ invoice/payment เดิม ไม่สร้างเอกสารซ้ำ
+- **Print log + snapshot**: `POST /api/document-templates/print-log` บันทึก print/reprint ใน `DocumentPrintLogs` และ snapshot ใน `DocumentPrintSnapshots` แบบ transaction เดียว, serializable + `UPDLOCK/HOLDLOCK`, มี unique guard `(document_type, document_id, print_no)`
+- **Reprint policy**: พิมพ์ซ้ำมี `print_no`, `reprint_count`, optional label เช่น `พิมพ์ซ้ำครั้งที่ {reprint_count}` และบังคับ reprint reason ได้; audit แยก `document_print` / `document_reprint`
+- **Template versioning**: `DocumentTemplates` + `DocumentTemplateVersions` เก็บ version/config/paper/mode/copy/reprint/red-ref; เอกสารใหม่ใช้ default template version ปัจจุบัน ส่วน reprint ใช้เลขเอกสารเดิม
+- **Security/permission**: Sample/test print ต้อง `settings.manage`; real invoice preview/print log ใช้ `settings.manage`, billing, reports หรือ gate permission ที่เกี่ยวข้อง และ reject unsupported document type
+
+Migration ที่ต้องรันหลัง pull:
+
+```bash
+node scripts/migrate-runtime-core-schema.js
+```
+
+Verification รอบนี้:
+
+```bash
+npm test -- src/app/api/__tests__/document-template-schema.test.ts src/app/api/__tests__/thai-baht-text.test.ts src/app/api/__tests__/document-template-helpers.test.ts src/app/api/__tests__/continuous-print-payload.test.ts src/app/api/__tests__/document-print-log.test.ts src/app/api/__tests__/document-template-api.test.ts src/app/api/__tests__/continuous-print-ui.test.ts --runInBand --cacheDirectory ./.next/jest-cache
+npx tsc --noEmit --pretty false
+npm run lint
+```
+
+ผลล่าสุด: focused Document Template / Continuous Print tests `54/54` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+
+### อัปเดตล่าสุด: Document Template Visual Designer Phase 2 MVP (27 พ.ค. 2569)
+
+รอบนี้ต่อยอด Document Template Manager จาก form setting เป็น canvas designer สำหรับ Continuous Tax Invoice / Receipt โดยยังใช้ `DocumentTemplateField` และ `ContinuousTaxReceipt` renderer เดิม ไม่สร้าง renderer ใหม่ซ้ำ:
+
+- **Canvas Designer**: เพิ่ม `src/components/document-templates/DocumentTemplateDesigner.tsx` พร้อม paper canvas ที่แสดงขนาดจริงตาม `paper.width_mm` / `paper.height_mm`, origin top-left, ruler, grid, snap step, zoom, pointer drag และ resize
+- **Field Editing**: `TemplateCanvas.tsx` render field จาก `x_mm`, `y_mm`, `width_mm`, `height_mm`; `FieldInspector.tsx` แก้ label, binding, geometry, font size/weight, align, visible, locked, layer, format และ sample value
+- **Binding Palette + Layer List**: เพิ่ม allowlist binding สำหรับ `company.*`, `customer.*`, `document.*`, `payment.*`, `totals.*`, `lines[]`; drag/drop binding ลง canvas ได้ และจัดการ layer visibility/lock ได้
+- **Undo/Redo + Keyboard Nudge**: `src/lib/documentTemplateDesigner.ts` เพิ่ม helper สำหรับ snap mm, nudge, resize, add/delete field และ client-side history; Arrow = move ตาม snap, Shift = large move, Alt = fine move
+- **Draft Workflow**: Active template แก้ตรง ๆ ไม่ได้ ต้อง `POST /api/document-templates/[templateId]/draft` เพื่อ clone current published version เป็น draft ก่อน; `PUT` update เฉพาะ draft version และ `publish` จึงทำให้เอกสารใหม่ใช้ version ใหม่
+- **Preview/Test Print จาก draft**: `/billing/print/continuous` ส่ง `templateId` / `versionNo` ไป `/api/document-templates/preview` เพื่อ preview sample/real ด้วย draft config โดยไม่ consume เลขเอกสารจริง
+- **Import/Export Guardrail**: import JSON ใช้ `validateDesignerTemplateConfig()` ตรวจ binding allowlist, duplicate field id, field หลุดขอบกระดาษ และ text ที่เสี่ยง XSS ก่อนส่ง API
+- **Granular Permissions**: seed permission ใหม่ `document_templates.view/create/update_draft/publish/export/import/test_print`; `settings.manage` ไม่ใช่ permission เดียวของ module นี้แล้ว
+- **Reprint Compatibility**: print-log validate template version เก่าที่ published ได้ ไม่บังคับให้เป็น current version เพื่อให้ reprint เอกสารเก่ายังใช้ template version เดิม
+- **UI/Preview Polish**: ปรับ designer เป็น 2-column workspace ให้ canvas กว้างขึ้น, ย้าย Binding Palette / Layer List เป็น right-side panel แบบ tab, เพิ่ม search binding, เพิ่ม empty state + Create Default Template และกัน Preview/Test Print ไม่ให้ fallback ไป sample layout คนละชุดเมื่อยังไม่มี template จริง; draft preview จะ save draft ก่อนเปิด print preview เพื่อให้หัวเอกสารตรงกับ canvas
+- **Continuous Preview Polish**: หน้า `/billing/print/continuous` มีปุ่ม "กลับไปแก้ Template" บน toolbar และ renderer full-form normalize line item table columns ให้ไม่ล้นกรอบกระดาษ แม้ default column width จะมาจาก config หน่วย mm
+
+ไฟล์หลัก:
+
+- `src/components/document-templates/DocumentTemplateDesigner.tsx`
+- `src/components/document-templates/TemplateCanvas.tsx`
+- `src/components/document-templates/FieldInspector.tsx`
+- `src/components/document-templates/BindingPalette.tsx`
+- `src/components/document-templates/LayerList.tsx`
+- `src/components/document-templates/DesignerToolbar.tsx`
+- `src/components/document-templates/DesignerStatusBar.tsx`
+- `src/lib/documentTemplateDesigner.ts`
+- `src/app/api/document-templates/[templateId]/draft/route.ts`
+
+Migration ที่ต้องรันหลัง pull:
+
+```bash
+node scripts/migrate-runtime-core-schema.js
+```
+
+Verification รอบนี้:
+
+```bash
+npm test -- src/app/api/__tests__/document-template-schema.test.ts src/app/api/__tests__/thai-baht-text.test.ts src/app/api/__tests__/document-template-helpers.test.ts src/app/api/__tests__/document-template-designer.test.ts src/app/api/__tests__/document-template-designer-ui.test.ts src/app/api/__tests__/continuous-print-payload.test.ts src/app/api/__tests__/document-print-log.test.ts src/app/api/__tests__/document-template-api.test.ts src/app/api/__tests__/continuous-print-ui.test.ts --runInBand --cacheDirectory ./.next/jest-cache
+npm test -- --runInBand --cacheDirectory ./.next/jest-cache
+npx tsc --noEmit --pretty false
+npm run lint
+```
+
+ผลล่าสุด: focused Document Template / Designer tests `68/68` ผ่าน, full suite `915/915` ผ่าน, `tsc` ผ่าน, `eslint` ผ่านโดยไม่มี warning; รอบ Continuous Preview Polish ล่าสุดรัน `continuous-print-ui.test.ts` `10/10` ผ่าน, `/billing/print/continuous?...` ตอบ `200`, `tsc` ผ่าน, `eslint` ผ่าน
+
+### อัปเดตล่าสุดก่อนหน้า: Customer Portal Access Control + EIR Visibility Policy (25 พ.ค. 2569)
 
 รอบนี้ harden ชั้นข้อมูลของ Customer Portal และ EIR visibility เพื่อปิดความเสี่ยง data leakage ก่อนทำ Driver/Trucking Portal UI:
 
@@ -249,7 +323,7 @@ container-yard-system/
 │   │   │   ├── mnr/page.tsx      # หน้า M&R (3 tabs: EOR/สร้าง EOR/รหัสความเสียหาย) + **actual_cost modal + notes field + user_id tracking**
 │   │   │   ├── supervisor-review/page.tsx # Supervisor approval inbox + approve/reject review workflow
 │   │   │   ├── billing/
-│   │   │   │   ├── page.tsx              # หน้าบัญชี orchestrator (tabs + data fetch + modal state)
+│   │   │   │   ├── page.tsx              # หน้าบัญชี orchestrator (tabs + data fetch + modal state) + continuous print actions
 │   │   │   │   ├── BillingClearanceTab.tsx # Clearance audit UI + No Charge/Waived/Credit control list
 │   │   │   │   ├── BillingReports.tsx    # Daily/monthly billing report + control report + PDF/Excel export
 │   │   │   │   ├── CreditControlTab.tsx   # Customer credit limit/overdue/hold monitor
@@ -260,12 +334,13 @@ container-yard-system/
 │   │   │   │   ├── billingUi.ts           # Shared billing labels/badges/export lazy loader
 │   │   │   │   └── DemurrageTab.tsx       # **Demurrage Calculator** — overview + risk cards + editable rates + per-container calculator + timeline
 │   │   │   └── settings/
-│   │   │       ├── page.tsx              # หน้าตั้งค่า (12 tabs, รวม Rate Limit)
+│   │   │       ├── page.tsx              # หน้าตั้งค่า (รวม Document Templates, Portal Access, Rate Limit)
 │   │   │       ├── CompanySettings.tsx    # CRUD ข้อมูลองค์กร (+ logo upload + branch)
 │   │   │       ├── YardsSettings.tsx      # CRUD ลาน + โซน (+ branch สำนักงานใหญ่/สาขา)
 │   │   │       ├── CustomerMaster.tsx     # **🏢 CRUD ลูกค้า Multi-role** (checkbox roles + branch manager + EDI prefix + customer_code display)
 │   │   │       ├── UsersSettings.tsx      # CRUD ผู้ใช้งาน + unlock/reset trusted device binding
 │   │   │       ├── SecuritySettings.tsx   # Password policy + account lockout + TOTP 2FA + trusted device policy
+│   │   │       ├── DocumentTemplateManager.tsx # Print template manager: preview/test print/full-overlay/reprint policy
 │   │   │       ├── PermissionsMatrix.tsx  # Permission Matrix (33×6 incl. customers)
 │   │   │       ├── ApprovalHierarchy.tsx  # ลำดับชั้นอนุมัติ + วงเงิน
 │   │   │       ├── EDIConfiguration.tsx   # SFTP/FTP/API/**Email** endpoints — CRUD + **⏰ Auto-Schedule UI** + **📋 Template Editor** (2-tab layout, **drag-and-drop** field mapping, live preview)
@@ -279,6 +354,7 @@ container-yard-system/
 │   │   ├── billing/
 │   │   │   └── print/
 │   │   │       ├── page.tsx          # หน้าพิมพ์ A4 ใบแจ้งหนี้/ใบเสร็จ (standalone, ไม่มี sidebar)
+│   │   │       ├── continuous/page.tsx # Continuous tax invoice/receipt print (full/overlay + print log)
 │   │   │       └── report/
 │   │   │           └── page.tsx      # **หน้าพิมพ์รายงานประจำวัน/ประจำเดือน** (A4, auto-print)
 │   │   │
@@ -330,6 +406,16 @@ container-yard-system/
 │   │       │   ├── ar-aging/route.ts        # **GET AR Aging report** — ยอดค้างชำระแยกตามอายุ (current/30/60/90+ วัน) + แยกตามลูกค้า
 │   │       │   ├── dunning-actions/route.ts # POST AR dunning contact/promise-to-pay audit log
 │   │       │   └── demurrage/route.ts      # **GET/POST/PUT demurrage** — overview, single calc, rates CRUD
+│   │       ├── document-templates/
+│   │       │   ├── route.ts                 # GET/POST template list/create
+│   │       │   ├── [templateId]/route.ts    # GET/PUT template detail/draft config
+│   │       │   ├── [templateId]/duplicate/route.ts
+│   │       │   ├── [templateId]/publish/route.ts
+│   │       │   ├── [templateId]/set-default/route.ts
+│   │       │   ├── [templateId]/deactivate/route.ts
+│   │       │   ├── preview/route.ts         # sample/real preview, no running number consume
+│   │       │   ├── test-print/route.ts      # calibration/test print, settings-only, no print log
+│   │       │   └── print-log/route.ts       # real print/reprint log + snapshot
 │   │       ├── portal/
 │   │       │   ├── overview/route.ts        # Customer KPIs + recent gate activity
 │   │       │   ├── containers/route.ts      # Customer inventory: summary/search/status + booking/EIR/invoice context via PortalEntityAccess
@@ -408,6 +494,8 @@ container-yard-system/
 │   │   │   └── ContainerTimeline.tsx   # **Container Tracking Timeline** — visual vertical timeline (Gate-In→Move→Hold→Repair→Gate-Out)
 │   │   ├── portal/
 │   │   │   └── PortalInspectionModal.tsx # Customer Portal read-only inspection: 6-side SVG, damage points, photo evidence
+│   │   ├── billing/
+│   │   │   └── ContinuousTaxReceipt.tsx # Continuous tax invoice/receipt renderer: full/overlay, carbonless/separate, calibration grid
 │   │   └── gate/
 │   │       ├── EIRDocument.tsx         # EIR A5 landscape print (physical 202×140mm area, readable print text, Portal, QR, condition, grade, BoxTech specs, signatures)
 │   │       ├── ContainerInspection.tsx  # 6-side SVG damage marking + photo + grade
@@ -431,6 +519,14 @@ container-yard-system/
 │       ├── approvalInbox.ts      # Supervisor approval inbox priority/SLA/exposure builder
 │       ├── arDunning.ts          # AR dunning stage/action/reminder draft + contact audit detail builder
 │       ├── billingTariffSimulator.ts # Billing tariff preview math for per-day/per-container/fixed rates
+│       ├── billingContinuousPrint.ts # DB payload builder for continuous invoice/receipt print
+│       ├── billingContinuousPrintSample.ts # Client-safe sample payload for preview/test print
+│       ├── billingContinuousPrintTypes.ts # Client-safe continuous print payload types
+│       ├── documentTemplateTypes.ts # Template config/paper/field/copy mode types
+│       ├── documentTemplateDefaults.ts # Client-safe default continuous template config
+│       ├── documentTemplates.ts # Server-side template validation, stored policy, version binding
+│       ├── documentPrintLog.ts  # Print/reprint state, transactional print log + snapshot helper
+│       ├── thaiBahtText.ts      # Reusable Thai baht text formatter
 │       ├── gateWorkflow.ts       # Gate-In/Out workflow step + exception + decision signal model used by guided UI
 │       ├── gateOperationalGuardrails.ts # Preflight guardrails: duplicate seal/plate warning, driver/photo completeness model; QR pass builder reserved for future phase
 │       ├── reconciliationActions.ts # Reports action-center row decoration, deep links, SLA aging, resolved/ignored filtering
@@ -507,6 +603,10 @@ container-yard-system/
 | `ReeferExceptions` | check_id, container_id, severity, status, reason, recommended_action, resolution_note, acknowledged/resolved user/time | Workflow ปิด loop เมื่ออุณหภูมินอกช่วง อ่านค่าไม่ได้ หรือไฟ/ปลั๊กมีปัญหา |
 | `ISOContainerCodes` | iso_code, description | รหัส ISO ตู้ |
 | `DocumentFormats` | doc_type, prefix, running_number | เลขเอกสาร |
+| `DocumentTemplates` | template_code, template_name, document_type, status, is_default, current_version_no | Master record ของ print template แยกจากระบบเลขเอกสาร |
+| `DocumentTemplateVersions` | template_id, version_no, paper/mode/copy settings, reprint_label_template, red_ref_source, config_json, status/published_at | Versioned layout/config สำหรับ A4/continuous/overlay template และรองรับ Visual Designer phase ถัดไป |
+| `DocumentPrintLogs` | document_type, document_id, document_no, template_code/version, print_no, is_reprint, reprint_count, reprint_reason, manual_preprinted_form_no, printed_by | ประวัติ print/reprint เอกสารภาษี/ใบเสร็จ มี unique guard `(document_type, document_id, print_no)` |
+| `DocumentPrintSnapshots` | print_id, document_type, document_id, document_no, template_code/version, snapshot_json | Snapshot payload ที่ใช้พิมพ์จริง เพื่อ reprint/audit ไม่เปลี่ยนตามข้อมูล master ภายหลัง |
 | `GateTransactions` | container_id, transaction_type, driver_name, truck_plate, eir_number, **container_owner_id** (FK→Customers), **billing_customer_id** (FK→Customers), **billing_clearance_id** | บันทึก Gate In/Out — **แยกเจ้าของตู้/คนจ่ายเงิน** + ผูกหลักฐาน Billing Clearance ก่อนออก EIR |
 | `WorkOrders` | container_id, order_type, from/to positions, priority, status | คำสั่งงานรถยก |
 | `GateOutRequests` | yard_id, container_id, booking_id/ref, billing_customer_id, billing_clearance_id, work_order_id, gate_transaction_id, eir_number, driver/truck/seal context, status | Durable session สำหรับ Gate-Out: ขอดึงตู้ → restore context → mark at gate → released |
@@ -637,6 +737,21 @@ container-yard-system/
 | GET | `/api/billing/demurrage?yard_id=X` | **Demurrage rates config** — ดึง rate ทั้งหมด |
 | POST | `/api/billing/demurrage` | **Create demurrage rate** — `{ yard_id, charge_type, free_days, rate_20/40/45, description }` |
 | PUT | `/api/billing/demurrage` | **Update/Delete rate** — `{ demurrage_id, ... }` or `{ demurrage_id, action: 'delete' }` (soft delete) |
+
+### Document Templates / Continuous Print
+
+| Method | Endpoint | คำอธิบาย |
+|--------|----------|---------|
+| GET/POST | `/api/document-templates` | List/create print templates and draft version config; requires `settings.manage` |
+| GET/PUT | `/api/document-templates/[templateId]` | Read/update current draft template version; update only allowed while version is draft |
+| POST | `/api/document-templates/[templateId]/duplicate` | Duplicate template and config as new draft |
+| POST | `/api/document-templates/[templateId]/publish` | Publish current draft/version and mark template active |
+| POST | `/api/document-templates/[templateId]/set-default` | Set published template as default per document type |
+| POST | `/api/document-templates/[templateId]/deactivate` | Deactivate template and remove default flag |
+| GET | `/api/document-templates/preview` | Sample/real preview without consuming `DocumentSequences`; sample requires `settings.manage`, real invoice allows billing/gate/report permissions |
+| POST | `/api/document-templates/test-print` | Calibration/test print with sample payload only; no print log and no document number consume |
+| POST | `/api/document-templates/print-log` | Record real print/reprint + snapshot transactionally; rejects sample/test document types |
+| PAGE | `/billing/print/continuous?id=X&type=receipt\|tax_invoice_receipt` | Continuous tax invoice/receipt print page with full/overlay and reprint label support |
 
 ### Boxtech API (Container Database)
 
@@ -1124,6 +1239,12 @@ Scoring system สำหรับแนะนำพิกัดวางตู�
   - **PromptPay QR** สำหรับ invoice ที่ยังไม่ชำระ: ตั้งค่าได้ที่ Billing → Payment QR, QR เป็น fixed amount ตามยอด `grand_total`
   - ช่องลายเซ็น: **ผู้จ่าย / Paid by** (ซ้าย) + **ผู้รับเงิน / Received by** (ขวา) + auto-print
   - Receipt: หัวเอกสาร **"Receipt"** (ไม่มี Tax Invoice) + แสตมป์ "✅ ชำระเงินแล้ว" + ใช้ `receipt_number` แยกจาก `invoice_number` เมื่อชำระครบ
+- [x] **Document Template Manager Phase 1 + Continuous Tax Invoice/Receipt** (✅ เสร็จ — 26 พ.ค. 2569)
+  - Settings → Document Templates จัดการ template/version, preview sample/real, test print/calibration, duplicate/publish/default/deactivate, import/export JSON
+  - `/billing/print/continuous?id=X&type=receipt|tax_invoice_receipt` รองรับ full form / pre-printed overlay, paper 9.5in × 5.5in, carbonless 5-copy หรือ separate 5 pages
+  - ปุ่ม "ฟอร์มต่อเนื่อง" เพิ่มใน Billing invoice/receipt, Billing Clearance, Gate-In และ Gate-Out โดยใช้ invoice/payment เดิม ไม่สร้างเอกสารซ้ำ
+  - `DocumentPrintLogs` + `DocumentPrintSnapshots` เก็บ print/reprint + payload snapshot แบบ transaction เดียว, กัน print_no ชนด้วย `UPDLOCK/HOLDLOCK` และ unique index
+  - Preview/Test Print ไม่ consume running number; reprint ใช้เลขเดิม, รองรับ label/เหตุผลพิมพ์ซ้ำ และ audit `document_print` / `document_reprint`
 - [x] **Billing Statement batch** (✅ เสร็จ — 22 พ.ค. 2569) — เพิ่ม `GET/POST /api/billing/statements`, ตาราง `BillingStatements/BillingStatementLines`, ปุ่ม “ออกเอกสารวางบิลรวม” ที่ Billing → เอกสาร, กล่อง “ประวัติใบวางบิลรวม” สำหรับเปิด/พิมพ์ซ้ำย้อนหลัง และหน้า `/billing/print/statement` สำหรับ A4 statement โดย lock invoice ที่อยู่ใน statement แล้วไม่ให้วางบิลซ้ำ
 - [x] **Payment Allocation** (✅ เสร็จ — 22 พ.ค. 2569) — เพิ่ม `GET/POST /api/billing/payments`, ตาราง `BillingPayments/BillingPaymentAllocations`, รับชำระแบบ partial/multi-invoice ผ่าน `balance_amount`, และ Payment Reconciliation สร้าง payment allocation แทนการ set paid ตรง ๆ
 - [x] **Billing API read permission hardening** (✅ เสร็จ — 22 พ.ค. 2569) — `GET /api/billing/invoices`, `ar-aging`, `reports`, `credit-control`, `erp-export`, `statements`, `payments` require billing/report permission + yard access ฝั่ง server
