@@ -10,6 +10,7 @@ import {
   Star,
   XCircle,
 } from 'lucide-react';
+import { CalibrationProfilesPanel } from '@/components/document-templates/CalibrationProfilesPanel';
 import { DocumentTemplateDesigner } from '@/components/document-templates/DocumentTemplateDesigner';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
 import { validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
@@ -53,6 +54,10 @@ type TemplateDetail = {
 type TemplateListResponse = {
   templates?: DocumentTemplateRow[];
   error?: string;
+};
+
+type PreviewParamOptions = {
+  calibrationProfileId?: string;
 };
 
 const defaultConfig = buildDefaultContinuousTemplateConfig();
@@ -365,7 +370,7 @@ export default function DocumentTemplateManager() {
     }
   };
 
-  const previewParams = (preview: 'sample' | 'real', testPrint = false) => {
+  const previewParams = (preview: 'sample' | 'real', testPrint = false, options?: PreviewParamOptions) => {
     const params: Record<string, string> = {
       type: selectedTemplate?.document_type || 'tax_invoice_receipt',
       preview,
@@ -375,6 +380,7 @@ export default function DocumentTemplateManager() {
     if (selectedTemplate) params.templateId = String(selectedTemplate.template_id);
     if (editingVersion?.version_no) params.versionNo = String(editingVersion.version_no);
     if (testPrint) params.testPrint = '1';
+    if (options?.calibrationProfileId) params.calibrationProfileId = options.calibrationProfileId;
     if (preview === 'real') params.id = invoiceId.trim();
     return params;
   };
@@ -393,9 +399,9 @@ export default function DocumentTemplateManager() {
     openPrintPreview(previewParams('sample'));
   };
 
-  const testPrint = async () => {
+  const testPrint = async (options?: PreviewParamOptions) => {
     if (!await ensurePreviewReady()) return;
-    openPrintPreview(previewParams('sample', true));
+    openPrintPreview(previewParams('sample', true, options));
   };
 
   const realPreview = async () => {
@@ -408,6 +414,7 @@ export default function DocumentTemplateManager() {
   };
 
   const updatePaper = (key: keyof DocumentTemplateConfig['paper'], value: number) => {
+    if (!Number.isFinite(value)) return;
     setConfig(current => ({
       ...current,
       paper: {
@@ -570,6 +577,13 @@ export default function DocumentTemplateManager() {
                   </label>
                 </div>
               </section>
+
+              <CalibrationProfilesPanel
+                config={config}
+                readOnly={!canEditDraft}
+                onChange={setConfig}
+                onTestPrint={calibrationProfileId => testPrint({ calibrationProfileId })}
+              />
 
               <DocumentTemplateDesigner
                 config={config}

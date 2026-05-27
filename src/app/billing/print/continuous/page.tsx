@@ -38,6 +38,11 @@ type PrintLogResponse = {
   error?: string;
 };
 
+type PreviewRequest = {
+  url: string;
+  init?: RequestInit;
+};
+
 function modeFrom(value: string | null): DocumentTemplateMode {
   return value === 'overlay' ? 'overlay' : 'full';
 }
@@ -61,13 +66,50 @@ function positiveIntFrom(value: unknown) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function withPreviewParams(searchParams: URLSearchParams) {
+function withPreviewParams(searchParams: URLSearchParams): PreviewRequest {
   const previewParams = new URLSearchParams();
-  for (const key of ['id', 'type', 'mode', 'copyMode', 'copyIndex', 'preview', 'testPrint', 'templateId', 'versionNo']) {
+  for (const key of ['id', 'type', 'mode', 'copyMode', 'copyIndex', 'preview', 'testPrint', 'templateId', 'versionNo', 'calibrationProfileId']) {
     const value = searchParams.get(key);
     if (value !== null) previewParams.set(key, value);
   }
-  return `/api/document-templates/preview?${previewParams.toString()}`;
+  return { url: `/api/document-templates/preview?${previewParams.toString()}` };
+}
+
+function withTestPrintParams(
+  searchParams: URLSearchParams,
+  mode: DocumentTemplateMode,
+  copyMode: DocumentTemplateCopyMode,
+): PreviewRequest {
+  const templateId = positiveIntFrom(searchParams.get('templateId'));
+  const versionNo = positiveIntFrom(searchParams.get('versionNo'));
+  const calibrationProfileId = searchParams.get('calibrationProfileId')?.trim();
+  return {
+    url: '/api/document-templates/test-print',
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_type: searchParams.get('type') || 'tax_invoice_receipt',
+        mode,
+        copyMode,
+        template_id: templateId,
+        version_no: versionNo,
+        ...(calibrationProfileId ? { calibrationProfileId } : {}),
+      }),
+    },
+  };
+}
+
+function previewRequestFromSearchParams(
+  searchParams: URLSearchParams,
+  mode: DocumentTemplateMode,
+  copyMode: DocumentTemplateCopyMode,
+  testPrint: boolean,
+  hasInvoiceId: boolean,
+) {
+  return testPrint && !hasInvoiceId
+    ? withTestPrintParams(searchParams, mode, copyMode)
+    : withPreviewParams(searchParams);
 }
 
 function fallbackPreview(mode: DocumentTemplateMode, copyMode: DocumentTemplateCopyMode) {
@@ -113,7 +155,8 @@ function ContinuousPrintContent() {
       setStatus('loading');
       setErrorMessage('');
       try {
-        const response = await fetch(withPreviewParams(searchParams));
+        const previewRequest = previewRequestFromSearchParams(searchParams, mode, copyMode, testPrint, hasInvoiceId);
+        const response = await fetch(previewRequest.url, previewRequest.init);
         if (!response.ok) throw new Error(`Preview route unavailable (${response.status})`);
 
         const data = await response.json() as PreviewResponse;
@@ -148,7 +191,7 @@ function ContinuousPrintContent() {
     return () => {
       cancelled = true;
     };
-  }, [copyMode, fallback, hasInvoiceId, mode, previewLabel, searchParams]);
+  }, [copyMode, fallback, hasInvoiceId, mode, previewLabel, searchParams, testPrint]);
 
   async function postPrintLog(documentId: number, reprintReason?: string | null): Promise<PrintLogResponse> {
     const policy = config.print_policy;

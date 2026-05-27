@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 import { GET, POST } from '../document-templates/route';
 import { POST as duplicateTemplate } from '../document-templates/[templateId]/duplicate/route';
 import { POST as createDraftTemplate } from '../document-templates/[templateId]/draft/route';
@@ -672,6 +674,41 @@ describe('document template API', () => {
     expect(body.testPrint).toBe(true);
   });
 
+  it('returns sample test print payload from a selected draft version when versionNo is provided', async () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    config.paper.top_offset_mm = 4;
+    const db = makeDb([{ recordset: [{ config_json: JSON.stringify(config) }] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/test-print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_type: 'tax_invoice_receipt',
+        template_id: 12,
+        versionNo: 3,
+      }),
+    });
+
+    const response = await testPrintTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'templateId', value: 12 },
+      { name: 'versionNo', value: 3 },
+    ]));
+    expect(db.queries[0]).toContain('@versionNo IS NULL OR v.version_no = @versionNo');
+    expect(db.queries[0]).toContain('v.version_no = t.current_version_no');
+    expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        template_id: 12,
+        version_no: 3,
+      }),
+    }));
+    expect(body.config.paper.top_offset_mm).toBe(4);
+  });
+
   it('rejects malformed test print JSON after settings permission without auditing', async () => {
     const db = makeDb();
     mockedGetDb.mockResolvedValue(db);
@@ -886,5 +923,19 @@ describe('document template API', () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+});
+
+describe('document template calibration API flow', () => {
+  it('preview accepts calibration profile id without consuming document number', () => {
+    const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/document-templates/preview/route.ts'), 'utf8');
+    expect(source).toContain('calibrationProfileId');
+    expect(source).toContain('applyCalibrationProfileToConfig');
+  });
+
+  it('test print accepts calibration settings and does not write print logs', () => {
+    const source = fs.readFileSync(path.join(process.cwd(), 'src/app/api/document-templates/test-print/route.ts'), 'utf8');
+    expect(source).toContain('calibrationProfileId');
+    expect(source).not.toContain('DocumentPrintLogs');
   });
 });

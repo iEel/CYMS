@@ -152,3 +152,21 @@ describe('line item inspector source wiring', () => {
     expect(source).toContain("selection?.type === 'line_items'");
   });
 });
+
+describe('calibration profile UI wiring', () => {
+  it('exposes create, apply, update, delete, and test print actions', () => {
+    const source = read('src/components/document-templates/CalibrationProfilesPanel.tsx');
+    expect(source).toContain('Create profile from current paper');
+    expect(source).toContain('Apply profile');
+    expect(source).toContain('Update profile');
+    expect(source).toContain('Delete profile');
+    expect(source).toContain('Test Print with marks');
+    expect(source).toContain('formToProfile(nextForm,');
+    expect(source).toContain('profiles.map(profile => profile.profile_id === selectedProfile?.profile_id ? nextProfile : profile)');
+    expect(source).not.toContain('formWithCurrentPaper');
+  });
+
+  it('renders calibration panel from manager', () => {
+    expect(read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx')).toContain('<CalibrationProfilesPanel');
+  });
+});

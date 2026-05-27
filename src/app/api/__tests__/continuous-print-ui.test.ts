@@ -112,6 +112,11 @@ describe('continuous print UI', () => {
     const source = fs.readFileSync(pagePath, 'utf8');
 
     expect(source).toContain('/api/document-templates/preview');
+    expect(source).toContain('/api/document-templates/test-print');
+    expect(source).toContain("method: 'POST'");
+    expect(source).toContain('calibrationProfileId');
+    expect(source).toContain('versionNo');
+    expect(source).toContain('version_no: versionNo');
   });
 
   it('keeps the continuous print page safe for the client bundle', () => {
@@ -190,9 +195,10 @@ describe('continuous print UI', () => {
   it('opens settings test prints as sample-only without a real invoice id', () => {
     const source = fs.readFileSync(templateManagerPath, 'utf8');
 
-    expect(source).toContain('const testPrint = async () =>');
-    expect(source).toContain("openPrintPreview(previewParams('sample', true));");
+    expect(source).toContain('const testPrint = async (options?: PreviewParamOptions) =>');
+    expect(source).toContain("openPrintPreview(previewParams('sample', true, options));");
     expect(source).toContain("params.testPrint = '1'");
+    expect(source).toContain('calibrationProfileId');
     expect(source).not.toContain('realPreview(true)');
   });
 });
