@@ -4,6 +4,15 @@ import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
 import { applyPortalGrants, buildBookingContainerGrants, buildBookingPartyGrants } from '@/lib/portalGrantRules';
 import { ensureReeferBookingPolicy } from '@/lib/reeferBookingPolicy';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const BOOKING_READ_PERMISSIONS = ['booking.manage', 'gate.in', 'gate.out', 'reports.view'];
+const BOOKING_WRITE_PERMISSIONS = ['booking.manage', 'integration.send'];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 function bookingSummarySelect() {
   return `
@@ -57,25 +66,41 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const lookup = searchParams.get('lookup');
+    const yardId = parsePositiveInt(searchParams.get('yard_id'));
+
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const permission = await requireAnyPermission(
+      request,
+      db,
+      BOOKING_READ_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ดูข้อมูล Booking'
+    );
+    if (permission instanceof Response) return permission;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ดู Booking ของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     // === Lookup mode: find booking by container_number or container_id ===
     if (lookup === '1') {
-      const db = await getDb();
       const containerNumber = searchParams.get('container_number');
       const containerId = searchParams.get('container_id');
       const bookingNumber = searchParams.get('booking_number');
-      const yardId = searchParams.get('yard_id');
 
       if (bookingNumber) {
-        const req = db.request().input('bkRef', sql.NVarChar, bookingNumber.trim());
-        if (yardId) req.input('yardId', sql.Int, parseInt(yardId));
+        const req = db.request()
+          .input('bkRef', sql.NVarChar, bookingNumber.trim())
+          .input('yardId', sql.Int, yardId);
         const result = await req.query(`
           SELECT TOP 1 ${bookingSummarySelect()}
           FROM Bookings b
           LEFT JOIN Customers c ON b.customer_id = c.customer_id
           ${bookingPartyJoins()}
           WHERE b.booking_number = @bkRef
-          ${yardId ? 'AND b.yard_id = @yardId' : ''}
+            AND b.yard_id = @yardId
           ORDER BY b.created_at DESC
         `);
         return NextResponse.json({ booking: result.recordset[0] || null });
@@ -83,8 +108,9 @@ export async function GET(request: NextRequest) {
 
       if (containerNumber) {
         // Find booking that expects or already owns this container number.
-        const req = db.request().input('cNum', sql.NVarChar, containerNumber.toUpperCase());
-        if (yardId) req.input('yardId', sql.Int, parseInt(yardId));
+        const req = db.request()
+          .input('cNum', sql.NVarChar, containerNumber.toUpperCase())
+          .input('yardId', sql.Int, yardId);
         const result = await req.query(`
           SELECT TOP 1 ${bookingSummarySelect()}
           FROM BookingContainers bc
@@ -92,17 +118,22 @@ export async function GET(request: NextRequest) {
           LEFT JOIN Customers c ON b.customer_id = c.customer_id
           ${bookingPartyJoins()}
           WHERE bc.container_number = @cNum AND b.status IN ('pending', 'confirmed')
-          ${yardId ? 'AND b.yard_id = @yardId' : ''}
+            AND b.yard_id = @yardId
           ORDER BY b.created_at DESC
         `);
         return NextResponse.json({ booking: result.recordset[0] || null });
       }
 
       if (containerId) {
+        const parsedContainerId = parsePositiveInt(containerId);
+        if (!parsedContainerId) {
+          return NextResponse.json({ error: 'ต้องระบุ container_id ที่ถูกต้อง' }, { status: 400 });
+        }
         // Gate-Out: find a safe booking candidate. Exact pre-advised links win;
         // otherwise use an open booking only when size/type/customer rules match.
-        const req = db.request().input('cId', sql.Int, parseInt(containerId));
-        if (yardId) req.input('yardId', sql.Int, parseInt(yardId));
+        const req = db.request()
+          .input('cId', sql.Int, parsedContainerId)
+          .input('yardId', sql.Int, yardId);
         const result = await req.query(`
           WITH TargetContainer AS (
             SELECT container_id, container_number, size, type, container_owner_id
@@ -114,7 +145,7 @@ export async function GET(request: NextRequest) {
             FROM BookingContainers bc
             JOIN Bookings b ON bc.booking_id = b.booking_id
             WHERE bc.container_id = @cId AND bc.status IN ('pending', 'received')
-            ${yardId ? 'AND b.yard_id = @yardId' : ''}
+              AND b.yard_id = @yardId
 
             UNION ALL
 
@@ -125,7 +156,7 @@ export async function GET(request: NextRequest) {
             WHERE bc.container_id IS NULL
               AND bc.container_number = ct.container_number
               AND bc.status IN ('pending', 'received')
-            ${yardId ? 'AND b.yard_id = @yardId' : ''}
+              AND b.yard_id = @yardId
 
             UNION ALL
 
@@ -137,7 +168,7 @@ export async function GET(request: NextRequest) {
               AND (b.container_size IS NULL OR b.container_size = '' OR b.container_size = ct.size)
               AND (b.container_type IS NULL OR b.container_type = '' OR b.container_type = ct.type)
               AND (b.customer_id IS NULL OR ct.container_owner_id IS NULL OR b.customer_id = ct.container_owner_id)
-            ${yardId ? 'AND b.yard_id = @yardId' : ''}
+              AND b.yard_id = @yardId
           )
           SELECT TOP 1 ${bookingSummarySelect()}
           FROM CandidateBookings cb
@@ -153,7 +184,6 @@ export async function GET(request: NextRequest) {
     }
 
     // === Normal listing mode ===
-    const yardId = searchParams.get('yard_id');
     const status = searchParams.get('status');
     const search = searchParams.get('search');
     const summary = searchParams.get('summary');
@@ -161,18 +191,15 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')));
     const offset = (page - 1) * limit;
 
-    const db = await getDb();
     const conditions: string[] = [];
 
     // Build conditions (shared between count + data queries)
     const reqCount = db.request();
     const reqData = db.request();
 
-    if (yardId) {
-      conditions.push('b.yard_id = @yardId');
-      reqCount.input('yardId', sql.Int, parseInt(yardId));
-      reqData.input('yardId', sql.Int, parseInt(yardId));
-    }
+    conditions.push('b.yard_id = @yardId');
+    reqCount.input('yardId', sql.Int, yardId);
+    reqData.input('yardId', sql.Int, yardId);
     if (status) {
       conditions.push('b.status = @status');
       reqCount.input('status', sql.NVarChar, status);
@@ -250,11 +277,26 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const yardId = parsePositiveInt(body.yard_id);
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      BOOKING_WRITE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์สร้าง Booking'
+    );
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์สร้าง Booking ในลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     const result = await db.request()
       .input('bookingNumber', sql.NVarChar, body.booking_number)
-      .input('yardId', sql.Int, body.yard_id)
+      .input('yardId', sql.Int, yardId)
       .input('customerId', sql.Int, body.customer_id || null)
       .input('bookingCustomerId', sql.Int, body.booking_customer_id || body.customer_id || null)
       .input('shippingLineId', sql.Int, body.shipping_line_id || null)
@@ -294,7 +336,7 @@ export async function POST(request: NextRequest) {
     const booking = result.recordset[0];
     const reeferPolicy = await ensureReeferBookingPolicy(db, {
       booking_id: booking.booking_id,
-      yard_id: booking.yard_id || body.yard_id,
+      yard_id: booking.yard_id || yardId,
       customer_id: booking.customer_id || body.customer_id || null,
       container_type: booking.container_type || body.container_type,
     }, {
@@ -328,7 +370,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await logAudit({ yardId: body.yard_id, action: 'booking_create', entityType: 'booking', entityId: booking.booking_id, details: { booking_number: body.booking_number, booking_type: body.booking_type, container_count: body.container_count } });
+    await logAudit({ userId: actor.userId, yardId, action: 'booking_create', entityType: 'booking', entityId: booking.booking_id, details: { booking_number: body.booking_number, booking_type: body.booking_type, container_count: body.container_count } });
 
     return NextResponse.json({ success: true, booking, reefer_policy: reeferPolicy });
   } catch (error: unknown) {
@@ -343,10 +385,33 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
+    const bookingId = parsePositiveInt(body.booking_id);
+    if (!bookingId) {
+      return NextResponse.json({ error: 'ต้องระบุ booking_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      BOOKING_WRITE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์แก้ไข Booking'
+    );
+    if (actor instanceof Response) return actor;
+
+    const existingBookingResult = await db.request()
+      .input('bookingId', sql.Int, bookingId)
+      .query('SELECT TOP 1 booking_id, yard_id FROM Bookings WHERE booking_id = @bookingId');
+    const existingBooking = existingBookingResult.recordset[0];
+    if (!existingBooking) {
+      return NextResponse.json({ error: 'ไม่พบ Booking' }, { status: 404 });
+    }
+
+    const yardAccess = await requireYardAccess(request, db, existingBooking.yard_id, 'คุณไม่มีสิทธิ์แก้ไข Booking ของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     const sets: string[] = [];
-    const req = db.request().input('bookingId', sql.Int, body.booking_id);
+    const req = db.request().input('bookingId', sql.Int, bookingId);
 
     if (body.status !== undefined) { sets.push('status = @status'); req.input('status', sql.NVarChar, body.status); }
     if (body.vessel_name !== undefined) { sets.push('vessel_name = @vesselName'); req.input('vesselName', sql.NVarChar, body.vessel_name); }
@@ -374,7 +439,7 @@ export async function PUT(request: NextRequest) {
     await req.query(`UPDATE Bookings SET ${sets.join(', ')} WHERE booking_id = @bookingId`);
 
     const updatedBookingResult = await db.request()
-      .input('bookingId', sql.Int, body.booking_id)
+      .input('bookingId', sql.Int, bookingId)
       .query(`
         SELECT booking_id, booking_number, customer_id, booking_customer_id, shipping_line_id,
           forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id,
@@ -387,7 +452,7 @@ export async function PUT(request: NextRequest) {
       await applyPortalGrants(db, buildBookingPartyGrants(updatedBooking));
     }
 
-    await logAudit({ action: 'booking_update', entityType: 'booking', entityId: body.booking_id, details: { status: body.status, vessel_name: body.vessel_name } });
+    await logAudit({ userId: actor.userId, yardId: existingBooking.yard_id, action: 'booking_update', entityType: 'booking', entityId: bookingId, details: { status: body.status, vessel_name: body.vessel_name } });
 
     // Send email notification if status changed
     if (body.status && ['confirmed', 'completed', 'cancelled'].includes(body.status)) {
@@ -404,7 +469,7 @@ export async function PUT(request: NextRequest) {
           if (notifyBooking) {
             // Fetch booking + customer details
             const bkRes = await db.request()
-              .input('bkId', sql.Int, body.booking_id)
+              .input('bkId', sql.Int, bookingId)
               .query(`
                 SELECT b.*, c.customer_name, c.contact_email
                 FROM Bookings b

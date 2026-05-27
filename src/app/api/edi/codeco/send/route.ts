@@ -11,21 +11,46 @@ import {
   type EDITemplate,
 } from '@/lib/ediFormatter';
 import { uploadFTP } from '@/lib/ftpClient';
+import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // POST — Send CODECO file via Email/SFTP/FTP/API to a specific endpoint
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { endpoint_id, yard_id, date_from, date_to, type, shipping_line } = body;
+    const endpointId = parsePositiveInt(endpoint_id);
+    const yardId = parsePositiveInt(yard_id);
+
+    if (!endpointId) {
+      return NextResponse.json({ error: 'ต้องระบุ endpoint_id ที่ถูกต้อง' }, { status: 400 });
+    }
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
 
     const db = await getDb();
+    const actor = await requirePermission(
+      request,
+      db,
+      'integration.send',
+      'คุณไม่มีสิทธิ์ส่ง EDI'
+    );
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ส่ง EDI ของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     // 1. Get endpoint config
     const epResult = await db.request()
-      .input('epId', sql.Int, endpoint_id)
+      .input('epId', sql.Int, endpointId)
       .query('SELECT * FROM EDIEndpoints WHERE endpoint_id = @epId');
 
     if (epResult.recordset.length === 0) {
@@ -37,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Generate CODECO data
-    const req = db.request().input('yardId', sql.Int, yard_id || 1);
+    const req = db.request().input('yardId', sql.Int, yardId);
     let query = `
       SELECT g.transaction_id, g.transaction_type, g.eir_number,
              g.driver_name, g.truck_plate, g.truck_company, g.seal_number, g.booking_ref,
@@ -238,7 +263,7 @@ export async function POST(request: NextRequest) {
 
     // 7. Log the send
     await db.request()
-      .input('epId2', sql.Int, endpoint_id)
+      .input('epId2', sql.Int, endpointId)
       .input('filename', sql.NVarChar, filename)
       .input('recordCount', sql.Int, transactions.length)
       .input('status', sql.NVarChar, sendStatus)
@@ -249,14 +274,14 @@ export async function POST(request: NextRequest) {
       `);
 
     await writeIntegrationLog({
-      yardId: yard_id || 1,
+      yardId,
       system: 'EDI',
       direction: 'outbound',
       messageType: 'CODECO',
       destination: ep.type === 'email' ? ep.host : ep.type === 'api' ? ep.host : `${ep.host}:${ep.remote_path || ''}`,
       endpointName: ep.name,
       referenceType: 'edi_endpoint',
-      referenceId: endpoint_id,
+      referenceId: endpointId,
       referenceNumber: effectiveShippingLine || 'ALL',
       payloadSummary: {
         delivery_type: ep.type,
@@ -274,7 +299,7 @@ export async function POST(request: NextRequest) {
 
     // Update last_sent info on endpoint
     await db.request()
-      .input('epId3', sql.Int, endpoint_id)
+      .input('epId3', sql.Int, endpointId)
       .input('lastStatus', sql.NVarChar, sendStatus)
       .query(`
         UPDATE EDIEndpoints SET last_sent_at = GETDATE(), last_status = @lastStatus, updated_at = GETDATE()
@@ -283,9 +308,9 @@ export async function POST(request: NextRequest) {
 
     if (sendStatus === 'failed') {
       await logAudit({
-        userId: null, yardId: yard_id || 1,
+        userId: actor.userId, yardId,
         action: 'edi_send_failed',
-        entityType: 'edi_endpoint', entityId: endpoint_id,
+        entityType: 'edi_endpoint', entityId: endpointId,
         details: {
           endpoint_name: ep.name, delivery_type: ep.type, format: template?.template_name || ep.format,
           shipping_line: effectiveShippingLine || 'ALL', record_count: transactions.length, filename,
@@ -301,9 +326,9 @@ export async function POST(request: NextRequest) {
     }
 
     await logAudit({
-      userId: null, yardId: yard_id || 1,
+      userId: actor.userId, yardId,
       action: 'edi_send_success',
-      entityType: 'edi_endpoint', entityId: endpoint_id,
+      entityType: 'edi_endpoint', entityId: endpointId,
       details: {
         endpoint_name: ep.name, delivery_type: ep.type, format: template?.template_name || ep.format,
         shipping_line: effectiveShippingLine || 'ALL', record_count: transactions.length, filename,
@@ -327,9 +352,17 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const endpointId = searchParams.get('endpoint_id');
+    const endpointId = parsePositiveInt(searchParams.get('endpoint_id'));
 
     const db = await getDb();
+    const actor = await requirePermission(
+      request,
+      db,
+      'integration.logs.view',
+      'คุณไม่มีสิทธิ์ดูประวัติการส่ง EDI'
+    );
+    if (actor instanceof Response) return actor;
+
     const req = db.request();
     let query = `
       SELECT l.*, e.name as endpoint_name, e.host, e.shipping_line
@@ -338,7 +371,7 @@ export async function GET(request: NextRequest) {
     `;
     if (endpointId) {
       query += ` WHERE l.endpoint_id = @epId`;
-      req.input('epId', sql.Int, parseInt(endpointId));
+      req.input('epId', sql.Int, endpointId);
     }
     query += ` ORDER BY l.sent_at DESC`;
     const result = await req.query(query);

@@ -2,11 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requireAnyPermission } from '@/lib/apiAuth';
+
+const EDI_TEMPLATE_READ_PERMISSIONS = ['settings.manage', 'integration.send', 'integration.logs.view'];
+const EDI_TEMPLATE_MANAGE_PERMISSIONS = ['settings.manage'];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // GET — list all templates
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      EDI_TEMPLATE_READ_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ดู EDI Template'
+    );
+    if (actor instanceof Response) return actor;
+
     const result = await db.request().query(`
       SELECT * FROM EDITemplates WHERE is_active = 1 ORDER BY is_system DESC, template_name
     `);
@@ -31,6 +48,14 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      EDI_TEMPLATE_MANAGE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์จัดการ EDI Template'
+    );
+    if (actor instanceof Response) return actor;
+
     const result = await db.request()
       .input('name', sql.NVarChar, template_name)
       .input('format', sql.NVarChar, base_format)
@@ -49,7 +74,7 @@ export async function POST(request: NextRequest) {
       `);
 
     await logAudit({
-      userId: null, yardId: 1,
+      userId: actor.userId,
       action: 'edi_template_create',
       entityType: 'edi_template',
       entityId: result.recordset[0].template_id,
@@ -75,18 +100,29 @@ export async function PUT(request: NextRequest) {
     if (!template_id) {
       return NextResponse.json({ error: 'กรุณาระบุ template_id' }, { status: 400 });
     }
+    const templateId = parsePositiveInt(template_id);
+    if (!templateId) {
+      return NextResponse.json({ error: 'กรุณาระบุ template_id ที่ถูกต้อง' }, { status: 400 });
+    }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      EDI_TEMPLATE_MANAGE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์จัดการ EDI Template'
+    );
+    if (actor instanceof Response) return actor;
 
     // Check if system template
-    const check = await db.request().input('id', sql.Int, template_id)
+    const check = await db.request().input('id', sql.Int, templateId)
       .query('SELECT is_system FROM EDITemplates WHERE template_id = @id');
     if (check.recordset[0]?.is_system) {
       return NextResponse.json({ error: 'ไม่สามารถแก้ไข System Template ได้' }, { status: 403 });
     }
 
     await db.request()
-      .input('id', sql.Int, template_id)
+      .input('id', sql.Int, templateId)
       .input('name', sql.NVarChar, template_name)
       .input('format', sql.NVarChar, base_format)
       .input('desc', sql.NVarChar, description || null)
@@ -109,10 +145,10 @@ export async function PUT(request: NextRequest) {
       `);
 
     await logAudit({
-      userId: null, yardId: 1,
+      userId: actor.userId,
       action: 'edi_template_update',
       entityType: 'edi_template',
-      entityId: template_id,
+      entityId: templateId,
       details: { template_name },
     });
 
@@ -127,13 +163,20 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const templateId = parseInt(searchParams.get('template_id') || '0');
+    const templateId = parsePositiveInt(searchParams.get('template_id'));
 
     if (!templateId) {
       return NextResponse.json({ error: 'กรุณาระบุ template_id' }, { status: 400 });
     }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      EDI_TEMPLATE_MANAGE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์จัดการ EDI Template'
+    );
+    if (actor instanceof Response) return actor;
 
     // Check if system template
     const check = await db.request().input('id', sql.Int, templateId)
@@ -156,7 +199,7 @@ export async function DELETE(request: NextRequest) {
       .query('DELETE FROM EDITemplates WHERE template_id = @id');
 
     await logAudit({
-      userId: null, yardId: 1,
+      userId: actor.userId,
       action: 'edi_template_delete',
       entityType: 'edi_template',
       entityId: templateId,
