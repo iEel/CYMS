@@ -1,9 +1,23 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Compass, LocateFixed, RotateCcw } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import Yard3DCameraToolbar from './Yard3DCameraToolbar';
+import {
+  YARD_SCENE_THEME,
+  applyRendererQuality,
+  createConcreteMaterial,
+  createContainerBodyMaterial,
+  createYardLights,
+} from './yard3dScene';
+import {
+  createBayRowTicks,
+  createDirectionArrow,
+  createLaneMarkings,
+  createReeferPlugPosts,
+  createSelectionOutline,
+} from './yard3dGeometry';
 
 interface ContainerBlock {
   container_id: number;
@@ -129,11 +143,7 @@ function createContainerMesh(ctr: ContainerBlock, colorMode: YardColorMode): THR
 
   // === ตัวตู้ — single box, single material ===
   const bodyGeo = new THREE.BoxGeometry(w, h, d);
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: baseColor,
-    roughness: 0.6,
-    metalness: 0.3,
-  });
+  const bodyMat = createContainerBodyMaterial(baseColor);
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.castShadow = true;
   body.receiveShadow = true;
@@ -170,6 +180,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
   const cameraTweenRef = useRef<number>(0);
   const cameraHomeRef = useRef<CameraPose | null>(null);
   const prevHighlightRef = useRef<THREE.Object3D | null>(null);
+  const selectionOutlineRef = useRef<THREE.Object3D | null>(null);
 
   const [zones, setZones] = useState<ZoneInfo[]>([]);
   const [containers, setContainers] = useState<ContainerBlock[]>([]);
@@ -267,8 +278,8 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
 
     // Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0F172A);
-    scene.fog = new THREE.Fog(0x0F172A, 80, 180);
+    scene.background = new THREE.Color(YARD_SCENE_THEME.background);
+    scene.fog = new THREE.Fog(YARD_SCENE_THEME.fog, 80, 180);
     sceneRef.current = scene;
 
     // Camera
@@ -280,11 +291,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, logarithmicDepthBuffer: true });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    applyRendererQuality(renderer);
     el.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -297,34 +304,11 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     controls.maxDistance = 120;
     controlsRef.current = controls;
 
-    // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
-    scene.add(ambientLight);
-
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
-    dirLight.position.set(20, 30, 15);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 80;
-    dirLight.shadow.camera.left = -50;
-    dirLight.shadow.camera.right = 50;
-    dirLight.shadow.camera.top = 50;
-    dirLight.shadow.camera.bottom = -50;
-    scene.add(dirLight);
-
-    const fillLight = new THREE.DirectionalLight(0x6366F1, 0.25);
-    fillLight.position.set(-15, 12, -10);
-    scene.add(fillLight);
-
-    const rimLight = new THREE.DirectionalLight(0xF59E0B, 0.15);
-    rimLight.position.set(0, 5, -20);
-    scene.add(rimLight);
+    scene.add(createYardLights());
 
     // Ground — concrete yard floor
     const groundGeo = new THREE.PlaneGeometry(200, 200);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x1A2332, roughness: 0.95 });
+    const groundMat = createConcreteMaterial();
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.01;
@@ -332,7 +316,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     scene.add(ground);
 
     // Grid
-    const grid = new THREE.GridHelper(120, 60, 0x2D3B4E, 0x1A2332);
+    const grid = new THREE.GridHelper(120, 60, YARD_SCENE_THEME.concreteGridMajor, YARD_SCENE_THEME.concreteGridMinor);
     scene.add(grid);
 
     // Build zones & containers
@@ -381,6 +365,14 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       label.rotation.x = -Math.PI / 2;
       label.position.set(zoneOffsetX + zoneWidth / 2, 0.05, -1.5);
       scene.add(label);
+
+      scene.add(createBayRowTicks(zoneWidth, zoneDepth, CW_20 + GAP_X, CD + GAP_Z, zoneOffsetX));
+      scene.add(createLaneMarkings(zoneWidth, zoneDepth + 1, zoneOffsetX, -0.65));
+      scene.add(createDirectionArrow(zoneOffsetX + zoneWidth / 2, -0.65, Math.PI / 2));
+
+      if (zone.zone_type === 'reefer') {
+        scene.add(createReeferPlugPosts(zoneWidth, zoneDepth, zoneOffsetX));
+      }
 
       // Containers in this zone
       const zoneContainers = containers.filter(c => c.zone_name === zone.zone_name);
@@ -636,6 +628,33 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     };
   }, [highlightContainerNumber]);
 
+  useEffect(() => {
+    if (selectionOutlineRef.current) {
+      selectionOutlineRef.current.parent?.remove(selectionOutlineRef.current);
+      selectionOutlineRef.current = null;
+    }
+
+    if (!selectedContainerNumber || !sceneRef.current) return;
+
+    const foundEntry = Array.from(containerMeshesRef.current.values())
+      .find(item => item.data.container_number === selectedContainerNumber);
+    if (!foundEntry) return;
+
+    const is40 = foundEntry.data.size === '40' || foundEntry.data.size === '45';
+    const width = is40 ? CW_40 : CW_20;
+    const height = foundEntry.data.size === '45' ? CH * 1.12 : CH;
+    const outline = createSelectionOutline(width, height, CD);
+    foundEntry.mesh.add(outline);
+    selectionOutlineRef.current = outline;
+
+    return () => {
+      outline.parent?.remove(outline);
+      if (selectionOutlineRef.current === outline) {
+        selectionOutlineRef.current = null;
+      }
+    };
+  }, [colorMode, containers, selectedContainerNumber, selectedZone, zones]);
+
   // Helper: find which container group contains this child object
   const findContainerEntry = useCallback((obj: THREE.Object3D) => {
     for (const [, entry] of containerMeshesRef.current) {
@@ -694,7 +713,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
         setTooltip({
           x: e.clientX - canvasRef.current!.getBoundingClientRect().left,
           y: e.clientY - canvasRef.current!.getBoundingClientRect().top - 60,
-          text: `${c.container_number} | ${c.size}'${c.type} | ${c.shipping_line || '—'} | ${statusLabel} | B${c.bay}-R${c.row}-T${c.tier}`,
+          text: `${c.container_number} • ${c.size}'${c.type} • ${statusLabel} • Zone ${c.zone_name} B${c.bay}-R${c.row}-T${c.tier}`,
         });
       }
     } else {
@@ -799,42 +818,12 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
         )}
       </div>
 
-      {/* Camera controls */}
-      <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">
-        <div className="flex items-center gap-1 bg-slate-900/80 backdrop-blur rounded-lg p-1 border border-slate-700">
-          <button
-            type="button"
-            title="รีเซ็ตมุมกล้อง"
-            aria-label="รีเซ็ตมุมกล้อง"
-            onClick={resetYardCamera}
-            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-300 hover:bg-slate-700/80 hover:text-white transition"
-          >
-            <RotateCcw size={14} />
-          </button>
-          <button
-            type="button"
-            title="มุมมองด้านบน"
-            aria-label="มุมมองด้านบน"
-            onClick={showTopDownView}
-            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-300 hover:bg-slate-700/80 hover:text-white transition"
-          >
-            <Compass size={14} />
-          </button>
-          <button
-            type="button"
-            title="โฟกัสตู้ที่เลือก"
-            aria-label="โฟกัสตู้ที่เลือก"
-            onClick={focusSelectedContainer}
-            disabled={!selectedContainerNumber && !highlightContainerNumber}
-            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-300 hover:bg-slate-700/80 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-300 transition"
-          >
-            <LocateFixed size={14} />
-          </button>
-        </div>
-        <div className="text-[10px] text-slate-500 bg-slate-900/60 backdrop-blur rounded-lg px-2.5 py-1.5 border border-slate-700/50">
-          หมุน • Shift+ลาก • Scroll ซูม
-        </div>
-      </div>
+      <Yard3DCameraToolbar
+        canFocusSelected={Boolean(selectedContainerNumber || highlightContainerNumber)}
+        onOverview={resetYardCamera}
+        onTopDown={showTopDownView}
+        onFocusSelected={focusSelectedContainer}
+      />
     </div>
   );
 }

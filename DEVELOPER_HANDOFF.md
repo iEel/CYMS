@@ -1308,6 +1308,7 @@ container-yard-system/
 | **X-Ray Mode** | ตู้อื่น opacity 60% + beacon สีเหลือง + วงแหวนบนพื้น + **floating label** (billboard) |
 | **Camera** | OrbitControls + smooth lerp zoom (cubic easing) |
 | **Stack** | Ground-up stacking — ไม่มีตู้ลอย |
+| **Visual Polish Phase 1** | แยก scene/theme helpers (`yard3dScene.ts`, `yard3dGeometry.ts`), ปรับ concrete yard floor/lighting, เพิ่ม lane markings + bay/row ticks + reefer plug posts, selected-container outline และ `Yard3DCameraToolbar` แบบ compact โดยไม่เปลี่ยน schema/API |
 
 ### 7.6 Auto-Allocation Algorithm
 
