@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const YARD_STATS_READ_PERMISSIONS = [
+  'reports.view',
+  'yard.location.assign',
+  'yard.slot.move',
+];
 
 // GET — สถิติลานสำหรับ Dashboard + Yard Overview
 export async function GET(request: NextRequest) {
@@ -16,6 +22,8 @@ export async function GET(request: NextRequest) {
     const db = await getDb();
     const yardAccess = await requireYardAccess(request, db, yardId);
     if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requireAnyPermission(request, db, YARD_STATS_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ดูสถิติลาน');
+    if (actor instanceof NextResponse) return actor;
 
     const req = db.request()
       .input('yardId', sql.Int, yardId);

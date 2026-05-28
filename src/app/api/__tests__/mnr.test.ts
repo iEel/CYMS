@@ -5,6 +5,8 @@
 
 import { NextRequest } from 'next/server';
 import { applyPortalGrants, buildInvoicePartyGrants } from '@/lib/portalGrantRules';
+import fs from 'fs';
+import path from 'path';
 
 // ── Mock DB ────────────────────────────────────────────────────────
 const mockQuery = jest.fn();
@@ -36,6 +38,7 @@ jest.mock('@/lib/portalGrantRules', () => ({
 
 const mockedBuildInvoicePartyGrants = buildInvoicePartyGrants as jest.Mock;
 const mockedApplyPortalGrants = applyPortalGrants as jest.Mock;
+const repoRoot = path.resolve(__dirname, '../../../..');
 
 function makeRequest(method: string, url: string, body?: unknown): NextRequest {
   return new NextRequest(url, {
@@ -113,6 +116,14 @@ describe('POST /api/mnr', () => {
     estimated_cost: 3500,
     damage_details: [{ code: 'P1-DM1-RP1', description: 'รอยบุ๋มด้านหน้า' }],
   };
+
+  it('normalizes owner and billing parties through the shared business party resolver', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'src/app/api/mnr/route.ts'), 'utf8');
+
+    expect(source).toContain('normalizeBusinessPartyContext');
+    expect(source).toContain('resolveBillingCustomerId');
+    expect(source).not.toContain('body.billing_customer_id || body.customer_id');
+  });
 
   it('creates EOR with valid payload', async () => {
     // INSERT query

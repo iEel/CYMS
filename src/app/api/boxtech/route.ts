@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireAnyPermission } from '@/lib/apiAuth';
+
+const BOXTECH_READ_PERMISSIONS = [
+  'gate.in',
+  'gate.out',
+  'yard.location.assign',
+  'yard.slot.move',
+];
 
 // ==========================================
 // Boxtech Token Cache (in-memory)
@@ -113,6 +121,8 @@ export async function GET(request: NextRequest) {
 
     // 1. Look up prefix → customer mapping in our DB (ALL matches, not TOP 1)
     const pool = await getDb();
+    const actor = await requireAnyPermission(request, pool, BOXTECH_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ค้นหา BoxTech');
+    if (actor instanceof NextResponse) return actor;
 
     const prefixResult = await pool.request()
       .input('prefix', sql.NVarChar, prefix)

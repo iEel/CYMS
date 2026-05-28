@@ -2,11 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requireAnyPermission } from '@/lib/apiAuth';
+
+const EDI_ENDPOINT_READ_PERMISSIONS = ['settings.manage', 'integration.send', 'integration.logs.view'];
+const EDI_ENDPOINT_MANAGE_PERMISSIONS = ['settings.manage'];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // GET — List EDI Endpoints
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      EDI_ENDPOINT_READ_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ดู EDI Endpoint'
+    );
+    if (actor instanceof Response) return actor;
+
     const result = await db.request().query(`
       SELECT e.*, 
         (SELECT TOP 1 status FROM EDISendLog WHERE endpoint_id = e.endpoint_id ORDER BY sent_at DESC) as last_log_status,
@@ -26,6 +43,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      EDI_ENDPOINT_MANAGE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์จัดการ EDI Endpoint'
+    );
+    if (actor instanceof Response) return actor;
+
     const result = await db.request()
       .input('name', sql.NVarChar, body.name)
       .input('shipping_line', sql.NVarChar, body.shipping_line || null)
@@ -41,9 +66,9 @@ export async function POST(request: NextRequest) {
         INSERT INTO EDIEndpoints (name, shipping_line, type, host, port, username, password, remote_path, format, template_id)
         OUTPUT INSERTED.*
         VALUES (@name, @shipping_line, @type, @host, @port, @username, @password, @remote_path, @format, @template_id)
-      `);
+    `);
     const ep = result.recordset[0];
-    await logAudit({ action: 'create', entityType: 'edi_endpoint', entityId: ep.endpoint_id, details: { name: body.name, host: body.host } });
+    await logAudit({ userId: actor.userId, action: 'create', entityType: 'edi_endpoint', entityId: ep.endpoint_id, details: { name: body.name, host: body.host } });
     return NextResponse.json({ success: true, endpoint: ep });
   } catch (error) {
     console.error('❌ POST EDI endpoint error:', error);
@@ -55,9 +80,22 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
+    const endpointId = parsePositiveInt(body.endpoint_id);
+    if (!endpointId) {
+      return NextResponse.json({ error: 'ต้องระบุ endpoint_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      EDI_ENDPOINT_MANAGE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์จัดการ EDI Endpoint'
+    );
+    if (actor instanceof Response) return actor;
+
     await db.request()
-      .input('id', sql.Int, body.endpoint_id)
+      .input('id', sql.Int, endpointId)
       .input('name', sql.NVarChar, body.name)
       .input('shipping_line', sql.NVarChar, body.shipping_line || null)
       .input('type', sql.NVarChar, body.type || 'sftp')
@@ -77,7 +115,7 @@ export async function PUT(request: NextRequest) {
           template_id = @template_id, updated_at = GETDATE()
         WHERE endpoint_id = @id
       `);
-    await logAudit({ action: 'update', entityType: 'edi_endpoint', entityId: body.endpoint_id, details: { name: body.name, host: body.host } });
+    await logAudit({ userId: actor.userId, action: 'update', entityType: 'edi_endpoint', entityId: endpointId, details: { name: body.name, host: body.host } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ PUT EDI endpoint error:', error);
@@ -89,13 +127,25 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const id = parseInt(searchParams.get('endpoint_id') || '0');
+    const id = parsePositiveInt(searchParams.get('endpoint_id'));
+    if (!id) {
+      return NextResponse.json({ error: 'ต้องระบุ endpoint_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const actor = await requireAnyPermission(
+      request,
+      db,
+      EDI_ENDPOINT_MANAGE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์จัดการ EDI Endpoint'
+    );
+    if (actor instanceof Response) return actor;
+
     await db.request().input('id', sql.Int, id)
       .query('DELETE FROM EDISendLog WHERE endpoint_id = @id');
     await db.request().input('id2', sql.Int, id)
       .query('DELETE FROM EDIEndpoints WHERE endpoint_id = @id2');
-    await logAudit({ action: 'delete', entityType: 'edi_endpoint', entityId: id, details: {} });
+    await logAudit({ userId: actor.userId, action: 'delete', entityType: 'edi_endpoint', entityId: id, details: {} });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ DELETE EDI endpoint error:', error);

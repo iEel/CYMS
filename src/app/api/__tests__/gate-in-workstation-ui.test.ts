@@ -14,7 +14,7 @@ describe('Gate In workstation UI', () => {
   it('keeps the main form focused by moving readiness and visibility preview into the side rail', () => {
     const sideRailStart = gateIn.indexOf('gate-in-side-rail');
     const decisionBar = gateIn.indexOf('<GateDecisionBar signals={gateInDecisionSignals} compact />', sideRailStart);
-    const preview = gateIn.indexOf('{portalVisibilityPreviewPanel}', sideRailStart);
+    const preview = gateIn.indexOf('<GateInVisibilityPreviewPanel', sideRailStart);
 
     expect(sideRailStart).toBeGreaterThan(-1);
     expect(decisionBar).toBeGreaterThan(sideRailStart);

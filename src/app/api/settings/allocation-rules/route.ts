@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requirePermission } from '@/lib/apiAuth';
 
 const SETTING_KEY = 'allocation_rules';
 
 // GET — Retrieve allocation rules
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const db = await getDb();
-    const result = await db.request().query(
-      `SELECT setting_value FROM SystemSettings WHERE setting_key = '${SETTING_KEY}'`
-    );
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์ดูการตั้งค่าจัดตู้');
+    if (actor instanceof Response) return actor;
+
+    const result = await db.request()
+      .input('key', sql.NVarChar, SETTING_KEY)
+      .query('SELECT setting_value FROM SystemSettings WHERE setting_key = @key');
 
     if (result.recordset.length > 0) {
       return NextResponse.json(JSON.parse(result.recordset[0].setting_value));
@@ -35,6 +39,9 @@ export async function PUT(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไขการตั้งค่าจัดตู้');
+    if (actor instanceof Response) return actor;
+
     const jsonValue = JSON.stringify({ rules });
 
     await db.request()

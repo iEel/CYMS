@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 27 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 28 พฤษภาคม 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer + Billing API Permission Hardening + Settings API Hardening + EDI/Booking API Permission Hardening + Remaining Operational API Hardening + Attachment Center Hardening + CODECO Export Guard + Smoke Coverage + Migration Ledger + Preview Navigation Hardening + Yard 3D Workspace Polish** (~100%)
 
 ---
 
@@ -21,6 +21,224 @@
 | **เฟส 7** | ซ่อมบำรุง M&R, EOR, CEDEX, **Audit Trail, Zod Validation, Actual Cost Modal, CEDEX ภาษาไทย** | ✅ เสร็จ |
 | **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Continuous Tax Invoice/Receipt Template, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
+
+### อัปเดตล่าสุด: Yard 3D Workspace Polish Phase 2 (28 พ.ค. 2569)
+
+รอบนี้ปรับ 3D Yard จากมุมมองเสริมให้เป็น workspace ที่ใช้งานจริงบน desktop/tablet ได้ดีขึ้น โดยเน้น framing, visual hierarchy และ live-sync copy:
+
+- **3D camera framing helper**: เพิ่ม `src/components/yard/yard3dCamera.ts` สำหรับคำนวณ home/top-down/container-focus pose จากขนาดลานจริง แทนค่า magic number ใน component
+- **Yard 3D default visual mode**: ตั้งค่า default color mode เป็น `status` เพื่อให้ planner เห็นตู้ในลาน/ค้างจ่าย/ซ่อมก่อน ส่วน `shipping line` ยังสลับดูได้
+- **Compact legend**: เพิ่ม `Yard3DLegend` ให้ legend ซ้อนบน canvas แบบ compact พร้อม count badge และ overflow count เพื่อลดการกินพื้นที่
+- **Workspace sizing**: `YardViewer3D` ใช้ `min-h-[520px]` + `h-[min(72vh,760px)]` ทำให้ canvas มีพื้นที่พอสำหรับการหมุน/zoom และไม่เตี้ยเกินบน desktop
+- **Camera toolbar UX**: ปุ่มกล้องมี label บน desktop (`ภาพรวม`, `Top`, `Focus`) และปุ่ม focus แสดง `เลือกตู้ก่อน` เมื่อยังไม่มี selected container
+- **Live sync copy**: เปลี่ยน badge จาก `Live Yard อัปเดต ...` เป็น `เชื่อมต่ออยู่ / ซิงก์ล่าสุด ...`; refresh ทุก 30 วินาทีและอัปเดต timestamp เฉพาะเมื่อ API refresh สำเร็จจริง
+- **Browser QA**: ตรวจ `/yard` ผ่าน in-app browser แล้วพบ canvas 3D แสดงจริง (`815x567` ใน viewport ทดสอบ), legend/toolbar แสดงถูก, ปุ่ม Top/ภาพรวมทำงาน, Focus disabled เมื่อยังไม่เลือกตู้ และไม่มี console error
+
+Verification รอบนี้:
+
+```bash
+npm test -- --cacheDirectory .tmp\jest --runInBand --runTestsByPath src/app/api/__tests__/yard-3d-camera-framing.test.ts src/app/api/__tests__/yard-3d-workspace-ui.test.ts src/app/api/__tests__/yard-ui.test.ts src/app/api/__tests__/yard-3d-visual-polish.test.ts
+npm run lint
+npx tsc --noEmit --pretty false
+npm test -- --cacheDirectory .tmp\jest --runInBand
+```
+
+ผลล่าสุด: Yard 3D focused regression `19/19` ผ่าน, `npm run lint` ผ่าน, `npx tsc --noEmit --pretty false` ผ่าน, full Jest `144 suites / 1437 tests` ผ่าน
+
+### อัปเดตล่าสุด: Runtime Schema Probe Cleanup + Capability Contract (28 พ.ค. 2569)
+
+รอบนี้เริ่มแผน `CYMS Runtime Policy And Maintainability` ข้อ 1-2 โดยย้าย assumption เรื่อง schema runtime ออกจาก request path:
+
+- **Runtime schema capability helper**: เพิ่ม `src/lib/schemaCapabilities.ts` เพื่อประกาศ capability ที่ migration/deploy ต้องมี (`BillingClearances`, `BookingContainers`, `EDISendLog`, `ApprovalReviews`, `GateTransactions.billing_clearance_id`) และ `assertRuntimeSchemaReady()` สำหรับ fail-fast โดยไม่ query schema ระหว่าง request
+- **No request-path schema probing guard**: ขยาย `src/app/api/__tests__/no-runtime-ddl.test.ts` ให้ scan production runtime source ทั้ง `src/app/api` และ `src/lib` ว่าห้ามมี `OBJECT_ID(`, `COL_LENGTH(`, `sys.columns`, `INFORMATION_SCHEMA.COLUMNS` ใน request handlers/helpers; อนุญาตเฉพาะ migration/schema/test tooling
+- **Container detail cleanup**: `GET /api/containers/detail` เลิกใช้ `IF OBJECT_ID(...)` รอบ `BillingClearances`, `Bookings`/`BookingContainers`, `EDIEndpoints`/`EDISendLog`, และ `ApprovalReviews`; query ตรงตาม schema contract หลัง migration
+- **Readable audit trail cleanup**: `GET /api/audit-trail/readable` เลิก probe `BillingClearances` และรวม `billing_clearance` audit linkage เป็นส่วนหนึ่งของ query ปกติ
+- **Reconciliation cleanup**: `GET /api/reports/reconciliation` เลิกใช้ `COL_LENGTH('GateTransactions', 'billing_clearance_id')` ใน issue query แล้วอิง schema contract แทน
+- **Shared entity access resolver**: เพิ่ม `src/lib/entityAccessResolver.ts` เป็น allowlisted resolver กลางสำหรับ entity scope (`container`, `booking`, `invoice`, `statement`/`billing_statement`, `gate_transaction`, `eir`, `gate_out_request`, `repair_order`/`eor`, `reefer_check`, `reefer_exception`) โดยคืน `yardId`, `customerId`, `entityRef` และ fail-closed เมื่อ entity type/ID ไม่ถูกต้องหรือไม่พบรายการ
+- **Attachment access uses shared resolver**: `src/lib/attachmentAccess.ts` เลิกถือ table map เองและเรียก `resolveEntityScope()` / `requireResolvedEntityYardAccess()` แทน โดยยัง preserve entity type เดิมเช่น `billing_statement` และ `eor` เพื่อไม่ให้ attachment เก่าหายจากการค้นหา
+- **Read route resolver adoption**: `GET /api/entity-timeline` derive entity scope ก่อน query timeline เมื่อไม่ได้ส่ง `yard_id` และใช้ resolved yard เพื่อจำกัด query; `GET /api/audit-trail/readable` derive yard จาก `container_id`/`entity_type+entity_id` แทนการบังคับ non-manager ส่ง `yard_id` เมื่อสามารถ resolve รายการได้ ทำให้ deny เกิดก่อน query audit/timeline กว้าง
+- **Remaining resolver adoption**: `documents/activity` ยังไม่ถูกย้ายเข้าระบบ resolver ในรอบนี้ เพราะต้อง normalize document lifecycle type เพิ่มเติมให้ครอบคลุม receipt/credit note ก่อน เพื่อไม่ให้ reject เอกสารบัญชีเดิมผิดพลาด
+- **Business party resolver**: เพิ่ม `src/lib/businessPartyResolver.ts` เพื่อ normalize party context กลาง (`legacyCustomerId`, `bookingCustomerId`, `billToCustomerId`, owner/line/forwarder/shipper/consignee/trucking) พร้อม validation positive integer; `POST /api/mnr`, M&R invoice creation, `POST/PUT /api/edi/bookings`, และ `POST /api/billing/invoices` ใช้ helper นี้แทน fallback ตรง `billing_customer_id || customer_id` / `booking_customer_id || customer_id`; booking update และ invoice create reject party id ที่ไม่ใช่ positive integer ก่อน bind SQL
+- **Invoice bill-to rule**: การสร้าง invoice ใช้ `billToCustomerId` เป็น `Invoices.customer_id` เสมอ (รองรับ `bill_to_customer_id`, `billing_customer_id`, และ legacy `customer_id`) เพื่อให้ invoice grant จำกัดเฉพาะ bill-to/customer ของ invoice ไม่ inherit จาก owner/booking party อื่น
+- **Offline operation policy**: เพิ่ม `src/lib/offlineOperationPolicy.ts` และผูก `offlineFetch()` ให้ queue ได้เฉพาะ allowlist งานภาคสนาม (`gate_in`, `gate_out`, `gate_out_pickup_request`, `photo_upload`, `reefer_check`, `yard_audit`, `yard_position_*`) ส่วน invoice/payment/billing clearance/portal visibility/customer master/document template publish/import และ operation ที่ไม่ระบุชนิดงานจะถูก block เป็น online-only พร้อม payload `blocked/error/message` โดยไม่เข้า IndexedDB queue
+- **Gate In component decomposition**: แยกส่วน inline ที่เหลือใน `GateInTab.tsx` เพิ่มเป็น `GateInSubmitSection.tsx` (notes/submit/result/EIR action) และ `GateInVisibilityPreviewPanel.tsx` (Portal Visibility Preview) โดยยังประกอบ submit payload และ state หลักใน parent เดิม เพื่อลดความเสี่ยง behavior change
+- **Yard page decomposition**: แยก selected-container action panel ออกจาก `YardPageClient.tsx` เป็น `src/app/(dashboard)/yard/components/YardSelectedContainerPanel.tsx`; ยังไม่ย้าย data fetching/3D canvas state เพื่อให้ behavior เดิมคงที่
+- **Container Detail decomposition**: แยก UI primitives ของ `ContainerDetailModal.tsx` เป็น `src/components/yard/detail/DetailUi.tsx` (`InfoField`, `DocumentRow`, `MiniMetric`) โดยยังคง modal state/tabs/data fetching เดิมทั้งหมด
+- **Migration**: ไม่มี schema migration ใหม่ในรอบนี้ แต่ deployment ต้องรัน runtime core migration เดิมให้ครบก่อน serve routes เหล่านี้
+
+Verification รอบนี้:
+
+```bash
+npm test -- src/lib/__tests__/schemaCapabilities.test.ts src/app/api/__tests__/no-runtime-ddl.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/container-detail-permissions.test.ts src/app/api/__tests__/derived-yard-access.test.ts src/app/api/__tests__/reports.test.ts src/app/api/__tests__/read-api-permission-hardening.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/lib/__tests__/entityAccessResolver.test.ts src/app/api/__tests__/attachment-access.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/derived-yard-access.test.ts src/app/api/__tests__/read-api-permission-hardening.test.ts src/lib/__tests__/entityAccessResolver.test.ts src/app/api/__tests__/attachment-access.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/lib/__tests__/businessPartyResolver.test.ts src/app/api/__tests__/mnr.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/edi-api-hardening.test.ts src/app/api/__tests__/booking-business-context-ui.test.ts src/app/api/__tests__/gate-in-business-context-ui.test.ts src/lib/__tests__/businessPartyResolver.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/edi-api-hardening.test.ts src/lib/__tests__/businessPartyResolver.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/billing-api-permissions.test.ts src/app/api/__tests__/billing.test.ts src/lib/__tests__/businessPartyResolver.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/lib/__tests__/offlineOperationPolicy.test.ts src/lib/__tests__/offlineQueue.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/gate-in-business-context-ui.test.ts src/app/api/__tests__/gate-in-party-grants.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/yard-ui.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/boxtech-container-weights.test.ts src/app/api/__tests__/container-detail-permissions.test.ts --runInBand --cacheDirectory .tmp\jest
+npx tsc --noEmit --pretty false
+npm run lint
+Invoke-WebRequest http://localhost:3005/gate
+Invoke-WebRequest http://localhost:3005/yard
+```
+
+ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน, entity resolver + attachment access tests `10/10` ผ่าน, read-route resolver regression `43/43` ผ่าน, business party + M&R tests `20/20` ผ่าน, EDI booking party regression `27/27` ผ่าน, EDI booking update party regression `12/12` ผ่าน, billing invoice party regression `29/29` ผ่าน, offline operation policy regression `17/17` ผ่าน, Gate In characterization `7/7` ผ่าน, Yard UI regression `7/7` ผ่าน, Container Detail regression `8/8` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน, `/gate` และ `/yard` dev-server smoke `200 OK`
+
+### อัปเดตล่าสุด: Next Hardening + Maintainability Slice (28 พ.ค. 2569)
+
+รอบนี้ปิดงาน hardening/read-export ที่เหลือ และลดจุดเสี่ยงด้าน maintainability ในหน้าใหญ่ โดยยังคง behavior เดิมของงานหน้าลาน/บัญชี/booking:
+
+- **Attachment Center access control**: `GET/POST /api/attachments` require server-side permission ผ่าน `src/lib/attachmentAccess.ts`; resolve entity จาก allowlist (`container`, `booking`, `invoice`, `eir`, `repair_order`, `reefer_*` ฯลฯ) แล้วตรวจ `requireYardAccess` ก่อนอ่าน/เขียน attachment เพื่อกัน cross-yard/entity IDOR; เพิ่ม permission `documents.attachment.view` / `documents.attachment.upload` ใน RBAC seeds และใช้ `actor.userId` จาก server-side auth สำหรับ upload audit
+- **CODECO export guard**: `GET /api/edi/codeco` require `integration.send` ก่อน query/export และมี behavior test ว่า actor ที่ไม่มีสิทธิ์ได้ `403` โดยไม่แตะ `SELECT g.transaction_id`; ไม่ใช้ `integration.logs.view` เป็นสิทธิ์ export
+- **Auth session token hardening**: `/api/auth/me` ยังคง restore session จาก httpOnly cookie/proxy header แต่ไม่ส่ง raw JWT `token` กลับใน JSON; upload flow ฝั่ง portal booking ถูกปรับให้ใช้ cookie/proxy session ได้
+- **Upload auth alignment**: `/api/uploads` ใช้ `requireRequestActor()` แทน bearer-only verification เพื่อให้ session จาก proxy/header ทำงานกับ client ที่ไม่เก็บ token ใน state
+- **E2E smoke coverage**: `scripts/e2e-smoke.mjs` ครอบคลุม `/api/auth/me`, public EIR, portal containers, Document Templates และ continuous print preview; protected page redirects ใช้ shared helper `scripts/e2e-smoke-helpers.cjs` เพื่อตรวจ same-origin `/login`/`/auth` และกัน external redirect
+- **Gate Out decomposition**: แยก search state ไป `useGateOutSearch`, portal visibility preview ไป `useGateOutVisibilityPreview`, และ status rail ไป `GateOutStatusRail` แบบ presentational-only โดยย้าย billing/approval mutations กลับไปเป็น callbacks ใน `GateOutTab`
+- **Billing/Booking decomposition**: แยกเอกสาร/ใบวางบิลรวมเป็น `BillingDocumentActions` + `BillingStatementHistory`; แยกหน้า booking create/import เป็น `BookingCreateForm` + `BookingImportTemplatePanel` โดย parent ยังถือ API/mutation logic เหมือนเดิม
+- **Migration ledger**: เพิ่ม `SchemaMigrations` ใน `src/lib/schema.sql` และ `scripts/migrate-runtime-core-schema.js`; migration script create ledger แบบ idempotent และ `MERGE` key `runtime-core-schema` หลัง migration สำเร็จ
+- **Document Template preview UX**: preview/test print ส่ง `returnTo`, `templateId`, `versionNo`; continuous print toolbar มีปุ่ม `กลับไป Document Templates` และแสดง template/version metadata เฉพาะ non-print
+- **Return path hardening**: เพิ่ม `src/app/billing/print/continuous/returnPath.ts` เพื่อ sanitize `returnTo` ให้เป็น internal relative path เท่านั้น กัน `http(s)`, protocol-relative, `javascript:`, ค่าว่าง และ control characters
+- **Regression tests**: เพิ่ม/ปรับ `attachment-access`, `edi-codeco-permissions`, `auth-me-session`, `uploads-auth`, `portal-booking-upload-ui`, `e2e-smoke-script`, `gate-out-workstation-ui`, `large-page-decomposition`, `migration-ledger`, `document-template-designer-ui`, และ `continuous-print-ui`
+
+Migration ที่ต้องรันหลัง pull:
+
+```bash
+node scripts/migrate-runtime-core-schema.js
+```
+
+Verification รอบนี้:
+
+```bash
+npm test -- --cacheDirectory .tmp\jest --runInBand --runTestsByPath src/app/api/__tests__/attachment-access.test.ts src/app/api/__tests__/api-auth-coverage.test.ts src/app/api/__tests__/edi-codeco-permissions.test.ts src/app/api/__tests__/auth-me-session.test.ts src/app/api/__tests__/e2e-smoke-script.test.ts src/app/api/__tests__/gate-out-workstation-ui.test.ts src/app/api/__tests__/gate-out-business-context-ui.test.ts src/app/api/__tests__/large-page-decomposition.test.ts src/app/api/__tests__/migration-ledger.test.ts src/app/api/__tests__/document-template-designer-ui.test.ts src/app/api/__tests__/continuous-print-ui.test.ts
+npm run lint
+npx tsc --noEmit --pretty false
+npm test -- --cacheDirectory .tmp\jest --runInBand
+```
+
+ผลล่าสุด: focused regression tests `149/149` ผ่าน, `npm run lint` ผ่าน, `npx tsc --noEmit --pretty false` ผ่าน, full suite `137 suites / 1183 tests` ผ่าน
+
+### อัปเดตล่าสุด: Read-side Policy Hardening + Portal Exact EIR Grants + Runtime Cleanup (27 พ.ค. 2569)
+
+รอบนี้ต่อยอด API Permission Hardening จาก mutation/config routes ไปยัง read-side routes และปิดช่อง policy ที่ยังอาจกว้างเกินไป:
+
+- **Sensitive read API hardening**: เพิ่ม route-level permission guard ให้ `containers/detail`, `containers/timeline`, `dashboard`, `search`, `reports/*`, `yard/stats`, `operations/stream`, `audit-trail/readable`, `boxtech`, `customers/360`, `documents/activity|consistency|lifecycle`, `entity-timeline`, `integrations/logs|mapping`, `mnr/eor-pdf`, และ `settings/data-quality|sop|status-model`
+- **Yard access จากข้อมูลที่ query ได้**: route ที่ `yard_id` optional เช่น `documents/activity` และ `entity-timeline` derive yard จาก rows ที่คืนมาแล้วตรวจ `requireYardAccess`; `customers/360`, `integrations/logs`, `audit-trail/readable` บังคับ non-`yard_manager` ต้องส่ง `yard_id` เพื่อกัน all-yard read
+- **Portal EIR/Gate exact grants**: `portalGateVisibilitySql()` / `portalEirVisibilitySql()` default เป็น exact grant เท่านั้น (`gate_transaction` หรือ `eir`); container fallback ต้อง opt-in ด้วย `{ allowContainerFallback: true }` และใช้เฉพาะ summary ที่ sanitize แล้ว
+- **Document bundle policy**: full EIR/Gate document bundle ไม่ถูก unlock จาก container-only grant; explicit `eir` grant และ `gate_transaction` grant ยังใช้ได้ผ่าน `portalEirExactVisibilitySql()`
+- **Permissions GET read-only**: ย้าย RBAC seed/upsert ออกจาก `GET /api/settings/permissions` ไป `src/lib/rbacSeeds.ts` และเพิ่ม `POST /api/settings/permissions/sync` ที่ `yard_manager` เท่านั้น พร้อม audit `permissions_seed_sync`
+- **Scheduler internal helpers**: `bookingScheduler` และ `ediScheduler` เลิก fetch local protected API; ใช้ `runBookingSummaryJob()` / `runCodecoSendJob()` ร่วมกับ API routes แทน โดย API manual trigger ยังมี permission + yard guard เหมือนเดิม
+- **Auth fetch patch cleanup**: `dashboard` และ `portal` layouts ใช้ `installAuthFetchPatch()` กลางจาก `src/lib/authFetch.ts` พร้อม stable symbol กัน HMR double wrapping และไม่ overwrite explicit `Authorization`
+- **Gate component split**: แตก `GateInTab` / `GateOutTab` เป็น section components ใต้ `src/app/(dashboard)/gate/components/*` โดยคง state/API flow ใน parent เพื่อลดขนาดไฟล์และให้ refactor ต่อได้ง่ายขึ้น
+- **Regression tests**: เพิ่ม/ปรับ `read-api-permission-hardening`, `container-detail-permissions`, `read-route-runtime-permissions`, `derived-yard-access`, `portal-eir-exact-grants`, `permissions-sync`, `scheduler-internal-jobs`, `authFetch` และ gate-focused tests
+- **Migration**: ไม่มี schema migration ใหม่ในรอบนี้ เป็น server-side guard/refactor/test cleanup เท่านั้น
+
+Verification รอบนี้:
+
+```bash
+npm test -- --cacheDirectory .tmp\jest --runInBand --runTestsByPath src/app/api/__tests__/read-api-permission-hardening.test.ts src/app/api/__tests__/container-detail-permissions.test.ts src/app/api/__tests__/read-route-runtime-permissions.test.ts src/app/api/__tests__/derived-yard-access.test.ts src/app/api/__tests__/portal-eir-exact-grants.test.ts src/app/api/__tests__/permissions-sync.test.ts src/app/api/__tests__/scheduler-internal-jobs.test.ts src/lib/__tests__/authFetch.test.ts
+npx tsc --noEmit --pretty false
+npm run lint
+npm test -- --cacheDirectory .tmp\jest --runInBand
+```
+
+### อัปเดตล่าสุด: Remaining Operational API Permission Hardening Slice 4 (27 พ.ค. 2569)
+
+รอบนี้ปิดกลุ่ม route ที่เหลือจาก API Permission Hardening queue หลัง Billing/Settings/EDI slices โดยโฟกัส route ที่แตะ master data, yard operations, scheduler, running number และ rate setting:
+
+- **M&R CEDEX catalog**: `GET/POST/PUT/DELETE /api/mnr/cedex` require M&R/survey/report permission สำหรับ read และ `mnr.cedex.manage` สำหรับ mutation; audit ใช้ `actor.userId` จาก server-side header ไม่รับ user จาก body
+- **Operations shifting plan**: `POST /api/operations/shift` require `yard.slot.move` หรือ `yard.location.assign`, validate `container_id` + `yard_id`, ตรวจ `requireYardAccess`, และ query target/stacked/used positions ด้วย `c.yard_id = @yardId` เพื่อกันดึงตู้ข้ามลาน
+- **Photo retention cleanup**: ย้าย logic cleanup ไป `src/lib/photoRetentionCleanup.ts`; API `POST /api/settings/photo-retention/cleanup` require `settings.manage` และ scheduler เรียก helper โดยตรงแทนการ fetch endpoint ที่ไม่มี auth
+- **Yard audit**: `GET/POST /api/yard/audit` require yard operation/report permission + `requireYardAccess`, เลิก fallback `yard_id=1`, validate `zone_id`/`yard_id`, และ audit submit ด้วย `actor.userId`
+- **Demurrage + storage rates**: `billing/demurrage` และ `settings/storage-rates` require billing/report/settings permission สำหรับ read และ `settings.manage` สำหรับ mutation พร้อม yard guard และ actor attribution ใน audit
+- **Document numbering**: `GET/POST/PUT /api/documents/numbering` require `settings.manage` + `requireYardAccess` ก่อนดู/ออกเลข/แก้ sequence; preview/test print ของ Document Template ยังคงไม่ consume running number ตาม flow เดิม
+- **EDI schedule**: `GET /api/edi/schedule` require integration/settings read permission; `PUT/POST` schedule update/reload require `settings.manage` และ validate `schedule_yard_id` ก่อน reload scheduler
+- **Regression tests**: เพิ่ม `remaining-api-hardening.test.ts` และขยาย `api-auth-coverage.test.ts` / `yard-access-guard.test.ts` เพื่อกัน route เหล่านี้ถอยกลับไปไม่มี guard, default yard หรือ spoofable actor
+- **Migration**: ไม่มี migration ใหม่ในรอบนี้ เป็น server-side guard/refactor + tests เท่านั้น
+- **Remaining note**: `auth/login/logout` เป็น public/auth boundary ตามหน้าที่ และ `uploads` ยังใช้ bearer token + whitelist folder อยู่แล้ว ไม่รวมใน queue รอบนี้
+
+Verification รอบนี้:
+
+```bash
+npm test -- --cacheDirectory .tmp\jest --runInBand --runTestsByPath src/app/api/__tests__/api-auth-coverage.test.ts src/app/api/__tests__/remaining-api-hardening.test.ts src/app/api/__tests__/yard-access-guard.test.ts
+npx tsc --noEmit --pretty false
+npm run lint
+npm test -- --cacheDirectory .tmp\jest --runInBand
+```
+
+ผลล่าสุด: focused remaining hardening tests `135/135` ผ่าน, full suite `122 suites / 1093 tests` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+
+### อัปเดตล่าสุด: EDI + Booking API Permission Hardening Slice 3 (27 พ.ค. 2569)
+
+รอบนี้ต่อข้อ API Permission Hardening โดยปิด route ฝั่ง Booking/EDI ที่เคยอ่านหรือแก้ข้อมูล booking, endpoint, template, seal validation และ CODECO send โดยยังไม่มี permission + yard guard ครบ:
+
+- **Booking container links**: `GET/POST/DELETE /api/bookings/containers` require `booking.manage` หรือสิทธิ์ gate ที่เกี่ยวข้อง และ derive `yard_id` จาก `Bookings` / `BookingContainers` ก่อนเรียก `requireYardAccess`; ไม่ใช้ `booking_id` อย่างเดียวเพื่อดึงข้อมูลข้ามลาน
+- **Staff Booking API**: `GET/POST/PUT /api/edi/bookings` require permission (`booking.manage`, gate read หรือ integration send ตาม operation) และบังคับ `yard_id` สำหรับ read/lookup/list; update ดึง `Bookings.yard_id` จาก DB ก่อนตรวจ yard access และ audit ใช้ `actor.userId`
+- **EDI endpoint/template config**: `/api/edi/endpoints` และ `/api/edi/templates` require `settings.manage` สำหรับ mutation และ allow read เฉพาะ settings/integration roles; audit log เลิกใช้ `userId: null` / hard-coded `yardId: 1`
+- **EDI seal validation**: `POST /api/edi/validate` require gate/booking/integration permission, validate `yard_id`, ตรวจ `requireYardAccess`, และ query container scoped ด้วย `Containers.yard_id`
+- **CODECO send/logs**: `POST /api/edi/codeco/send` require `integration.send`, validate `endpoint_id` + `yard_id`, ตรวจ `requireYardAccess`, ไม่ default `yard_id` เป็น 1 แล้ว; `GET` send logs require `integration.logs.view`
+- **Regression tests**: เพิ่ม `edi-api-hardening.test.ts` และขยาย `api-auth-coverage.test.ts` / `yard-access-guard.test.ts` เพื่อกัน route เหล่านี้ถอยกลับไปไม่มี permission/yard guard หรือกลับไปใช้ spoofable actor/default yard
+- **Migration**: ไม่มี migration ใหม่ในรอบนี้ เป็น server-side guard + tests เท่านั้น
+- **Remaining API hardening queue ณ Slice 3**: scan หลัง slice นี้เหลือ `mnr/cedex`, `operations/shift`, `settings/photo-retention/cleanup`, `yard/audit`, `billing/demurrage`, `documents/numbering`, `edi/schedule`, `settings/storage-rates`; กลุ่มนี้ถูก harden ต่อแล้วใน Slice 4 ส่วน `uploads` ยังใช้ bearer token + whitelist folder อยู่แล้ว
+
+Verification รอบนี้:
+
+```bash
+npm test -- --cacheDirectory .tmp\jest --runInBand --runTestsByPath src/app/api/__tests__/api-auth-coverage.test.ts src/app/api/__tests__/edi-api-hardening.test.ts src/app/api/__tests__/yard-access-guard.test.ts
+npx tsc --noEmit --pretty false
+npm run lint
+npm test -- --cacheDirectory .tmp\jest --runInBand
+```
+
+ผลล่าสุด: focused EDI/Booking hardening tests `116/116` ผ่าน, full suite `121 suites / 1066 tests` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+
+### อัปเดตล่าสุด: Settings API Hardening Slice 2 (27 พ.ค. 2569)
+
+รอบนี้ต่อข้อ 2 ของ API Permission Hardening โดยปิด route ฝั่ง Settings/System Config ที่เป็น mutation หรือเปิด configuration สำคัญโดยยังไม่มี server-side permission guard ครบ:
+
+- **Settings config guard**: `allocation-rules`, `company`, `email`, `photo-retention`, `prefix-mapping`, `rate-limit`, `security`, `yards`, `zones` เพิ่ม `requirePermission(..., 'settings.manage')` สำหรับ operations ที่แก้ไข/ดู configuration สำคัญ
+- **Yard/Zone scope**: `settings/zones` ตรวจ `requireYardAccess` เมื่ออ่าน/เพิ่ม/แก้/ลบ zone ตามลาน; ถ้า query zones ทั้งหมดต้องเป็น authenticated actor และ mutation ต้องมี `settings.manage`
+- **Actor attribution**: `settings/security` เลิก trust `admin_user_id` จาก body แล้วใช้ `actor.userId` จาก proxy header ผ่าน `requirePermission`; audit log ของ company/prefix/rate-limit/yard/zone ใช้ server-derived actor เพิ่มขึ้น
+- **SQL hardening**: `settings/photo-retention` เปลี่ยนการบันทึก `SystemSettings` จาก SQL string interpolation เป็น parameterized query (`@dbKey`, `@value`)
+- **Portal account creation**: `settings/customers/portal` เปลี่ยนจากอ่าน `x-user-role` เองเป็น `requireRole(request, ['yard_manager'])` และ validate `customer_id` เป็น positive integer
+- **Regression tests**: เพิ่ม `settings-api-hardening.test.ts` และขยาย `api-auth-coverage.test.ts` ให้จับ settings routes ที่กลับไปไม่มี guard หรือกลับไปใช้ spoofable actor จาก body
+- **Remaining API hardening queue ณ slice 2**: static scan หลัง slice นี้ยังเหลือ `bookings/containers`, กลุ่ม `edi/*`, `mnr/cedex`, `operations/shift`, `settings/photo-retention/cleanup`, และ `yard/audit`; กลุ่ม `bookings/containers` + `edi/*` ถูก harden ต่อแล้วใน Slice 3
+
+Verification รอบนี้:
+
+```bash
+npm test -- --cacheDirectory .tmp\jest --runInBand --runTestsByPath src/app/api/__tests__/api-auth-coverage.test.ts src/app/api/__tests__/settings-api-hardening.test.ts src/app/api/__tests__/yard-zone-plug-capacity.test.ts
+npm test -- --cacheDirectory .tmp\jest --runInBand
+npx tsc --noEmit --pretty false
+npm run lint
+```
+
+ผลล่าสุด: focused Settings hardening tests `65/65` ผ่าน, full suite `120 suites / 1043 tests` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+
+### อัปเดตล่าสุด: Billing API Permission Hardening Slice 1 (27 พ.ค. 2569)
+
+รอบนี้เริ่มงานข้อ 1 ของ API Permission Hardening โดยปิดช่อง route ฝั่ง Billing/Gate billing ที่เคยคำนวณหรือคืนข้อมูลสำคัญจาก request ได้โดยยังไม่มี server-side permission + yard guard ครบ:
+
+- **Tariff API**: `GET/POST/PUT /api/billing/tariffs` ต้องมีสิทธิ์ตามงาน (`settings.manage` สำหรับแก้ไข, billing/report สำหรับอ่าน) และต้องผ่าน `requireYardAccess`; `GET` ต้องระบุ `yard_id` ชัดเจน ไม่ดึง tariff ทุกลานโดยไม่มี scope
+- **Gate billing calculation**: `POST /api/billing/auto-calculate`, `POST /api/billing/gate-check`, `POST /api/billing/gate-in-check` require permission ตามบริบท (`gate.in`, `gate.out`, billing หรือ reports) และตรวจ yard access ก่อน query ตู้/ลูกค้า/tariff
+- **PromptPay QR**: `GET /api/billing/payment-qr` require billing/report permission ก่อนอ่าน setting และตรวจ `Invoices.yard_id` ด้วย `requireYardAccess` ก่อนคืน customer/payment QR details
+- **Regression tests**: ขยาย `billing-api-permissions.test.ts`, `payment-qr.test.ts`, `api-auth-coverage.test.ts`, และ `yard-access-guard.test.ts` เพื่อกัน route เหล่านี้ถอยกลับไปไม่มี permission/yard guard
+- **Migration**: ไม่มี migration ใหม่ในรอบนี้ เป็น server-side guard + tests เท่านั้น
+
+Verification รอบนี้:
+
+```bash
+npm test -- --cacheDirectory .tmp\jest --runInBand --runTestsByPath src/app/api/__tests__/api-auth-coverage.test.ts src/app/api/__tests__/yard-access-guard.test.ts src/app/api/__tests__/billing-api-permissions.test.ts src/app/api/__tests__/payment-qr.test.ts
+npm test -- --cacheDirectory .tmp\jest --runInBand
+npx tsc --noEmit --pretty false
+npm run lint
+```
+
+ผลล่าสุด: focused API hardening tests `88/88` ผ่าน, full suite `119 suites / 1011 tests` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
 
 ### อัปเดตล่าสุด: Document Template Manager + Continuous Tax Invoice/Receipt (26 พ.ค. 2569)
 
@@ -1113,6 +1331,7 @@ container-yard-system/
 | **X-Ray Mode** | ตู้อื่น opacity 60% + beacon สีเหลือง + วงแหวนบนพื้น + **floating label** (billboard) |
 | **Camera** | OrbitControls + smooth lerp zoom (cubic easing) |
 | **Stack** | Ground-up stacking — ไม่มีตู้ลอย |
+| **Visual Polish Phase 1** | แยก scene/theme helpers (`yard3dScene.ts`, `yard3dGeometry.ts`), ปรับ concrete yard floor/lighting, เพิ่ม lane markings + bay/row ticks + reefer plug posts, selected-container outline และ `Yard3DCameraToolbar` แบบ compact โดยไม่เปลี่ยน schema/API |
 
 ### 7.6 Auto-Allocation Algorithm
 
@@ -1988,7 +2207,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 54 suites / 546 tests; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Portal entity access grants + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning + Reefer Monitoring/Exception tests แล้ว, billing/M&R mock flow อัปเดตให้ตรงกับ `DocumentSequences` แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --cacheDirectory .tmp\jest --runInBand` ผ่าน 144 suites / 1437 tests; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Portal entity access grants + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning + Yard 3D Workspace Polish + Reefer Monitoring/Exception + Document Template Designer + Billing/Settings/API/EDI Attachment hardening tests แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |

@@ -32,13 +32,16 @@ describe('Gate visibility preview', () => {
 
   it('renders Portal Visibility Preview in Gate In', () => {
     const gateIn = fs.readFileSync(path.join(process.cwd(), 'src/app/(dashboard)/gate/GateInTab.tsx'), 'utf8');
-    expect(gateIn).toContain('Portal Visibility Preview');
+    const previewPanel = fs.readFileSync(path.join(process.cwd(), 'src/app/(dashboard)/gate/components/GateInVisibilityPreviewPanel.tsx'), 'utf8');
+
+    expect(gateIn).toContain('GateInVisibilityPreviewPanel');
+    expect(previewPanel).toContain('Portal Visibility Preview');
     expect(gateIn).toContain('/api/gate/visibility-preview');
     expect(gateIn).toContain('yard_id: yardId');
     expect(gateIn).toContain('booking_id: selectedBooking?.booking_id || null');
-    expect(gateIn).toContain('accessRole');
-    expect(gateIn).toContain('customerName?: string | null');
-    expect(gateIn).toContain('row.customerName || `Customer #${row.customerId}`');
+    expect(previewPanel).toContain('accessRole');
+    expect(previewPanel).toContain('customerName?: string | null');
+    expect(previewPanel).toContain('row.customerName || `Customer #${row.customerId}`');
     expect(gateIn).toContain('visibilityPreviewError');
     expect(gateIn).toContain('containerValid !== true');
     expect(gateIn).toContain('normalizedContainerNumber.length !== 11');

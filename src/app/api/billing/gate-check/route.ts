@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { getBillingGuard } from '@/lib/billingGuard';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const GATE_OUT_BILLING_PERMISSIONS = [
+  'gate.out',
+  'billing.invoice.create',
+  'billing.payment.receive',
+];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 type StorageRateTier = {
   tier_name: string;
@@ -50,12 +62,28 @@ function chooseStorageRateTiers(
 export async function POST(request: NextRequest) {
   try {
     const { yard_id, container_id, billing_customer_id, container_owner_id, booking_ref } = await request.json();
+    const yardId = parsePositiveInt(yard_id);
+    const containerId = parsePositiveInt(container_id);
+    if (!yardId || !containerId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id และ container_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const permission = await requireAnyPermission(
+      request,
+      db,
+      GATE_OUT_BILLING_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ตรวจสอบค่าบริการ Gate-Out'
+    );
+    if (permission instanceof Response) return permission;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ตรวจสอบค่าบริการของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     // 1. Get container info + dwell days
     const cResult = await db.request()
-      .input('containerId', sql.Int, container_id)
-      .input('yardId', sql.Int, yard_id)
+      .input('containerId', sql.Int, containerId)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT c.container_id, c.container_number, c.size, c.type, c.status,
                c.gate_in_date, c.shipping_line, c.is_laden, c.hold_status,
@@ -182,7 +210,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine credit status from BILLING customer (not owner)
-    const billingGuard = await getBillingGuard(db, billingCustomer?.customer_id, yard_id);
+    const billingGuard = await getBillingGuard(db, billingCustomer?.customer_id, yardId);
 
     if (billingCustomer) {
       creditTerm = billingGuard.credit_term || billingCustomer.credit_term || 0;
@@ -190,7 +218,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Calculate storage charges — CUSTOMER-SPECIFIC tiered rates with cargo_status
-    const tierReq = db.request().input('yardId2', sql.Int, yard_id);
+    const tierReq = db.request().input('yardId2', sql.Int, yardId);
     let tierQuery = `
       SELECT tier_name, from_day, to_day, rate_20, rate_40, rate_45, customer_id, ISNULL(cargo_status, 'any') as cargo_status
       FROM StorageRateTiers
@@ -275,7 +303,7 @@ export async function POST(request: NextRequest) {
     } else if (dwellDays > 0) {
       // Fallback: use flat Tariffs table if no tiers exist
       const tResult = await db.request()
-        .input('yardId3', sql.Int, yard_id)
+        .input('yardId3', sql.Int, yardId)
         .query(`
           SELECT charge_type, description, rate, unit, free_days
           FROM Tariffs
@@ -313,7 +341,7 @@ export async function POST(request: NextRequest) {
 
     // 4. Also add non-storage charges from Tariffs (LOLO, gate, etc.)
     const otherResult = await db.request()
-      .input('yardId4', sql.Int, yard_id)
+      .input('yardId4', sql.Int, yardId)
       .query(`
         SELECT charge_type, description, rate, unit
         FROM Tariffs
@@ -348,7 +376,7 @@ export async function POST(request: NextRequest) {
 
     // 5. Check existing GATE-OUT invoices for this container
     const existingInv = await db.request()
-      .input('cid', sql.Int, container_id)
+      .input('cid', sql.Int, containerId)
       .query(`
         SELECT invoice_id, invoice_number, grand_total, status, paid_at, description
         FROM Invoices

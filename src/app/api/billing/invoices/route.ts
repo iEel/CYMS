@@ -7,6 +7,7 @@ import { logDocumentLifecycle } from '@/lib/documentLifecycle';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { applyPortalGrants, buildInvoicePartyGrants } from '@/lib/portalGrantRules';
 import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
+import { normalizeBusinessPartyContext, validateBusinessPartyInput } from '@/lib/businessPartyResolver';
 
 function normalizePositiveAmount(value: unknown, fallback: number) {
   const parsed = Number(value ?? fallback);
@@ -148,8 +149,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const db = await getDb();
     const bodyDocumentType = body.document_type === 'credit_note' ? 'credit_note' : 'invoice';
+    const partyValidation = validateBusinessPartyInput(body);
+    if (!partyValidation.valid) {
+      return NextResponse.json({ error: partyValidation.errors.join(', ') }, { status: 400 });
+    }
+
+    const invoicePartyContext = normalizeBusinessPartyContext(body);
+    const invoiceCustomerId = invoicePartyContext.billToCustomerId;
+    if (!invoiceCustomerId) {
+      return NextResponse.json({ error: 'ต้องระบุลูกค้าผู้รับใบแจ้งหนี้' }, { status: 400 });
+    }
+
+    const db = await getDb();
     const yardAccess = await requireYardAccess(request, db, body.yard_id);
     if (yardAccess instanceof NextResponse) return yardAccess;
     const actor = await requirePermission(
@@ -175,7 +187,7 @@ export async function POST(request: NextRequest) {
     const result = await db.request()
       .input('invNumber', sql.NVarChar, invNumber)
       .input('yardId', sql.Int, body.yard_id)
-      .input('customerId', sql.Int, body.customer_id)
+      .input('customerId', sql.Int, invoiceCustomerId)
       .input('containerId', sql.Int, body.container_id || null)
       .input('chargeType', sql.NVarChar, body.charge_type)
       .input('description', sql.NVarChar, body.description)
@@ -208,7 +220,7 @@ export async function POST(request: NextRequest) {
     await logAudit({
       userId: actor.userId, yardId: body.yard_id,
       action: 'invoice_create', entityType: 'invoice', entityId: inv.invoice_id,
-      details: { invoice_number: invNumber, customer_id: body.customer_id, charge_type: body.charge_type, grand_total: grandTotal, container_id: body.container_id }
+      details: { invoice_number: invNumber, customer_id: invoiceCustomerId, charge_type: body.charge_type, grand_total: grandTotal, container_id: body.container_id }
     });
 
     queueDocumentLifecycle({
@@ -223,7 +235,7 @@ export async function POST(request: NextRequest) {
       reason: body.notes || null,
       userId: actor.userId,
       yardId: body.yard_id,
-      details: { customer_id: body.customer_id, charge_type: body.charge_type, grand_total: grandTotal, container_id: body.container_id || null },
+      details: { customer_id: invoiceCustomerId, charge_type: body.charge_type, grand_total: grandTotal, container_id: body.container_id || null },
     });
 
     return NextResponse.json({ success: true, invoice: inv, invoice_number: invNumber });

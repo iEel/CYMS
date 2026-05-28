@@ -17,6 +17,8 @@ import CreditControlTab from './CreditControlTab';
 import ARAgingTab from './ARAgingTab';
 import TariffSimulatorPanel from './TariffSimulatorPanel';
 import PaymentReconciliationTab from './PaymentReconciliationTab';
+import BillingDocumentActions, { type BillingStatementGroup } from './components/BillingDocumentActions';
+import BillingStatementHistory from './components/BillingStatementHistory';
 import type { ClearanceRow, ClearanceStats, CreditCustomer } from './billingTypes';
 
 interface TariffRow {
@@ -385,7 +387,7 @@ export default function BillingPage() {
     setCnRevisedUnitPrice(Number(suggestedUnitPrice.toFixed(2)));
   };
 
-  const issueBillingStatement = async (group: { key: string; customer_id?: number; customer: string; invoices: InvoiceRow[]; total: number }) => {
+  const issueBillingStatement = async (group: BillingStatementGroup) => {
     if (!canCreateInvoice || !group.customer_id) {
       toast('error', 'ไม่สามารถออกเอกสารวางบิลได้', 'ต้องมีสิทธิ์ออกบิลและข้อมูล customer_id');
       return;
@@ -893,141 +895,22 @@ export default function BillingPage() {
       {/* =================== DOCUMENTS TAB (Statement, Receipt, Print) =================== */}
       {activeTab === 'documents' && (
         <div className="space-y-4">
-          {/* Billing Statement */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-700">
-              <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><FileText size={16} /> ใบวางบิล (Billing Statement)</h3>
-              <p className="text-xs text-slate-400 mt-0.5">รวมยอดค้างชำระตามลูกค้า</p>
-            </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-700">
-              {(() => {
-                const grouped: Record<string, { key: string; customer_id?: number; customer: string; invoices: InvoiceRow[]; total: number }> = {};
-                invoices.filter(i => ['issued', 'overdue'].includes(i.status)).forEach(inv => {
-                  const key = inv.customer_id ? String(inv.customer_id) : inv.customer_name || 'ไม่ระบุลูกค้า';
-                  if (!grouped[key]) grouped[key] = { key, customer_id: inv.customer_id, customer: inv.customer_name || 'ไม่ระบุลูกค้า', invoices: [], total: 0 };
-                  grouped[key].invoices.push(inv);
-                  grouped[key].total += Number(inv.balance_amount ?? inv.grand_total ?? 0);
-                });
-                const entries = Object.values(grouped);
-                if (entries.length === 0) return <div className="p-8 text-center text-sm text-slate-400">ไม่มีบิลค้างชำระ</div>;
-                return entries.map(g => (
-                  <div key={g.customer} className="p-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-                      <div>
-                        <span className="font-semibold text-sm text-slate-800 dark:text-white">{g.customer}</span>
-                        <p className="text-[10px] text-slate-400">{g.invoices.length} ใบแจ้งหนี้ค้างชำระ</p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-blue-600">฿{g.total.toLocaleString()}</span>
-                        <button
-                          onClick={() => issueBillingStatement(g)}
-                          disabled={!canCreateInvoice || !g.customer_id || statementBusyKey === g.key}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {statementBusyKey === g.key ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
-                          ออกเอกสารวางบิลรวม
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {g.invoices.map(inv => (
-                        <div key={inv.invoice_id} className="flex items-center justify-between text-xs text-slate-500">
-                          <span className="font-mono">{inv.invoice_number} — {inv.description}</span>
-                          <span>฿{Number(inv.balance_amount ?? inv.grand_total ?? 0).toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <button onClick={() => window.print()} className="mt-2 text-xs text-slate-500 hover:text-blue-700 flex items-center gap-1"><Printer size={10} /> พิมพ์สรุปบนหน้าจอนี้</button>
-                  </div>
-                ));
-              })()}
-            </div>
-          </div>
-
-          {/* Billing Statement History */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <div>
-                <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><FileText size={16} /> ประวัติใบวางบิลรวม</h3>
-                <p className="text-xs text-slate-400 mt-0.5">เอกสารที่ออกแล้วสามารถเปิดดูหรือพิมพ์ซ้ำได้</p>
-              </div>
-              <button onClick={fetchStatements} className="h-8 justify-center text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1">
-                <RotateCcw size={12} /> รีเฟรช
-              </button>
-            </div>
-            {statementsLoading ? (
-              <div className="p-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-slate-400" /></div>
-            ) : statements.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">ยังไม่มีประวัติใบวางบิลรวม</div>
-            ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                {statements.map(statement => (
-                  <div key={statement.statement_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">{statement.statement_number}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                            statement.status === 'issued' ? 'bg-blue-50 text-blue-600' :
-                            statement.status === 'paid' ? 'bg-emerald-50 text-emerald-600' :
-                            statement.status === 'cancelled' ? 'bg-slate-100 text-slate-400' :
-                            'bg-amber-50 text-amber-600'
-                          }`}>{statement.status}</span>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          {statement.customer_name || 'ไม่ระบุลูกค้า'} • {statement.line_count || 0} ใบแจ้งหนี้ • ออกเมื่อ {formatDateTime(statement.issued_at || statement.created_at || new Date().toISOString())}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-blue-600">฿{Number(statement.grand_total || 0).toLocaleString()}</span>
-                        <button
-                          onClick={() => window.open(`/billing/print/statement?id=${statement.statement_id}&yard_id=${yardId}`, '_blank')}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100"
-                        >
-                          <Printer size={12} /> เปิด/พิมพ์ซ้ำ
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Receipt */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-700">
-              <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500" /> ใบเสร็จรับเงิน (Receipt)</h3>
-              <p className="text-xs text-slate-400 mt-0.5">บิลที่ชำระแล้ว สามารถออกใบเสร็จ</p>
-            </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-700">
-              {invoices.filter(i => i.status === 'paid').length === 0 ? (
-                <div className="p-8 text-center text-sm text-slate-400">ยังไม่มีบิลที่ชำระแล้ว</div>
-              ) : invoices.filter(i => i.status === 'paid').slice(0, 20).map(inv => (
-                <div key={inv.invoice_id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">{inv.invoice_number}</span>
-                        <span className="text-xs bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">ชำระแล้ว</span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">{inv.customer_name} • {inv.description} • ฿{inv.grand_total.toLocaleString()}</p>
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <button onClick={() => window.open(`/billing/print?id=${inv.invoice_id}&type=receipt`, '_blank')}
-                        className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 flex items-center gap-1">
-                        <Printer size={12} /> พิมพ์ใบเสร็จ
-                      </button>
-                      <button onClick={() => window.open(`/billing/print/continuous?id=${inv.invoice_id}&type=receipt`, '_blank')}
-                        className="px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-600 flex items-center gap-1">
-                        <Printer size={12} /> ฟอร์มต่อเนื่อง
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <BillingDocumentActions
+            invoices={invoices}
+            canCreateInvoice={canCreateInvoice}
+            statementBusyKey={statementBusyKey}
+            onIssueStatement={issueBillingStatement}
+            onPrintSummary={() => window.print()}
+            onPrintReceipt={(invoice) => window.open(`/billing/print?id=${invoice.invoice_id}&type=receipt`, '_blank')}
+            onPrintContinuousReceipt={(invoice) => window.open(`/billing/print/continuous?id=${invoice.invoice_id}&type=receipt`, '_blank')}
+          />
+          <BillingStatementHistory
+            statements={statements}
+            loading={statementsLoading}
+            yardId={yardId}
+            onRefresh={fetchStatements}
+            onOpenStatement={(statement) => window.open(`/billing/print/statement?id=${statement.statement_id}&yard_id=${yardId}`, '_blank')}
+          />
         </div>
       )}
 

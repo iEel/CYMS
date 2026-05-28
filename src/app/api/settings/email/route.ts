@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { sendEmail } from '@/lib/emailService';
+import { requirePermission } from '@/lib/apiAuth';
 
 // GET — ดึงค่า email settings (non-sensitive from DB + env status)
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์ดูการตั้งค่าอีเมล');
+    if (actor instanceof Response) return actor;
+
     const result = await db.request().query(`
       SELECT setting_key, setting_value FROM SystemSettings 
       WHERE setting_key LIKE 'email_%'
@@ -56,6 +60,8 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไขการตั้งค่าอีเมล');
+    if (actor instanceof Response) return actor;
 
     const settingsToSave: Record<string, string> = {
       email_enabled: String(body.enabled ?? false),
@@ -120,6 +126,10 @@ export async function POST(request: NextRequest) {
     if (!to) {
       return NextResponse.json({ error: 'กรุณาระบุอีเมลปลายทาง' }, { status: 400 });
     }
+
+    const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์ส่งอีเมลทดสอบ');
+    if (actor instanceof Response) return actor;
 
     const result = await sendEmail({
       to,

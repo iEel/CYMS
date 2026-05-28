@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import sql from 'mssql';
+import { requirePermission } from '@/lib/apiAuth';
 import fs from 'fs';
 import path from 'path';
 
@@ -136,8 +138,12 @@ function scanUploads(config: Record<string, number | boolean | string | null>) {
 }
 
 // GET — Load config + storage stats
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์ดูการตั้งค่าอายุไฟล์');
+    if (actor instanceof Response) return actor;
+
     const config = await getRetentionConfig();
     const stats = scanUploads(config);
     return NextResponse.json({ config, stats });
@@ -148,10 +154,12 @@ export async function GET() {
 }
 
 // PUT — Save config
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไขการตั้งค่าอายุไฟล์');
+    if (actor instanceof Response) return actor;
 
     const keys = [
       'gate_photos_days',
@@ -167,12 +175,15 @@ export async function PUT(request: Request) {
       if (body[key] !== undefined) {
         const value = String(body[key]);
         const dbKey = `photo_retention_${key}`;
-        await db.request().query(`
+        await db.request()
+          .input('dbKey', sql.NVarChar, dbKey)
+          .input('value', sql.NVarChar, value)
+          .query(`
           MERGE SystemSettings AS target
-          USING (SELECT '${dbKey}' AS setting_key) AS source
+          USING (SELECT @dbKey AS setting_key) AS source
           ON target.setting_key = source.setting_key
-          WHEN MATCHED THEN UPDATE SET setting_value = '${value}', updated_at = GETDATE()
-          WHEN NOT MATCHED THEN INSERT (setting_key, setting_value) VALUES ('${dbKey}', '${value}');
+          WHEN MATCHED THEN UPDATE SET setting_value = @value, updated_at = GETDATE()
+          WHEN NOT MATCHED THEN INSERT (setting_key, setting_value) VALUES (@dbKey, @value);
         `);
       }
     }

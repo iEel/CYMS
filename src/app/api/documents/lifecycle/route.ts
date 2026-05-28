@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { ensureDocumentLifecycle } from '@/lib/documentLifecycle';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const DOCUMENT_READ_PERMISSIONS = [
+  'audit_trail.read',
+  'reports.view',
+  'document_templates.view',
+  'billing.invoice.create',
+  'billing.payment.receive',
+];
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,6 +24,9 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, DOCUMENT_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ดู Document Lifecycle');
+    if (actor instanceof NextResponse) return actor;
+
     await ensureDocumentLifecycle(db);
 
     const req = db.request()
@@ -37,6 +49,16 @@ export async function GET(request: NextRequest) {
       WHERE ${conditions.join(' AND ')}
       ORDER BY dl.created_at ASC, dl.lifecycle_id ASC
     `);
+
+    const yardIds = Array.from(new Set(
+      result.recordset
+        .map((row: Record<string, unknown>) => Number(row.yard_id))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    ));
+    for (const yardId of yardIds) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
 
     return NextResponse.json({ lifecycle: result.recordset });
   } catch (error) {

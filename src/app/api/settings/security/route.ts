@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requirePermission } from '@/lib/apiAuth';
 import {
   DEFAULT_DEVICE_BINDING_POLICY,
   DEVICE_BINDING_SETTING_KEY,
@@ -20,15 +21,22 @@ const DEFAULT_CONFIG = {
   lockout_duration_min: 30,
 };
 
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 // GET — ดึง password policy config + locked users
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์ดูการตั้งค่าความปลอดภัย');
+    if (actor instanceof Response) return actor;
 
     // Get policy
-    const policyResult = await db.request().query(
-      `SELECT setting_value FROM SystemSettings WHERE setting_key = '${SETTING_KEY}'`
-    );
+    const policyResult = await db.request()
+      .input('key', sql.NVarChar, SETTING_KEY)
+      .query('SELECT setting_value FROM SystemSettings WHERE setting_key = @key');
     let policy = DEFAULT_CONFIG;
     if (policyResult.recordset.length > 0 && policyResult.recordset[0].setting_value) {
       policy = { ...DEFAULT_CONFIG, ...JSON.parse(policyResult.recordset[0].setting_value) };
@@ -68,13 +76,17 @@ export async function GET() {
 // PUT — อัพเดท password policy config หรือ unlock user
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json();
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไขการตั้งค่าความปลอดภัย');
+    if (actor instanceof Response) return actor;
+
+    const body = await request.json();
 
     // Action: unlock user
-    if (body.action === 'unlock' && body.user_id) {
+    const targetUserId = parsePositiveInt(body['user_id']);
+    if (body.action === 'unlock' && targetUserId) {
       await db.request()
-        .input('userId', sql.Int, body.user_id)
+        .input('userId', sql.Int, targetUserId)
         .query(`
           UPDATE Users 
           SET failed_login_count = 0, locked_at = NULL, updated_at = GETDATE()
@@ -82,11 +94,11 @@ export async function PUT(request: NextRequest) {
         `);
 
       await logAudit({
-        userId: body.admin_user_id,
+        userId: actor.userId,
         action: 'account_unlock',
         entityType: 'user',
-        entityId: body.user_id,
-        details: { unlocked_user_id: body.user_id },
+        entityId: targetUserId,
+        details: { unlocked_user_id: targetUserId },
       });
 
       return NextResponse.json({ success: true, message: 'ปลดล็อคบัญชีเรียบร้อย' });
@@ -116,7 +128,7 @@ export async function PUT(request: NextRequest) {
         `);
 
       await logAudit({
-        userId: body.admin_user_id,
+        userId: actor.userId,
         action: 'password_policy_update',
         entityType: 'system_settings',
         details: config,
@@ -143,7 +155,7 @@ export async function PUT(request: NextRequest) {
         `);
 
       await logAudit({
-        userId: body.admin_user_id,
+        userId: actor.userId,
         action: 'device_binding_policy_update',
         entityType: 'system_settings',
         details: {

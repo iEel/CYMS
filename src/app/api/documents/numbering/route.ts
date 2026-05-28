@@ -2,16 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { ensureDocumentSequences, nextDocumentNumber } from '@/lib/documentNumber';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const rawYardId = searchParams.get('yard_id');
-    const yardId = Number(rawYardId);
+    const yardId = parsePositiveInt(searchParams.get('yard_id'));
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
-    const yardAccess = await requireYardAccess(request, db, rawYardId);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requirePermission(
+      request,
+      db,
+      'settings.manage',
+      'คุณไม่มีสิทธิ์ดูเลขเอกสาร'
+    );
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ดูเลขเอกสารของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
     await ensureDocumentSequences(db);
 
     const result = await db.request()
@@ -33,20 +49,32 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const yardId = Number(body.yard_id);
+    const yardId = parsePositiveInt(body.yard_id);
     const documentType = String(body.document_type || '').trim();
     const prefix = String(body.prefix || '').trim().toUpperCase();
     const year = body.year ? Number(body.year) : new Date().getFullYear();
     const month = body.month ? Number(body.month) : new Date().getMonth() + 1;
     const padding = body.padding ? Number(body.padding) : 6;
 
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     if (!documentType || !prefix) {
       return NextResponse.json({ error: 'document_type และ prefix จำเป็นต้องระบุ' }, { status: 400 });
     }
 
     const db = await getDb();
+    const actor = await requirePermission(
+      request,
+      db,
+      'settings.manage',
+      'คุณไม่มีสิทธิ์ออกเลขเอกสาร'
+    );
+    if (actor instanceof Response) return actor;
+
     const yardAccess = await requireYardAccess(request, db, yardId);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    if (yardAccess instanceof Response) return yardAccess;
     const documentNumber = await nextDocumentNumber({ db, yardId, documentType, prefix, year, month, padding });
     return NextResponse.json({ document_number: documentNumber });
   } catch (error) {
@@ -58,7 +86,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const yardId = Number(body.yard_id);
+    const yardId = parsePositiveInt(body.yard_id);
     const documentType = String(body.document_type || '').trim();
     const prefix = String(body.prefix || '').trim().toUpperCase();
     const year = body.sequence_year ? Number(body.sequence_year) : new Date().getFullYear();
@@ -66,13 +94,25 @@ export async function PUT(request: NextRequest) {
     const nextNumber = Math.max(Number(body.next_number || 1), 1);
     const padding = Math.min(Math.max(Number(body.padding || 6), 3), 10);
 
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     if (!documentType || !prefix) {
       return NextResponse.json({ error: 'document_type และ prefix จำเป็นต้องระบุ' }, { status: 400 });
     }
 
     const db = await getDb();
+    const actor = await requirePermission(
+      request,
+      db,
+      'settings.manage',
+      'คุณไม่มีสิทธิ์แก้ไขเลขเอกสาร'
+    );
+    if (actor instanceof Response) return actor;
+
     const yardAccess = await requireYardAccess(request, db, yardId);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    if (yardAccess instanceof Response) return yardAccess;
     await ensureDocumentSequences(db);
     const result = await db.request()
       .input('yardId', sql.Int, yardId)

@@ -295,17 +295,15 @@ export default function PortalBookings() {
 
   const uploadBookingDocument = async (file: File | null) => {
     if (!detail || !file) return;
-    if (!session?.token) {
-      setDocumentError('ไม่พบ session สำหรับอัปโหลดไฟล์');
-      return;
-    }
     setDocumentUploading(true);
     setDocumentError('');
     try {
       const dataUrl = await fileToDataUrl(file);
+      const uploadHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.token) uploadHeaders.Authorization = `Bearer ${session.token}`;
       const uploadRes = await fetch('/api/uploads', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        headers: uploadHeaders,
         body: JSON.stringify({
           data: dataUrl,
           folder: 'documents',

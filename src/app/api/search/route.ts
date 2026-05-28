@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 type SearchKind = 'container' | 'gate' | 'invoice' | 'booking';
+
+const SEARCH_READ_PERMISSIONS = [
+  'gate.in',
+  'gate.out',
+  'booking.manage',
+  'billing.invoice.create',
+  'yard.location.assign',
+  'yard.slot.move',
+  'reports.view',
+];
 
 interface SearchResult {
   id: string;
@@ -62,6 +72,8 @@ export async function GET(request: NextRequest) {
     const db = await getDb();
     const yardAccess = await requireYardAccess(request, db, yardId);
     if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requireAnyPermission(request, db, SEARCH_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ค้นหาข้อมูล');
+    if (actor instanceof NextResponse) return actor;
 
     const containerReq = applyCommonInputs(db.request(), query, perEntityLimit, yardId);
     const containerResult = await containerReq.query(`

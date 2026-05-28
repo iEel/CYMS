@@ -4,6 +4,7 @@ import sql from 'mssql';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sarabunBase64 } from '@/lib/sarabunFont';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
 
 const FONT = 'Sarabun';
 const PHOTO_CATEGORY_LABELS: Record<string, string> = {
@@ -14,6 +15,12 @@ const PHOTO_CATEGORY_LABELS: Record<string, string> = {
   full_container: 'Full container view',
   repair_material: 'Repair material/part',
 };
+const EOR_PDF_READ_PERMISSIONS = [
+  'mnr.eor.create',
+  'mnr.eor.update',
+  'mnr.eor.approve',
+  'reports.view',
+];
 
 function parseJson(value: unknown) {
   if (!value || typeof value !== 'string') return value;
@@ -48,6 +55,9 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, EOR_PDF_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ดู EOR PDF');
+    if (actor instanceof NextResponse) return actor;
+
     const result = await db.request()
       .input('eorId', sql.Int, parseInt(eorId))
       .query(`
@@ -68,6 +78,9 @@ export async function GET(request: NextRequest) {
     }
 
     const eor = result.recordset[0];
+    const yardAccess = await requireYardAccess(request, db, eor.yard_id, 'คุณไม่มีสิทธิ์ดู EOR ของลานนี้');
+    if (yardAccess instanceof NextResponse) return yardAccess;
+
     const damageRows = toDamageRows(eor.damage_details);
 
     let company: Record<string, string> = {};

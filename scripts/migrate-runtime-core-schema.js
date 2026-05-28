@@ -28,6 +28,20 @@ async function migrate() {
     console.log('Connecting to database...');
     pool = await sql.connect(config);
 
+    await runStep(pool, 'Schema migration ledger', `
+      IF OBJECT_ID('SchemaMigrations', 'U') IS NULL
+      BEGIN
+        CREATE TABLE SchemaMigrations (
+          migration_key NVARCHAR(150) NOT NULL PRIMARY KEY,
+          migration_name NVARCHAR(255) NOT NULL,
+          checksum NVARCHAR(128) NULL,
+          applied_at DATETIME2 NOT NULL CONSTRAINT DF_SchemaMigrations_AppliedAt DEFAULT SYSUTCDATETIME(),
+          applied_by NVARCHAR(100) NULL,
+          status NVARCHAR(30) NOT NULL CONSTRAINT DF_SchemaMigrations_Status DEFAULT 'applied'
+        );
+      END;
+    `);
+
     await runStep(pool, 'Gate/billing clearance columns', `
       IF COL_LENGTH('Containers', 'container_grade') IS NULL
         ALTER TABLE Containers ADD container_grade NVARCHAR(1) NOT NULL CONSTRAINT DF_Containers_Grade DEFAULT 'A';
@@ -1298,6 +1312,30 @@ async function migrate() {
           SELECT 1 FROM RolePermissions rp
           WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
         );
+    `);
+
+    await runStep(pool, 'Record runtime core schema migration', `
+      MERGE SchemaMigrations AS target
+      USING (
+        SELECT
+          CAST('runtime-core-schema' AS NVARCHAR(150)) AS migration_key,
+          CAST('Runtime Core Schema' AS NVARCHAR(255)) AS migration_name,
+          CAST(NULL AS NVARCHAR(128)) AS checksum,
+          SYSUTCDATETIME() AS applied_at,
+          CAST(SYSTEM_USER AS NVARCHAR(100)) AS applied_by,
+          CAST('applied' AS NVARCHAR(30)) AS status
+      ) AS source
+        ON target.migration_key = source.migration_key
+      WHEN MATCHED THEN
+        UPDATE SET
+          migration_name = source.migration_name,
+          checksum = source.checksum,
+          applied_at = source.applied_at,
+          applied_by = source.applied_by,
+          status = source.status
+      WHEN NOT MATCHED THEN
+        INSERT (migration_key, migration_name, checksum, applied_at, applied_by, status)
+        VALUES (source.migration_key, source.migration_name, source.checksum, source.applied_at, source.applied_by, source.status);
     `);
 
     console.log('Runtime schema migration complete.');

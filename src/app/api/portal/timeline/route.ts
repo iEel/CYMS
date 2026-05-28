@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
             g.eir_number AS reference_number,
             g.truck_plate,
             g.driver_name,
-            g.remarks AS detail
+            CAST(NULL AS NVARCHAR(500)) AS detail
           FROM GateTransactions g
           WHERE g.booking_ref = @bookingNumber
              OR EXISTS (
@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
             g.eir_number AS reference_number,
             g.truck_plate,
             g.driver_name,
-            g.remarks AS detail
+            CAST(NULL AS NVARCHAR(500)) AS detail
           FROM GateTransactions g
           WHERE g.container_id = @containerId OR g.container_number = @containerNumber
           ORDER BY g.created_at DESC

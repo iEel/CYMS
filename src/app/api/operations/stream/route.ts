@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const OPERATIONS_STREAM_READ_PERMISSIONS = [
+  'yard.slot.move',
+  'yard.location.assign',
+];
 
 /**
  * GET /api/operations/stream?yard_id=X
@@ -14,6 +19,8 @@ export async function GET(request: NextRequest) {
   const db = await getDb();
   const yardAccess = await requireYardAccess(request, db, yardId);
   if (yardAccess instanceof NextResponse) return yardAccess;
+  const actor = await requireAnyPermission(request, db, OPERATIONS_STREAM_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ดูงานลาน');
+  if (actor instanceof NextResponse) return actor;
 
   const encoder = new TextEncoder();
   let lastHash = '';

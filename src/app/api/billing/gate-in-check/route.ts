@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { getBillingGuard } from '@/lib/billingGuard';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const GATE_IN_BILLING_PERMISSIONS = [
+  'gate.in',
+  'billing.invoice.create',
+  'billing.payment.receive',
+];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 /**
  * POST /api/billing/gate-in-check
@@ -11,7 +23,23 @@ import { getBillingGuard } from '@/lib/billingGuard';
 export async function POST(request: NextRequest) {
   try {
     const { yard_id, container_number, size, shipping_line, booking_ref, billing_customer_id, container_owner_id } = await request.json();
+    const yardId = parsePositiveInt(yard_id);
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const permission = await requireAnyPermission(
+      request,
+      db,
+      GATE_IN_BILLING_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ตรวจสอบค่าบริการ Gate-In'
+    );
+    if (permission instanceof Response) return permission;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ตรวจสอบค่าบริการของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
+
     const containerSize = parseInt(size) || 20;
 
     // 1. Resolve Owner + Billing Customer (with priority logic)
@@ -118,7 +146,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const billingGuard = await getBillingGuard(db, billingCustomer?.customer_id, yard_id);
+    const billingGuard = await getBillingGuard(db, billingCustomer?.customer_id, yardId);
 
     if (billingCustomer) {
       creditTerm = billingGuard.credit_term || billingCustomer.credit_term || 0;
@@ -127,7 +155,7 @@ export async function POST(request: NextRequest) {
 
     // 2. Get per-container charges from Tariffs (LOLO, gate, washing, PTI, reefer, etc.)
     const tariffResult = await db.request()
-      .input('yardId', sql.Int, yard_id)
+      .input('yardId', sql.Int, yardId)
       .query(`
         SELECT charge_type, description, rate, unit
         FROM Tariffs

@@ -466,14 +466,16 @@ export default function DocumentTemplateManager() {
   };
 
   const previewParams = (preview: 'sample' | 'real', testPrint = false, options?: PreviewParamOptions) => {
+    if (!selectedTemplate || !editingVersion) return {};
     const params: Record<string, string> = {
       type: selectedTemplate?.document_type || 'tax_invoice_receipt',
       preview,
       mode: config.mode,
       copyMode: config.copy_mode,
+      returnTo: '/settings?tab=document-templates',
+      templateId: String(selectedTemplate.template_id),
+      versionNo: String(editingVersion.version_no),
     };
-    if (selectedTemplate) params.templateId = String(selectedTemplate.template_id);
-    if (editingVersion?.version_no) params.versionNo = String(editingVersion.version_no);
     if (testPrint) params.testPrint = '1';
     if (options?.calibrationProfileId) params.calibrationProfileId = options.calibrationProfileId;
     if (preview === 'real') params.id = invoiceId.trim();

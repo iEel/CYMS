@@ -2,7 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
-import { requireYardAccess } from '@/lib/apiAuth';
+import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
+
+const DEMURRAGE_READ_PERMISSIONS = [
+  'settings.manage',
+  'billing.invoice.create',
+  'billing.payment.receive',
+  'reports.view',
+];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 /**
  * GET /api/billing/demurrage?yard_id=X
@@ -18,12 +30,24 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const rawYardId = searchParams.get('yard_id');
-    const yardId = Number(rawYardId);
-    const containerId = searchParams.get('container_id');
+    const yardId = parsePositiveInt(rawYardId);
+    const containerId = parsePositiveInt(searchParams.get('container_id'));
     const mode = searchParams.get('mode');
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
-    const yardAccess = await requireYardAccess(request, db, rawYardId);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    const permission = await requireAnyPermission(
+      request,
+      db,
+      DEMURRAGE_READ_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ดูข้อมูล Demurrage'
+    );
+    if (permission instanceof Response) return permission;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ดู Demurrage ของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     // Mode: overview — list containers approaching demurrage
     if (mode === 'overview') {
@@ -80,7 +104,7 @@ export async function GET(request: NextRequest) {
     // Mode: single container calculation
     if (containerId) {
       const cResult = await db.request()
-        .input('containerId', sql.Int, parseInt(containerId))
+        .input('containerId', sql.Int, containerId)
         .input('yardId', sql.Int, yardId)
         .query(`
           SELECT c.container_id, c.container_number, c.size, c.type,
@@ -166,12 +190,25 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const yardId = parsePositiveInt(body.yard_id);
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
-    const yardAccess = await requireYardAccess(request, db, body.yard_id);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    const actor = await requirePermission(
+      request,
+      db,
+      'settings.manage',
+      'คุณไม่มีสิทธิ์จัดการ Demurrage'
+    );
+    if (actor instanceof Response) return actor;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์จัดการ Demurrage ของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     const result = await db.request()
-      .input('yardId', sql.Int, body.yard_id)
+      .input('yardId', sql.Int, yardId)
       .input('customerId', sql.Int, body.customer_id || null)
       .input('chargeType', sql.NVarChar, body.charge_type || 'demurrage')
       .input('freeDays', sql.Int, body.free_days || 7)
@@ -187,7 +224,7 @@ export async function POST(request: NextRequest) {
 
     const rate = result.recordset[0];
 
-    await logAudit({ yardId: body.yard_id, action: 'demurrage_create', entityType: 'demurrage_rate', entityId: rate.demurrage_id, details: { charge_type: body.charge_type, free_days: body.free_days, rate_20: body.rate_20, rate_40: body.rate_40 } });
+    await logAudit({ userId: actor.userId, yardId, action: 'demurrage_create', entityType: 'demurrage_rate', entityId: rate.demurrage_id, details: { charge_type: body.charge_type, free_days: body.free_days, rate_20: body.rate_20, rate_40: body.rate_40 } });
 
     return NextResponse.json({ success: true, rate });
   } catch (error) {
@@ -199,20 +236,38 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
+    const demurrageId = parsePositiveInt(body.demurrage_id);
+    if (!demurrageId) {
+      return NextResponse.json({ error: 'ต้องระบุ demurrage_id ที่ถูกต้อง' }, { status: 400 });
+    }
+
     const db = await getDb();
+    const actor = await requirePermission(
+      request,
+      db,
+      'settings.manage',
+      'คุณไม่มีสิทธิ์จัดการ Demurrage'
+    );
+    if (actor instanceof Response) return actor;
+
     const scopeResult = await db.request()
-      .input('id', sql.Int, body.demurrage_id)
+      .input('id', sql.Int, demurrageId)
       .query('SELECT yard_id FROM DemurrageRates WHERE demurrage_id = @id');
-    const yardAccess = await requireYardAccess(request, db, scopeResult.recordset[0]?.yard_id);
-    if (yardAccess instanceof NextResponse) return yardAccess;
+    const scopedRate = scopeResult.recordset[0];
+    if (!scopedRate) {
+      return NextResponse.json({ error: 'ไม่พบ Demurrage rate' }, { status: 404 });
+    }
+
+    const yardAccess = await requireYardAccess(request, db, scopedRate.yard_id, 'คุณไม่มีสิทธิ์จัดการ Demurrage ของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     if (body.action === 'delete') {
       await db.request()
-        .input('id', sql.Int, body.demurrage_id)
+        .input('id', sql.Int, demurrageId)
         .query('UPDATE DemurrageRates SET is_active = 0 WHERE demurrage_id = @id');
     } else {
       await db.request()
-        .input('id', sql.Int, body.demurrage_id)
+        .input('id', sql.Int, demurrageId)
         .input('freeDays', sql.Int, body.free_days || 7)
         .input('rate20', sql.Decimal(12, 2), body.rate_20 || 0)
         .input('rate40', sql.Decimal(12, 2), body.rate_40 || 0)
@@ -225,7 +280,7 @@ export async function PUT(request: NextRequest) {
         `);
     }
 
-    await logAudit({ action: body.action === 'delete' ? 'demurrage_delete' : 'demurrage_update', entityType: 'demurrage_rate', entityId: body.demurrage_id, details: { free_days: body.free_days, rate_20: body.rate_20, action: body.action } });
+    await logAudit({ userId: actor.userId, yardId: scopedRate.yard_id, action: body.action === 'delete' ? 'demurrage_delete' : 'demurrage_update', entityType: 'demurrage_rate', entityId: demurrageId, details: { free_days: body.free_days, rate_20: body.rate_20, action: body.action } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { ensureIntegrationLogTable } from '@/lib/integrationLog';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const INTEGRATION_LOG_READ_PERMISSIONS = [
+  'integration.logs.view',
+  'settings.manage',
+];
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +20,16 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(500, Math.max(1, parseInt(searchParams.get('limit') || '100')));
 
     const db = await getDb();
+    const actor = await requireAnyPermission(request, db, INTEGRATION_LOG_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ดู Integration Logs');
+    if (actor instanceof NextResponse) return actor;
+    if (!yardId && actor.role !== 'yard_manager') {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id เพื่อดู Integration Logs ทุกลาน' }, { status: 400 });
+    }
+    if (yardId) {
+      const yardAccess = await requireYardAccess(request, db, yardId);
+      if (yardAccess instanceof NextResponse) return yardAccess;
+    }
+
     await ensureIntegrationLogTable(db);
 
     const req = db.request().input('limit', sql.Int, limit);
@@ -76,4 +92,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'ไม่สามารถดึง Integration Logs ได้' }, { status: 500 });
   }
 }
-

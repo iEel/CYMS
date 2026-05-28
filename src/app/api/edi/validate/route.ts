@@ -1,23 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+
+const EDI_VALIDATE_PERMISSIONS = ['gate.in', 'gate.out', 'booking.manage', 'integration.send'];
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // POST — Seal Cross-Validation
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { container_number, seal_number, yard_id } = body;
+    const yardId = parsePositiveInt(yard_id);
+
+    if (!yardId) {
+      return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
+    }
+    if (!container_number) {
+      return NextResponse.json({ error: 'ต้องระบุ container_number' }, { status: 400 });
+    }
 
     const db = await getDb();
+    const permission = await requireAnyPermission(
+      request,
+      db,
+      EDI_VALIDATE_PERMISSIONS,
+      'คุณไม่มีสิทธิ์ตรวจสอบข้อมูล EDI'
+    );
+    if (permission instanceof Response) return permission;
+
+    const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์ตรวจสอบข้อมูลของลานนี้');
+    if (yardAccess instanceof Response) return yardAccess;
 
     // Find container
     const containerResult = await db.request()
       .input('containerNumber', sql.NVarChar, container_number)
-      .query('SELECT * FROM Containers WHERE container_number = @containerNumber');
+      .input('yardId', sql.Int, yardId)
+      .query('SELECT * FROM Containers WHERE container_number = @containerNumber AND yard_id = @yardId');
 
     // Find matching booking
     const bookingResult = await db.request()
-      .input('yardId', sql.Int, yard_id)
+      .input('yardId', sql.Int, yardId)
       .input('sealNumber', sql.NVarChar, seal_number || '')
       .query(`
         SELECT * FROM Bookings

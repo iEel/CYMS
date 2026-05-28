@@ -38,6 +38,7 @@ jest.mock('@/lib/apiAuth', () => ({
     }
     return { userId, role };
   }),
+  requirePermission: jest.fn(() => ({ userId: 1, role: 'yard_manager' })),
   requireYardAccess: jest.fn((_request: NextRequest, _db: unknown, yardId: string | number | null) => {
     const { NextResponse } = jest.requireActual('next/server') as typeof import('next/server');
     const parsed = Number(yardId);

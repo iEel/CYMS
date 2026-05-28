@@ -54,7 +54,15 @@ describe('document template visual designer UI', () => {
     expect(manager).toContain('const ensurePreviewReady = async ()');
     expect(manager).toContain('await saveDraft()');
     expect(manager).toContain("setError('เลือกหรือสร้าง document template ก่อน Preview')");
-    expect(manager).toContain('if (selectedTemplate) params.templateId');
+    expect(manager).toContain('templateId: String(selectedTemplate.template_id)');
+  });
+
+  it('passes return path and selected template version identity to preview windows', () => {
+    const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
+
+    expect(manager).toContain("returnTo: '/settings?tab=document-templates'");
+    expect(manager).toContain('templateId: String(selectedTemplate.template_id)');
+    expect(manager).toContain('versionNo: String(editingVersion.version_no)');
   });
 
   it('lets settings deep-link back into the document template designer tab', () => {

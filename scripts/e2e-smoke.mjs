@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const { assertProtectedPageRedirect } = require('./e2e-smoke-helpers.cjs');
+
 const baseUrl = (process.env.CYMS_E2E_BASE_URL || 'http://localhost:3005').replace(/\/$/, '');
 
 async function request(path, options = {}) {
@@ -29,6 +35,8 @@ function assertContains(result, needle) {
   }
 }
 
+export { assertProtectedPageRedirect };
+
 async function run() {
   const checks = [];
 
@@ -46,11 +54,28 @@ async function run() {
   assertStatus(authMe, [200, 401]);
   checks.push(authMe);
 
+  const publicEir = await request('/eir/SMOKE-EIR-NOT-FOUND');
+  assertStatus(publicEir, [200, 404]);
+  checks.push(publicEir);
+
+  const portalContainers = await request('/portal/containers');
+  assertStatus(portalContainers, [200, 302, 307, 308]);
+  assertProtectedPageRedirect(portalContainers);
+  checks.push(portalContainers);
+
+  const documentTemplates = await request('/settings?tab=document-templates');
+  assertStatus(documentTemplates, [200, 302, 307, 308]);
+  assertProtectedPageRedirect(documentTemplates);
+  checks.push(documentTemplates);
+
+  const continuousPrint = await request('/billing/print/continuous?preview=sample&type=tax_invoice_receipt');
+  assertStatus(continuousPrint, [200, 302, 307, 308]);
+  assertProtectedPageRedirect(continuousPrint);
+  checks.push(continuousPrint);
+
   const dashboard = await request('/dashboard');
   assertStatus(dashboard, [200, 302, 307, 308]);
-  if ([302, 307, 308].includes(dashboard.status) && !String(dashboard.location || '').includes('/login')) {
-    throw new Error(`/dashboard redirected to unexpected location: ${dashboard.location}`);
-  }
+  assertProtectedPageRedirect(dashboard);
   checks.push(dashboard);
 
   console.log(`E2E smoke passed against ${baseUrl}`);
@@ -59,8 +84,10 @@ async function run() {
   }
 }
 
-run().catch((error) => {
-  console.error('E2E smoke failed');
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  run().catch((error) => {
+    console.error('E2E smoke failed');
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}

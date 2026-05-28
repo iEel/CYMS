@@ -17,6 +17,7 @@ describe('Yard management UI', () => {
 
   it('makes the 3D yard color legend match the actual container color mode', () => {
     const source = fs.readFileSync(path.join(root, 'src/components/yard/YardViewer3D.tsx'), 'utf8');
+    const scene = fs.readFileSync(path.join(root, 'src/components/yard/yard3dScene.ts'), 'utf8');
 
     expect(source).toContain('type YardColorMode');
     expect(source).toContain('colorMode');
@@ -24,37 +25,42 @@ describe('Yard management UI', () => {
     expect(source).toContain('สีตู้');
     expect(source).toContain('สายเรือ');
     expect(source).toContain('สถานะ');
-    expect(source).toContain('THREE.PCFShadowMap');
-    expect(source).not.toContain('THREE.PCFSoftShadowMap');
+    expect(scene).toContain('THREE.PCFShadowMap');
+    expect(scene).not.toContain('THREE.PCFSoftShadowMap');
   });
 
   it('adds practical 3D camera controls for yard operators', () => {
     const source = fs.readFileSync(path.join(root, 'src/components/yard/YardViewer3D.tsx'), 'utf8');
+    const toolbar = fs.readFileSync(path.join(root, 'src/components/yard/Yard3DCameraToolbar.tsx'), 'utf8');
 
     expect(source).toContain('resetYardCamera');
     expect(source).toContain('showTopDownView');
     expect(source).toContain('focusSelectedContainer');
-    expect(source).toContain('รีเซ็ตมุมกล้อง');
-    expect(source).toContain('มุมมองด้านบน');
-    expect(source).toContain('โฟกัสตู้ที่เลือก');
+    expect(source).toContain('Yard3DCameraToolbar');
+    expect(toolbar).toContain('ภาพรวมลาน');
+    expect(toolbar).toContain('มุมมองด้านบน');
+    expect(toolbar).toContain('โฟกัสตู้ที่เลือก');
   });
 
   it('turns 3D selected containers into an actionable yard panel', () => {
     const source = fs.readFileSync(path.join(root, clientPath), 'utf8');
+    const selectedPanel = fs.readFileSync(path.join(root, 'src/app/(dashboard)/yard/components/YardSelectedContainerPanel.tsx'), 'utf8');
 
     expect(source).toContain('selectedContainerActionPanel');
-    expect(source).toContain('ตู้ที่เลือกในลาน');
-    expect(source).toContain('เปิดรายละเอียด');
-    expect(source).toContain('Timeline');
-    expect(source).toContain('Booking');
-    expect(source).toContain('Billing');
+    expect(source).toContain('YardSelectedContainerPanel');
+    expect(selectedPanel).toContain('ตู้ที่เลือกในลาน');
+    expect(selectedPanel).toContain('เปิดรายละเอียด');
+    expect(selectedPanel).toContain('Timeline');
+    expect(selectedPanel).toContain('Booking');
+    expect(selectedPanel).toContain('Billing');
   });
 
   it('keeps the yard view live when work orders change', () => {
     const source = fs.readFileSync(path.join(root, clientPath), 'utf8');
 
     expect(source).toContain('/api/operations/stream?yard_id=');
-    expect(source).toContain('Live Yard');
+    expect(source).toContain('เชื่อมต่ออยู่');
+    expect(source).toContain('ซิงก์ล่าสุด');
     expect(source).toContain('lastLiveRefreshAt');
     expect(source).toContain('ordersEventCountRef');
     expect(source).toContain('fetchData();');

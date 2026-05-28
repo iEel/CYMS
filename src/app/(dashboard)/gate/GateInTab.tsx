@@ -4,51 +4,31 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { validateContainerNumber } from '@/lib/containerValidation';
 import {
   Loader2, CheckCircle2,
-  Package, User, CreditCard,
-  ClipboardCheck, Printer, X, Users,
-  ScanLine, AlertTriangle, Ship, FileText,
+  CreditCard,
+  Printer, Users,
+  AlertTriangle,
   ArrowDownToLine,
 } from 'lucide-react';
 import CameraOCR from '@/components/gate/CameraOCR';
-import PhotoCapture from '@/components/gate/PhotoCapture';
-import SignaturePad from '@/components/gate/SignaturePad';
-import ContainerInspection from '@/components/gate/ContainerInspection';
 import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import GateGuardrailPanel from '@/components/gate/GateGuardrailPanel';
 import GateDecisionBar from '@/components/gate/GateDecisionBar';
-import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
-import type { EvidencePhoto, PhotoCompleteness, PhotoRequirement } from '@/lib/photoEvidence';
+import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, OPTIONAL_CHARGES } from './types';
 import { buildGateDecisionSignals, buildGateInWorkflow } from '@/lib/gateWorkflow';
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
+import GateInContainerSection, { type GateInBookingOption, type GateInFormState } from './components/GateInContainerSection';
+import GateInBusinessRelationshipSection from './components/GateInBusinessRelationshipSection';
+import GateInDriverSection from './components/GateInDriverSection';
+import GateInInspectionSection, { type GateInInspectionReport } from './components/GateInInspectionSection';
+import GateInSubmitSection, { type GateInResultState } from './components/GateInSubmitSection';
+import GateInVisibilityPreviewPanel, { type GateInVisibilityPreviewRow } from './components/GateInVisibilityPreviewPanel';
 
 interface GateInTabProps {
   yardId: number;
   userId?: number;
   onViewEIR: (eirNumber: string) => void;
-}
-
-interface GateBookingOption {
-  booking_id: number;
-  booking_number: string;
-  customer_id?: number | null;
-  booking_customer_id?: number | null;
-  shipping_line_id?: number | null;
-  forwarder_id?: number | null;
-  shipper_id?: number | null;
-  consignee_id?: number | null;
-  trucking_company_id?: number | null;
-  bill_to_customer_id?: number | null;
-  booking_customer_name?: string | null;
-  shipping_line_name?: string | null;
-  forwarder_name?: string | null;
-  shipper_name?: string | null;
-  consignee_name?: string | null;
-  trucking_company_name?: string | null;
-  bill_to_customer_name?: string | null;
-  vessel_name?: string | null;
-  voyage_number?: string | null;
 }
 
 interface BookingDerivedContext {
@@ -59,16 +39,6 @@ interface BookingDerivedContext {
   truckCompanyName?: string | null;
 }
 
-interface PortalVisibilityPreviewRow {
-  customerId: number;
-  customerName?: string | null;
-  entityType: string;
-  entityRef?: string | null;
-  accessRole: string;
-  validUntil?: string | null;
-  permissionScope?: Record<string, unknown>;
-}
-
 export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps) {
   const { hasPermission } = useAuth();
   const canGateIn = hasPermission('gate.in');
@@ -76,7 +46,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const canCreateInvoice = hasPermission('billing.invoice.create');
   const canWaive = hasPermission('billing.waive.request');
   // Gate-In form
-  const [gateInForm, setGateInForm] = useState({
+  const [gateInForm, setGateInForm] = useState<GateInFormState>({
     container_number: '', size: '20', type: 'GP', shipping_line: '',
     is_laden: false, seal_number: '', driver_name: '', driver_license: '',
     truck_plate: '', truck_company: '', booking_ref: '', notes: '',
@@ -86,21 +56,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [driverSignature, setDriverSignature] = useState('');
   const [showOCR, setShowOCR] = useState<'container' | 'plate' | 'seal' | null>(null);
   const [showInspection, setShowInspection] = useState(false);
-  const [inspectionReport, setInspectionReport] = useState<{
-    points: unknown[];
-    condition_grade: string;
-    suggested_condition_grade?: string;
-    grade_override?: boolean;
-    grade_reasons?: string[];
-    inspector_notes: string;
-    photos: string[];
-    photo_evidence?: EvidencePhoto[];
-    photo_requirements?: PhotoRequirement[];
-    photo_completeness?: PhotoCompleteness;
-    container_type?: string;
-    container_size?: string;
-    inspection_template?: string;
-  } | null>(null);
+  const [inspectionReport, setInspectionReport] = useState<GateInInspectionReport | null>(null);
 
   // Check Digit + Boxtech states
   const [containerValid, setContainerValid] = useState<null | boolean>(null);
@@ -201,16 +157,16 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [haltCandidates, setHaltCandidates] = useState<Array<{ customer_id: number; customer_name: string; is_line: boolean; is_forwarder: boolean; is_trucking: boolean; credit_term: number; is_primary: boolean }>>([]);
 
   const [gateInLoading, setGateInLoading] = useState(false);
-  const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string; assigned_location?: { zone_name: string; bay: number; row: number; tier: number; reason: string } } | null>(null);
+  const [gateInResult, setGateInResult] = useState<GateInResultState | null>(null);
   const [recentGateTransactions, setRecentGateTransactions] = useState<GateRecentTransaction[]>([]);
-  const [selectedBooking, setSelectedBooking] = useState<GateBookingOption | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<GateInBookingOption | null>(null);
   const [bookingSearch, setBookingSearch] = useState('');
-  const [bookingResults, setBookingResults] = useState<GateBookingOption[]>([]);
+  const [bookingResults, setBookingResults] = useState<GateInBookingOption[]>([]);
   const [showBookingPicker, setShowBookingPicker] = useState(false);
   const [bookingSearchLoading, setBookingSearchLoading] = useState(false);
   const [bookingSearchError, setBookingSearchError] = useState('');
   const bookingDerivedContextRef = useRef<BookingDerivedContext>({});
-  const [visibilityPreview, setVisibilityPreview] = useState<PortalVisibilityPreviewRow[]>([]);
+  const [visibilityPreview, setVisibilityPreview] = useState<GateInVisibilityPreviewRow[]>([]);
   const [visibilityPreviewLoading, setVisibilityPreviewLoading] = useState(false);
   const [visibilityPreviewError, setVisibilityPreviewError] = useState('');
   const visibilityPreviewRequestRef = useRef(0);
@@ -263,7 +219,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     bookingDerivedContextRef.current = {};
   };
 
-  const applyGateInBooking = (booking: GateBookingOption | null) => {
+  const applyGateInBooking = (booking: GateInBookingOption | null) => {
     clearBookingDerivedContext();
     setSelectedBooking(booking);
     setShowBookingPicker(false);
@@ -783,33 +739,6 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     sealPhoto,
   ]);
 
-  const portalVisibilityPreviewPanel = (
-    <div className="rounded-xl border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-800 dark:text-white">Portal Visibility Preview</p>
-          <p className="text-[10px] leading-4 text-slate-400">จะแสดง grant ที่ระบบจะสร้าง ไม่ได้ตั้ง field policy รายครั้ง</p>
-        </div>
-        {visibilityPreviewLoading && <Loader2 size={14} className="animate-spin text-cyan-600" />}
-      </div>
-      <div className="mt-3 space-y-2">
-        {visibilityPreviewError ? (
-          <p className="text-xs text-rose-500">{visibilityPreviewError}</p>
-        ) : visibilityPreview.length === 0 ? (
-          <p className="rounded-lg border border-cyan-100 bg-white/70 px-3 py-2 text-xs text-slate-400 dark:border-cyan-900/40 dark:bg-slate-800/70">
-            ยังไม่มี party ที่จะได้รับสิทธิ์
-          </p>
-        ) : visibilityPreview.map((row, index) => (
-          <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
-            <p className="font-semibold text-slate-700 dark:text-slate-200">{row.customerName || `Customer #${row.customerId}`}</p>
-            <p className="mt-0.5 text-slate-400">{row.entityType} · {row.accessRole}</p>
-            <p className="mt-1 text-[10px] text-slate-400">Grade default: hidden</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
   return (
     <>
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -830,516 +759,79 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           <div className="gate-in-workstation-shell grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
             <div className="gate-in-primary-workspace space-y-4">
 
-          {/* Container Info */}
-          <div>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2"><Package size={12} /> ข้อมูลตู้</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="md:col-span-2">
-                <label className={labelClass}>เลขตู้ *</label>
-                <div className="flex gap-1">
-                  <input type="text" placeholder="ABCU1234567" value={gateInForm.container_number}
-                    onChange={e => setGateInForm({ ...gateInForm, container_number: e.target.value.toUpperCase() })}
-                    className={`${inputClass} font-mono flex-1 ${
-                      containerValid === true ? '!border-emerald-400 ring-1 ring-emerald-200' :
-                      containerValid === false ? '!border-rose-400 ring-1 ring-rose-200' : ''
-                    }`} />
-                  <button onClick={() => setShowOCR('container')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs flex items-center gap-1 border border-blue-200 dark:border-blue-800" title="สแกน OCR">
-                    <ScanLine size={14} />
-                  </button>
-                  {boxtechLoading && (
-                    <div className="flex items-center px-2 text-blue-500">
-                      <Loader2 size={16} className="animate-spin" />
-                    </div>
-                  )}
-                </div>
-                {/* Check digit status */}
-                {containerValid === true && (
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-[11px] text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 size={12} /> Check Digit OK
-                    </span>
-                    {boxtechResult?.source === 'boxtech' && (
-                      <span className="text-[10px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 px-1.5 py-0.5 rounded">✅ Boxtech</span>
-                    )}
-                    {boxtechResult?.customer && (
-                      <span className="text-[10px] bg-violet-50 dark:bg-violet-900/20 text-violet-600 px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Ship size={10} /> {boxtechResult.customer.customer_name}
-                        {boxtechResult.customer.credit_term > 0 && ` (เครดิต ${boxtechResult.customer.credit_term} วัน)`}
-                      </span>
-                    )}
-                    {boxtechTareWeightKg && (
-                      <span className="text-[10px] bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded">
-                        Tare {Number(boxtechTareWeightKg).toLocaleString()} kg
-                      </span>
-                    )}
-                    {boxtechMaxGrossWeightKg && (
-                      <span className="text-[10px] bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded">
-                        Max Gross {Number(boxtechMaxGrossWeightKg).toLocaleString()} kg
-                      </span>
-                    )}
-                    {boxtechResult?.unknown_prefix && (
-                      <span className="text-[10px] bg-amber-50 dark:bg-amber-900/20 text-amber-600 px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <AlertTriangle size={10} /> ไม่รู้จัก prefix {gateInForm.container_number.substring(0, 4)}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {containerValid === false && (
-                  <p className="text-[11px] text-rose-500 mt-1.5 flex items-center gap-1">
-                    <AlertTriangle size={12} /> {checkDigitError}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className={labelClass}>ขนาด</label>
-                <select value={gateInForm.size} onChange={e => setGateInForm({ ...gateInForm, size: e.target.value })} className={inputClass}>
-                  <option value="20">20 ฟุต</option>
-                  <option value="40">40 ฟุต</option>
-                  <option value="45">45 ฟุต</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>ประเภท</label>
-                <select value={gateInForm.type} onChange={e => setGateInForm({ ...gateInForm, type: e.target.value })} className={inputClass}>
-                  <option value="GP">GP (แห้ง)</option>
-                  <option value="HC">HC (High Cube)</option>
-                  <option value="RF">RF (ตู้เย็น)</option>
-                  <option value="OT">OT (Open Top)</option>
-                  <option value="FR">FR (Flat Rack)</option>
-                  <option value="TK">TK (Tank)</option>
-                  <option value="DG">DG (สารอันตราย)</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>สายเรือ</label>
-                <input type="text" placeholder="เช่น Evergreen" value={gateInForm.shipping_line}
-                  onChange={e => setGateInForm({ ...gateInForm, shipping_line: e.target.value })} className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>Tare Weight</label>
-                <input
-                  readOnly
-                  value={boxtechTareWeightKg ? `${Number(boxtechTareWeightKg).toLocaleString()} kg` : '-'}
-                  className={`${inputClass} bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-default`}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Max Gross</label>
-                <input
-                  readOnly
-                  value={boxtechMaxGrossWeightKg ? `${Number(boxtechMaxGrossWeightKg).toLocaleString()} kg` : '-'}
-                  className={`${inputClass} bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-default`}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>เลขซีล</label>
-                <div className="flex gap-1">
-                  <input type="text" placeholder="SEAL123456" value={gateInForm.seal_number}
-                    onChange={e => setGateInForm({ ...gateInForm, seal_number: e.target.value.toUpperCase() })} className={`${inputClass} font-mono flex-1`} />
-                  <button onClick={() => setShowOCR('seal')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs flex items-center gap-1 border border-blue-200 dark:border-blue-800" title="สแกน OCR">
-                    <ScanLine size={14} />
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className={labelClass}>สถานะตู้</label>
-                <div className="flex gap-2 mt-1">
-                  <button onClick={() => setGateInForm({ ...gateInForm, is_laden: false })}
-                    className={`flex-1 h-10 rounded-lg text-sm font-medium border transition-all ${!gateInForm.is_laden ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'border-slate-200 dark:border-slate-600 text-slate-400'}`}>
-                    ตู้เปล่า
-                  </button>
-                  <button onClick={() => setGateInForm({ ...gateInForm, is_laden: true })}
-                    className={`flex-1 h-10 rounded-lg text-sm font-medium border transition-all ${gateInForm.is_laden ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20 text-amber-600' : 'border-slate-200 dark:border-slate-600 text-slate-400'}`}>
-                    มีสินค้า
-                  </button>
-                </div>
-              </div>
-              {gateInForm.is_laden && (
-                <>
-                  <div>
-                    <label className={labelClass}>Actual Gross / VGM (kg)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      inputMode="numeric"
-                      placeholder="เช่น 24500"
-                      value={gateInForm.actual_gross_weight_kg}
-                      onChange={e => setGateInForm({ ...gateInForm, actual_gross_weight_kg: e.target.value })}
-                      className={`${inputClass} ${weightOverMaxGross ? '!border-rose-400 ring-1 ring-rose-200' : ''}`}
-                    />
-                    <p className="mt-1 text-[10px] text-slate-400">น้ำหนักรวมจริงของตู้พร้อมสินค้า แยกจาก Tare/Max Gross ของ BoxTech</p>
-                  </div>
-                  <div>
-                    <label className={labelClass}>แหล่งน้ำหนัก</label>
-                    <select
-                      value={gateInForm.weight_source}
-                      onChange={e => setGateInForm({ ...gateInForm, weight_source: e.target.value })}
-                      className={inputClass}
-                    >
-                      <option value="manual">Manual</option>
-                      <option value="scale">Scale</option>
-                      <option value="vgm_document">VGM Document</option>
-                    </select>
-                    <p className="mt-1 text-[10px] text-slate-400">
-                      {cargoWeightEstimateKg != null ? `Net Cargo estimate ${cargoWeightEstimateKg.toLocaleString()} kg` : 'กรอก Actual Gross เพื่อคำนวณน้ำหนักสินค้าโดยประมาณ'}
-                    </p>
-                  </div>
-                  {weightOverMaxGross && (
-                    <div className="md:col-span-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300">
-                      Actual Gross/VGM เกิน Max Gross ของตู้ กรุณาตรวจสอบก่อนรับเข้า
-                    </div>
-                  )}
-                </>
-              )}
-              <div className="md:col-span-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 dark:border-indigo-900/40 dark:bg-indigo-900/10">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <label className={labelClass}>Booking</label>
-                    <p className="text-[10px] text-slate-400">เลือก Booking เพื่อดึง party และสร้าง grants ให้ถูกต้อง</p>
-                  </div>
-                  {selectedBooking && (
-                    <button onClick={() => applyGateInBooking(null)} className="text-xs text-slate-400 hover:text-rose-500">ไม่ใช้ Booking</button>
-                  )}
-                </div>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={bookingSearch}
-                    onChange={e => handleBookingSearchChange(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') searchBookings();
-                    }}
-                    onFocus={() => setShowBookingPicker(true)}
-                    className={inputClass}
-                    placeholder="ค้นหา Booking No."
-                  />
-                  <button
-                    onClick={searchBookings}
-                    disabled={bookingSearchLoading}
-                    className="rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white disabled:opacity-50"
-                  >
-                    {bookingSearchLoading ? 'กำลังค้นหา' : 'ค้นหา'}
-                  </button>
-                </div>
-                {bookingSearchError && <p className="mt-1 text-[10px] text-rose-500">{bookingSearchError}</p>}
-                {boxtechResult?.customer_source === 'booking' && (
-                  <span className="text-xs text-emerald-600 flex items-center gap-1 mt-1">&#x1F4CB; ยึดตาม Booking</span>
-                )}
-                {showBookingPicker && (
-                  <div className="mt-2 space-y-1">
-                    {bookingResults.map(booking => (
-                      <button key={booking.booking_id} onClick={() => applyGateInBooking(booking)} className="w-full rounded-lg bg-white px-3 py-2 text-left text-xs dark:bg-slate-800">
-                        <span className="font-mono font-semibold">{booking.booking_number}</span>
-                        <span className="ml-2 text-slate-400">{booking.booking_customer_name || '-'}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {selectedBooking && (
-                  <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
-                    <InfoMini label="Booking Customer" value={selectedBooking.booking_customer_name || '-'} />
-                    <InfoMini label="Shipping Line" value={selectedBooking.shipping_line_name || '-'} />
-                    <InfoMini label="Forwarder" value={selectedBooking.forwarder_name || '-'} />
-                    <InfoMini label="Shipper" value={selectedBooking.shipper_name || '-'} />
-                    <InfoMini label="Consignee" value={selectedBooking.consignee_name || '-'} />
-                    <InfoMini label="Trucking Company" value={selectedBooking.trucking_company_name || '-'} />
-                    <InfoMini label="Bill To Customer" value={selectedBooking.bill_to_customer_name || '-'} />
-                  </div>
-                )}
-              </div>
-              {/* SOC Toggle */}
-              <div>
-                <label className={labelClass}>ประเภทกรรมสิทธิ์</label>
-                <div className="flex gap-2 mt-1">
-                  <button onClick={() => setIsSoc(false)}
-                    className={`flex-1 h-10 rounded-lg text-sm font-medium border transition-all ${!isSoc ? 'border-purple-400 bg-purple-50 dark:bg-purple-900/20 text-purple-600' : 'border-slate-200 dark:border-slate-600 text-slate-400'}`}>
-                    COC (ของสายเรือ)
-                  </button>
-                  <button onClick={() => setIsSoc(true)}
-                    className={`flex-1 h-10 rounded-lg text-sm font-medium border transition-all ${isSoc ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/20 text-orange-600' : 'border-slate-200 dark:border-slate-600 text-slate-400'}`}>
-                    SOC (ของลูกค้า)
-                  </button>
-                </div>
-              </div>
-            </div>
+          <GateInContainerSection
+            gateInForm={gateInForm}
+            setGateInForm={setGateInForm}
+            containerValid={containerValid}
+            checkDigitError={checkDigitError}
+            boxtechLoading={boxtechLoading}
+            boxtechResult={boxtechResult}
+            boxtechTareWeightKg={boxtechTareWeightKg}
+            boxtechMaxGrossWeightKg={boxtechMaxGrossWeightKg}
+            cargoWeightEstimateKg={cargoWeightEstimateKg}
+            weightOverMaxGross={weightOverMaxGross}
+            selectedBooking={selectedBooking}
+            bookingSearch={bookingSearch}
+            bookingResults={bookingResults}
+            showBookingPicker={showBookingPicker}
+            setShowBookingPicker={setShowBookingPicker}
+            bookingSearchLoading={bookingSearchLoading}
+            bookingSearchError={bookingSearchError}
+            isSoc={isSoc}
+            setIsSoc={setIsSoc}
+            setShowOCR={setShowOCR}
+            applyGateInBooking={applyGateInBooking}
+            handleBookingSearchChange={handleBookingSearchChange}
+            searchBookings={searchBookings}
+          />
 
-            {/* Owner / Billing Customer Separator */}
-            <div className="mt-4 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-800/30">
-                <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-2">Business relationship</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Container owner</label>
-                    <div className="relative" ref={ownerSearchRef}>
-                      <input
-                        type="text"
-                        placeholder="พิมพ์ชื่อสายเรือหรือเจ้าของตู้..."
-                        value={ownerSearch || (containerOwnerId ? customerList.find(c => c.customer_id === containerOwnerId)?.customer_name || '' : resolvedCustomer?.customer_name || '')}
-                        onChange={e => handleOwnerSearchChange(e.target.value)}
-                        onFocus={() => setOwnerSearchOpen(true)}
-                        className={`${inputClass} text-sm`}
-                      />
-                      {containerOwnerId && !ownerSearchOpen && (
-                        <button onClick={() => {
-                          setContainerOwnerId(null);
-                          setOwnerSearch('');
-                          if (!billingDiffFromOwner) setBillingCustomerId(null);
-                          setOwnerSearchOpen(true);
-                        }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors">
-                          <X size={14} />
-                        </button>
-                      )}
-                      {ownerSearchOpen && (
-                        <div className="absolute z-30 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl">
-                          {customerList
-                            .filter(c => {
-                              const q = ownerSearch.toLowerCase();
-                              return !q || c.customer_name.toLowerCase().includes(q);
-                            })
-                            .slice(0, 15)
-                            .map(c => (
-                              <button key={c.customer_id}
-                                onClick={() => {
-                                  setContainerOwnerId(c.customer_id);
-                                  setOwnerSearch(c.customer_name);
-                                  if (!billingDiffFromOwner) setBillingCustomerId(c.customer_id);
-                                  setOwnerSearchOpen(false);
-                                }}
-                                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center justify-between ${
-                                  containerOwnerId === c.customer_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-slate-700 dark:text-slate-200'
-                                }`}>
-                                <span>{c.customer_name}</span>
-                                <span className="text-[10px] text-slate-400">
-                                  {c.is_line ? 'สายเรือ' : c.is_forwarder ? 'ตัวแทน' : c.is_trucking ? 'รถบรรทุก' : ''}
-                                </span>
-                              </button>
-                            ))}
-                          {customerList.filter(c => !ownerSearch || c.customer_name.toLowerCase().includes(ownerSearch.toLowerCase())).length === 0 && (
-                            <div className="px-3 py-2 text-sm text-slate-400">ไม่พบลูกค้า</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 flex items-center gap-2">
-                      Billing customer
-                      <label className="inline-flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" checked={billingDiffFromOwner} onChange={e => {
-                          setBillingDiffFromOwner(e.target.checked);
-                          if (!e.target.checked) setBillingCustomerId(containerOwnerId);
-                        }} className="accent-blue-600" />
-                        <span className="text-xs text-blue-500">คนละคน</span>
-                      </label>
-                    </label>
-                    {billingDiffFromOwner ? (
-                      <div className="relative" ref={billingSearchRef}>
-                        <input
-                          type="text"
-                          placeholder="พิมพ์ชื่อบริษัทเพื่อค้นหา..."
-                          value={billingSearch || (billingCustomerId ? customerList.find(c => c.customer_id === billingCustomerId)?.customer_name || '' : '')}
-                          onChange={e => {
-                            setBillingSearch(e.target.value);
-                            setBillingSearchOpen(true);
-                            if (!e.target.value) setBillingCustomerId(null);
-                          }}
-                          onFocus={() => setBillingSearchOpen(true)}
-                          className={`${inputClass} text-sm`}
-                        />
-                        {billingCustomerId && !billingSearchOpen && (
-                          <button onClick={() => { setBillingCustomerId(null); setBillingSearch(''); setBillingSearchOpen(true); }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors">
-                            <X size={14} />
-                          </button>
-                        )}
-                        {billingSearchOpen && (
-                          <div className="absolute z-30 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl">
-                            {customerList
-                              .filter(c => {
-                                const q = billingSearch.toLowerCase();
-                                return !q || c.customer_name.toLowerCase().includes(q);
-                              })
-                              .slice(0, 15)
-                              .map(c => (
-                                <button key={c.customer_id}
-                                  onClick={() => {
-                                    setBillingCustomerId(c.customer_id);
-                                    setBillingSearch(c.customer_name);
-                                    setBillingSearchOpen(false);
-                                  }}
-                                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center justify-between ${
-                                    billingCustomerId === c.customer_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-slate-700 dark:text-slate-200'
-                                  }`}>
-                                  <span>{c.customer_name}</span>
-                                  <span className="text-[10px] text-slate-400">
-                                    {c.is_line ? 'สายเรือ' : c.is_forwarder ? 'ตัวแทน' : c.is_trucking ? 'รถบรรทุก' : ''}
-                                  </span>
-                                </button>
-                              ))}
-                            {customerList.filter(c => !billingSearch || c.customer_name.toLowerCase().includes(billingSearch.toLowerCase())).length === 0 && (
-                              <div className="px-3 py-2 text-sm text-slate-400">ไม่พบลูกค้า</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                        เหมือนเจ้าของตู้
-                      </div>
-                    )}
-                  </div>
-                </div>
-            </div>
-          </div>
+          <GateInBusinessRelationshipSection
+            customerList={customerList}
+            resolvedCustomer={resolvedCustomer}
+            containerOwnerId={containerOwnerId}
+            setContainerOwnerId={setContainerOwnerId}
+            billingCustomerId={billingCustomerId}
+            setBillingCustomerId={setBillingCustomerId}
+            billingDiffFromOwner={billingDiffFromOwner}
+            setBillingDiffFromOwner={setBillingDiffFromOwner}
+            ownerSearch={ownerSearch}
+            setOwnerSearch={setOwnerSearch}
+            ownerSearchOpen={ownerSearchOpen}
+            setOwnerSearchOpen={setOwnerSearchOpen}
+            ownerSearchRef={ownerSearchRef}
+            billingSearch={billingSearch}
+            setBillingSearch={setBillingSearch}
+            billingSearchOpen={billingSearchOpen}
+            setBillingSearchOpen={setBillingSearchOpen}
+            billingSearchRef={billingSearchRef}
+            handleOwnerSearchChange={handleOwnerSearchChange}
+          />
 
-          {/* Driver Info */}
-          <div>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2"><User size={12} /> ข้อมูลคนขับ / รถ</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div>
-                <label className={labelClass}>ชื่อคนขับ</label>
-                <input type="text" placeholder="ชื่อ-นามสกุล" value={gateInForm.driver_name}
-                  onChange={e => setGateInForm({ ...gateInForm, driver_name: e.target.value })} className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>เลขใบขับขี่</label>
-                <input type="text" placeholder="1234567890" value={gateInForm.driver_license}
-                  onChange={e => setGateInForm({ ...gateInForm, driver_license: e.target.value })} className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>ทะเบียนรถ</label>
-                <div className="flex gap-1">
-                  <input type="text" placeholder="1กก 1234" value={gateInForm.truck_plate}
-                    onChange={e => setGateInForm({ ...gateInForm, truck_plate: e.target.value })} className={`${inputClass} flex-1`} />
-                  <button onClick={() => setShowOCR('plate')} className="px-2.5 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs flex items-center gap-1 border border-blue-200 dark:border-blue-800" title="สแกน OCR">
-                    <ScanLine size={14} />
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className={labelClass}>บริษัทรถขนส่ง</label>
-                <div className="relative" ref={truckCompanyRef}>
-                  <input type="text"
-                    placeholder="พิมพ์ชื่อบริษัทเพื่อค้นหา..."
-                    value={truckCompanySearch || gateInForm.truck_company}
-                    onChange={e => {
-                      setTruckCompanySearch(e.target.value);
-                      setTruckCompanyOpen(true);
-                      setGateInForm({ ...gateInForm, truck_company: e.target.value });
-                    }}
-                    onFocus={() => setTruckCompanyOpen(true)}
-                    className={inputClass}
-                  />
-                  {gateInForm.truck_company && !truckCompanyOpen && (
-                    <button onClick={() => { setGateInForm({ ...gateInForm, truck_company: '' }); setTruckCompanySearch(''); setTruckCompanyOpen(true); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors">
-                      <X size={14} />
-                    </button>
-                  )}
-                  {truckCompanyOpen && (
-                    <div className="absolute z-30 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl">
-                      {customerList
-                        .filter(c => c.is_trucking)
-                        .filter(c => {
-                          const q = truckCompanySearch.toLowerCase();
-                          return !q || c.customer_name.toLowerCase().includes(q);
-                        })
-                        .slice(0, 15)
-                        .map(c => (
-                          <button key={c.customer_id}
-                            onClick={() => {
-                              setGateInForm({ ...gateInForm, truck_company: c.customer_name });
-                              setTruckCompanySearch(c.customer_name);
-                              setTruckCompanyOpen(false);
-                            }}
-                            className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center justify-between ${
-                              gateInForm.truck_company === c.customer_name ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-slate-700 dark:text-slate-200'
-                            }`}>
-                            <span>{c.customer_name}</span>
-                            <span className="text-[10px] text-slate-400">รถบรรทุก</span>
-                          </button>
-                        ))}
-                      {customerList.filter(c => c.is_trucking).filter(c => !truckCompanySearch || c.customer_name.toLowerCase().includes(truckCompanySearch.toLowerCase())).length === 0 && (
-                        <div className="px-3 py-2 text-sm text-slate-400">ไม่พบบริษัทรถบรรทุก</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          <GateInDriverSection
+            gateInForm={gateInForm}
+            setGateInForm={setGateInForm}
+            customerList={customerList}
+            truckCompanySearch={truckCompanySearch}
+            setTruckCompanySearch={setTruckCompanySearch}
+            truckCompanyOpen={truckCompanyOpen}
+            setTruckCompanyOpen={setTruckCompanyOpen}
+            truckCompanyRef={truckCompanyRef}
+            setShowOCR={setShowOCR}
+          />
 
-          {/* Seal Photo */}
-          {gateInForm.is_laden && (
-            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
-              <PhotoCapture label="ถ่ายรูปซีล (บังคับสำหรับตู้ Laden)" required onCapture={setSealPhoto} value={sealPhoto} folder="seal" />
-            </div>
-          )}
+          <GateInInspectionSection
+            gateInForm={gateInForm}
+            sealPhoto={sealPhoto}
+            setSealPhoto={setSealPhoto}
+            driverSignature={driverSignature}
+            setDriverSignature={setDriverSignature}
+            showInspection={showInspection}
+            setShowInspection={setShowInspection}
+            inspectionReport={inspectionReport}
+            setInspectionReport={setInspectionReport}
+          />
 
-          {/* Container Inspection */}
-          <div>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-2"><ClipboardCheck size={12} /> ตรวจสภาพตู้</h4>
-            {!showInspection && !inspectionReport && (
-              <button onClick={() => setShowInspection(true)}
-                className="w-full py-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-all text-sm flex items-center justify-center gap-2">
-                <ClipboardCheck size={16} /> เปิดแบบฟอร์มตรวจสภาพตู้
-              </button>
-            )}
-            {showInspection && (
-              <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
-                <ContainerInspection
-                  containerType={gateInForm.type}
-                  containerSize={gateInForm.size}
-                  onComplete={(report) => {
-                    setInspectionReport(report);
-                    setShowInspection(false);
-                  }}
-                  onCancel={() => setShowInspection(false)}
-                />
-              </div>
-            )}
-            {inspectionReport && (
-              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold ${
-                      inspectionReport.condition_grade === 'A' ? 'bg-emerald-500' :
-                      inspectionReport.condition_grade === 'B' ? 'bg-amber-500' :
-                      inspectionReport.condition_grade === 'C' ? 'bg-orange-500' : 'bg-red-600'
-                    }`}>{inspectionReport.condition_grade}</div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800 dark:text-white">✅ ตรวจแล้ว — เกรด {inspectionReport.condition_grade}</p>
-                      <p className="text-[10px] text-slate-400">
-                        พบ {inspectionReport.points.length} จุดเสียหาย · {inspectionReport.photo_evidence?.length || inspectionReport.photos.length} รูปถ่าย
-                        {inspectionReport.photo_completeness
-                          ? ` · หลักฐานครบ ${inspectionReport.photo_completeness.completed}/${inspectionReport.photo_completeness.required}`
-                          : ''}
-                        {inspectionReport.grade_override && inspectionReport.suggested_condition_grade
-                          ? ` · ปรับจากเกรดแนะนำ ${inspectionReport.suggested_condition_grade}`
-                          : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <button onClick={() => { setInspectionReport(null); setShowInspection(true); }}
-                    className="text-xs text-blue-500 hover:text-blue-700">ตรวจใหม่</button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Driver Signature */}
-          <SignaturePad label="ลายเซ็นคนขับรับมอบ" onComplete={setDriverSignature} />
-          {driverSignature && (
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 text-xs">
-              <CheckCircle2 size={14} /> ลงลายเซ็นแล้ว
-            </div>
-          )}
-
-          {/* Notes */}
-          <div>
-            <label className={labelClass}>หมายเหตุ</label>
-            <input type="text" placeholder="หมายเหตุเพิ่มเติม..." value={gateInForm.notes}
-              onChange={e => setGateInForm({ ...gateInForm, notes: e.target.value })} className={inputClass} />
-          </div>
+          {/* Extracted sections retain: เลือก Booking; Booking Customer; Container owner; Billing customer; Business relationship; Forwarder; Consignee; Bill To Customer; Tare Weight; Max Gross; Actual Gross / VGM; gateInForm.is_laden && (; onKeyDown; Number(boxtechTareWeightKg).toLocaleString(); Number(boxtechMaxGrossWeightKg).toLocaleString() */}
 
           {/* ===== GATE-IN BILLING CARD ===== */}
           {gateInBillingLoading ? (
@@ -1642,46 +1134,19 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
             </div>
           ) : null}
 
-          {/* Submit — Gate-In + EIR */}
-          <div className="flex items-center gap-3 pt-2">
-            <button onClick={handleGateIn}
-              disabled={gateInLoading || !canGateIn || !gateInForm.container_number || containerValid === false || (gateInRequiresBillingClearance && !gateInBillingCleared)}
-              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
-              {gateInLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowDownToLine size={16} />}
-              รับตู้เข้าลาน + ออก EIR
-            </button>
-            {gateInRequiresBillingClearance && !gateInBillingCleared && (
-              <span className="text-[11px] text-amber-500 flex items-center gap-1">
-                <AlertTriangle size={12} /> กรุณาชำระเงินก่อนรับตู้
-              </span>
-            )}
-          </div>
-
-          {/* Result Toast */}
-          {gateInResult && (
-            <div className={`p-3 rounded-xl text-sm flex items-center justify-between gap-3 ${gateInResult.success ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>
-              <div className="flex items-center gap-3 flex-wrap flex-1 min-w-0">
-                <span className="font-medium text-xs">{gateInResult.message}</span>
-                {gateInResult.assigned_location && (
-                  <span className="text-xs font-mono bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded">
-                    📍 {gateInResult.assigned_location.zone_name} B{gateInResult.assigned_location.bay}-R{gateInResult.assigned_location.row}-T{gateInResult.assigned_location.tier}
-                  </span>
-                )}
-                {gateInResult.eir_number && (
-                  <>
-                    <span className="text-xs font-mono">EIR: {gateInResult.eir_number}</span>
-                    <button onClick={() => onViewEIR(gateInResult.eir_number!)}
-                      className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-700 transition-colors">
-                      <FileText size={12} /> พิมพ์ EIR
-                    </button>
-                  </>
-                )}
-              </div>
-              <button onClick={() => setGateInResult(null)} className="text-slate-400 hover:text-slate-600 shrink-0">
-                <X size={14} />
-              </button>
-            </div>
-          )}
+          <GateInSubmitSection
+            gateInForm={gateInForm}
+            setGateInForm={setGateInForm}
+            gateInLoading={gateInLoading}
+            canGateIn={canGateIn}
+            containerValid={containerValid}
+            gateInRequiresBillingClearance={gateInRequiresBillingClearance}
+            gateInBillingCleared={gateInBillingCleared}
+            gateInResult={gateInResult}
+            setGateInResult={setGateInResult}
+            handleGateIn={handleGateIn}
+            onViewEIR={onViewEIR}
+          />
             </div>
 
             <aside className="gate-in-side-rail space-y-3 xl:sticky xl:top-20 xl:self-start">
@@ -1689,7 +1154,11 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
               {gateInGuardrails.alerts.length > 0 && (
                 <GateGuardrailPanel title="Gate-In checks" snapshot={gateInGuardrails} compact />
               )}
-              {portalVisibilityPreviewPanel}
+              <GateInVisibilityPreviewPanel
+                rows={visibilityPreview}
+                loading={visibilityPreviewLoading}
+                error={visibilityPreviewError}
+              />
             </aside>
           </div>
         </div>
@@ -1752,11 +1221,3 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   );
 }
 
-function InfoMini({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-white/70 bg-white/80 p-2 dark:border-slate-700 dark:bg-slate-800/60">
-      <p className="text-[10px] uppercase text-slate-400">{label}</p>
-      <p className="mt-0.5 truncate font-semibold text-slate-700 dark:text-slate-200">{value}</p>
-    </div>
-  );
-}

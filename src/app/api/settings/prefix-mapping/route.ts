@@ -2,11 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { logAudit } from '@/lib/audit';
+import { requirePermission } from '@/lib/apiAuth';
+
+function parsePositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 // GET — List all prefix mappings (grouped by prefix for multi-owner view)
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const pool = await getDb();
+    const actor = await requirePermission(request, pool, 'settings.manage', 'คุณไม่มีสิทธิ์ดู Prefix Mapping');
+    if (actor instanceof Response) return actor;
+
     const result = await pool.request().query(`
       SELECT pm.prefix_id, pm.prefix_code, pm.customer_id, pm.is_primary, pm.notes, pm.created_at,
              c.customer_name,
@@ -29,8 +38,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { prefix_code, customer_id, notes, is_primary } = body;
+    const customerId = parsePositiveInt(customer_id);
 
-    if (!prefix_code || !customer_id) {
+    if (!prefix_code || !customerId) {
       return NextResponse.json({ error: 'prefix_code and customer_id required' }, { status: 400 });
     }
 
@@ -40,11 +50,13 @@ export async function POST(req: NextRequest) {
     }
 
     const pool = await getDb();
+    const actor = await requirePermission(req, pool, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไข Prefix Mapping');
+    if (actor instanceof Response) return actor;
 
     // Check duplicate (same prefix + same customer)
     const dup = await pool.request()
       .input('code', sql.NVarChar, code)
-      .input('custId', sql.Int, customer_id)
+      .input('custId', sql.Int, customerId)
       .query('SELECT COUNT(*) as cnt FROM PrefixMapping WHERE prefix_code = @code AND customer_id = @custId');
     if (dup.recordset[0].cnt > 0) {
       return NextResponse.json({ error: `prefix ${code} กับลูกค้ารายนี้ถูกเพิ่มไปแล้ว` }, { status: 400 });
@@ -59,7 +71,7 @@ export async function POST(req: NextRequest) {
 
     const result = await pool.request()
       .input('prefix_code', sql.NVarChar, code)
-      .input('customer_id', sql.Int, customer_id)
+      .input('customer_id', sql.Int, customerId)
       .input('is_primary', sql.Bit, is_primary ? 1 : 0)
       .input('notes', sql.NVarChar, notes || null)
       .query(`
@@ -69,7 +81,7 @@ export async function POST(req: NextRequest) {
       `);
 
     const created = result.recordset[0];
-    await logAudit({ action: 'prefix_create', entityType: 'prefix_mapping', entityId: created.prefix_id, details: { prefix_code: code, customer_id, is_primary } });
+    await logAudit({ userId: actor.userId, action: 'prefix_create', entityType: 'prefix_mapping', entityId: created.prefix_id, details: { prefix_code: code, customer_id: customerId, is_primary } });
     return NextResponse.json({ success: true, data: created });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -82,17 +94,20 @@ export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
     const { prefix_id, is_primary, notes } = body;
+    const prefixId = parsePositiveInt(prefix_id);
 
-    if (!prefix_id) {
+    if (!prefixId) {
       return NextResponse.json({ error: 'prefix_id required' }, { status: 400 });
     }
 
     const pool = await getDb();
+    const actor = await requirePermission(req, pool, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไข Prefix Mapping');
+    if (actor instanceof Response) return actor;
 
     // If setting as primary, unset others with the same prefix
     if (is_primary) {
       const current = await pool.request()
-        .input('id', sql.Int, prefix_id)
+        .input('id', sql.Int, prefixId)
         .query('SELECT prefix_code FROM PrefixMapping WHERE prefix_id = @id');
       if (current.recordset.length > 0) {
         await pool.request()
@@ -102,7 +117,7 @@ export async function PUT(req: NextRequest) {
     }
 
     await pool.request()
-      .input('id', sql.Int, prefix_id)
+      .input('id', sql.Int, prefixId)
       .input('is_primary', sql.Bit, is_primary ? 1 : 0)
       .input('notes', sql.NVarChar, notes || null)
       .query(`
@@ -111,7 +126,7 @@ export async function PUT(req: NextRequest) {
         WHERE prefix_id = @id
       `);
 
-    await logAudit({ action: 'prefix_update', entityType: 'prefix_mapping', entityId: prefix_id, details: { is_primary } });
+    await logAudit({ userId: actor.userId, action: 'prefix_update', entityType: 'prefix_mapping', entityId: prefixId, details: { is_primary } });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -123,16 +138,19 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const prefixId = searchParams.get('prefix_id');
+    const prefixId = parsePositiveInt(searchParams.get('prefix_id'));
     if (!prefixId) {
       return NextResponse.json({ error: 'prefix_id required' }, { status: 400 });
     }
 
     const pool = await getDb();
+    const actor = await requirePermission(req, pool, 'settings.manage', 'คุณไม่มีสิทธิ์ลบ Prefix Mapping');
+    if (actor instanceof Response) return actor;
+
     await pool.request()
-      .input('id', sql.Int, parseInt(prefixId))
+      .input('id', sql.Int, prefixId)
       .query('DELETE FROM PrefixMapping WHERE prefix_id = @id');
-    await logAudit({ action: 'prefix_delete', entityType: 'prefix_mapping', entityId: parseInt(prefixId) });
+    await logAudit({ userId: actor.userId, action: 'prefix_delete', entityType: 'prefix_mapping', entityId: prefixId });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

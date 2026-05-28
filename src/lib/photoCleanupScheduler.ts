@@ -7,15 +7,12 @@ let currentCronExpr: string | null = null;
 async function executeCleanup(): Promise<void> {
   console.log('🧹 [Photo Cleanup] Starting cleanup...');
   try {
-    const baseUrl = `http://localhost:${process.env.PORT || 3005}`;
-    const res = await fetch(`${baseUrl}/api/settings/photo-retention/cleanup`, { method: 'POST' });
-    const data = await res.json();
+    const { getDb } = await import('@/lib/db');
+    const { runPhotoRetentionCleanup } = await import('@/lib/photoRetentionCleanup');
+    const db = await getDb();
+    const data = await runPhotoRetentionCleanup(db);
 
-    if (data.success) {
-      console.log(`  ✅ [Photo Cleanup] Deleted ${data.deleted} files, freed ${data.freed_mb} MB`);
-    } else {
-      console.log(`  ⚠️ [Photo Cleanup] Error: ${data.error || 'unknown'}`);
-    }
+    console.log(`  ✅ [Photo Cleanup] Deleted ${data.deleted} files, freed ${data.freed_mb} MB`);
   } catch (error) {
     console.error('  ❌ [Photo Cleanup] Error:', error);
   }

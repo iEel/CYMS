@@ -4,7 +4,7 @@ import path from 'path';
 const repoRoot = path.resolve(__dirname, '../../../..');
 const migration = fs.readFileSync(path.join(repoRoot, 'scripts/migrate-runtime-core-schema.js'), 'utf8');
 const schema = fs.readFileSync(path.join(repoRoot, 'src/lib/schema.sql'), 'utf8');
-const permissionsRoute = fs.readFileSync(path.join(repoRoot, 'src/app/api/settings/permissions/route.ts'), 'utf8');
+const rbacSeeds = fs.readFileSync(path.join(repoRoot, 'src/lib/rbacSeeds.ts'), 'utf8');
 
 function collectApiRoutes(relativeDir: string): string[] {
   const absoluteDir = path.join(repoRoot, relativeDir);
@@ -55,7 +55,7 @@ describe('document template schema', () => {
       'document_templates.import',
       'document_templates.test_print',
     ]) {
-      expect(permissionsRoute).toContain(permission);
+      expect(rbacSeeds).toContain(permission);
       expect(migration).toContain(permission);
     }
   });

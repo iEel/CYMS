@@ -3,14 +3,18 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { getRateLimitStats, clearRateLimitStores, invalidateRateLimitConfig } from '@/lib/rateLimit';
 import { logAudit } from '@/lib/audit';
+import { requirePermission } from '@/lib/apiAuth';
 
 // GET — Get rate limit settings + stats
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const db = await getDb();
-    const result = await db.request().query(
-      "SELECT setting_value FROM SystemSettings WHERE setting_key = 'rate_limit'"
-    );
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์ดู Rate Limit');
+    if (actor instanceof Response) return actor;
+
+    const result = await db.request()
+      .input('key', sql.NVarChar, 'rate_limit')
+      .query('SELECT setting_value FROM SystemSettings WHERE setting_key = @key');
     const config = result.recordset[0]
       ? JSON.parse(result.recordset[0].setting_value)
       : { enabled: true, login_limit: 5, login_window_min: 15, api_limit: 100, api_window_min: 1, upload_limit: 10, upload_window_min: 1 };
@@ -39,6 +43,9 @@ export async function PUT(request: NextRequest) {
     };
 
     const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์แก้ไข Rate Limit');
+    if (actor instanceof Response) return actor;
+
     await db.request()
       .input('key', sql.NVarChar, 'rate_limit')
       .input('value', sql.NVarChar, JSON.stringify(config))
@@ -52,7 +59,7 @@ export async function PUT(request: NextRequest) {
 
     invalidateRateLimitConfig();
 
-    await logAudit({ action: 'rate_limit_update', entityType: 'system_settings', details: { enabled: config.enabled, login_limit: config.login_limit, api_limit: config.api_limit } });
+    await logAudit({ userId: actor.userId, action: 'rate_limit_update', entityType: 'system_settings', details: { enabled: config.enabled, login_limit: config.login_limit, api_limit: config.api_limit } });
 
     return NextResponse.json({ success: true, config });
   } catch (error) {
@@ -62,10 +69,14 @@ export async function PUT(request: NextRequest) {
 }
 
 // DELETE — Clear all rate limit stores
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
+    const db = await getDb();
+    const actor = await requirePermission(request, db, 'settings.manage', 'คุณไม่มีสิทธิ์ล้าง Rate Limit');
+    if (actor instanceof Response) return actor;
+
     clearRateLimitStores();
-    await logAudit({ action: 'rate_limit_clear', entityType: 'system_settings', details: { cleared: true } });
+    await logAudit({ userId: actor.userId, action: 'rate_limit_clear', entityType: 'system_settings', details: { cleared: true } });
     return NextResponse.json({ success: true, message: 'ล้าง Rate Limit ทั้งหมดแล้ว' });
   } catch (error) {
     console.error('❌ DELETE rate limit error:', error);

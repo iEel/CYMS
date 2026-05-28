@@ -1,4 +1,5 @@
 import cron, { ScheduledTask } from 'node-cron';
+import { runCodecoSendJob } from '@/lib/codecoSendJob';
 
 // Active cron jobs keyed by endpoint_id
 const activeJobs = new Map<number, ScheduledTask>();
@@ -27,22 +28,15 @@ async function executeEdiSend(ep: ScheduledEndpoint): Promise<void> {
     const { getDb } = await import('@/lib/db');
     const db = await getDb();
 
-    // Call the same logic as the CODECO send API — build body and use internal fetch
-    const baseUrl = `http://localhost:${process.env.PORT || 3005}`;
-    const res = await fetch(`${baseUrl}/api/edi/codeco/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        endpoint_id: ep.endpoint_id,
-        yard_id: ep.schedule_yard_id,
-        date_from: today,
-        date_to: today,
-        type: 'all',
-        shipping_line: ep.shipping_line || undefined,
-      }),
-    });
-
-    const data = await res.json();
+    const result = await runCodecoSendJob({
+      endpoint_id: ep.endpoint_id,
+      yard_id: ep.schedule_yard_id,
+      date_from: today,
+      date_to: today,
+      type: 'all',
+      shipping_line: ep.shipping_line || undefined,
+    }, db);
+    const data = result.body;
 
     // Update last run time
     const sql = (await import('mssql')).default;

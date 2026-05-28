@@ -48,3 +48,16 @@ describe('production runtime source does not own database DDL', () => {
     expect(source).not.toMatch(/\bALTER\s+TABLE\b/i);
   });
 });
+
+describe('production runtime source does not probe database schema per request', () => {
+  const runtimeSourceFiles = productionRoots.flatMap(collectSourceFiles);
+
+  it.each(runtimeSourceFiles)('%s has no request-path schema discovery', (relativePath) => {
+    const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+
+    expect(source).not.toMatch(/\bOBJECT_ID\s*\(/i);
+    expect(source).not.toMatch(/\bCOL_LENGTH\s*\(/i);
+    expect(source).not.toMatch(/\bsys\.columns\b/i);
+    expect(source).not.toMatch(/\bINFORMATION_SCHEMA\.COLUMNS\b/i);
+  });
+});
