@@ -99,7 +99,7 @@ sudo npm install -g pm2
 ping 192.168.110.106
 
 # ทดสอบ port 1433 (ถ้ามี sqlcmd)
-sqlcmd -S 192.168.110.106 -U sa -P 'YOUR_SA_PASSWORD' -C -Q "SELECT @@VERSION"
+sqlcmd -S 192.168.110.106,1433 -U sa -P 'YOUR_SA_PASSWORD' -C -Q "SELECT @@VERSION"
 
 # หรือใช้ telnet/nc เช็ค port
 nc -zv 192.168.110.106 1433
@@ -137,28 +137,31 @@ cd container-yard-system
 ### 5.2 ติดตั้ง Dependencies
 
 ```bash
-npm install
+npm ci
 ```
 
 > ⏱ ใช้เวลาประมาณ 2-5 นาที ขึ้นอยู่กับความเร็ว internet
+> ใช้ `npm ci` ใน production/staging เพื่อให้ dependency ตรงกับ `package-lock.json`; ใช้ `npm install` เฉพาะตอนพัฒนาและต้องการอัปเดต lockfile
 
 ### 5.3 Dependencies สำคัญ (อ้างอิง)
 
-> ✅ **ไม่ต้องติดตั้งแยก** — ทุก package อยู่ใน `package.json` แล้ว คำสั่ง `npm install` ด้านบนจะติดตั้งให้ทั้งหมดอัตโนมัติ
+> ✅ **ไม่ต้องติดตั้งแยก** — ทุก package อยู่ใน `package.json` แล้ว คำสั่ง `npm ci` ด้านบนจะติดตั้งให้ทั้งหมดอัตโนมัติ
 > ตารางนี้เป็น **รายการอ้างอิง** ให้รู้ว่าระบบใช้ library อะไรบ้าง
 
 | Package | หน้าที่ |
 |---------|--------|
 | `next` + `react` | Web framework (App Router) |
 | `mssql` | MS SQL Server driver |
-| `jsonwebtoken` + `bcryptjs` | JWT authentication + password hashing |
+| `jose` + `bcryptjs` | JWT authentication + password hashing |
 | `zod` | Runtime input validation |
 | `ssh2-sftp-client` | SFTP file transfer (ส่ง EDI) |
+| `nodemailer` + `@azure/msal-node` | Email delivery ผ่าน SMTP หรือ Azure Graph |
 | `jspdf` + `jspdf-autotable` | 📄 PDF report export (รองรับภาษาไทย) |
 | `tesseract.js` | OCR สแกนเลขตู้ |
 | `xlsx` | Excel/CSV import/export |
 | `three` | 3D Yard Viewer |
-| `qrcode.react` | QR Code สำหรับ EIR |
+| `qrcode.react` | QR Code สำหรับ EIR / PromptPay |
+| `recharts` | Dashboard/report charts |
 
 ---
 
@@ -178,11 +181,23 @@ DB_PORT=1433
 DB_NAME=CYMS_DB
 DB_USER=sa
 DB_PASSWORD=<รหัสผ่าน>
-DB_INSTANCE=alpha              # ถ้าใช้ named instance (เช่น ALPHA)
+# DB_INSTANCE=alpha            # Optional: ถ้าใช้ named instance (เช่น ALPHA)
 
 # ===== JWT =====
 JWT_SECRET=ใส่-random-string-ยาวๆ-อย่างน้อย-32-ตัว
 JWT_EXPIRES_IN=8h
+
+# ===== Upload / File Storage =====
+# ใช้ได้ 2 แบบ: byte limit หรือ MB limit; ถ้าตั้งทั้งคู่ MAX_FILE_SIZE จะถูกใช้ก่อน
+# MAX_FILE_SIZE=5242880
+UPLOAD_MAX_SIZE_MB=5
+
+# ===== Billing / Payment QR (Optional) =====
+# PROMPTPAY_ID=0105559000000
+
+# ===== BoxTech Container Specs (Optional) =====
+# BOXTECH_USERNAME=
+# BOXTECH_PASSWORD=
 
 # ===== Email (Optional — ถ้าต้องการส่ง email) =====
 # SMTP_HOST=smtp.office365.com
@@ -196,6 +211,9 @@ JWT_EXPIRES_IN=8h
 # AZURE_CLIENT_ID=
 # AZURE_CLIENT_SECRET=
 # AZURE_MAIL_FROM=
+
+# ===== Smoke Test (Optional) =====
+# CYMS_E2E_BASE_URL=https://cyms.yourcompany.com
 ```
 
 **สร้าง JWT_SECRET แบบ random:**
@@ -206,6 +224,10 @@ openssl rand -base64 32
 ```
 
 > ⚠️ **สำคัญ**: ตั้ง `DB_PASSWORD` และ `JWT_SECRET` ให้แข็งแรง ไม่ใช่ค่า default
+>
+> 🔒 `JWT_SECRET` เป็นค่า **บังคับใน production** แล้ว ระบบจะ fail-fast ถ้าไม่ตั้งค่า เพื่อไม่ให้ production เผลอใช้ secret default
+>
+> 📁 ไฟล์อัปโหลดจริงอยู่ที่ `public/uploads/...` ต้อง backup/persist directory นี้พร้อม DB ไม่เช่นนั้นรูป Gate/EIR/M&R/เอกสารแนบจะหายหลังย้าย server
 
 ---
 
@@ -223,22 +245,39 @@ node scripts/seed-users.js
 # 3. สร้าง Permissions
 node scripts/seed-permissions.js
 
-# 4. (Optional) สร้างตู้ตัวอย่าง
+# 4. (Optional) สร้างตู้ตัวอย่าง — ห้ามรันใน Production จริง
 node scripts/seed-containers.js
 
-# 5. Migration scripts — รันทุกตัว
+# 5. Migration scripts — รันทุกตัวตามลำดับนี้
 node scripts/migrate-billing.js
 node scripts/migrate-gate-transactions.js
 node scripts/migrate-work-orders.js
 node scripts/migrate-edi-endpoints.js
 node scripts/migrate-edi-mnr.js
+node scripts/migrate-edi-schedule.js
+node scripts/migrate-edi-templates.js
 node scripts/migrate-demurrage.js
 node scripts/migrate-storage-tiers.js
 node scripts/migrate-cedex.js
+node scripts/migrate-customer-portal.js
+node scripts/migrate-booking-containers.js
+node scripts/migrate-gate-owner.js
+node scripts/migrate-prefix-multi.js
+node scripts/migrate-password-policy.js
+node scripts/migrate-transfer-yard.js
+node scripts/migrate-tariff-matrix.js
+node scripts/migrate-truck-company.js
+
+# 6. Migration กลางล่าสุด — สำคัญมาก: runtime routes ไม่ทำ DDL เองแล้ว
+node scripts/migrate-runtime-core-schema.js
+
+# 7. Seed/Update reference data
 node scripts/update-cedex-thai.js
 ```
 
 > ✅ ดูผลลัพธ์ — ทุก script ควรแสดงข้อความ `✅ ... สำเร็จ`
+>
+> ℹ️ `scripts/migrate-runtime-core-schema.js` เป็น idempotent migration กลางที่เติม schema ล่าสุด เช่น `SchemaMigrations`, `EntityAttachments`, `DocumentLifecycle`, `ApprovalReviews`, `IntegrationLogs`, `PortalEntityAccess` extensions, BoxTech weight fields, document template/continuous print fields และ permissions ใหม่ ๆ ต้องรันก่อน start version ใหม่เสมอ
 
 ---
 
@@ -252,6 +291,7 @@ cd /var/www/container-yard-system
 # ตรวจคุณภาพโค้ดก่อน build
 npm run lint
 npx tsc --noEmit --pretty false
+npm test -- --cacheDirectory .tmp/jest --runInBand
 
 # Build production bundle
 npm run build
@@ -259,9 +299,9 @@ npm run build
 # ⏱ ใช้เวลาประมาณ 1-3 นาที
 ```
 
-> ✅ `npm run lint` ต้องไม่มี error ก่อน deploy ได้ แต่ warning บางรายการ เช่น `<img>` optimization หรือ unused variable ใน migration script อาจยังแสดงได้โดยไม่ทำให้คำสั่ง fail
+> ✅ `npm run lint`, `tsc`, และ `npm test` ต้องผ่านก่อน deploy production
 >
-> ℹ️ ระบบ EDI SFTP ใช้ `ssh2-sftp-client` และถูกตั้งค่าเป็น server external package ใน `next.config.ts` แล้ว ไม่ต้องติดตั้งแยก ให้ใช้ `npm install` จาก `package.json` ตามปกติ
+> ℹ️ ระบบ EDI SFTP ใช้ `ssh2-sftp-client` และถูกตั้งค่าเป็น server external package ใน `next.config.ts` แล้ว ไม่ต้องติดตั้งแยก ให้ใช้ `npm ci` จาก `package-lock.json` ตามปกติ
 
 ### 8.2 ทดสอบรัน
 
@@ -270,6 +310,12 @@ npm run build
 npm start
 # → http://localhost:3005
 # กด Ctrl+C เพื่อหยุด
+```
+
+หลัง start แล้วสามารถรัน smoke test ได้:
+
+```bash
+CYMS_E2E_BASE_URL=http://localhost:3005 npm run test:e2e:smoke
 ```
 
 ---
@@ -310,8 +356,10 @@ module.exports = {
 ### 9.2 สร้าง Log Directory + เริ่ม PM2
 
 ```bash
-# สร้าง log directory
+# สร้าง log directory และ upload directory
 mkdir -p /var/www/container-yard-system/logs
+mkdir -p /var/www/container-yard-system/public/uploads
+chmod -R u+rwX /var/www/container-yard-system/public/uploads
 
 # เริ่มรัน
 cd /var/www/container-yard-system
@@ -472,12 +520,12 @@ curl -I http://localhost
 
 Cloudflare Tunnel ทำให้เข้าถึง CYMS จาก internet ได้โดย **ไม่ต้องเปิด port บน firewall** — ปลอดภัยกว่า expose port ตรง
 
-### 10.1 ข้อกำหนด
+### 11.1 ข้อกำหนด
 
 - มี Cloudflare account (ฟรีได้)
 - มี domain ที่ใช้ Cloudflare DNS (เช่น `cyms.yourcompany.com`)
 
-### 10.2 ติดตั้ง cloudflared
+### 11.2 ติดตั้ง cloudflared
 
 ```bash
 # ดาวน์โหลด + ติดตั้ง cloudflared
@@ -489,7 +537,7 @@ rm cloudflared.deb
 cloudflared --version
 ```
 
-### 10.3 Login + สร้าง Tunnel
+### 11.3 Login + สร้าง Tunnel
 
 ```bash
 # Login (จะเปิด browser — ถ้าเป็น headless server ให้ copy URL ไปเปิดเอง)
@@ -501,7 +549,7 @@ cloudflared tunnel create cyms
 # → สร้างไฟล์ credentials: ~/.cloudflared/xxxxxxxx.json
 ```
 
-### 10.4 สร้าง Config File
+### 11.4 สร้าง Config File
 
 ```bash
 nano ~/.cloudflared/config.yml
@@ -519,14 +567,14 @@ ingress:
 
 > ⚠️ แก้ `hostname`, `tunnel`, `credentials-file` ให้ตรงกับของจริง
 
-### 10.5 สร้าง DNS Record
+### 11.5 สร้าง DNS Record
 
 ```bash
 cloudflared tunnel route dns cyms cyms.yourcompany.com
 # → สร้าง CNAME record: cyms.yourcompany.com → xxxxxxxx.cfargotunnel.com
 ```
 
-### 10.6 ทดสอบ Tunnel
+### 11.6 ทดสอบ Tunnel
 
 ```bash
 # ทดสอบรัน (foreground)
@@ -536,7 +584,7 @@ cloudflared tunnel run cyms
 # กด Ctrl+C เพื่อหยุด
 ```
 
-### 10.7 ตั้ง cloudflared เป็น Service (Auto-start)
+### 11.7 ตั้ง cloudflared เป็น Service (Auto-start)
 
 ```bash
 # ติดตั้งเป็น system service
@@ -595,45 +643,88 @@ sudo systemctl start fail2ban
 
 ## 13. Backup Strategy
 
-### 12.1 Database Backup Script
+> ⚠️ ถ้า MS SQL Server อยู่คนละเครื่องกับ App Server ให้ทำ DB backup บน **DB Server** เป็นหลัก เพราะ `BACKUP DATABASE ... TO DISK` จะเขียนไฟล์บนเครื่องที่ SQL Server service รันอยู่ ไม่ใช่เครื่อง App Server
+
+### 13.1 Database Backup Script (รันบน DB Server)
+
+ตัวอย่างนี้เหมาะกับ DB Server ที่เป็น Linux และมี `sqlcmd`:
 
 ```bash
-# สร้าง backup directory
 sudo mkdir -p /var/backups/cyms
-
-# สร้าง backup script
-sudo nano /var/backups/cyms/backup.sh
+sudo nano /var/backups/cyms/backup-db.sh
 ```
 
 ```bash
 #!/bin/bash
 # CYMS Database Backup Script
+set -euo pipefail
+
 BACKUP_DIR="/var/backups/cyms"
 DATE=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="$BACKUP_DIR/CYMS_DB_$DATE.bak"
+DB_NAME="CYMS_DB"
+DB_USER="cyms_user"
+DB_PASSWORD="YOUR_DB_PASSWORD"
 
-# Backup via sqlcmd
-/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YOUR_SA_PASSWORD' -C -Q "
-BACKUP DATABASE CYMS_DB 
+# รันบน DB Server หรือเครื่องที่ SQL Server service เขียน path นี้ได้
+/opt/mssql-tools18/bin/sqlcmd -S 127.0.0.1 -U "$DB_USER" -P "$DB_PASSWORD" -C -Q "
+BACKUP DATABASE [$DB_NAME]
 TO DISK = '$BACKUP_FILE' 
 WITH FORMAT, COMPRESSION, NAME = 'CYMS Full Backup $DATE';
 "
 
 # ลบ backup เก่ากว่า 30 วัน
-find $BACKUP_DIR -name "CYMS_DB_*.bak" -mtime +30 -delete
+find "$BACKUP_DIR" -name "CYMS_DB_*.bak" -mtime +30 -delete
 
 echo "✅ Backup สำเร็จ: $BACKUP_FILE"
 ```
 
-### 12.2 ตั้ง Cron Job (Backup อัตโนมัติทุกวัน ตี 2)
+ถ้า DB Server เป็น Windows ให้ใช้ SQL Server Agent / Maintenance Plan / SSMS Backup Job แล้วคัดลอก `.bak` ไป storage ที่ปลอดภัยแทน
+
+### 13.2 Upload/File Backup Script (รันบน App Server)
+
+รูป Gate/EIR/M&R, logo, และเอกสารแนบอยู่ใน `public/uploads` ต้อง backup แยกจาก DB:
 
 ```bash
-sudo chmod +x /var/backups/cyms/backup.sh
+sudo mkdir -p /var/backups/cyms/uploads
+nano /var/backups/cyms/backup-uploads.sh
+```
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+APP_DIR="/var/www/container-yard-system"
+BACKUP_DIR="/var/backups/cyms/uploads"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+mkdir -p "$BACKUP_DIR"
+tar -czf "$BACKUP_DIR/uploads_$DATE.tar.gz" -C "$APP_DIR/public" uploads
+find "$BACKUP_DIR" -name "uploads_*.tar.gz" -mtime +30 -delete
+
+echo "✅ Upload backup สำเร็จ: $BACKUP_DIR/uploads_$DATE.tar.gz"
+```
+
+### 13.3 ตั้ง Cron Job (Backup อัตโนมัติทุกวัน ตี 2)
+
+บน DB Server:
+
+```bash
+sudo chmod +x /var/backups/cyms/backup-db.sh
 
 # เพิ่ม cron job
 sudo crontab -e
 # เพิ่มบรรทัด:
-0 2 * * * /var/backups/cyms/backup.sh >> /var/backups/cyms/backup.log 2>&1
+0 2 * * * /var/backups/cyms/backup-db.sh >> /var/backups/cyms/backup-db.log 2>&1
+```
+
+บน App Server:
+
+```bash
+sudo chmod +x /var/backups/cyms/backup-uploads.sh
+sudo crontab -e
+# เพิ่มบรรทัด:
+15 2 * * * /var/backups/cyms/backup-uploads.sh >> /var/backups/cyms/backup-uploads.log 2>&1
 ```
 
 ---
@@ -642,27 +733,34 @@ sudo crontab -e
 
 เมื่อต้องการ deploy version ใหม่:
 
+> สำหรับ routine deploy ให้รัน `migrate-runtime-core-schema.js` ทุกครั้งเพราะเป็น idempotent และเป็น schema contract ล่าสุดของ runtime routes
+> ถ้า release note หรือ `DEVELOPER_HANDOFF.md` ระบุ migration เฉพาะทางเพิ่มเติม ให้รัน script นั้นก่อน `migrate-runtime-core-schema.js`
+
 ```bash
 cd /var/www/container-yard-system
 
 # 1. ดึงโค้ดใหม่
 git pull origin master
 
-# 2. ติดตั้ง dependencies ใหม่ (ถ้ามีเพิ่ม)
-npm install
+# 2. ติดตั้ง dependencies ตาม lockfile
+npm ci
 
-# 3. รัน migration scripts ใหม่ (ถ้ามี)
-# node scripts/migrate-xxx.js
+# 3. รัน migration กลางล่าสุดก่อน build/start version ใหม่
+node scripts/migrate-runtime-core-schema.js
 
 # 4. ตรวจและ Build ใหม่
 npm run lint
 npx tsc --noEmit --pretty false
+npm test -- --cacheDirectory .tmp/jest --runInBand
 npm run build
 
 # 5. Restart
 pm2 restart cyms
 
-# ตรวจสอบ
+# 6. Smoke test หลัง restart
+CYMS_E2E_BASE_URL=http://localhost:3005 npm run test:e2e:smoke
+
+# 7. ตรวจสอบ logs
 pm2 logs cyms --lines 20
 ```
 
@@ -679,11 +777,14 @@ echo "🚀 Deploying CYMS..."
 
 cd /var/www/container-yard-system
 git pull origin master
-npm install
+npm ci
+node scripts/migrate-runtime-core-schema.js
 npm run lint
 npx tsc --noEmit --pretty false
+npm test -- --cacheDirectory .tmp/jest --runInBand
 npm run build
 pm2 restart cyms
+CYMS_E2E_BASE_URL="${CYMS_E2E_BASE_URL:-http://localhost:3005}" npm run test:e2e:smoke
 
 echo "✅ Deploy สำเร็จ!"
 pm2 status
@@ -736,12 +837,12 @@ node scripts/clear-test-data.js --confirm
 | M&R, Audit Logs, Holds | Customers, Tariff |
 | EDI Logs, Bookings | CEDEX Codes, Company Profile |
 
-หลังรันเสร็จ ลบไฟล์รูปที่ทดสอบด้วย:
+หลังรันเสร็จ ลบไฟล์รูป/เอกสารทดสอบด้วย โดยระวังอย่าลบไฟล์ production:
 
 ```bash
-rm -rf public/uploads/gate-photos/*
-rm -rf public/uploads/exit-photos/*
-rm -rf public/uploads/repair-photos/*
+# ถ้าเป็น DB ทดสอบล้วนและยืนยันว่าไม่มีไฟล์จริง:
+rm -rf public/uploads/*
+mkdir -p public/uploads
 pm2 restart cyms
 ```
 
@@ -760,7 +861,12 @@ GO
 DB_NAME=CYMS_PROD
 
 # รัน setup scripts ทั้งหมด (เหมือนขั้นตอนที่ 7)
-npm run build && pm2 restart cyms
+node scripts/setup-db.js
+node scripts/seed-users.js
+node scripts/seed-permissions.js
+node scripts/migrate-runtime-core-schema.js
+npm run build
+pm2 restart cyms
 ```
 
 > 💡 วิธีนี้ดีถ้าต้องการเก็บ DB ทดสอบไว้ด้วย เพื่อกลับมาใช้ทีหลัง
@@ -786,18 +892,18 @@ pm2 restart cyms
 ### เชื่อมต่อ SQL Server ไม่ได้
 
 ```bash
-# ตรวจสอบ service
+# ถ้า DB Server เป็น Linux และคุณ SSH เข้า DB Server ได้:
 sudo systemctl status mssql-server
-
-# restart
 sudo systemctl restart mssql-server
 
-# ทดสอบเชื่อมต่อ
-sqlcmd -S localhost -U cyms_user -P 'CymsStr0ng!Pass' -C -d CYMS_DB -Q "SELECT 1"
-
-# ดู log
 sudo cat /var/opt/mssql/log/errorlog | tail -50
+
+# ทดสอบจาก App Server ไป DB Server
+sqlcmd -S 192.168.110.106,1433 -U cyms_user -P 'CymsStr0ng!Pass' -C -d CYMS_DB -Q "SELECT 1"
+nc -zv 192.168.110.106 1433
 ```
+
+ถ้า DB Server เป็น Windows ให้ตรวจ SQL Server Configuration Manager ว่าเปิด TCP/IP แล้ว, firewall อนุญาต port 1433 จาก App Server, และ SQL Login ยัง active อยู่
 
 ### Nginx ไม่ทำงาน / 502 Bad Gateway
 
@@ -904,7 +1010,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
                         │ Cloudflare Tunnel (encrypted)
                         ▼
 ┌──────────────────────────────────────────────────────┐
-│             Ubuntu Server                             │
+│             Ubuntu App Server                         │
 │  ┌────────────────────────────────────────────────┐   │
 │  │  cloudflared (tunnel daemon)                   │   │
 │  └──────────────────┬─────────────────────────────┘   │
@@ -915,14 +1021,17 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 │  └──────────────────┬─────────────────────────────┘   │
 │                     │ http://127.0.0.1:3005           │
 │  ┌──────────────────▼─────────────────────────────┐   │
-│  │  PM2 → Next.js (CYMS)                         │   │
+│  │  PM2 → Next.js 16 (CYMS)                       │   │
 │  │  /var/www/container-yard-system                │   │
+│  │  public/uploads (persistent file storage)      │   │
 │  └──────────────────┬─────────────────────────────┘   │
-│                     │ tcp://localhost:1433             │
-│  ┌──────────────────▼─────────────────────────────┐   │
-│  │  MS SQL Server 2022 Express                    │   │
-│  │  Database: CYMS_DB                             │   │
-│  └────────────────────────────────────────────────┘   │
+└─────────────────────┼────────────────────────────────┘
+                      │ tcp://192.168.110.106:1433
+                      ▼
+┌──────────────────────────────────────────────────────┐
+│             MS SQL Server 2019+/2022                  │
+│             Database: CYMS_DB                         │
+│             Backup runs on DB Server                  │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -938,11 +1047,13 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 | Restart Nginx | `sudo systemctl restart nginx` |
 | ทดสอบ Nginx config | `sudo nginx -t` |
 | ดู Nginx logs | `tail -f /var/log/nginx/cyms_error.log` |
-| Restart SQL Server | `sudo systemctl restart mssql-server` |
+| Restart SQL Server | รันบน DB Server: `sudo systemctl restart mssql-server` หรือ restart SQL Server service บน Windows |
 | Restart Tunnel | `sudo systemctl restart cloudflared` |
 | Deploy ใหม่ | `cd /var/www/container-yard-system && ./deploy.sh` |
-| Backup DB | `sudo /var/backups/cyms/backup.sh` |
+| Backup DB | รันบน DB Server: `sudo /var/backups/cyms/backup-db.sh` |
+| Backup uploads | รันบน App Server: `sudo /var/backups/cyms/backup-uploads.sh` |
 | รัน Tests | `cd /var/www/container-yard-system && npm test` |
+| Smoke test หลัง deploy | `CYMS_E2E_BASE_URL=http://localhost:3005 npm run test:e2e:smoke` |
 | อัปเดต CEDEX ภาษาไทย | `node scripts/update-cedex-thai.js` |
 | Export PDF รายงาน | บัญชี → รายงาน → ปุ่ม PDF (client-side, ไม่ต้องตั้งค่าเพิ่ม) |
 
