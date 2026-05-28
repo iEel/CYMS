@@ -10,6 +10,18 @@
 -- GO
 
 -- ===================================
+-- ตาราง: Schema Migrations Ledger
+-- ===================================
+CREATE TABLE SchemaMigrations (
+    migration_key   NVARCHAR(150) NOT NULL PRIMARY KEY,
+    migration_name  NVARCHAR(200),
+    checksum        NVARCHAR(128),
+    applied_at      DATETIME2 DEFAULT GETDATE(),
+    applied_by      NVARCHAR(128),
+    status          NVARCHAR(30)
+);
+
+-- ===================================
 -- ตาราง: ข้อมูลบริษัท (Company Profile)
 -- ===================================
 CREATE TABLE CompanyProfile (
