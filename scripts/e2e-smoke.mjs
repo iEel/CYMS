@@ -46,6 +46,22 @@ async function run() {
   assertStatus(authMe, [200, 401]);
   checks.push(authMe);
 
+  const publicEir = await request('/eir/SMOKE-EIR-NOT-FOUND');
+  assertStatus(publicEir, [200, 404]);
+  checks.push(publicEir);
+
+  const portalContainers = await request('/portal/containers');
+  assertStatus(portalContainers, [200, 302, 401, 403]);
+  checks.push(portalContainers);
+
+  const documentTemplates = await request('/settings?tab=document-templates');
+  assertStatus(documentTemplates, [200, 302, 401, 403]);
+  checks.push(documentTemplates);
+
+  const continuousPrint = await request('/billing/print/continuous?preview=sample&type=tax_invoice_receipt');
+  assertStatus(continuousPrint, [200, 302, 401, 403]);
+  checks.push(continuousPrint);
+
   const dashboard = await request('/dashboard');
   assertStatus(dashboard, [200, 302, 307, 308]);
   if ([302, 307, 308].includes(dashboard.status) && !String(dashboard.location || '').includes('/login')) {

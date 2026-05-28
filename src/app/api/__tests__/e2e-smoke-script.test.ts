@@ -14,5 +14,9 @@ describe('E2E smoke test script', () => {
     expect(script).toContain('/manifest.json');
     expect(script).toContain('/api/auth/me');
     expect(script).toContain('/dashboard');
+    expect(script).toContain('/eir/');
+    expect(script).toContain('/portal/containers');
+    expect(script).toContain('/settings?tab=document-templates');
+    expect(script).toContain('/billing/print/continuous');
   });
 });
