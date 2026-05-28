@@ -196,15 +196,17 @@ type EntityScope = {
 
 **Steps:**
 
-- [ ] Add characterization tests or component-level smoke tests for visible Gate In fields.
+- [x] Add characterization tests or component-level smoke tests for visible Gate In fields.
 - [ ] Extract booking/customer lookup state into `useGateInBookingContext`.
 - [ ] Extract billing and clearance state into `useGateInBillingContext`.
 - [ ] Extract grant preview derivation into `useGateInVisibilityPreview`.
-- [ ] Move container fields into `GateInContainerSection`.
-- [ ] Move owner/billing/party fields into `GateInBusinessRelationshipSection`.
-- [ ] Move driver/truck fields into `GateInDriverSection`.
-- [ ] Move photo/signature/evidence controls into `GateInEvidenceSection`.
-- [ ] Keep final submit payload assembled in the parent until tests prove safe extraction.
+- [x] Move container fields into `GateInContainerSection`.
+- [x] Move owner/billing/party fields into `GateInBusinessRelationshipSection`.
+- [x] Move driver/truck fields into `GateInDriverSection`.
+- [x] Move photo/signature/evidence controls into `GateInEvidenceSection`.
+- [x] Extract notes/submit/result into `GateInSubmitSection`.
+- [x] Extract Portal Visibility Preview rendering into `GateInVisibilityPreviewPanel`.
+- [x] Keep final submit payload assembled in the parent until tests prove safe extraction.
 - [ ] Verify no visual regression in desktop and responsive widths.
 
 **Acceptance Criteria:**

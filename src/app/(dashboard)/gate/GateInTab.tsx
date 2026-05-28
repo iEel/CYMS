@@ -5,15 +5,15 @@ import { validateContainerNumber } from '@/lib/containerValidation';
 import {
   Loader2, CheckCircle2,
   CreditCard,
-  Printer, X, Users,
-  AlertTriangle, FileText,
+  Printer, Users,
+  AlertTriangle,
   ArrowDownToLine,
 } from 'lucide-react';
 import CameraOCR from '@/components/gate/CameraOCR';
 import GateWorkflowPanel from '@/components/gate/GateWorkflowPanel';
 import GateGuardrailPanel from '@/components/gate/GateGuardrailPanel';
 import GateDecisionBar from '@/components/gate/GateDecisionBar';
-import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, inputClass, labelClass, OPTIONAL_CHARGES } from './types';
+import { BillingCharge, BillingClearance, BillingClearanceType, GateInBillingData, OPTIONAL_CHARGES } from './types';
 import { buildGateDecisionSignals, buildGateInWorkflow } from '@/lib/gateWorkflow';
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
@@ -22,6 +22,8 @@ import GateInContainerSection, { type GateInBookingOption, type GateInFormState 
 import GateInBusinessRelationshipSection from './components/GateInBusinessRelationshipSection';
 import GateInDriverSection from './components/GateInDriverSection';
 import GateInInspectionSection, { type GateInInspectionReport } from './components/GateInInspectionSection';
+import GateInSubmitSection, { type GateInResultState } from './components/GateInSubmitSection';
+import GateInVisibilityPreviewPanel, { type GateInVisibilityPreviewRow } from './components/GateInVisibilityPreviewPanel';
 
 interface GateInTabProps {
   yardId: number;
@@ -35,16 +37,6 @@ interface BookingDerivedContext {
   ownerName?: string | null;
   billingCustomerId?: number | null;
   truckCompanyName?: string | null;
-}
-
-interface PortalVisibilityPreviewRow {
-  customerId: number;
-  customerName?: string | null;
-  entityType: string;
-  entityRef?: string | null;
-  accessRole: string;
-  validUntil?: string | null;
-  permissionScope?: Record<string, unknown>;
 }
 
 export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps) {
@@ -165,7 +157,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [haltCandidates, setHaltCandidates] = useState<Array<{ customer_id: number; customer_name: string; is_line: boolean; is_forwarder: boolean; is_trucking: boolean; credit_term: number; is_primary: boolean }>>([]);
 
   const [gateInLoading, setGateInLoading] = useState(false);
-  const [gateInResult, setGateInResult] = useState<{ success: boolean; message: string; eir_number?: string; assigned_location?: { zone_name: string; bay: number; row: number; tier: number; reason: string } } | null>(null);
+  const [gateInResult, setGateInResult] = useState<GateInResultState | null>(null);
   const [recentGateTransactions, setRecentGateTransactions] = useState<GateRecentTransaction[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<GateInBookingOption | null>(null);
   const [bookingSearch, setBookingSearch] = useState('');
@@ -174,7 +166,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [bookingSearchLoading, setBookingSearchLoading] = useState(false);
   const [bookingSearchError, setBookingSearchError] = useState('');
   const bookingDerivedContextRef = useRef<BookingDerivedContext>({});
-  const [visibilityPreview, setVisibilityPreview] = useState<PortalVisibilityPreviewRow[]>([]);
+  const [visibilityPreview, setVisibilityPreview] = useState<GateInVisibilityPreviewRow[]>([]);
   const [visibilityPreviewLoading, setVisibilityPreviewLoading] = useState(false);
   const [visibilityPreviewError, setVisibilityPreviewError] = useState('');
   const visibilityPreviewRequestRef = useRef(0);
@@ -747,33 +739,6 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     sealPhoto,
   ]);
 
-  const portalVisibilityPreviewPanel = (
-    <div className="rounded-xl border border-cyan-100 bg-cyan-50/60 p-3 dark:border-cyan-900/40 dark:bg-cyan-900/10">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-800 dark:text-white">Portal Visibility Preview</p>
-          <p className="text-[10px] leading-4 text-slate-400">จะแสดง grant ที่ระบบจะสร้าง ไม่ได้ตั้ง field policy รายครั้ง</p>
-        </div>
-        {visibilityPreviewLoading && <Loader2 size={14} className="animate-spin text-cyan-600" />}
-      </div>
-      <div className="mt-3 space-y-2">
-        {visibilityPreviewError ? (
-          <p className="text-xs text-rose-500">{visibilityPreviewError}</p>
-        ) : visibilityPreview.length === 0 ? (
-          <p className="rounded-lg border border-cyan-100 bg-white/70 px-3 py-2 text-xs text-slate-400 dark:border-cyan-900/40 dark:bg-slate-800/70">
-            ยังไม่มี party ที่จะได้รับสิทธิ์
-          </p>
-        ) : visibilityPreview.map((row, index) => (
-          <div key={`${row.customerId}-${row.entityType}-${row.accessRole}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-800/70">
-            <p className="font-semibold text-slate-700 dark:text-slate-200">{row.customerName || `Customer #${row.customerId}`}</p>
-            <p className="mt-0.5 text-slate-400">{row.entityType} · {row.accessRole}</p>
-            <p className="mt-1 text-[10px] text-slate-400">Grade default: hidden</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
   return (
     <>
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -867,13 +832,6 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           />
 
           {/* Extracted sections retain: เลือก Booking; Booking Customer; Container owner; Billing customer; Business relationship; Forwarder; Consignee; Bill To Customer; Tare Weight; Max Gross; Actual Gross / VGM; gateInForm.is_laden && (; onKeyDown; Number(boxtechTareWeightKg).toLocaleString(); Number(boxtechMaxGrossWeightKg).toLocaleString() */}
-
-          {/* Notes */}
-          <div>
-            <label className={labelClass}>หมายเหตุ</label>
-            <input type="text" placeholder="หมายเหตุเพิ่มเติม..." value={gateInForm.notes}
-              onChange={e => setGateInForm({ ...gateInForm, notes: e.target.value })} className={inputClass} />
-          </div>
 
           {/* ===== GATE-IN BILLING CARD ===== */}
           {gateInBillingLoading ? (
@@ -1176,46 +1134,19 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
             </div>
           ) : null}
 
-          {/* Submit — Gate-In + EIR */}
-          <div className="flex items-center gap-3 pt-2">
-            <button onClick={handleGateIn}
-              disabled={gateInLoading || !canGateIn || !gateInForm.container_number || containerValid === false || (gateInRequiresBillingClearance && !gateInBillingCleared)}
-              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
-              {gateInLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowDownToLine size={16} />}
-              รับตู้เข้าลาน + ออก EIR
-            </button>
-            {gateInRequiresBillingClearance && !gateInBillingCleared && (
-              <span className="text-[11px] text-amber-500 flex items-center gap-1">
-                <AlertTriangle size={12} /> กรุณาชำระเงินก่อนรับตู้
-              </span>
-            )}
-          </div>
-
-          {/* Result Toast */}
-          {gateInResult && (
-            <div className={`p-3 rounded-xl text-sm flex items-center justify-between gap-3 ${gateInResult.success ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>
-              <div className="flex items-center gap-3 flex-wrap flex-1 min-w-0">
-                <span className="font-medium text-xs">{gateInResult.message}</span>
-                {gateInResult.assigned_location && (
-                  <span className="text-xs font-mono bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded">
-                    📍 {gateInResult.assigned_location.zone_name} B{gateInResult.assigned_location.bay}-R{gateInResult.assigned_location.row}-T{gateInResult.assigned_location.tier}
-                  </span>
-                )}
-                {gateInResult.eir_number && (
-                  <>
-                    <span className="text-xs font-mono">EIR: {gateInResult.eir_number}</span>
-                    <button onClick={() => onViewEIR(gateInResult.eir_number!)}
-                      className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-700 transition-colors">
-                      <FileText size={12} /> พิมพ์ EIR
-                    </button>
-                  </>
-                )}
-              </div>
-              <button onClick={() => setGateInResult(null)} className="text-slate-400 hover:text-slate-600 shrink-0">
-                <X size={14} />
-              </button>
-            </div>
-          )}
+          <GateInSubmitSection
+            gateInForm={gateInForm}
+            setGateInForm={setGateInForm}
+            gateInLoading={gateInLoading}
+            canGateIn={canGateIn}
+            containerValid={containerValid}
+            gateInRequiresBillingClearance={gateInRequiresBillingClearance}
+            gateInBillingCleared={gateInBillingCleared}
+            gateInResult={gateInResult}
+            setGateInResult={setGateInResult}
+            handleGateIn={handleGateIn}
+            onViewEIR={onViewEIR}
+          />
             </div>
 
             <aside className="gate-in-side-rail space-y-3 xl:sticky xl:top-20 xl:self-start">
@@ -1223,7 +1154,11 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
               {gateInGuardrails.alerts.length > 0 && (
                 <GateGuardrailPanel title="Gate-In checks" snapshot={gateInGuardrails} compact />
               )}
-              {portalVisibilityPreviewPanel}
+              <GateInVisibilityPreviewPanel
+                rows={visibilityPreview}
+                loading={visibilityPreviewLoading}
+                error={visibilityPreviewError}
+              />
             </aside>
           </div>
         </div>
