@@ -3,7 +3,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { existsSync } from 'fs';
 import { logAudit } from '@/lib/audit';
-import { verifyToken } from '@/lib/auth';
+import { requireRequestActor } from '@/lib/apiAuth';
 
 // [Security] whitelist ของ folder ที่อนุญาต — ป้องกัน path traversal
 const ALLOWED_FOLDERS = new Set(['photos', 'gate', 'seal', 'damage', 'eir', 'mnr', 'documents', 'logos', 'reefer']);
@@ -42,19 +42,11 @@ function getMaxFileSizeBytes(): number {
   return DEFAULT_BYTES;
 }
 
-// POST — Upload photo (base64 → file) — ต้องมี Bearer token
+// POST — Upload photo (base64 → file) — ต้องมี proxy-authenticated actor
 export async function POST(request: NextRequest) {
   try {
-    // [Security] ตรวจสอบ auth token เพิ่มเติม (middleware ยังเช็คก่อนถึงที่นี่แล้ว)
-    // แต่เช็คอีกรอบในกรณีที่ route path เปลี่ยนแล้ว PUBLIC_PATHS อาจยัง miss
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต — กรุณาเข้าสู่ระบบ' }, { status: 401 });
-    }
-    const user = await verifyToken(authHeader.slice(7));
-    if (!user) {
-      return NextResponse.json({ error: 'Token ไม่ถูกต้องหรือหมดอายุ' }, { status: 401 });
-    }
+    const actor = requireRequestActor(request);
+    if (actor instanceof NextResponse) return actor;
 
     const body = await request.json();
     const { data, folder = 'photos', filename_prefix = 'photo' } = body;
@@ -120,7 +112,7 @@ export async function POST(request: NextRequest) {
     const urlPath = `/uploads/${sanitizedFolder}/${yearMonth}/${fileName}`;
 
     await logAudit({
-      userId: user.userId,
+      userId: actor.userId,
       action: 'file_upload',
       entityType: 'upload',
       details: { folder: sanitizedFolder, filename: fileName, size: buffer.length, url: urlPath },
