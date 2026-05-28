@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { pathToFileURL } from 'node:url';
+
 const baseUrl = (process.env.CYMS_E2E_BASE_URL || 'http://localhost:3005').replace(/\/$/, '');
 
 async function request(path, options = {}) {
@@ -29,12 +31,16 @@ function assertContains(result, needle) {
   }
 }
 
-function assertProtectedPageRedirect(result) {
+export function assertProtectedPageRedirect(result) {
   if (![302, 307, 308].includes(result.status)) {
     return;
   }
 
   const location = String(result.location || '');
+  if (!location) {
+    throw new Error(`${result.path} redirected to missing location`);
+  }
+
   let redirectUrl;
   try {
     redirectUrl = new URL(location, baseUrl);
@@ -42,7 +48,11 @@ function assertProtectedPageRedirect(result) {
     throw new Error(`${result.path} redirected to invalid location: ${location}`);
   }
 
-  const expectedPath = redirectUrl.pathname.includes('/login') || redirectUrl.pathname.includes('/auth');
+  const expectedPath =
+    redirectUrl.pathname === '/login' ||
+    redirectUrl.pathname.startsWith('/login/') ||
+    redirectUrl.pathname === '/auth' ||
+    redirectUrl.pathname.startsWith('/auth/');
   if (redirectUrl.origin !== new URL(baseUrl).origin || !expectedPath) {
     throw new Error(`${result.path} redirected to unexpected location: ${location}`);
   }
@@ -95,8 +105,10 @@ async function run() {
   }
 }
 
-run().catch((error) => {
-  console.error('E2E smoke failed');
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  run().catch((error) => {
+    console.error('E2E smoke failed');
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}
