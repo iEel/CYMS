@@ -6,6 +6,7 @@ import { ArrowLeft, Printer } from 'lucide-react';
 import { ContinuousTaxReceipt } from '@/components/billing/ContinuousTaxReceipt';
 import { buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrintSample';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
+import { sanitizeContinuousPrintReturnTo } from './returnPath';
 import type { ContinuousPrintPayload } from '@/lib/billingContinuousPrintTypes';
 import type {
   DocumentTemplateConfig,
@@ -131,7 +132,7 @@ function ContinuousPrintContent() {
   const copyIndex = copyIndexFrom(searchParams.get('copyIndex'));
   const testPrint = booleanFrom(searchParams.get('testPrint'));
   const previewLabel = booleanFrom(searchParams.get('preview')) ? 'PREVIEW' : null;
-  const returnTo = searchParams.get('returnTo') || '/settings?tab=document-templates';
+  const returnTo = sanitizeContinuousPrintReturnTo(searchParams.get('returnTo'));
   const templateId = searchParams.get('templateId');
   const versionNo = searchParams.get('versionNo');
   const hasInvoiceId = Boolean(searchParams.get('id'));

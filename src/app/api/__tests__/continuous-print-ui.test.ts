@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lineItemsBoxStyle, lineItemValue } from '@/components/billing/ContinuousTaxReceipt';
+import { sanitizeContinuousPrintReturnTo } from '@/app/billing/print/continuous/returnPath';
 import type { DocumentTemplateConfig } from '@/lib/documentTemplateTypes';
 
 const source = fs.readFileSync(path.join(process.cwd(), 'src/components/billing/ContinuousTaxReceipt.tsx'), 'utf8');
@@ -149,10 +150,25 @@ describe('continuous print UI', () => {
 
     expect(source).toContain('handleBackToTemplate');
     expect(source).toContain('returnTo');
-    expect(source).toContain("searchParams.get('returnTo') || '/settings?tab=document-templates'");
+    expect(source).toContain("sanitizeContinuousPrintReturnTo(searchParams.get('returnTo'))");
+    expect(source).not.toContain("searchParams.get('returnTo') || '/settings?tab=document-templates'");
     expect(source).toContain('กลับไป Document Templates');
     expect(source).toContain('href={returnTo}');
-    expect(source).toContain('/settings?tab=document-templates');
+    expect(source).toContain("import { sanitizeContinuousPrintReturnTo } from './returnPath'");
+  });
+
+  it('sanitizes returnTo before exposing it as preview navigation', () => {
+    expect(sanitizeContinuousPrintReturnTo('/settings?tab=document-templates')).toBe('/settings?tab=document-templates');
+    expect(sanitizeContinuousPrintReturnTo('/settings?tab=document-templates#draft')).toBe('/settings?tab=document-templates#draft');
+    expect(sanitizeContinuousPrintReturnTo(null)).toBe('/settings?tab=document-templates');
+    expect(sanitizeContinuousPrintReturnTo('')).toBe('/settings?tab=document-templates');
+    expect(sanitizeContinuousPrintReturnTo('   ')).toBe('/settings?tab=document-templates');
+    expect(sanitizeContinuousPrintReturnTo('//evil.test/path')).toBe('/settings?tab=document-templates');
+    expect(sanitizeContinuousPrintReturnTo('http://evil.test/path')).toBe('/settings?tab=document-templates');
+    expect(sanitizeContinuousPrintReturnTo('https://evil.test/path')).toBe('/settings?tab=document-templates');
+    expect(sanitizeContinuousPrintReturnTo('javascript:alert(1)')).toBe('/settings?tab=document-templates');
+    expect(sanitizeContinuousPrintReturnTo('settings?tab=document-templates')).toBe('/settings?tab=document-templates');
+    expect(sanitizeContinuousPrintReturnTo('/\n/evil.test')).toBe('/settings?tab=document-templates');
   });
 
   it('shows selected template identity on the non-print preview toolbar', () => {
