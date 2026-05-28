@@ -18,5 +18,9 @@ describe('E2E smoke test script', () => {
     expect(script).toContain('/portal/containers');
     expect(script).toContain('/settings?tab=document-templates');
     expect(script).toContain('/billing/print/continuous');
+    expect(script).toContain('assertProtectedPageRedirect');
+    expect(script).toContain('assertStatus(portalContainers, [200, 302, 307, 308, 401, 403])');
+    expect(script).toContain('assertStatus(documentTemplates, [200, 302, 307, 308, 401, 403])');
+    expect(script).toContain('assertStatus(continuousPrint, [200, 302, 307, 308, 401, 403])');
   });
 });

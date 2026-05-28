@@ -29,6 +29,25 @@ function assertContains(result, needle) {
   }
 }
 
+function assertProtectedPageRedirect(result) {
+  if (![302, 307, 308].includes(result.status)) {
+    return;
+  }
+
+  const location = String(result.location || '');
+  let redirectUrl;
+  try {
+    redirectUrl = new URL(location, baseUrl);
+  } catch {
+    throw new Error(`${result.path} redirected to invalid location: ${location}`);
+  }
+
+  const expectedPath = redirectUrl.pathname.includes('/login') || redirectUrl.pathname.includes('/auth');
+  if (redirectUrl.origin !== new URL(baseUrl).origin || !expectedPath) {
+    throw new Error(`${result.path} redirected to unexpected location: ${location}`);
+  }
+}
+
 async function run() {
   const checks = [];
 
@@ -51,15 +70,18 @@ async function run() {
   checks.push(publicEir);
 
   const portalContainers = await request('/portal/containers');
-  assertStatus(portalContainers, [200, 302, 401, 403]);
+  assertStatus(portalContainers, [200, 302, 307, 308, 401, 403]);
+  assertProtectedPageRedirect(portalContainers);
   checks.push(portalContainers);
 
   const documentTemplates = await request('/settings?tab=document-templates');
-  assertStatus(documentTemplates, [200, 302, 401, 403]);
+  assertStatus(documentTemplates, [200, 302, 307, 308, 401, 403]);
+  assertProtectedPageRedirect(documentTemplates);
   checks.push(documentTemplates);
 
   const continuousPrint = await request('/billing/print/continuous?preview=sample&type=tax_invoice_receipt');
-  assertStatus(continuousPrint, [200, 302, 401, 403]);
+  assertStatus(continuousPrint, [200, 302, 307, 308, 401, 403]);
+  assertProtectedPageRedirect(continuousPrint);
   checks.push(continuousPrint);
 
   const dashboard = await request('/dashboard');
