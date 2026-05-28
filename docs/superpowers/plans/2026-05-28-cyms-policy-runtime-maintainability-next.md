@@ -335,7 +335,7 @@ type BusinessPartyContext = {
 - [x] Implement parsing and validation helpers that reject non-integer party IDs.
 - [x] Apply to M&R route first, because it currently uses body party IDs directly.
 - [x] Apply to EDI booking creation.
-- [ ] Apply to EDI booking update.
+- [x] Apply to EDI booking update.
 - [ ] Apply to billing invoice creation so invoice grants remain bill-to only.
 - [x] Keep all SQL parameterized.
 

@@ -30,9 +30,12 @@ describe('EDI and booking API hardening', () => {
     const source = read('src/app/api/edi/bookings/route.ts');
 
     expect(source).toContain('normalizeBusinessPartyContext');
+    expect(source).toContain('validateBusinessPartyInput');
     expect(source).toContain('bookingPartyContext.bookingCustomerId');
     expect(source).toContain('bookingPartyContext.billToCustomerId');
     expect(source).not.toContain('body.booking_customer_id || body.customer_id');
+    expect(source).not.toContain("req.input('customerId', sql.Int, body.customer_id || null)");
+    expect(source).not.toContain("req.input('billToCustomerId', sql.Int, body.bill_to_customer_id || null)");
   });
 
   it.each([

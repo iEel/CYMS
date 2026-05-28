@@ -5,7 +5,7 @@ import { logAudit } from '@/lib/audit';
 import { applyPortalGrants, buildBookingContainerGrants, buildBookingPartyGrants } from '@/lib/portalGrantRules';
 import { ensureReeferBookingPolicy } from '@/lib/reeferBookingPolicy';
 import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
-import { normalizeBusinessPartyContext } from '@/lib/businessPartyResolver';
+import { normalizeBusinessPartyContext, validateBusinessPartyInput } from '@/lib/businessPartyResolver';
 
 const BOOKING_READ_PERMISSIONS = ['booking.manage', 'gate.in', 'gate.out', 'reports.view'];
 const BOOKING_WRITE_PERMISSIONS = ['booking.manage', 'integration.send'];
@@ -13,6 +13,10 @@ const BOOKING_WRITE_PERMISSIONS = ['booking.manage', 'integration.send'];
 function parsePositiveInt(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function hasPartyField(input: Record<string, unknown>, ...fields: string[]) {
+  return fields.some((field) => Object.prototype.hasOwnProperty.call(input, field));
 }
 
 function bookingSummarySelect() {
@@ -283,6 +287,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ต้องระบุ yard_id ที่ถูกต้อง' }, { status: 400 });
     }
 
+    const partyValidation = validateBusinessPartyInput(body);
+    if (!partyValidation.valid) {
+      return NextResponse.json({ error: partyValidation.errors.join(', ') }, { status: 400 });
+    }
+
     const db = await getDb();
     const actor = await requireAnyPermission(
       request,
@@ -414,6 +423,11 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'ต้องระบุ booking_id ที่ถูกต้อง' }, { status: 400 });
     }
 
+    const partyValidation = validateBusinessPartyInput(body);
+    if (!partyValidation.valid) {
+      return NextResponse.json({ error: partyValidation.errors.join(', ') }, { status: 400 });
+    }
+
     const db = await getDb();
     const actor = await requireAnyPermission(
       request,
@@ -436,6 +450,7 @@ export async function PUT(request: NextRequest) {
 
     const sets: string[] = [];
     const req = db.request().input('bookingId', sql.Int, bookingId);
+    const bookingPartyContext = normalizeBusinessPartyContext(body);
 
     if (body.status !== undefined) { sets.push('status = @status'); req.input('status', sql.NVarChar, body.status); }
     if (body.vessel_name !== undefined) { sets.push('vessel_name = @vesselName'); req.input('vesselName', sql.NVarChar, body.vessel_name); }
@@ -446,14 +461,14 @@ export async function PUT(request: NextRequest) {
     if (body.eta !== undefined) { sets.push('eta = @eta'); req.input('eta', sql.DateTime2, body.eta || null); }
     if (body.valid_from !== undefined) { sets.push('valid_from = @validFrom'); req.input('validFrom', sql.DateTime2, body.valid_from || null); }
     if (body.valid_to !== undefined) { sets.push('valid_to = @validTo'); req.input('validTo', sql.DateTime2, body.valid_to || null); }
-    if (body.customer_id !== undefined) { sets.push('customer_id = @customerId'); req.input('customerId', sql.Int, body.customer_id || null); }
-    if (body.booking_customer_id !== undefined) { sets.push('booking_customer_id = @bookingCustomerId'); req.input('bookingCustomerId', sql.Int, body.booking_customer_id || null); }
-    if (body.shipping_line_id !== undefined) { sets.push('shipping_line_id = @shippingLineId'); req.input('shippingLineId', sql.Int, body.shipping_line_id || null); }
-    if (body.forwarder_id !== undefined) { sets.push('forwarder_id = @forwarderId'); req.input('forwarderId', sql.Int, body.forwarder_id || null); }
-    if (body.shipper_id !== undefined) { sets.push('shipper_id = @shipperId'); req.input('shipperId', sql.Int, body.shipper_id || null); }
-    if (body.consignee_id !== undefined) { sets.push('consignee_id = @consigneeId'); req.input('consigneeId', sql.Int, body.consignee_id || null); }
-    if (body.trucking_company_id !== undefined) { sets.push('trucking_company_id = @truckingCompanyId'); req.input('truckingCompanyId', sql.Int, body.trucking_company_id || null); }
-    if (body.bill_to_customer_id !== undefined) { sets.push('bill_to_customer_id = @billToCustomerId'); req.input('billToCustomerId', sql.Int, body.bill_to_customer_id || null); }
+    if (hasPartyField(body, 'customer_id')) { sets.push('customer_id = @customerId'); req.input('customerId', sql.Int, bookingPartyContext.legacyCustomerId); }
+    if (hasPartyField(body, 'booking_customer_id')) { sets.push('booking_customer_id = @bookingCustomerId'); req.input('bookingCustomerId', sql.Int, bookingPartyContext.bookingCustomerId); }
+    if (hasPartyField(body, 'shipping_line_id')) { sets.push('shipping_line_id = @shippingLineId'); req.input('shippingLineId', sql.Int, bookingPartyContext.shippingLineId); }
+    if (hasPartyField(body, 'forwarder_id')) { sets.push('forwarder_id = @forwarderId'); req.input('forwarderId', sql.Int, bookingPartyContext.forwarderId); }
+    if (hasPartyField(body, 'shipper_id')) { sets.push('shipper_id = @shipperId'); req.input('shipperId', sql.Int, bookingPartyContext.shipperId); }
+    if (hasPartyField(body, 'consignee_id')) { sets.push('consignee_id = @consigneeId'); req.input('consigneeId', sql.Int, bookingPartyContext.consigneeId); }
+    if (hasPartyField(body, 'trucking_company_id')) { sets.push('trucking_company_id = @truckingCompanyId'); req.input('truckingCompanyId', sql.Int, bookingPartyContext.truckingCompanyId); }
+    if (hasPartyField(body, 'bill_to_customer_id', 'billing_customer_id')) { sets.push('bill_to_customer_id = @billToCustomerId'); req.input('billToCustomerId', sql.Int, bookingPartyContext.billToCustomerId); }
     if (body.created_by_customer_user_id !== undefined) { sets.push('created_by_customer_user_id = @CreatedByCustomerUserId'); req.input('CreatedByCustomerUserId', sql.Int, body.created_by_customer_user_id || null); }
     if (body.seal_number !== undefined) { sets.push('seal_number = @sealNumber'); req.input('sealNumber', sql.NVarChar, body.seal_number); }
     if (body.notes !== undefined) { sets.push('notes = @notes'); req.input('notes', sql.NVarChar, body.notes); }
