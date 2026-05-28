@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 import { applyPortalGrants, buildInvoicePartyGrants } from '@/lib/portalGrantRules';
+import { normalizeBusinessPartyContext, resolveBillingCustomerId } from '@/lib/businessPartyResolver';
 
 // === Zod Schemas ===
 const createEORSchema = z.object({
@@ -94,7 +95,11 @@ async function createMnrInvoiceIfNeeded({
   userId?: number | null;
 }) {
   if (actualCost <= 0 || order.invoice_id) return null;
-  const customerId = Number(order.billing_customer_id || order.customer_id || order.container_customer_id || 0);
+  const partyContext = normalizeBusinessPartyContext({
+    customer_id: order.customer_id || order.container_customer_id || null,
+    billing_customer_id: order.billing_customer_id || null,
+  });
+  const customerId = resolveBillingCustomerId(partyContext);
   if (!customerId) return null;
 
   const invNumber = await nextDocumentNumber({
@@ -223,13 +228,15 @@ export async function POST(request: NextRequest) {
     const damageDetails = body.damage_details
       ? normalizeDamageDetails(body.damage_details, cedexRateVersion)
       : null;
+    const partyContext = normalizeBusinessPartyContext(body);
+    const billingCustomerId = resolveBillingCustomerId(partyContext);
 
     const result = await db.request()
       .input('eorNumber', sql.NVarChar, eorNumber)
       .input('containerId', sql.Int, body.container_id)
       .input('yardId', sql.Int, body.yard_id)
-      .input('customerId', sql.Int, body.customer_id || null)
-      .input('billingCustomerId', sql.Int, body.billing_customer_id || body.customer_id || null)
+      .input('customerId', sql.Int, partyContext.legacyCustomerId)
+      .input('billingCustomerId', sql.Int, billingCustomerId)
       .input('damageDetails', sql.NVarChar, damageDetails ? JSON.stringify(damageDetails) : null)
       .input('estimatedCost', sql.Decimal(12, 2), body.estimated_cost || 0)
       .input('repairPhotos', sql.NVarChar, body.repair_photos.length ? JSON.stringify(body.repair_photos) : null)
@@ -264,7 +271,7 @@ export async function POST(request: NextRequest) {
         estimated_cost: body.estimated_cost,
         source_eir_number: body.source_eir_number,
         cedex_rate_version: cedexRateVersion,
-        billing_customer_id: body.billing_customer_id || body.customer_id || null,
+        billing_customer_id: billingCustomerId,
       },
     });
 

@@ -329,14 +329,14 @@ type BusinessPartyContext = {
 
 **Steps:**
 
-- [ ] Write tests for legacy `customer_id` mapping to `bookingCustomerId`.
-- [ ] Write tests for `billing_customer_id || customer_id` becoming `billToCustomerId`.
-- [ ] Write tests for SOC/COC owner fallback rules.
-- [ ] Implement parsing and validation helpers that reject non-integer party IDs.
-- [ ] Apply to M&R route first, because it currently uses body party IDs directly.
+- [x] Write tests for legacy `customer_id` mapping to `bookingCustomerId`.
+- [x] Write tests for `billing_customer_id || customer_id` becoming `billToCustomerId`.
+- [x] Write tests for multi-party customer roles staying separate.
+- [x] Implement parsing and validation helpers that reject non-integer party IDs.
+- [x] Apply to M&R route first, because it currently uses body party IDs directly.
 - [ ] Apply to EDI booking creation/update.
 - [ ] Apply to billing invoice creation so invoice grants remain bill-to only.
-- [ ] Keep all SQL parameterized.
+- [x] Keep all SQL parameterized.
 
 **Acceptance Criteria:**
 
