@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
       yardIds,
       activeYardId: yardIds[0] || 1,
       customerId: (payload.customerId as number) || null,
-      token, // ส่ง token กลับไปให้ client เก็บใน state
     };
 
     return NextResponse.json({ authenticated: true, session });
