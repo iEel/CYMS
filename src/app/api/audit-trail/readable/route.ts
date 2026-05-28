@@ -4,6 +4,12 @@ import sql from 'mssql';
 import { formatAuditLogs, type RawAuditLog } from '@/lib/auditFormatter';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 import { assertRuntimeSchemaReady } from '@/lib/schemaCapabilities';
+import {
+  isEntityAccessResponse,
+  parseEntityId,
+  requireResolvedEntityYardAccess,
+  resolveEntityScope,
+} from '@/lib/entityAccessResolver';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,20 +28,41 @@ export async function GET(request: NextRequest) {
     assertRuntimeSchemaReady();
     const actor = await requirePermission(request, db, 'audit_trail.read', 'คุณไม่มีสิทธิ์ดู Audit Trail');
     if (actor instanceof NextResponse) return actor;
-    if (!yardId && actor.role !== 'yard_manager') {
-      return NextResponse.json({ error: 'ต้องระบุ yard_id เพื่อดู Audit Trail ทุกลาน' }, { status: 400 });
-    }
+
+    let effectiveYardId = yardId ? Number(yardId) : null;
+    const parsedContainerId = parseEntityId(containerId);
+    if (isEntityAccessResponse(parsedContainerId)) return parsedContainerId;
+    const parsedEntityId = parseEntityId(entityId);
+    if (isEntityAccessResponse(parsedEntityId)) return parsedEntityId;
+
     if (yardId) {
       const yardAccess = await requireYardAccess(request, db, yardId);
       if (yardAccess instanceof NextResponse) return yardAccess;
+    } else {
+      const scope = await resolveEntityScope({
+        db,
+        entityType: containerId ? 'container' : String(entityType),
+        entityId: containerId ? parsedContainerId : parsedEntityId,
+        entityRef: null,
+      });
+      if (isEntityAccessResponse(scope)) return scope;
+      const entityAccess = await requireResolvedEntityYardAccess({
+        request,
+        db,
+        actor,
+        scope,
+        message: 'คุณไม่มีสิทธิ์ดู Audit Trail ของลานนี้',
+      });
+      if (entityAccess instanceof NextResponse) return entityAccess;
+      effectiveYardId = scope.yardId;
     }
 
     const req = db.request().input('limit', sql.Int, limit);
     const conditions: string[] = [];
 
-    if (yardId) {
+    if (effectiveYardId) {
       conditions.push('(a.yard_id = @yardId OR a.yard_id IS NULL)');
-      req.input('yardId', sql.Int, parseInt(yardId));
+      req.input('yardId', sql.Int, effectiveYardId);
     }
 
     if (containerId) {

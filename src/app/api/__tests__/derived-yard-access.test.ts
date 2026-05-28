@@ -103,6 +103,15 @@ describe('derived yard access for read routes', () => {
 
   it('entity timeline checks positive derived yard ids and strips internal yard ids from the response', async () => {
     const db = makeDb((statement) => {
+      if (statement.includes('FROM Containers')) {
+        return {
+          recordset: [{
+            entity_id: 99,
+            entity_ref: 'CONT99',
+            yard_id: 5,
+          }],
+        };
+      }
       if (statement.includes('FROM AuditLog a')) {
         return {
           recordset: [
@@ -143,6 +152,7 @@ describe('derived yard access for read routes', () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
+    expect(db.statements.find(statement => statement.includes('FROM Containers'))).toBeTruthy();
     const timelineQuery = db.statements.find(statement => statement.includes('FROM AuditLog a'));
     expect(timelineQuery).toMatch(/SELECT event_type[\s\S]*\byard_id\b[\s\S]*FROM \(/);
     expect(db.yardAccessChecks).toEqual([5]);
@@ -181,21 +191,13 @@ describe('derived yard access for read routes', () => {
     expect(db.yardAccessChecks).toEqual([5]);
   });
 
-  it('entity timeline returns 403 when derived yard access is denied after querying', async () => {
+  it('entity timeline returns 403 when derived yard access is denied before timeline querying', async () => {
     const db = makeDb((statement) => {
-      if (statement.includes('FROM AuditLog a')) {
+      if (statement.includes('FROM Containers')) {
         return {
           recordset: [{
-            event_type: 'audit',
-            event_name: 'updated',
-            entity_type: 'container',
             entity_id: 99,
-            entity_number: null,
-            status: null,
-            description: 'updated',
-            actor_name: 'Ops User',
-            created_at: '2026-05-28T00:00:00.000Z',
-            details: null,
+            entity_ref: 'CONT99',
             yard_id: 5,
           }],
         };
@@ -210,6 +212,7 @@ describe('derived yard access for read routes', () => {
     expect(res.status).toBe(403);
     expect(body.error).toContain('ลานนี้');
     expect(db.yardAccessChecks).toEqual([5]);
+    expect(db.statements.some(statement => statement.includes('FROM AuditLog a'))).toBe(false);
   });
 
   it('entity timeline scopes attachments by supplied yard_id and strips internal yard ids', async () => {
@@ -249,7 +252,6 @@ describe('derived yard access for read routes', () => {
   it.each([
     ['customer 360', customer360Route.GET, 'http://localhost/api/customers/360?customer_id=10'],
     ['integration logs', integrationLogsRoute.GET, 'http://localhost/api/integrations/logs'],
-    ['readable audit trail', readableAuditTrailRoute.GET, 'http://localhost/api/audit-trail/readable?container_id=99'],
   ])('%s blocks omitted yard_id for non-yard_manager users', async (_name, handler, url) => {
     const db = makeDb(() => ({ recordset: [] }));
     mockedGetDb.mockResolvedValue(db);
@@ -259,6 +261,47 @@ describe('derived yard access for read routes', () => {
 
     expect(res.status).toBe(400);
     expect(body.error).toContain('yard_id');
+  });
+
+  it('readable audit trail derives container yard access when yard_id is omitted', async () => {
+    const db = makeDb((statement) => {
+      if (statement.includes('FROM Containers')) {
+        return {
+          recordset: [{
+            entity_id: 99,
+            entity_ref: 'CONT99',
+            yard_id: 5,
+          }],
+        };
+      }
+      if (statement.includes('FROM AuditLog a')) {
+        return {
+          recordset: [{
+            log_id: 1,
+            action: 'container_update',
+            entity_type: 'container',
+            entity_id: 99,
+            details: JSON.stringify({ container_number: 'CONT99' }),
+            created_at: '2026-05-28T00:00:00.000Z',
+            full_name: 'Ops User',
+            username: 'ops',
+          }],
+        };
+      }
+      return { recordset: [] };
+    });
+    mockedGetDb.mockResolvedValue(db);
+
+    const res = await readableAuditTrailRoute.GET(makeRequest('http://localhost/api/audit-trail/readable?container_id=99'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(db.yardAccessChecks).toEqual([5]);
+    const scopeIndex = db.statements.findIndex(statement => statement.includes('FROM Containers'));
+    const auditIndex = db.statements.findIndex(statement => statement.includes('FROM AuditLog a'));
+    expect(scopeIndex).toBeGreaterThanOrEqual(0);
+    expect(auditIndex).toBeGreaterThan(scopeIndex);
   });
 
   it('customer 360 allows yard_manager to omit yard_id', async () => {
@@ -339,8 +382,14 @@ describe('derived yard access for read routes', () => {
 
   it('readable audit trail allows yard_manager to omit yard_id', async () => {
     const db = makeDb((statement) => {
-      if (statement.includes("OBJECT_ID('BillingClearances', 'U')")) {
-        return { recordset: [{ exists_flag: 0 }] };
+      if (statement.includes('FROM Containers')) {
+        return {
+          recordset: [{
+            entity_id: 99,
+            entity_ref: 'CONT99',
+            yard_id: 5,
+          }],
+        };
       }
       if (statement.includes('FROM AuditLog a')) {
         return {

@@ -161,12 +161,13 @@ type EntityScope = {
 
 **Steps:**
 
-- [ ] Identify routes that accept `entity_type`, `entity_id`, `container_id`, `booking_id`, or document refs.
-- [ ] Add resolver-based yard/customer checks before loading detail/activity data.
-- [ ] Preserve internal admin/staff access behavior.
-- [ ] Preserve customer portal default-deny behavior where the route is portal-facing.
-- [ ] Add tests for a cross-yard/cross-customer denied read.
-- [ ] Add tests that valid same-yard staff still get the expected response.
+- [x] Identify routes that accept `entity_type`, `entity_id`, `container_id`, `booking_id`, or document refs.
+- [x] Add resolver-based yard/customer checks before loading broad entity data for `entity-timeline` and `audit-trail/readable`.
+- [x] Preserve internal admin/staff access behavior for the routes touched in this slice.
+- [x] Preserve customer portal default-deny behavior where the route is portal-facing.
+- [x] Add tests for denied derived-yard reads before timeline/audit queries run.
+- [x] Add tests that valid same-yard staff still get the expected response.
+- [ ] Apply the resolver to `documents/activity` after document type normalization covers receipt/credit note flows.
 
 **Acceptance Criteria:**
 

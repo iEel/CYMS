@@ -3,6 +3,12 @@ import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { ensureAttachmentCenter } from '@/lib/attachmentCenter';
 import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+import {
+  isEntityAccessResponse,
+  parseEntityId,
+  requireResolvedEntityYardAccess,
+  resolveEntityScope,
+} from '@/lib/entityAccessResolver';
 
 const ENTITY_TIMELINE_READ_PERMISSIONS = [
   'reports.view',
@@ -26,22 +32,49 @@ export async function GET(request: NextRequest) {
     if (!entityType || (!entityId && !entityNumber)) {
       return NextResponse.json({ error: 'entity_type และ entity_id หรือ entity_number จำเป็นต้องระบุ' }, { status: 400 });
     }
+    const parsedEntityId = parseEntityId(entityId);
+    if (isEntityAccessResponse(parsedEntityId)) return parsedEntityId;
 
     const db = await getDb();
     const actor = await requireAnyPermission(request, db, ENTITY_TIMELINE_READ_PERMISSIONS, 'คุณไม่มีสิทธิ์ดู Entity Timeline');
     if (actor instanceof NextResponse) return actor;
+
+    let effectiveEntityType = entityType;
+    let effectiveEntityId = parsedEntityId;
+    let effectiveEntityNumber = entityNumber || null;
+    let effectiveYardId = yardId ? Number(yardId) : null;
     if (yardId) {
       const yardAccess = await requireYardAccess(request, db, yardId);
       if (yardAccess instanceof NextResponse) return yardAccess;
+    } else {
+      const scope = await resolveEntityScope({
+        db,
+        entityType,
+        entityId: parsedEntityId,
+        entityRef: entityNumber,
+      });
+      if (isEntityAccessResponse(scope)) return scope;
+      const entityAccess = await requireResolvedEntityYardAccess({
+        request,
+        db,
+        actor,
+        scope,
+        message: 'คุณไม่มีสิทธิ์ดู Entity Timeline ของลานนี้',
+      });
+      if (entityAccess instanceof NextResponse) return entityAccess;
+      effectiveEntityType = scope.entityType;
+      effectiveEntityId = scope.entityId;
+      effectiveEntityNumber = scope.entityRef;
+      effectiveYardId = scope.yardId;
     }
 
     await ensureAttachmentCenter(db);
 
     const req = db.request()
-      .input('entityType', sql.NVarChar, entityType)
-      .input('entityId', sql.Int, entityId ? Number(entityId) : null)
-      .input('entityNumber', sql.NVarChar, entityNumber || null)
-      .input('yardId', sql.Int, yardId ? Number(yardId) : null);
+      .input('entityType', sql.NVarChar, effectiveEntityType)
+      .input('entityId', sql.Int, effectiveEntityId)
+      .input('entityNumber', sql.NVarChar, effectiveEntityNumber)
+      .input('yardId', sql.Int, effectiveYardId);
 
     const result = await req.query(`
       SELECT event_type, event_name, entity_type, entity_id, entity_number,
@@ -151,7 +184,7 @@ export async function GET(request: NextRequest) {
       ORDER BY created_at DESC
     `);
 
-    if (!yardId) {
+    if (!effectiveYardId) {
       const yardIds = Array.from(new Set(
         result.recordset
           .map((row: Record<string, unknown>) => Number(row.yard_id))
