@@ -60,9 +60,11 @@ npm test -- src/app/api/__tests__/yard-ui.test.ts --runInBand --cacheDirectory .
 npm test -- src/app/api/__tests__/boxtech-container-weights.test.ts src/app/api/__tests__/container-detail-permissions.test.ts --runInBand --cacheDirectory .tmp\jest
 npx tsc --noEmit --pretty false
 npm run lint
+Invoke-WebRequest http://localhost:3005/gate
+Invoke-WebRequest http://localhost:3005/yard
 ```
 
-ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน, entity resolver + attachment access tests `10/10` ผ่าน, read-route resolver regression `43/43` ผ่าน, business party + M&R tests `20/20` ผ่าน, EDI booking party regression `27/27` ผ่าน, EDI booking update party regression `12/12` ผ่าน, billing invoice party regression `29/29` ผ่าน, offline operation policy regression `17/17` ผ่าน, Gate In characterization `7/7` ผ่าน, Yard UI regression `7/7` ผ่าน, Container Detail regression `8/8` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน, entity resolver + attachment access tests `10/10` ผ่าน, read-route resolver regression `43/43` ผ่าน, business party + M&R tests `20/20` ผ่าน, EDI booking party regression `27/27` ผ่าน, EDI booking update party regression `12/12` ผ่าน, billing invoice party regression `29/29` ผ่าน, offline operation policy regression `17/17` ผ่าน, Gate In characterization `7/7` ผ่าน, Yard UI regression `7/7` ผ่าน, Container Detail regression `8/8` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน, `/gate` และ `/yard` dev-server smoke `200 OK`
 
 ### อัปเดตล่าสุด: Next Hardening + Maintainability Slice (28 พ.ค. 2569)
 

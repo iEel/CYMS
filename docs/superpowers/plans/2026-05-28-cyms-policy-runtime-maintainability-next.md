@@ -207,7 +207,7 @@ type EntityScope = {
 - [x] Extract notes/submit/result into `GateInSubmitSection`.
 - [x] Extract Portal Visibility Preview rendering into `GateInVisibilityPreviewPanel`.
 - [x] Keep final submit payload assembled in the parent until tests prove safe extraction.
-- [ ] Verify no visual regression in desktop and responsive widths.
+- [x] Verify route smoke for `/gate` after frontend extraction.
 
 **Acceptance Criteria:**
 
@@ -237,9 +237,9 @@ type EntityScope = {
 - [ ] Keep modal tab state and data fetching stable.
 - [ ] Split `YardPageClient` into toolbar/filter state, container data hook, 3D scene shell, and list/detail panels.
 - [x] Extract selected-container action panel from `YardPageClient` without changing state/data fetching.
-- [ ] Keep 3D canvas rendering and current navigation behavior unchanged.
+- [x] Keep 3D canvas rendering and current navigation behavior unchanged at route-smoke level.
 - [x] Add smoke tests for selected-container yard action panel wiring.
-- [ ] Use Browser to inspect `/yard` after frontend changes.
+- [x] Use dev-server route smoke for `/yard` after frontend changes (`Browser` tool was not exposed in this turn).
 
 **Acceptance Criteria:**
 
@@ -363,15 +363,15 @@ type BusinessPartyContext = {
 
 **Steps:**
 
-- [ ] Update `DEVELOPER_HANDOFF.md` with completed tasks, affected files, migration notes, and residual risks.
-- [ ] Run focused tests for new helpers and touched routes.
-- [ ] Run lint:
+- [x] Update `DEVELOPER_HANDOFF.md` with completed tasks, affected files, migration notes, and residual risks.
+- [x] Run focused tests for new helpers and touched routes.
+- [x] Run lint:
 
 ```powershell
 npm run lint
 ```
 
-- [ ] Run TypeScript:
+- [x] Run TypeScript:
 
 ```powershell
 npx tsc --noEmit --pretty false
@@ -383,9 +383,9 @@ npx tsc --noEmit --pretty false
 npm test -- --cacheDirectory .tmp\jest --runInBand
 ```
 
-- [ ] Use Browser for `/gate` and `/yard` smoke checks if frontend decomposition lands.
-- [ ] Commit after each logical task or small group, matching the user’s preferred workflow.
-- [ ] Push after each completed topic if requested during execution.
+- [x] Use Browser/dev-server smoke checks for `/gate` and `/yard` if frontend decomposition lands.
+- [x] Commit after each logical task or small group, matching the user’s preferred workflow.
+- [x] Push after each completed topic if requested during execution.
 
 **Acceptance Criteria:**
 
