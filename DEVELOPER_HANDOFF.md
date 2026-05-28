@@ -31,6 +31,8 @@
 - **Container detail cleanup**: `GET /api/containers/detail` เลิกใช้ `IF OBJECT_ID(...)` รอบ `BillingClearances`, `Bookings`/`BookingContainers`, `EDIEndpoints`/`EDISendLog`, และ `ApprovalReviews`; query ตรงตาม schema contract หลัง migration
 - **Readable audit trail cleanup**: `GET /api/audit-trail/readable` เลิก probe `BillingClearances` และรวม `billing_clearance` audit linkage เป็นส่วนหนึ่งของ query ปกติ
 - **Reconciliation cleanup**: `GET /api/reports/reconciliation` เลิกใช้ `COL_LENGTH('GateTransactions', 'billing_clearance_id')` ใน issue query แล้วอิง schema contract แทน
+- **Shared entity access resolver**: เพิ่ม `src/lib/entityAccessResolver.ts` เป็น allowlisted resolver กลางสำหรับ entity scope (`container`, `booking`, `invoice`, `statement`/`billing_statement`, `gate_transaction`, `eir`, `gate_out_request`, `repair_order`/`eor`, `reefer_check`, `reefer_exception`) โดยคืน `yardId`, `customerId`, `entityRef` และ fail-closed เมื่อ entity type/ID ไม่ถูกต้องหรือไม่พบรายการ
+- **Attachment access uses shared resolver**: `src/lib/attachmentAccess.ts` เลิกถือ table map เองและเรียก `resolveEntityScope()` / `requireResolvedEntityYardAccess()` แทน โดยยัง preserve entity type เดิมเช่น `billing_statement` และ `eor` เพื่อไม่ให้ attachment เก่าหายจากการค้นหา
 - **Migration**: ไม่มี schema migration ใหม่ในรอบนี้ แต่ deployment ต้องรัน runtime core migration เดิมให้ครบก่อน serve routes เหล่านี้
 
 Verification รอบนี้:
@@ -38,9 +40,12 @@ Verification รอบนี้:
 ```bash
 npm test -- src/lib/__tests__/schemaCapabilities.test.ts src/app/api/__tests__/no-runtime-ddl.test.ts --runInBand --cacheDirectory .tmp\jest
 npm test -- src/app/api/__tests__/container-detail-permissions.test.ts src/app/api/__tests__/derived-yard-access.test.ts src/app/api/__tests__/reports.test.ts src/app/api/__tests__/read-api-permission-hardening.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/lib/__tests__/entityAccessResolver.test.ts src/app/api/__tests__/attachment-access.test.ts --runInBand --cacheDirectory .tmp\jest
+npx tsc --noEmit --pretty false
+npm run lint
 ```
 
-ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน
+ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน, entity resolver + attachment access tests `10/10` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
 
 ### อัปเดตล่าสุด: Next Hardening + Maintainability Slice (28 พ.ค. 2569)
 

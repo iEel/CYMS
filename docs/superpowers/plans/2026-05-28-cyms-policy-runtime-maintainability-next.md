@@ -132,12 +132,12 @@ type EntityScope = {
 
 **Steps:**
 
-- [ ] Write tests for parsing entity locators from route query/body.
-- [ ] Write tests for resolving yard/customer scope by entity type.
-- [ ] Implement `resolveEntityScope(pool, locator)`.
-- [ ] Implement `requireResolvedEntityYardAccess(pool, actor, locator, action)`.
-- [ ] Refactor attachment access checks to use the resolver instead of maintaining a separate entity mapping.
-- [ ] Keep resolver behavior default deny when an entity cannot be resolved.
+- [x] Write tests for parsing entity locators from route query/body.
+- [x] Write tests for resolving yard/customer scope by entity type.
+- [x] Implement `resolveEntityScope(pool, locator)`.
+- [x] Implement `requireResolvedEntityYardAccess(pool, actor, locator, action)`.
+- [x] Refactor attachment access checks to use the resolver instead of maintaining a separate entity mapping.
+- [x] Keep resolver behavior default deny when an entity cannot be resolved.
 
 **Acceptance Criteria:**
 
