@@ -45,16 +45,16 @@ The next risks are now mostly policy drift and request-path maintainability:
 
 **Steps:**
 
-- [ ] Write tests for a small capability helper that exposes stable booleans for deployed runtime features:
+- [x] Write tests for a small capability helper that exposes stable booleans for deployed runtime features:
   - `billingClearances`
   - `bookingContainers`
   - `ediSendLog`
   - `approvalReviews`
   - `gateBillingClearanceId`
-- [ ] Implement `src/lib/schemaCapabilities.ts` with no database query in request path.
-- [ ] Add a guard test that scans runtime API route files for `OBJECT_ID(` and `COL_LENGTH(`.
-- [ ] Allow those strings only in migrations, schema tests, or explicit schema tooling.
-- [ ] Document that missing schema is a migration/deploy issue, not a per-request branch.
+- [x] Implement `src/lib/schemaCapabilities.ts` with no database query in request path.
+- [x] Add a guard test that scans runtime API route files for `OBJECT_ID(` and `COL_LENGTH(`.
+- [x] Allow those strings only in migrations, schema tests, or explicit schema tooling.
+- [x] Document that missing schema is a migration/deploy issue, not a per-request branch.
 
 **Acceptance Criteria:**
 
@@ -77,12 +77,12 @@ The next risks are now mostly policy drift and request-path maintainability:
 
 **Steps:**
 
-- [ ] Refactor `containers/detail/route.ts` to build billing, booking, EDI, and approval sections without inline table existence probes.
-- [ ] Refactor `audit-trail/readable/route.ts` to stop probing `BillingClearances` inside the readable audit query.
-- [ ] Refactor `reports/reconciliation/route.ts` to remove `COL_LENGTH('GateTransactions', 'billing_clearance_id')`.
-- [ ] Keep all SQL parameterized.
-- [ ] Add focused route tests that assert the expected query behavior without embedding schema probes.
-- [ ] Run the runtime-probe guard test.
+- [x] Refactor `containers/detail/route.ts` to build billing, booking, EDI, and approval sections without inline table existence probes.
+- [x] Refactor `audit-trail/readable/route.ts` to stop probing `BillingClearances` inside the readable audit query.
+- [x] Refactor `reports/reconciliation/route.ts` to remove `COL_LENGTH('GateTransactions', 'billing_clearance_id')`.
+- [x] Keep all SQL parameterized.
+- [x] Add focused route tests that assert the expected query behavior without embedding schema probes.
+- [x] Run the runtime-probe guard test.
 
 **Acceptance Criteria:**
 
@@ -407,4 +407,3 @@ Stop and ask before continuing if:
 - Existing tests encode conflicting behavior around missing optional tables.
 - A business party fallback could expose invoice or EIR data to non-billing/non-granted parties.
 - UI decomposition reveals mixed user edits in the same files.
-

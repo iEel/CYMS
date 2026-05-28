@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { calcDwellDays } from '@/lib/utils';
 import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+import { assertRuntimeSchemaReady } from '@/lib/schemaCapabilities';
 
 type ExceptionSeverity = 'info' | 'warning' | 'danger';
 
@@ -161,6 +162,7 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    assertRuntimeSchemaReady();
     const permission = await requireAnyPermission(
       request,
       db,
@@ -243,33 +245,15 @@ export async function GET(request: NextRequest) {
       .input('cid6', sql.Int, parseInt(containerId))
       .input('cnum', sql.NVarChar, container.container_number)
       .query(`
-        IF OBJECT_ID('BillingClearances', 'U') IS NOT NULL
-        BEGIN
-          SELECT TOP 20 bc.clearance_id, bc.transaction_type, bc.clearance_type,
-                 bc.original_amount, bc.final_amount, bc.reason, bc.invoice_id,
-                 bc.created_at, i.invoice_number, i.status AS invoice_status,
-                 u.full_name AS approved_by_name
-          FROM BillingClearances bc
-          LEFT JOIN Invoices i ON bc.invoice_id = i.invoice_id
-          LEFT JOIN Users u ON bc.approved_by = u.user_id
-          WHERE bc.container_id = @cid6 OR bc.container_number = @cnum
-          ORDER BY bc.created_at DESC
-        END
-        ELSE
-        BEGIN
-          SELECT TOP 0
-            CAST(NULL AS INT) AS clearance_id,
-            CAST(NULL AS NVARCHAR(20)) AS transaction_type,
-            CAST(NULL AS NVARCHAR(20)) AS clearance_type,
-            CAST(0 AS DECIMAL(12,2)) AS original_amount,
-            CAST(0 AS DECIMAL(12,2)) AS final_amount,
-            CAST(NULL AS NVARCHAR(500)) AS reason,
-            CAST(NULL AS INT) AS invoice_id,
-            CAST(NULL AS DATETIME2) AS created_at,
-            CAST(NULL AS NVARCHAR(50)) AS invoice_number,
-            CAST(NULL AS NVARCHAR(20)) AS invoice_status,
-            CAST(NULL AS NVARCHAR(200)) AS approved_by_name
-        END
+        SELECT TOP 20 bc.clearance_id, bc.transaction_type, bc.clearance_type,
+               bc.original_amount, bc.final_amount, bc.reason, bc.invoice_id,
+               bc.created_at, i.invoice_number, i.status AS invoice_status,
+               u.full_name AS approved_by_name
+        FROM BillingClearances bc
+        LEFT JOIN Invoices i ON bc.invoice_id = i.invoice_id
+        LEFT JOIN Users u ON bc.approved_by = u.user_id
+        WHERE bc.container_id = @cid6 OR bc.container_number = @cnum
+        ORDER BY bc.created_at DESC
       `);
 
     const bookingResult = await db.request()
@@ -277,76 +261,35 @@ export async function GET(request: NextRequest) {
       .input('cnum2', sql.NVarChar, container.container_number)
       .input('bookingRef', sql.NVarChar, container.booking_ref || gateIn?.booking_ref || gateOut?.booking_ref || null)
       .query(`
-        IF OBJECT_ID('Bookings', 'U') IS NOT NULL AND OBJECT_ID('BookingContainers', 'U') IS NOT NULL
-        BEGIN
-          SELECT TOP 1 b.booking_id, b.booking_number, b.booking_type, b.status,
-                 b.vessel_name, b.voyage_number, b.container_count, b.container_size,
-                 b.container_type, b.received_count, b.released_count, b.valid_from,
-                 b.valid_to, b.eta, c.customer_name,
-                 bc.status AS container_booking_status, bc.gate_in_at, bc.gate_out_at
-          FROM Bookings b
-          LEFT JOIN Customers c ON b.customer_id = c.customer_id
-          LEFT JOIN BookingContainers bc
-            ON bc.booking_id = b.booking_id
-           AND (bc.container_id = @cid7 OR bc.container_number = @cnum2)
-          WHERE b.booking_number = @bookingRef
-             OR bc.container_id = @cid7
-             OR bc.container_number = @cnum2
-          ORDER BY
-            CASE WHEN b.booking_number = @bookingRef THEN 0 ELSE 1 END,
-            b.created_at DESC
-        END
-        ELSE
-        BEGIN
-          SELECT TOP 0
-            CAST(NULL AS INT) AS booking_id,
-            CAST(NULL AS NVARCHAR(50)) AS booking_number,
-            CAST(NULL AS NVARCHAR(20)) AS booking_type,
-            CAST(NULL AS NVARCHAR(20)) AS status,
-            CAST(NULL AS NVARCHAR(100)) AS vessel_name,
-            CAST(NULL AS NVARCHAR(50)) AS voyage_number,
-            CAST(0 AS INT) AS container_count,
-            CAST(NULL AS NVARCHAR(10)) AS container_size,
-            CAST(NULL AS NVARCHAR(10)) AS container_type,
-            CAST(0 AS INT) AS received_count,
-            CAST(0 AS INT) AS released_count,
-            CAST(NULL AS DATETIME2) AS valid_from,
-            CAST(NULL AS DATETIME2) AS valid_to,
-            CAST(NULL AS DATETIME2) AS eta,
-            CAST(NULL AS NVARCHAR(200)) AS customer_name,
-            CAST(NULL AS NVARCHAR(20)) AS container_booking_status,
-            CAST(NULL AS DATETIME2) AS gate_in_at,
-            CAST(NULL AS DATETIME2) AS gate_out_at
-        END
+        SELECT TOP 1 b.booking_id, b.booking_number, b.booking_type, b.status,
+               b.vessel_name, b.voyage_number, b.container_count, b.container_size,
+               b.container_type, b.received_count, b.released_count, b.valid_from,
+               b.valid_to, b.eta, c.customer_name,
+               bc.status AS container_booking_status, bc.gate_in_at, bc.gate_out_at
+        FROM Bookings b
+        LEFT JOIN Customers c ON b.customer_id = c.customer_id
+        LEFT JOIN BookingContainers bc
+          ON bc.booking_id = b.booking_id
+         AND (bc.container_id = @cid7 OR bc.container_number = @cnum2)
+        WHERE b.booking_number = @bookingRef
+           OR bc.container_id = @cid7
+           OR bc.container_number = @cnum2
+        ORDER BY
+          CASE WHEN b.booking_number = @bookingRef THEN 0 ELSE 1 END,
+          b.created_at DESC
       `);
 
     const ediResult = await db.request()
       .input('line', sql.NVarChar, container.shipping_line || '')
       .query(`
-        IF OBJECT_ID('EDIEndpoints', 'U') IS NOT NULL AND OBJECT_ID('EDISendLog', 'U') IS NOT NULL
-        BEGIN
-          SELECT TOP 10 e.endpoint_id, e.name, e.shipping_line, e.type, e.format,
-                 e.last_sent_at, e.last_status,
-                 (SELECT TOP 1 l.status FROM EDISendLog l WHERE l.endpoint_id = e.endpoint_id ORDER BY l.sent_at DESC) AS last_log_status,
-                 (SELECT TOP 1 l.error_message FROM EDISendLog l WHERE l.endpoint_id = e.endpoint_id ORDER BY l.sent_at DESC) AS last_error_message
-          FROM EDIEndpoints e
-          WHERE e.is_active = 1
-            AND (@line = '' OR e.shipping_line IS NULL OR e.shipping_line = '' OR e.shipping_line = @line)
-          ORDER BY e.last_sent_at DESC, e.updated_at DESC
-        END
-        ELSE
-        BEGIN
-          SELECT TOP 0
-            CAST(NULL AS INT) AS endpoint_id,
-            CAST(NULL AS NVARCHAR(100)) AS name,
-            CAST(NULL AS NVARCHAR(100)) AS shipping_line,
-            CAST(NULL AS NVARCHAR(20)) AS type,
-            CAST(NULL AS NVARCHAR(10)) AS format,
-            CAST(NULL AS DATETIME2) AS last_sent_at,
-            CAST(NULL AS NVARCHAR(20)) AS last_status,
-            CAST(NULL AS NVARCHAR(20)) AS last_log_status,
-            CAST(NULL AS NVARCHAR(500)) AS last_error_message
-        END
+        SELECT TOP 10 e.endpoint_id, e.name, e.shipping_line, e.type, e.format,
+               e.last_sent_at, e.last_status,
+               (SELECT TOP 1 l.status FROM EDISendLog l WHERE l.endpoint_id = e.endpoint_id ORDER BY l.sent_at DESC) AS last_log_status,
+               (SELECT TOP 1 l.error_message FROM EDISendLog l WHERE l.endpoint_id = e.endpoint_id ORDER BY l.sent_at DESC) AS last_error_message
+        FROM EDIEndpoints e
+        WHERE e.is_active = 1
+          AND (@line = '' OR e.shipping_line IS NULL OR e.shipping_line = '' OR e.shipping_line = @line)
+        ORDER BY e.last_sent_at DESC, e.updated_at DESC
       `);
 
     const invoices = invoicesResult.recordset;
@@ -357,42 +300,21 @@ export async function GET(request: NextRequest) {
       .input('cid8', sql.Int, parseInt(containerId))
       .input('cnum3', sql.NVarChar, `%${container.container_number}%`)
       .query(`
-        IF OBJECT_ID('ApprovalReviews', 'U') IS NOT NULL
-        BEGIN
-          SELECT TOP 20
-            ar.review_id, ar.permission_code, ar.action, ar.entity_type, ar.entity_id,
-            ar.status, ar.requested_by, ar.approved_by, ar.reason, ar.details,
-            ar.created_at, ar.reviewed_at,
-            requester.full_name AS requested_by_name,
-            approver.full_name AS approved_by_name
-          FROM ApprovalReviews ar
-          LEFT JOIN Users requester ON ar.requested_by = requester.user_id
-          LEFT JOIN Users approver ON ar.approved_by = approver.user_id
-          WHERE (ar.entity_type = 'container' AND ar.entity_id = @cid8)
-             OR (ar.entity_type = 'invoice' AND EXISTS (
-                  SELECT 1 FROM Invoices i WHERE i.container_id = @cid8 AND i.invoice_id = ar.entity_id
-                ))
-             OR ar.details LIKE @cnum3
-          ORDER BY ar.created_at DESC
-        END
-        ELSE
-        BEGIN
-          SELECT TOP 0
-            CAST(NULL AS INT) AS review_id,
-            CAST(NULL AS NVARCHAR(100)) AS permission_code,
-            CAST(NULL AS NVARCHAR(100)) AS action,
-            CAST(NULL AS NVARCHAR(50)) AS entity_type,
-            CAST(NULL AS INT) AS entity_id,
-            CAST(NULL AS NVARCHAR(20)) AS status,
-            CAST(NULL AS INT) AS requested_by,
-            CAST(NULL AS INT) AS approved_by,
-            CAST(NULL AS NVARCHAR(500)) AS reason,
-            CAST(NULL AS NVARCHAR(MAX)) AS details,
-            CAST(NULL AS DATETIME2) AS created_at,
-            CAST(NULL AS DATETIME2) AS reviewed_at,
-            CAST(NULL AS NVARCHAR(100)) AS requested_by_name,
-            CAST(NULL AS NVARCHAR(100)) AS approved_by_name
-        END
+        SELECT TOP 20
+          ar.review_id, ar.permission_code, ar.action, ar.entity_type, ar.entity_id,
+          ar.status, ar.requested_by, ar.approved_by, ar.reason, ar.details,
+          ar.created_at, ar.reviewed_at,
+          requester.full_name AS requested_by_name,
+          approver.full_name AS approved_by_name
+        FROM ApprovalReviews ar
+        LEFT JOIN Users requester ON ar.requested_by = requester.user_id
+        LEFT JOIN Users approver ON ar.approved_by = approver.user_id
+        WHERE (ar.entity_type = 'container' AND ar.entity_id = @cid8)
+           OR (ar.entity_type = 'invoice' AND EXISTS (
+                SELECT 1 FROM Invoices i WHERE i.container_id = @cid8 AND i.invoice_id = ar.entity_id
+              ))
+           OR ar.details LIKE @cnum3
+        ORDER BY ar.created_at DESC
       `);
     const approvalReviews = approvalReviewsResult.recordset;
     const invoiceTotals = invoices.reduce((acc, inv) => {

@@ -6,6 +6,7 @@ import { getDataQualityRule } from '@/lib/dataQualityRules';
 import { applyReconciliationActions, type ReconciliationActionRecord, type ReconciliationIssueRow } from '@/lib/reconciliationActions';
 import { requireRequestActor, requireYardAccess } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/audit';
+import { assertRuntimeSchemaReady } from '@/lib/schemaCapabilities';
 
 type Severity = 'info' | 'warning' | 'critical';
 
@@ -114,7 +115,6 @@ const ISSUE_DEFINITIONS: IssueDefinition[] = [
       FROM GateTransactions g
       LEFT JOIN Containers c ON g.container_id = c.container_id
       WHERE g.yard_id = @yardId
-        AND COL_LENGTH('GateTransactions', 'billing_clearance_id') IS NOT NULL
         AND g.billing_clearance_id IS NULL
       ORDER BY g.created_at DESC
     `,
@@ -269,6 +269,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(Number(searchParams.get('limit') || 50), 1), 200);
     const includeClosed = searchParams.get('include_closed') === '1';
     const db = await getDb();
+    assertRuntimeSchemaReady();
     const yardAccess = await requireYardAccess(request, db, rawYardId);
     if (yardAccess instanceof NextResponse) return yardAccess;
     await ensureCustomerCreditColumns(db);

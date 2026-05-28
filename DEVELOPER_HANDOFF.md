@@ -22,6 +22,26 @@
 | **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Continuous Tax Invoice/Receipt Template, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
 
+### อัปเดตล่าสุด: Runtime Schema Probe Cleanup + Capability Contract (28 พ.ค. 2569)
+
+รอบนี้เริ่มแผน `CYMS Runtime Policy And Maintainability` ข้อ 1-2 โดยย้าย assumption เรื่อง schema runtime ออกจาก request path:
+
+- **Runtime schema capability helper**: เพิ่ม `src/lib/schemaCapabilities.ts` เพื่อประกาศ capability ที่ migration/deploy ต้องมี (`BillingClearances`, `BookingContainers`, `EDISendLog`, `ApprovalReviews`, `GateTransactions.billing_clearance_id`) และ `assertRuntimeSchemaReady()` สำหรับ fail-fast โดยไม่ query schema ระหว่าง request
+- **No request-path schema probing guard**: ขยาย `src/app/api/__tests__/no-runtime-ddl.test.ts` ให้ scan production runtime source ทั้ง `src/app/api` และ `src/lib` ว่าห้ามมี `OBJECT_ID(`, `COL_LENGTH(`, `sys.columns`, `INFORMATION_SCHEMA.COLUMNS` ใน request handlers/helpers; อนุญาตเฉพาะ migration/schema/test tooling
+- **Container detail cleanup**: `GET /api/containers/detail` เลิกใช้ `IF OBJECT_ID(...)` รอบ `BillingClearances`, `Bookings`/`BookingContainers`, `EDIEndpoints`/`EDISendLog`, และ `ApprovalReviews`; query ตรงตาม schema contract หลัง migration
+- **Readable audit trail cleanup**: `GET /api/audit-trail/readable` เลิก probe `BillingClearances` และรวม `billing_clearance` audit linkage เป็นส่วนหนึ่งของ query ปกติ
+- **Reconciliation cleanup**: `GET /api/reports/reconciliation` เลิกใช้ `COL_LENGTH('GateTransactions', 'billing_clearance_id')` ใน issue query แล้วอิง schema contract แทน
+- **Migration**: ไม่มี schema migration ใหม่ในรอบนี้ แต่ deployment ต้องรัน runtime core migration เดิมให้ครบก่อน serve routes เหล่านี้
+
+Verification รอบนี้:
+
+```bash
+npm test -- src/lib/__tests__/schemaCapabilities.test.ts src/app/api/__tests__/no-runtime-ddl.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/container-detail-permissions.test.ts src/app/api/__tests__/derived-yard-access.test.ts src/app/api/__tests__/reports.test.ts src/app/api/__tests__/read-api-permission-hardening.test.ts --runInBand --cacheDirectory .tmp\jest
+```
+
+ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน
+
 ### อัปเดตล่าสุด: Next Hardening + Maintainability Slice (28 พ.ค. 2569)
 
 รอบนี้ปิดงาน hardening/read-export ที่เหลือ และลดจุดเสี่ยงด้าน maintainability ในหน้าใหญ่ โดยยังคง behavior เดิมของงานหน้าลาน/บัญชี/booking:

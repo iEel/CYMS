@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import sql from 'mssql';
 import { formatAuditLogs, type RawAuditLog } from '@/lib/auditFormatter';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
+import { assertRuntimeSchemaReady } from '@/lib/schemaCapabilities';
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    assertRuntimeSchemaReady();
     const actor = await requirePermission(request, db, 'audit_trail.read', 'คุณไม่มีสิทธิ์ดู Audit Trail');
     if (actor instanceof NextResponse) return actor;
     if (!yardId && actor.role !== 'yard_manager') {
@@ -27,10 +29,6 @@ export async function GET(request: NextRequest) {
       const yardAccess = await requireYardAccess(request, db, yardId);
       if (yardAccess instanceof NextResponse) return yardAccess;
     }
-
-    const hasBillingClearances = await db.request()
-      .query("SELECT CASE WHEN OBJECT_ID('BillingClearances', 'U') IS NULL THEN 0 ELSE 1 END AS exists_flag");
-    const includeBillingClearances = hasBillingClearances.recordset[0]?.exists_flag === 1;
 
     const req = db.request().input('limit', sql.Int, limit);
     const conditions: string[] = [];
@@ -48,9 +46,9 @@ export async function GET(request: NextRequest) {
         OR (a.entity_type = 'invoice' AND EXISTS (
           SELECT 1 FROM Invoices i WHERE i.invoice_id = a.entity_id AND i.container_id = @containerId
         ))
-        ${includeBillingClearances ? `OR (a.entity_type = 'billing_clearance' AND EXISTS (
+        OR (a.entity_type = 'billing_clearance' AND EXISTS (
           SELECT 1 FROM BillingClearances bc WHERE bc.clearance_id = a.entity_id AND bc.container_id = @containerId
-        ))` : ''}
+        ))
       )`);
     } else {
       req.input('entityType', sql.NVarChar, entityType);
