@@ -86,16 +86,23 @@ describe('high-risk API mutation routes use server-derived actors', () => {
 
     const getSource = getMatch?.[0] || '';
     const guardIndex = getSource.search(/\brequireAttachmentView\s*\(/);
+    const entityGuardIndex = getSource.search(/\brequireAttachmentEntityAccess\s*\(/);
     const selectIndex = getSource.indexOf('SELECT attachment_id');
 
     expect(guardIndex).toBeGreaterThanOrEqual(0);
+    expect(entityGuardIndex).toBeGreaterThanOrEqual(0);
     expect(selectIndex).toBeGreaterThanOrEqual(0);
     expect(guardIndex).toBeLessThan(selectIndex);
+    expect(entityGuardIndex).toBeLessThan(selectIndex);
 
     const helperSource = fs.readFileSync(path.join(repoRoot, 'src/lib/attachmentAccess.ts'), 'utf8');
     expect(helperSource).toMatch(/\brequirePermission\s*\(/);
     expect(helperSource).toContain('documents.attachment.view');
     expect(helperSource).toContain('resolveAttachmentEntityScope');
-    expect(helperSource).toContain('requireYardAccess');
+    expect(helperSource).toContain('requireResolvedEntityYardAccess');
+
+    const resolverSource = fs.readFileSync(path.join(repoRoot, 'src/lib/entityAccessResolver.ts'), 'utf8');
+    expect(resolverSource).toContain('requireYardAccess');
+    expect(resolverSource).toContain('scope.yardId');
   });
 });
