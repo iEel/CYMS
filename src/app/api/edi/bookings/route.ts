@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit';
 import { applyPortalGrants, buildBookingContainerGrants, buildBookingPartyGrants } from '@/lib/portalGrantRules';
 import { ensureReeferBookingPolicy } from '@/lib/reeferBookingPolicy';
 import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+import { normalizeBusinessPartyContext } from '@/lib/businessPartyResolver';
 
 const BOOKING_READ_PERMISSIONS = ['booking.manage', 'gate.in', 'gate.out', 'reports.view'];
 const BOOKING_WRITE_PERMISSIONS = ['booking.manage', 'integration.send'];
@@ -294,17 +295,18 @@ export async function POST(request: NextRequest) {
     const yardAccess = await requireYardAccess(request, db, yardId, 'คุณไม่มีสิทธิ์สร้าง Booking ในลานนี้');
     if (yardAccess instanceof Response) return yardAccess;
 
+    const bookingPartyContext = normalizeBusinessPartyContext(body);
     const result = await db.request()
       .input('bookingNumber', sql.NVarChar, body.booking_number)
       .input('yardId', sql.Int, yardId)
-      .input('customerId', sql.Int, body.customer_id || null)
-      .input('bookingCustomerId', sql.Int, body.booking_customer_id || body.customer_id || null)
-      .input('shippingLineId', sql.Int, body.shipping_line_id || null)
-      .input('forwarderId', sql.Int, body.forwarder_id || null)
-      .input('shipperId', sql.Int, body.shipper_id || null)
-      .input('consigneeId', sql.Int, body.consignee_id || null)
-      .input('truckingCompanyId', sql.Int, body.trucking_company_id || null)
-      .input('billToCustomerId', sql.Int, body.bill_to_customer_id || null)
+      .input('customerId', sql.Int, bookingPartyContext.legacyCustomerId)
+      .input('bookingCustomerId', sql.Int, bookingPartyContext.bookingCustomerId)
+      .input('shippingLineId', sql.Int, bookingPartyContext.shippingLineId)
+      .input('forwarderId', sql.Int, bookingPartyContext.forwarderId)
+      .input('shipperId', sql.Int, bookingPartyContext.shipperId)
+      .input('consigneeId', sql.Int, bookingPartyContext.consigneeId)
+      .input('truckingCompanyId', sql.Int, bookingPartyContext.truckingCompanyId)
+      .input('billToCustomerId', sql.Int, bookingPartyContext.billToCustomerId)
       .input('createdByCustomerUserId', sql.Int, body.created_by_customer_user_id || null)
       .input('bookingType', sql.NVarChar, body.booking_type)
       .input('vesselName', sql.NVarChar, body.vessel_name || null)
@@ -337,7 +339,7 @@ export async function POST(request: NextRequest) {
     const reeferPolicy = await ensureReeferBookingPolicy(db, {
       booking_id: booking.booking_id,
       yard_id: booking.yard_id || yardId,
-      customer_id: booking.customer_id || body.customer_id || null,
+      customer_id: booking.booking_customer_id || booking.customer_id || bookingPartyContext.bookingCustomerId,
       container_type: booking.container_type || body.container_type,
     }, {
       intervalHours: body.reefer_interval_hours,
@@ -347,7 +349,18 @@ export async function POST(request: NextRequest) {
       maxTempC: body.reefer_max_temp_c,
     });
 
-    await applyPortalGrants(db, buildBookingPartyGrants({ ...body, ...booking }));
+    await applyPortalGrants(db, buildBookingPartyGrants({
+      ...body,
+      ...booking,
+      customer_id: booking.customer_id || bookingPartyContext.legacyCustomerId,
+      booking_customer_id: booking.booking_customer_id || bookingPartyContext.bookingCustomerId,
+      bill_to_customer_id: booking.bill_to_customer_id || bookingPartyContext.billToCustomerId,
+      shipping_line_id: booking.shipping_line_id || bookingPartyContext.shippingLineId,
+      forwarder_id: booking.forwarder_id || bookingPartyContext.forwarderId,
+      shipper_id: booking.shipper_id || bookingPartyContext.shipperId,
+      consignee_id: booking.consignee_id || bookingPartyContext.consigneeId,
+      trucking_company_id: booking.trucking_company_id || bookingPartyContext.truckingCompanyId,
+    }));
 
     // Auto-create BookingContainers if container_numbers provided
     if (body.container_numbers && Array.isArray(body.container_numbers)) {
@@ -363,7 +376,18 @@ export async function POST(request: NextRequest) {
               VALUES (@bookingId, @containerNumber)
             `);
           await applyPortalGrants(db, buildBookingContainerGrants(
-            { ...body, ...booking },
+            {
+              ...body,
+              ...booking,
+              customer_id: booking.customer_id || bookingPartyContext.legacyCustomerId,
+              booking_customer_id: booking.booking_customer_id || bookingPartyContext.bookingCustomerId,
+              bill_to_customer_id: booking.bill_to_customer_id || bookingPartyContext.billToCustomerId,
+              shipping_line_id: booking.shipping_line_id || bookingPartyContext.shippingLineId,
+              forwarder_id: booking.forwarder_id || bookingPartyContext.forwarderId,
+              shipper_id: booking.shipper_id || bookingPartyContext.shipperId,
+              consignee_id: booking.consignee_id || bookingPartyContext.consigneeId,
+              trucking_company_id: booking.trucking_company_id || bookingPartyContext.truckingCompanyId,
+            },
             linkResult.recordset[0] || { container_number: containerNumber },
           ));
         }

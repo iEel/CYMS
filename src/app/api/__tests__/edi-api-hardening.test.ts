@@ -26,6 +26,15 @@ describe('EDI and booking API hardening', () => {
     expect(source).toContain('userId: actor.userId');
   });
 
+  it('staff booking API normalizes business parties with the shared resolver', () => {
+    const source = read('src/app/api/edi/bookings/route.ts');
+
+    expect(source).toContain('normalizeBusinessPartyContext');
+    expect(source).toContain('bookingPartyContext.bookingCustomerId');
+    expect(source).toContain('bookingPartyContext.billToCustomerId');
+    expect(source).not.toContain('body.booking_customer_id || body.customer_id');
+  });
+
   it.each([
     'src/app/api/edi/endpoints/route.ts',
     'src/app/api/edi/templates/route.ts',
