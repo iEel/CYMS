@@ -81,7 +81,7 @@ describe('high-risk API mutation routes use server-derived actors', () => {
 
   it('attachments GET has its own attachment view guard before selecting attachment file URLs', () => {
     const source = fs.readFileSync(path.join(repoRoot, 'src/app/api/attachments/route.ts'), 'utf8');
-    const getMatch = source.match(/export\s+async\s+function\s+GET[\s\S]*?\n}\n\nexport\s+async\s+function\s+POST/);
+    const getMatch = source.match(/export\s+async\s+function\s+GET[\s\S]*?\r?\n}\r?\n\r?\nexport\s+async\s+function\s+POST/);
     expect(getMatch?.[0]).toBeDefined();
 
     const getSource = getMatch?.[0] || '';
