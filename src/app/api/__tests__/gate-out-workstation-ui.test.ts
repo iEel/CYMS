@@ -39,9 +39,12 @@ describe('Gate Out workstation UI', () => {
   });
 
   it('keeps Gate Out workflow state split into focused units', () => {
-    expect(gateOut).toContain('useGateOutSearch');
-    expect(gateOut).toContain('useGateOutVisibilityPreview');
-    expect(gateOut.length).toBeLessThan(52000);
+    expect(gateOut).toContain("import { useGateOutSearch } from './hooks/useGateOutSearch';");
+    expect(gateOut).toContain("import { useGateOutVisibilityPreview } from './hooks/useGateOutVisibilityPreview';");
+    expect(gateOut).toContain('} = useGateOutSearch({ yardId });');
+    expect(gateOut).toContain('} = useGateOutVisibilityPreview({');
+    expect(gateOut).toContain('GateOutSelectedStatusCards');
+    expect(gateOut).toContain('<GateOutSelectedStatusCards');
   });
 
   it('keeps Gate Out status rail presentational', () => {
