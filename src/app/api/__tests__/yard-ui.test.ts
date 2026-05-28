@@ -41,13 +41,15 @@ describe('Yard management UI', () => {
 
   it('turns 3D selected containers into an actionable yard panel', () => {
     const source = fs.readFileSync(path.join(root, clientPath), 'utf8');
+    const selectedPanel = fs.readFileSync(path.join(root, 'src/app/(dashboard)/yard/components/YardSelectedContainerPanel.tsx'), 'utf8');
 
     expect(source).toContain('selectedContainerActionPanel');
-    expect(source).toContain('ตู้ที่เลือกในลาน');
-    expect(source).toContain('เปิดรายละเอียด');
-    expect(source).toContain('Timeline');
-    expect(source).toContain('Booking');
-    expect(source).toContain('Billing');
+    expect(source).toContain('YardSelectedContainerPanel');
+    expect(selectedPanel).toContain('ตู้ที่เลือกในลาน');
+    expect(selectedPanel).toContain('เปิดรายละเอียด');
+    expect(selectedPanel).toContain('Timeline');
+    expect(selectedPanel).toContain('Booking');
+    expect(selectedPanel).toContain('Billing');
   });
 
   it('keeps the yard view live when work orders change', () => {

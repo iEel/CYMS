@@ -12,12 +12,13 @@ import BayCrossSection from '@/components/yard/BayCrossSection';
 import ContainerDetailModal from '@/components/yard/ContainerDetailModal';
 import EIRDocument from '@/components/gate/EIRDocument';
 import type { EIRData } from '@/components/gate/EIRDocument';
+import YardSelectedContainerPanel from './components/YardSelectedContainerPanel';
 
 const ContainerTimeline = nextDynamic(() => import('@/components/containers/ContainerTimeline'), { ssr: false });
 import {
   MapPin, Search, Filter, ChevronDown, Cuboid, ClipboardCheck,
   Box, Snowflake, AlertTriangle, Wrench, Trash2, Layers, LayoutGrid, Wand2, Loader2, CheckCircle2, Star, Clock,
-  Gauge, PackageCheck, FileText, Receipt,
+  Gauge, PackageCheck,
 } from 'lucide-react';
 
 const YardViewer3D = nextDynamic(() => import('@/components/yard/YardViewer3D'), {
@@ -348,111 +349,14 @@ export default function YardPage() {
   const lastLiveRefreshLabel = lastLiveRefreshAt
     ? lastLiveRefreshAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false })
     : 'รอข้อมูล';
-  const selectedStatus = selectedContainer
-    ? STATUS_LABELS[selectedContainer.status] || STATUS_LABELS.available
-    : null;
-  const selectedGrade = (selectedContainer?.container_grade || 'A').toUpperCase();
-  const selectedGradeInfo = GRADE_INFO[selectedGrade] || GRADE_INFO.A;
-  const selectedDwellDays = selectedContainer?.gate_in_date ? calcDwellDays(selectedContainer.gate_in_date) : null;
-  const selectedLocation = selectedContainer && selectedContainer.bay && selectedContainer.row && selectedContainer.tier
-    ? `Zone ${selectedContainer.zone_name} • B${selectedContainer.bay}-R${selectedContainer.row}-T${selectedContainer.tier}`
-    : `Zone ${selectedContainer?.zone_name || '—'} • ยังไม่ระบุพิกัด`;
-  const selectedContainerActionPanel = selectedContainer && (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">ตู้ที่เลือกในลาน</span>
-            {selectedStatus && (
-              <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${selectedStatus.color}`}>
-                {selectedStatus.label}
-              </span>
-            )}
-            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${selectedGradeInfo.bg} ${selectedGradeInfo.color}`}>
-              Grade {selectedGrade}
-            </span>
-            {selectedContainer.hold_status && (
-              <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                Hold: {selectedContainer.hold_status}
-              </span>
-            )}
-          </div>
-          <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
-            <p className="font-mono text-xl font-bold text-slate-800 dark:text-white">{selectedContainer.container_number}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {selectedContainer.size}&apos;{selectedContainer.type} • {selectedContainer.shipping_line || '—'} • {selectedContainer.is_laden ? 'มีสินค้า' : 'ตู้เปล่า'}
-            </p>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-            <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 px-3 py-2">
-              <p className="text-slate-400">พิกัด</p>
-              <p className="mt-0.5 font-mono font-semibold text-slate-700 dark:text-slate-200">{selectedLocation}</p>
-            </div>
-            <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 px-3 py-2">
-              <p className="text-slate-400">เข้าลาน</p>
-              <p className="mt-0.5 font-semibold text-slate-700 dark:text-slate-200">
-                {selectedContainer.gate_in_date ? formatShortDate(selectedContainer.gate_in_date) : '—'}
-              </p>
-            </div>
-            <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 px-3 py-2">
-              <p className="text-slate-400">อยู่ในลาน</p>
-              <p className="mt-0.5 font-semibold text-slate-700 dark:text-slate-200">
-                {selectedDwellDays ? `${selectedDwellDays} วัน` : '—'}
-              </p>
-            </div>
-            <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 px-3 py-2">
-              <p className="text-slate-400">Booking</p>
-              <p className="mt-0.5 truncate font-semibold text-slate-700 dark:text-slate-200">
-                {selectedContainer.booking_ref || '—'}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2 lg:max-w-[320px] lg:justify-end">
-          <button
-            type="button"
-            onClick={() => setDetailContainerId(selectedContainer.container_id)}
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700"
-          >
-            <FileText size={14} /> เปิดรายละเอียด
-          </button>
-          <button
-            type="button"
-            onClick={() => setTimelineId(selectedContainer.container_id)}
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-indigo-50 px-3 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-300"
-          >
-            <Clock size={14} /> Timeline
-          </button>
-          <button
-            type="button"
-            disabled={!selectedContainer.booking_ref}
-            onClick={() => {
-              if (selectedContainer.booking_ref) {
-                window.location.href = `/booking?search=${encodeURIComponent(selectedContainer.booking_ref)}`;
-              }
-            }}
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 dark:bg-emerald-900/20 dark:text-emerald-300"
-          >
-            <ClipboardCheck size={14} /> Booking
-          </button>
-          <button
-            type="button"
-            onClick={() => { window.location.href = `/billing?search=${encodeURIComponent(selectedContainer.container_number)}`; }}
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-amber-50 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-300"
-          >
-            <Receipt size={14} /> Billing
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedContainer(null)}
-            className="inline-flex h-9 items-center rounded-lg px-3 text-xs font-semibold text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
-          >
-            ปิด
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  const selectedContainerActionPanel = selectedContainer ? (
+    <YardSelectedContainerPanel
+      container={selectedContainer}
+      onOpenDetail={setDetailContainerId}
+      onOpenTimeline={setTimelineId}
+      onClearSelection={() => setSelectedContainer(null)}
+    />
+  ) : null;
 
   return (
     <div className="space-y-6">

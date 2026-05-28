@@ -235,8 +235,9 @@ type EntityScope = {
 - [ ] Split `ContainerDetailModal` into overview, lifecycle, EIR/documents, billing, M&R, reefer, and activity panels.
 - [ ] Keep modal tab state and data fetching stable.
 - [ ] Split `YardPageClient` into toolbar/filter state, container data hook, 3D scene shell, and list/detail panels.
+- [x] Extract selected-container action panel from `YardPageClient` without changing state/data fetching.
 - [ ] Keep 3D canvas rendering and current navigation behavior unchanged.
-- [ ] Add smoke tests for opening a container detail modal and switching key panels.
+- [x] Add smoke tests for selected-container yard action panel wiring.
 - [ ] Use Browser to inspect `/yard` after frontend changes.
 
 **Acceptance Criteria:**
