@@ -4,7 +4,7 @@ import type { ComponentProps, Dispatch, SetStateAction } from 'react';
 import GateDecisionBar from '@/components/gate/GateDecisionBar';
 import GateGuardrailPanel from '@/components/gate/GateGuardrailPanel';
 import type { PortalVisibilityPreviewRow } from '../hooks/useGateOutVisibilityPreview';
-import type { BillingCharge, BillingClearance, BillingClearanceType, BillingData, ContainerResult, GateOutBooking } from '../types';
+import type { BillingCharge, BillingClearance, BillingData, ContainerResult, GateOutBooking } from '../types';
 import GateOutReleaseRequestSection, { type GateOutFormState, type GateOutPhase } from './GateOutReleaseRequestSection';
 
 interface GateOutStatusRailProps {
@@ -99,12 +99,6 @@ interface GateOutSelectedStatusCardsProps {
   billingPaid: boolean;
   resolvedIsCredit: boolean;
   canCreateInvoice: boolean;
-  yardId: number;
-  buildFinalCharges: () => BillingCharge[];
-  createGateOutClearance: (clearanceType: BillingClearanceType, invoiceId?: number | null, reason?: string) => Promise<number>;
-  setBillingPaid: Dispatch<SetStateAction<boolean>>;
-  setBillingInvoiceNumber: Dispatch<SetStateAction<string>>;
-  setBillingInvoiceId: Dispatch<SetStateAction<number | null>>;
   originalSelectedTotal: number;
   canWaive: boolean;
   paymentMethod: 'cash' | 'transfer' | 'credit';
@@ -127,6 +121,11 @@ interface GateOutSelectedStatusCardsProps {
   handleGateOut: () => Promise<void>;
   gateOutLoading: boolean;
   canGateOut: boolean;
+  onCreateCreditInvoice: () => Promise<void>;
+  onRequestApproval: () => Promise<void>;
+  onCreatePaidInvoice: () => Promise<void>;
+  onConfirmNoCharge: () => Promise<void>;
+  onPrintBillingDocument: (continuous?: boolean) => void;
 }
 
 type CustomerOption = {
@@ -179,12 +178,6 @@ export function GateOutSelectedStatusCards({
   billingPaid,
   resolvedIsCredit,
   canCreateInvoice,
-  yardId,
-  buildFinalCharges,
-  createGateOutClearance,
-  setBillingPaid,
-  setBillingInvoiceNumber,
-  setBillingInvoiceId,
   originalSelectedTotal,
   canWaive,
   paymentMethod,
@@ -207,6 +200,11 @@ export function GateOutSelectedStatusCards({
   handleGateOut,
   gateOutLoading,
   canGateOut,
+  onCreateCreditInvoice,
+  onRequestApproval,
+  onCreatePaidInvoice,
+  onConfirmNoCharge,
+  onPrintBillingDocument,
 }: GateOutSelectedStatusCardsProps) {
   if (!selectedContainer) return null;
 
@@ -563,55 +561,14 @@ export function GateOutSelectedStatusCards({
                           <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">🏢 ลูกค้าเครดิต — วางบิลอัตโนมัติ</p>
                           <p className="text-[10px] text-blue-500">สร้างใบแจ้งหนี้ (pending) → ปล่อยตู้ได้เลย</p>
                         </div>
-                        <button disabled={!canCreateInvoice} onClick={async () => {
-                          if (!selectedContainer || !resolvedCustomer) return;
-                          try {
-                            const creditTerm = resolvedCustomer.credit_term || 0;
-                            const res = await fetch('/api/billing/invoices', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                yard_id: yardId, customer_id: resolvedCustomer.customer_id,
-                                container_id: selectedContainer.container_id, charge_type: 'storage',
-                                description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน)`,
-                                quantity: 1, unit_price: selectedTotal,
-                                due_date: new Date(Date.now() + creditTerm * 86400000).toISOString(),
-                                notes: JSON.stringify({
-                                  charges: buildFinalCharges(),
-                                  dwell_days: billingData.container.dwell_days,
-                                  container_size: billingData.container.size,
-                                  payment_method: 'credit',
-                                  payment_status: 'credit',
-                                  document_type: 'invoice',
-                                  transaction_type: 'gate_out',
-                                }),
-                              }),
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                              await createGateOutClearance('credit', data.invoice?.invoice_id || null, 'ลูกค้าเครดิต');
-                              setBillingPaid(true);
-                              setBillingInvoiceNumber(data.invoice_number || '');
-                              setBillingInvoiceId(data.invoice?.invoice_id || null);
-                            }
-                          } catch (err) { console.error(err); }
-                        }}
+                        <button disabled={!canCreateInvoice} onClick={onCreateCreditInvoice}
                           className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                         >📄 วางบิล</button>
                       </div>
                     ) : (
                       <>
                         {selectedGrand <= 0 && (
-                          <button disabled={!resolvedCustomer || !canWaive} onClick={async () => {
-                            try {
-                              const isWaived = originalSelectedTotal > 0;
-                              const reason = isWaived
-                                ? window.prompt('ระบุเหตุผลการยกเว้นค่าใช้จ่าย') || ''
-                                : 'ไม่มีค่าบริการ';
-                              if (isWaived && !reason.trim()) return;
-                              await createGateOutClearance(isWaived ? 'waived' : 'no_charge', null, reason);
-                            } catch (err) { console.error(err); }
-                          }}
+                          <button disabled={!resolvedCustomer || !canWaive} onClick={onRequestApproval}
                             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all">
                             <CheckCircle2 size={14} />
                             {originalSelectedTotal > 0 ? 'อนุมัติยกเว้นค่าใช้จ่าย' : 'ยืนยัน No Charge ฿0'}
@@ -628,43 +585,7 @@ export function GateOutSelectedStatusCards({
                             </button>
                           ))}
                         </div>
-                        <button disabled={!resolvedCustomer || !canReceivePayment} onClick={async () => {
-                          if (!selectedContainer || !billingData || !resolvedCustomer) return;
-                          try {
-                            const custId = resolvedCustomer.customer_id;
-                            const res = await fetch('/api/billing/invoices', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                yard_id: yardId, customer_id: custId,
-                                container_id: selectedContainer.container_id, charge_type: 'storage',
-                                description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน) — ชำระ ${paymentMethod === 'cash' ? 'เงินสด' : 'โอน'}`,
-                                quantity: 1, unit_price: selectedTotal,
-                                notes: JSON.stringify({
-                                  charges: buildFinalCharges(),
-                                  dwell_days: billingData.container.dwell_days,
-                                  container_size: billingData.container.size,
-                                  payment_method: paymentMethod,
-                                  payment_status: 'paid',
-                                  document_type: 'receipt',
-                                  transaction_type: 'gate_out',
-                                }),
-                              }),
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                              await fetch('/api/billing/invoices', {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ invoice_id: data.invoice.invoice_id, action: 'pay' }),
-                              });
-                              await createGateOutClearance('paid', data.invoice?.invoice_id || null, paymentMethod === 'cash' ? 'ชำระเงินสด' : 'ชำระเงินโอน');
-                              setBillingPaid(true);
-                              setBillingInvoiceNumber(data.invoice_number || '');
-                              setBillingInvoiceId(data.invoice?.invoice_id || null);
-                            }
-                          } catch (err) { console.error(err); }
-                        }}
+                        <button disabled={!resolvedCustomer || !canReceivePayment} onClick={onCreatePaidInvoice}
                           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all"
                         >💰 รับชำระเงิน ฿{selectedGrand.toLocaleString()}</button>
                       </>
@@ -684,18 +605,10 @@ export function GateOutSelectedStatusCards({
                     </span>
                     {(billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id) && (
                       <div className="flex flex-wrap justify-end gap-1">
-                        <button onClick={() => {
-                          const invId = billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id;
-                          const printType = billingClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt';
-                          window.open(`/billing/print?id=${invId}&type=${printType}`, '_blank');
-                        }}
+                        <button onClick={() => onPrintBillingDocument(false)}
                           className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"
                         >🖨️ {billingData.is_credit ? 'พิมพ์ใบแจ้งหนี้' : 'พิมพ์ใบเสร็จ'}</button>
-                        <button onClick={() => {
-                          const invId = billingInvoiceId || billingData.paid_invoices?.[0]?.invoice_id;
-                          const printType = billingClearance?.clearance_type === 'credit' ? 'tax_invoice_receipt' : 'receipt';
-                          window.open(`/billing/print/continuous?id=${invId}&type=${printType}`, '_blank');
-                        }}
+                        <button onClick={() => onPrintBillingDocument(true)}
                           className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white text-emerald-700 border border-emerald-200 text-xs font-medium hover:bg-emerald-50"
                         >ฟอร์มต่อเนื่อง</button>
                       </div>
@@ -707,7 +620,7 @@ export function GateOutSelectedStatusCards({
               <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-600 flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2"><CheckCircle2 size={14} /> ไม่มีค่าบริการ (อยู่ในช่วง Free Days หรือไม่มี Tariff)</span>
                 {!billingCleared && (
-                  <button onClick={() => createGateOutClearance('no_charge', null, 'ไม่มีค่าบริการ Gate-Out')}
+                  <button onClick={onConfirmNoCharge}
                     disabled={!canWaive}
                     className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     ยืนยัน No Charge

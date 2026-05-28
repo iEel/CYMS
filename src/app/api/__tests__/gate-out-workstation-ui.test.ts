@@ -3,6 +3,7 @@ import path from 'path';
 
 describe('Gate Out workstation UI', () => {
   const gateOut = fs.readFileSync(path.join(process.cwd(), 'src/app/(dashboard)/gate/GateOutTab.tsx'), 'utf8');
+  const gateOutStatusRail = fs.readFileSync(path.join(process.cwd(), 'src/app/(dashboard)/gate/components/GateOutStatusRail.tsx'), 'utf8');
 
   it('uses a two-column workstation layout with primary work and a side rail', () => {
     expect(gateOut).toContain('gate-out-workstation-shell');
@@ -41,5 +42,10 @@ describe('Gate Out workstation UI', () => {
     expect(gateOut).toContain('useGateOutSearch');
     expect(gateOut).toContain('useGateOutVisibilityPreview');
     expect(gateOut.length).toBeLessThan(52000);
+  });
+
+  it('keeps Gate Out status rail presentational', () => {
+    expect(gateOutStatusRail).not.toContain("fetch('/api/billing/invoices'");
+    expect(gateOutStatusRail).not.toContain('createGateOutClearance');
   });
 });

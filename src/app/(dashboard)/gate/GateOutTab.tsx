@@ -328,6 +328,105 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     return data.clearance_id as number;
   };
 
+  const handleCreateCreditInvoice = async () => {
+    if (!selectedContainer || !billingData || !resolvedCustomer) return;
+    try {
+      const creditTerm = resolvedCustomer.credit_term || 0;
+      const res = await fetch('/api/billing/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yard_id: yardId, customer_id: resolvedCustomer.customer_id,
+          container_id: selectedContainer.container_id, charge_type: 'storage',
+          description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน)`,
+          quantity: 1, unit_price: selectedTotal,
+          due_date: new Date(Date.now() + creditTerm * 86400000).toISOString(),
+          notes: JSON.stringify({
+            charges: buildFinalCharges(),
+            dwell_days: billingData.container.dwell_days,
+            container_size: billingData.container.size,
+            payment_method: 'credit',
+            payment_status: 'credit',
+            document_type: 'invoice',
+            transaction_type: 'gate_out',
+          }),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await createGateOutClearance('credit', data.invoice?.invoice_id || null, 'ลูกค้าเครดิต');
+        setBillingPaid(true);
+        setBillingInvoiceNumber(data.invoice_number || '');
+        setBillingInvoiceId(data.invoice?.invoice_id || null);
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleRequestApproval = async () => {
+    try {
+      const isWaived = originalSelectedTotal > 0;
+      const reason = isWaived
+        ? window.prompt('ระบุเหตุผลการยกเว้นค่าใช้จ่าย') || ''
+        : 'ไม่มีค่าบริการ';
+      if (isWaived && !reason.trim()) return;
+      await createGateOutClearance(isWaived ? 'waived' : 'no_charge', null, reason);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleCreatePaidInvoice = async () => {
+    if (!selectedContainer || !billingData || !resolvedCustomer) return;
+    try {
+      const custId = resolvedCustomer.customer_id;
+      const res = await fetch('/api/billing/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yard_id: yardId, customer_id: custId,
+          container_id: selectedContainer.container_id, charge_type: 'storage',
+          description: `ค่าบริการ Gate-Out ${selectedContainer.container_number} (${billingData.container.dwell_days} วัน) — ชำระ ${paymentMethod === 'cash' ? 'เงินสด' : 'โอน'}`,
+          quantity: 1, unit_price: selectedTotal,
+          notes: JSON.stringify({
+            charges: buildFinalCharges(),
+            dwell_days: billingData.container.dwell_days,
+            container_size: billingData.container.size,
+            payment_method: paymentMethod,
+            payment_status: 'paid',
+            document_type: 'receipt',
+            transaction_type: 'gate_out',
+          }),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetch('/api/billing/invoices', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoice_id: data.invoice.invoice_id, action: 'pay' }),
+        });
+        await createGateOutClearance('paid', data.invoice?.invoice_id || null, paymentMethod === 'cash' ? 'ชำระเงินสด' : 'ชำระเงินโอน');
+        setBillingPaid(true);
+        setBillingInvoiceNumber(data.invoice_number || '');
+        setBillingInvoiceId(data.invoice?.invoice_id || null);
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleConfirmNoCharge = async () => {
+    await createGateOutClearance('no_charge', null, 'ไม่มีค่าบริการ Gate-Out');
+  };
+
+  const handlePrintBillingDocument = (continuous = false) => {
+    const invId = billingInvoiceId || billingData?.paid_invoices?.[0]?.invoice_id;
+    if (!invId) return;
+    if (continuous) {
+      const printType = billingClearance?.clearance_type === 'credit' ? 'tax_invoice_receipt' : 'receipt';
+      window.open(`/billing/print/continuous?id=${invId}&type=${printType}`, '_blank');
+      return;
+    }
+    const printType = billingClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt';
+    window.open(`/billing/print?id=${invId}&type=${printType}`, '_blank');
+  };
+
   const loadGateOutBilling = async (container: ContainerResult, billingCustomerId?: number | null, bookingRef?: string) => {
     setBillingLoading(true);
     try {
@@ -877,12 +976,6 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           billingPaid={billingPaid}
           resolvedIsCredit={resolvedIsCredit}
           canCreateInvoice={canCreateInvoice}
-          yardId={yardId}
-          buildFinalCharges={buildFinalCharges}
-          createGateOutClearance={createGateOutClearance}
-          setBillingPaid={setBillingPaid}
-          setBillingInvoiceNumber={setBillingInvoiceNumber}
-          setBillingInvoiceId={setBillingInvoiceId}
           originalSelectedTotal={originalSelectedTotal}
           canWaive={canWaive}
           paymentMethod={paymentMethod}
@@ -905,6 +998,11 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           handleGateOut={handleGateOut}
           gateOutLoading={gateOutLoading}
           canGateOut={canGateOut}
+          onCreateCreditInvoice={handleCreateCreditInvoice}
+          onRequestApproval={handleRequestApproval}
+          onCreatePaidInvoice={handleCreatePaidInvoice}
+          onConfirmNoCharge={handleConfirmNoCharge}
+          onPrintBillingDocument={handlePrintBillingDocument}
         />
 
         {/* Result Toast */}
