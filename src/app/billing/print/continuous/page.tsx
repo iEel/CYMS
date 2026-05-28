@@ -131,6 +131,9 @@ function ContinuousPrintContent() {
   const copyIndex = copyIndexFrom(searchParams.get('copyIndex'));
   const testPrint = booleanFrom(searchParams.get('testPrint'));
   const previewLabel = booleanFrom(searchParams.get('preview')) ? 'PREVIEW' : null;
+  const returnTo = searchParams.get('returnTo') || '/settings?tab=document-templates';
+  const templateId = searchParams.get('templateId');
+  const versionNo = searchParams.get('versionNo');
   const hasInvoiceId = Boolean(searchParams.get('id'));
   const fallback = useMemo(() => fallbackPreview(mode, copyMode), [mode, copyMode]);
   const [payload, setPayload] = useState<ContinuousPrintPayload>(fallback.payload);
@@ -252,11 +255,7 @@ function ContinuousPrintContent() {
   }
 
   function handleBackToTemplate() {
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-    window.location.href = '/settings?tab=document-templates';
+    window.location.href = returnTo;
   }
 
   return (
@@ -287,6 +286,7 @@ function ContinuousPrintContent() {
         .continuous-print-toolbar-title {
           min-width: 0;
         }
+        .continuous-print-toolbar a,
         .continuous-print-toolbar button {
           align-items: center;
           background: #fff;
@@ -298,7 +298,9 @@ function ContinuousPrintContent() {
           font-weight: 700;
           gap: 8px;
           padding: 8px 12px;
+          text-decoration: none;
         }
+        .continuous-print-toolbar a.secondary,
         .continuous-print-toolbar button.secondary {
           background: #1f2937;
           color: #e5e7eb;
@@ -313,15 +315,15 @@ function ContinuousPrintContent() {
       `}</style>
       <div className="continuous-print-toolbar">
         <div className="continuous-print-toolbar-main">
-          <button
-            type="button"
+          <a
+            href={returnTo}
             className="secondary"
             onClick={handleBackToTemplate}
             aria-label="Back to document template designer"
           >
             <ArrowLeft size={16} />
-            กลับไปแก้ Template
-          </button>
+            กลับไป Document Templates
+          </a>
           <div className="continuous-print-toolbar-title">
             <strong>Continuous Tax Invoice / Receipt</strong>
             <div className="continuous-print-status">
@@ -332,6 +334,8 @@ function ContinuousPrintContent() {
                   : status === 'error'
                     ? 'Preview failed'
                     : 'Preview ready'}
+              {' · '}
+              Template {templateId || '-'} / v{versionNo || '-'}
             </div>
             {printError ? <div className="continuous-print-error">{printError}</div> : null}
           </div>

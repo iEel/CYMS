@@ -148,8 +148,19 @@ describe('continuous print UI', () => {
     const source = fs.readFileSync(pagePath, 'utf8');
 
     expect(source).toContain('handleBackToTemplate');
-    expect(source).toContain('กลับไปแก้ Template');
+    expect(source).toContain('returnTo');
+    expect(source).toContain("searchParams.get('returnTo') || '/settings?tab=document-templates'");
+    expect(source).toContain('กลับไป Document Templates');
+    expect(source).toContain('href={returnTo}');
     expect(source).toContain('/settings?tab=document-templates');
+  });
+
+  it('shows selected template identity on the non-print preview toolbar', () => {
+    const source = fs.readFileSync(pagePath, 'utf8');
+
+    expect(source).toContain("const templateId = searchParams.get('templateId')");
+    expect(source).toContain("const versionNo = searchParams.get('versionNo')");
+    expect(source).toContain("Template {templateId || '-'} / v{versionNo || '-'}");
   });
 
   it('wires document template management into settings', () => {
