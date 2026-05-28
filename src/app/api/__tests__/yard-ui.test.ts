@@ -59,7 +59,8 @@ describe('Yard management UI', () => {
     const source = fs.readFileSync(path.join(root, clientPath), 'utf8');
 
     expect(source).toContain('/api/operations/stream?yard_id=');
-    expect(source).toContain('Live Yard');
+    expect(source).toContain('เชื่อมต่ออยู่');
+    expect(source).toContain('ซิงก์ล่าสุด');
     expect(source).toContain('lastLiveRefreshAt');
     expect(source).toContain('ordersEventCountRef');
     expect(source).toContain('fetchData();');

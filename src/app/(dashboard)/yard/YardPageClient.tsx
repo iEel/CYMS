@@ -24,7 +24,7 @@ import {
 const YardViewer3D = nextDynamic(() => import('@/components/yard/YardViewer3D'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[500px] rounded-xl bg-slate-900 flex items-center justify-center">
+    <div className="w-full min-h-[520px] h-[min(72vh,760px)] rounded-xl bg-slate-900 flex items-center justify-center">
       <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
     </div>
   ),
@@ -109,7 +109,7 @@ const LIVE_STATUS_STYLE: Record<YardLiveStatus, { label: string; dot: string; te
     bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800/40',
   },
   live: {
-    label: 'Live Yard',
+    label: 'เชื่อมต่ออยู่',
     dot: 'bg-emerald-500',
     text: 'text-emerald-700 dark:text-emerald-300',
     bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800/40',
@@ -121,7 +121,7 @@ const LIVE_STATUS_STYLE: Record<YardLiveStatus, { label: string; dot: string; te
     bg: 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800/40',
   },
   offline: {
-    label: 'Live offline',
+    label: 'ไม่ได้เชื่อมต่อ',
     dot: 'bg-slate-400',
     text: 'text-slate-500 dark:text-slate-400',
     bg: 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700',
@@ -184,16 +184,25 @@ export default function YardPage() {
         fetch(`/api/yard/stats?yard_id=${yardId}`),
         fetch(`/api/containers?yard_id=${yardId}`),
       ]);
+      if (!statsRes.ok || !containersRes.ok) {
+        throw new Error('Failed to refresh yard data');
+      }
       const stats = await statsRes.json();
       const ctrs = await containersRes.json();
       setZones(stats.zones || []);
       setSummary(stats.summary || {});
       setContainers(ctrs || []);
+      setLastLiveRefreshAt(new Date());
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [yardId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    const interval = window.setInterval(fetchData, 30000);
+    return () => window.clearInterval(interval);
+  }, [fetchData]);
 
   useEffect(() => {
     if (!yardId || typeof window === 'undefined' || !window.EventSource) {
@@ -372,7 +381,7 @@ export default function YardPage() {
           <div className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-xs font-semibold ${liveMeta.bg} ${liveMeta.text}`}>
             <span className={`h-2 w-2 rounded-full ${liveMeta.dot} ${liveStatus === 'live' ? 'animate-pulse' : ''}`} />
             <span>{liveMeta.label}</span>
-            <span className="font-normal opacity-75">อัปเดต {lastLiveRefreshLabel}</span>
+            <span className="font-normal opacity-75">ซิงก์ล่าสุด {lastLiveRefreshLabel}</span>
           </div>
           {/* 2D / 3D Toggle */}
           <div className="flex items-center bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-1">
@@ -436,14 +445,16 @@ export default function YardPage() {
           {/* View Mode */}
           {viewMode === '3d' ? (
             <div className="space-y-4">
-              {/* 3D Viewer */}
-              <YardViewer3D
-                yardId={yardId}
-                selectedZone={filterZone || undefined}
-                onSelectContainer={(c) => setSelectedContainer(c as ContainerData | null)}
-              />
+              <div className="space-y-3">
+                {/* 3D Viewer */}
+                <YardViewer3D
+                  yardId={yardId}
+                  selectedZone={filterZone || undefined}
+                  onSelectContainer={(c) => setSelectedContainer(c as ContainerData | null)}
+                />
 
-              {selectedContainerActionPanel}
+                {selectedContainerActionPanel}
+              </div>
 
               {/* Zone filter cards (compact) */}
               <div className="flex gap-2 overflow-x-auto pb-1">
@@ -866,16 +877,14 @@ export default function YardPage() {
             setHighlightNumber(c.container_number);
           }} />
           {/* Right: 3D Viewer */}
-          <div>
+          <div className="space-y-3">
             <YardViewer3D
               yardId={yardId}
               selectedZone={filterZone || undefined}
               onSelectContainer={(c) => setSelectedContainer(c as ContainerData | null)}
               highlightContainerNumber={highlightNumber}
             />
-            <div className="mt-4">
-              {selectedContainerActionPanel}
-            </div>
+            {selectedContainerActionPanel}
           </div>
         </div>
       )}

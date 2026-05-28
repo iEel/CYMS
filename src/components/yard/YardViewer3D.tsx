@@ -755,7 +755,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
 
   if (loading) {
     return (
-      <div className="w-full h-[500px] rounded-xl bg-slate-900 flex items-center justify-center">
+      <div className="w-full min-h-[520px] h-[min(72vh,760px)] rounded-xl bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-slate-400 text-sm">กำลังโหลดแผนผัง 3D...</p>
@@ -765,7 +765,7 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
   }
 
   return (
-    <div className="relative w-full h-[500px] rounded-xl overflow-hidden border border-slate-700">
+    <div className="relative w-full min-h-[520px] h-[min(72vh,760px)] rounded-xl overflow-hidden border border-slate-700">
       <div
         ref={canvasRef}
         className="w-full h-full cursor-grab active:cursor-grabbing"
