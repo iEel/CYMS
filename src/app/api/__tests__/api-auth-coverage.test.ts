@@ -93,7 +93,9 @@ describe('high-risk API mutation routes use server-derived actors', () => {
     expect(guardIndex).toBeLessThan(selectIndex);
 
     const helperSource = fs.readFileSync(path.join(repoRoot, 'src/lib/attachmentAccess.ts'), 'utf8');
-    expect(helperSource).toMatch(/\brequireAnyPermission\s*\(/);
+    expect(helperSource).toMatch(/\brequirePermission\s*\(/);
     expect(helperSource).toContain('documents.attachment.view');
+    expect(helperSource).toContain('resolveAttachmentEntityScope');
+    expect(helperSource).toContain('requireYardAccess');
   });
 });

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { requireAnyPermission, requirePermission, requireRequestActor } from '@/lib/apiAuth';
+import { requirePermission, requireRequestActor, requireYardAccess } from '@/lib/apiAuth';
 import { ensureAttachmentCenter, logAttachment } from '@/lib/attachmentCenter';
 import { GET, POST } from '../attachments/route';
 
 jest.mock('@/lib/db', () => ({ getDb: jest.fn() }));
 jest.mock('@/lib/apiAuth', () => ({
-  requireAnyPermission: jest.fn(),
   requirePermission: jest.fn(),
   requireRequestActor: jest.fn(),
+  requireYardAccess: jest.fn(),
 }));
 jest.mock('@/lib/attachmentCenter', () => ({
   ensureAttachmentCenter: jest.fn(),
@@ -16,16 +16,28 @@ jest.mock('@/lib/attachmentCenter', () => ({
 }));
 
 const mockedGetDb = getDb as jest.Mock;
-const mockedRequireAnyPermission = requireAnyPermission as jest.Mock;
 const mockedRequirePermission = requirePermission as jest.Mock;
 const mockedRequireRequestActor = requireRequestActor as jest.Mock;
+const mockedRequireYardAccess = requireYardAccess as jest.Mock;
 const mockedEnsureAttachmentCenter = ensureAttachmentCenter as jest.Mock;
 const mockedLogAttachment = logAttachment as jest.Mock;
 
-function makeDb(recordset: unknown[] = []) {
-  const query = jest.fn().mockResolvedValue({ recordset });
+function makeDb({
+  attachments = [],
+  scopeRows = [{ entity_id: 44, entity_number: 'CONT44', yard_id: 7 }],
+}: {
+  attachments?: unknown[];
+  scopeRows?: unknown[];
+} = {}) {
+  const statements: string[] = [];
+  const query = jest.fn(async (statement: string) => {
+    statements.push(statement);
+    if (statement.includes('FROM Containers')) return { recordset: scopeRows };
+    if (statement.includes('FROM EntityAttachments')) return { recordset: attachments };
+    return { recordset: [] };
+  });
   const input = jest.fn().mockReturnThis();
-  return { request: jest.fn(() => ({ input, query })), input, query };
+  return { request: jest.fn(() => ({ input, query })), input, query, statements };
 }
 
 function makeGetRequest() {
@@ -45,35 +57,30 @@ function makePostRequest(body: Record<string, unknown>) {
 describe('attachment center access', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedRequireAnyPermission.mockResolvedValue({ userId: 9, role: 'gate_clerk' });
-    mockedRequirePermission.mockResolvedValue({ userId: 42, role: 'gate_clerk' });
+    mockedRequirePermission.mockImplementation((_request, _db, permissionCode) => {
+      const userId = permissionCode === 'documents.attachment.upload' ? 42 : 9;
+      return Promise.resolve({ userId, role: 'gate_clerk' });
+    });
     mockedRequireRequestActor.mockReturnValue({ userId: 999, role: 'gate_clerk' });
+    mockedRequireYardAccess.mockResolvedValue({ userId: 9, role: 'gate_clerk' });
     mockedEnsureAttachmentCenter.mockResolvedValue(undefined);
     mockedLogAttachment.mockResolvedValue({ attachment_id: 7 });
   });
 
   it('denies GET when actor lacks attachment read permission before querying attachments', async () => {
-    const db = makeDb([{ attachment_id: 1, file_url: 'https://example.test/leak.pdf' }]);
+    const db = makeDb({ attachments: [{ attachment_id: 1, file_url: 'https://example.test/leak.pdf' }] });
     mockedGetDb.mockResolvedValue(db);
-    mockedRequireAnyPermission.mockResolvedValueOnce(
+    mockedRequirePermission.mockResolvedValueOnce(
       NextResponse.json({ error: 'forbidden' }, { status: 403 })
     );
 
     const res = await GET(makeGetRequest());
 
     expect(res.status).toBe(403);
-    expect(mockedRequireAnyPermission).toHaveBeenCalledWith(
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
       expect.anything(),
       db,
-      expect.arrayContaining([
-        'documents.attachment.view',
-        'gate.eir.print',
-        'survey.inspect',
-        'mnr.eor.create',
-        'mnr.eor.update',
-        'billing.invoice.create',
-        'reports.view',
-      ]),
+      'documents.attachment.view',
       'คุณไม่มีสิทธิ์ดูเอกสารแนบ'
     );
     expect(mockedEnsureAttachmentCenter).not.toHaveBeenCalled();
@@ -82,19 +89,41 @@ describe('attachment center access', () => {
 
   it('returns attachments only after attachment read permission passes', async () => {
     const attachments = [{ attachment_id: 2, file_url: 'https://example.test/ok.pdf' }];
-    const db = makeDb(attachments);
+    const db = makeDb({ attachments });
     mockedGetDb.mockResolvedValue(db);
 
     const res = await GET(makeGetRequest());
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(mockedRequireAnyPermission.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockedRequirePermission.mock.invocationCallOrder[0]).toBeLessThan(
       mockedEnsureAttachmentCenter.mock.invocationCallOrder[0]
     );
     expect(mockedEnsureAttachmentCenter).toHaveBeenCalledWith(db);
-    expect(db.request).toHaveBeenCalledTimes(1);
+    expect(db.request).toHaveBeenCalledTimes(2);
+    expect(mockedRequireYardAccess).toHaveBeenCalledWith(
+      expect.anything(),
+      db,
+      7,
+      'คุณไม่มีสิทธิ์เข้าถึงเอกสารแนบของลานนี้'
+    );
+    expect(db.statements.join('\n')).toContain('FROM Containers');
+    expect(db.statements.join('\n')).toContain('AND (@yardId IS NULL OR yard_id = @yardId OR yard_id IS NULL)');
     expect(body).toEqual({ attachments });
+  });
+
+  it('denies GET when the resolved attachment entity is in a yard the actor cannot access', async () => {
+    const db = makeDb({ attachments: [{ attachment_id: 2, file_url: 'https://example.test/leak.pdf' }] });
+    mockedGetDb.mockResolvedValue(db);
+    mockedRequireYardAccess.mockResolvedValueOnce(
+      NextResponse.json({ error: 'forbidden yard' }, { status: 403 })
+    );
+
+    const res = await GET(makeGetRequest());
+
+    expect(res.status).toBe(403);
+    expect(db.statements.join('\n')).toContain('FROM Containers');
+    expect(db.statements.join('\n')).not.toContain('FROM EntityAttachments');
   });
 
   it('uses upload permission actor for POST and stores uploadedBy from that actor', async () => {
@@ -122,6 +151,9 @@ describe('attachment center access', () => {
       db,
       uploadedBy: 42,
       fileUrl: 'https://example.test/upload.pdf',
+      yardId: 7,
+      entityId: 44,
+      entityNumber: 'CONT44',
     }));
     expect(body).toEqual({ success: true, attachment: { attachment_id: 7 } });
   });

@@ -5,12 +5,14 @@ const root = process.cwd();
 
 describe('Gate-Out optional booking UI copy', () => {
   it('labels missing booking as optional instead of required', () => {
-    const source = fs.readFileSync(path.join(root, 'src/app/(dashboard)/gate/GateOutTab.tsx'), 'utf8');
+    const parent = fs.readFileSync(path.join(root, 'src/app/(dashboard)/gate/GateOutTab.tsx'), 'utf8');
+    const statusCards = fs.readFileSync(path.join(root, 'src/app/(dashboard)/gate/components/GateOutStatusRail.tsx'), 'utf8');
 
-    expect(source).toContain('Booking (ถ้ามี)');
-    expect(source).toContain('ไม่ระบุ Booking');
-    expect(source).toContain('ไม่มี Booking ก็ปล่อยได้');
-    expect(source).not.toContain('ยังไม่ได้ผูก Booking');
-    expect(source).not.toContain('เลือก Booking เพื่อคุมการปล่อยตู้');
+    expect(parent).toContain('<GateOutSelectedStatusCards');
+    expect(statusCards).toContain('Booking (ถ้ามี)');
+    expect(statusCards).toContain('ไม่ระบุ Booking');
+    expect(statusCards).toContain('ไม่มี Booking ก็ปล่อยได้');
+    expect(statusCards).not.toContain('ยังไม่ได้ผูก Booking');
+    expect(statusCards).not.toContain('เลือก Booking เพื่อคุมการปล่อยตู้');
   });
 });

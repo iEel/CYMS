@@ -73,6 +73,7 @@ describe('BoxTech container technical weights', () => {
     const types = fs.readFileSync(path.join(root, 'src/app/(dashboard)/gate/types.ts'), 'utf8');
     const containersRoute = fs.readFileSync(path.join(root, 'src/app/api/containers/route.ts'), 'utf8');
     const gateOut = fs.readFileSync(path.join(root, 'src/app/(dashboard)/gate/GateOutTab.tsx'), 'utf8');
+    const gateOutStatusRail = fs.readFileSync(path.join(root, 'src/app/(dashboard)/gate/components/GateOutStatusRail.tsx'), 'utf8');
 
     expect(types).toContain('tare_weight_kg?: number | null');
     expect(types).toContain('max_gross_weight_kg?: number | null');
@@ -83,11 +84,12 @@ describe('BoxTech container technical weights', () => {
     expect(containersRoute).toContain('SELECT c.*');
     expect(containersRoute).toContain('c.* includes BoxTech technical spec fields used by Gate Out and Container 360.');
 
-    expect(gateOut).toContain('(selectedContainer.tare_weight_kg != null || selectedContainer.max_gross_weight_kg != null)');
-    expect(gateOut).toContain('ข้อมูลสเปกจาก BoxTech');
-    expect(gateOut).toContain('Tare');
-    expect(gateOut).toContain('Max Gross');
-    expect(gateOut).toContain('ไม่ใช่น้ำหนักจริง/VGM');
+    expect(gateOut).toContain('<GateOutSelectedStatusCards');
+    expect(gateOutStatusRail).toContain('(selectedContainer.tare_weight_kg != null || selectedContainer.max_gross_weight_kg != null)');
+    expect(gateOutStatusRail).toContain('ข้อมูลสเปกจาก BoxTech');
+    expect(gateOutStatusRail).toContain('Tare');
+    expect(gateOutStatusRail).toContain('Max Gross');
+    expect(gateOutStatusRail).toContain('ไม่ใช่น้ำหนักจริง/VGM');
   });
 
   it('surfaces BoxTech technical weights in EIR payloads and Container 360 displays', () => {
