@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 import { getDb } from '@/lib/db';
 import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
 
@@ -13,6 +15,11 @@ const mockedGetDb = getDb as jest.Mock;
 const mockedRequireAnyPermission = requireAnyPermission as jest.Mock;
 const mockedRequirePermission = requirePermission as jest.Mock;
 const mockedRequireYardAccess = requireYardAccess as jest.Mock;
+const repoRoot = path.resolve(__dirname, '../../../..');
+
+function read(relativePath: string) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+}
 
 function makeDb() {
   const query = jest.fn().mockResolvedValue({ recordset: [] });
@@ -51,6 +58,17 @@ describe('billing API read permissions', () => {
       expect.any(String)
     );
     expect(mockedRequireYardAccess).not.toHaveBeenCalled();
+  });
+
+  it('normalizes invoice customer through the shared business party resolver', () => {
+    const source = read('src/app/api/billing/invoices/route.ts');
+
+    expect(source).toContain('normalizeBusinessPartyContext');
+    expect(source).toContain('validateBusinessPartyInput');
+    expect(source).toContain('invoicePartyContext.billToCustomerId');
+    expect(source).toContain(".input('customerId', sql.Int, invoiceCustomerId)");
+    expect(source).not.toContain(".input('customerId', sql.Int, body.customer_id)");
+    expect(source).not.toContain('customer_id: body.customer_id');
   });
 
   it('requires billing/report permission before returning AR aging', async () => {

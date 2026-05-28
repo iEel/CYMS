@@ -336,7 +336,7 @@ type BusinessPartyContext = {
 - [x] Apply to M&R route first, because it currently uses body party IDs directly.
 - [x] Apply to EDI booking creation.
 - [x] Apply to EDI booking update.
-- [ ] Apply to billing invoice creation so invoice grants remain bill-to only.
+- [x] Apply to billing invoice creation so invoice grants remain bill-to only.
 - [x] Keep all SQL parameterized.
 
 **Acceptance Criteria:**
