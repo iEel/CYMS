@@ -233,6 +233,7 @@ type EntityScope = {
 **Steps:**
 
 - [ ] Split `ContainerDetailModal` into overview, lifecycle, EIR/documents, billing, M&R, reefer, and activity panels.
+- [x] Extract shared Container Detail UI primitives (`InfoField`, `DocumentRow`, `MiniMetric`).
 - [ ] Keep modal tab state and data fetching stable.
 - [ ] Split `YardPageClient` into toolbar/filter state, container data hook, 3D scene shell, and list/detail panels.
 - [x] Extract selected-container action panel from `YardPageClient` without changing state/data fetching.

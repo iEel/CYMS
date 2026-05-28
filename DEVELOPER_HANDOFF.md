@@ -40,6 +40,7 @@
 - **Offline operation policy**: เพิ่ม `src/lib/offlineOperationPolicy.ts` และผูก `offlineFetch()` ให้ queue ได้เฉพาะ allowlist งานภาคสนาม (`gate_in`, `gate_out`, `gate_out_pickup_request`, `photo_upload`, `reefer_check`, `yard_audit`, `yard_position_*`) ส่วน invoice/payment/billing clearance/portal visibility/customer master/document template publish/import และ operation ที่ไม่ระบุชนิดงานจะถูก block เป็น online-only พร้อม payload `blocked/error/message` โดยไม่เข้า IndexedDB queue
 - **Gate In component decomposition**: แยกส่วน inline ที่เหลือใน `GateInTab.tsx` เพิ่มเป็น `GateInSubmitSection.tsx` (notes/submit/result/EIR action) และ `GateInVisibilityPreviewPanel.tsx` (Portal Visibility Preview) โดยยังประกอบ submit payload และ state หลักใน parent เดิม เพื่อลดความเสี่ยง behavior change
 - **Yard page decomposition**: แยก selected-container action panel ออกจาก `YardPageClient.tsx` เป็น `src/app/(dashboard)/yard/components/YardSelectedContainerPanel.tsx`; ยังไม่ย้าย data fetching/3D canvas state เพื่อให้ behavior เดิมคงที่
+- **Container Detail decomposition**: แยก UI primitives ของ `ContainerDetailModal.tsx` เป็น `src/components/yard/detail/DetailUi.tsx` (`InfoField`, `DocumentRow`, `MiniMetric`) โดยยังคง modal state/tabs/data fetching เดิมทั้งหมด
 - **Migration**: ไม่มี schema migration ใหม่ในรอบนี้ แต่ deployment ต้องรัน runtime core migration เดิมให้ครบก่อน serve routes เหล่านี้
 
 Verification รอบนี้:
@@ -56,11 +57,12 @@ npm test -- src/app/api/__tests__/billing-api-permissions.test.ts src/app/api/__
 npm test -- src/lib/__tests__/offlineOperationPolicy.test.ts src/lib/__tests__/offlineQueue.test.ts --runInBand --cacheDirectory .tmp\jest
 npm test -- src/app/api/__tests__/gate-in-business-context-ui.test.ts src/app/api/__tests__/gate-in-party-grants.test.ts --runInBand --cacheDirectory .tmp\jest
 npm test -- src/app/api/__tests__/yard-ui.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/app/api/__tests__/boxtech-container-weights.test.ts src/app/api/__tests__/container-detail-permissions.test.ts --runInBand --cacheDirectory .tmp\jest
 npx tsc --noEmit --pretty false
 npm run lint
 ```
 
-ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน, entity resolver + attachment access tests `10/10` ผ่าน, read-route resolver regression `43/43` ผ่าน, business party + M&R tests `20/20` ผ่าน, EDI booking party regression `27/27` ผ่าน, EDI booking update party regression `12/12` ผ่าน, billing invoice party regression `29/29` ผ่าน, offline operation policy regression `17/17` ผ่าน, Gate In characterization `7/7` ผ่าน, Yard UI regression `7/7` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน, entity resolver + attachment access tests `10/10` ผ่าน, read-route resolver regression `43/43` ผ่าน, business party + M&R tests `20/20` ผ่าน, EDI booking party regression `27/27` ผ่าน, EDI booking update party regression `12/12` ผ่าน, billing invoice party regression `29/29` ผ่าน, offline operation policy regression `17/17` ผ่าน, Gate In characterization `7/7` ผ่าน, Yard UI regression `7/7` ผ่าน, Container Detail regression `8/8` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
 
 ### อัปเดตล่าสุด: Next Hardening + Maintainability Slice (28 พ.ค. 2569)
 
