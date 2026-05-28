@@ -70,25 +70,23 @@ async function run() {
   checks.push(publicEir);
 
   const portalContainers = await request('/portal/containers');
-  assertStatus(portalContainers, [200, 302, 307, 308, 401, 403]);
+  assertStatus(portalContainers, [200, 302, 307, 308]);
   assertProtectedPageRedirect(portalContainers);
   checks.push(portalContainers);
 
   const documentTemplates = await request('/settings?tab=document-templates');
-  assertStatus(documentTemplates, [200, 302, 307, 308, 401, 403]);
+  assertStatus(documentTemplates, [200, 302, 307, 308]);
   assertProtectedPageRedirect(documentTemplates);
   checks.push(documentTemplates);
 
   const continuousPrint = await request('/billing/print/continuous?preview=sample&type=tax_invoice_receipt');
-  assertStatus(continuousPrint, [200, 302, 307, 308, 401, 403]);
+  assertStatus(continuousPrint, [200, 302, 307, 308]);
   assertProtectedPageRedirect(continuousPrint);
   checks.push(continuousPrint);
 
   const dashboard = await request('/dashboard');
   assertStatus(dashboard, [200, 302, 307, 308]);
-  if ([302, 307, 308].includes(dashboard.status) && !String(dashboard.location || '').includes('/login')) {
-    throw new Error(`/dashboard redirected to unexpected location: ${dashboard.location}`);
-  }
+  assertProtectedPageRedirect(dashboard);
   checks.push(dashboard);
 
   console.log(`E2E smoke passed against ${baseUrl}`);
