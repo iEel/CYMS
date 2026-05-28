@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
 import { ensureAttachmentCenter, logAttachment } from '@/lib/attachmentCenter';
-import { requireRequestActor } from '@/lib/apiAuth';
+import { isAttachmentAuthResponse, requireAttachmentUpload, requireAttachmentView } from '@/lib/attachmentAccess';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +16,9 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDb();
+    const actor = await requireAttachmentView(request, db);
+    if (isAttachmentAuthResponse(actor)) return actor;
+
     await ensureAttachmentCenter(db);
     const req = db.request()
       .input('entityType', sql.NVarChar, entityType)
@@ -49,8 +52,8 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
-    const actor = requireRequestActor(request);
-    if (actor instanceof NextResponse) return actor;
+    const actor = await requireAttachmentUpload(request, db);
+    if (isAttachmentAuthResponse(actor)) return actor;
     const attachment = await logAttachment({
       db,
       entityType: body.entity_type,

@@ -76,6 +76,24 @@ describe('high-risk API mutation routes use server-derived actors', () => {
   it.each(highRiskMutationRoutes)('%s has a server-side actor or permission guard', (relativePath) => {
     const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 
-    expect(source).toMatch(/\b(requirePermission|requireAnyPermission|requireRequestActor|requireRole)\s*\(/);
+    expect(source).toMatch(/\b(requirePermission|requireAnyPermission|requireRequestActor|requireRole|requireAttachmentView|requireAttachmentUpload)\s*\(/);
+  });
+
+  it('attachments GET has its own attachment view guard before selecting attachment file URLs', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'src/app/api/attachments/route.ts'), 'utf8');
+    const getMatch = source.match(/export\s+async\s+function\s+GET[\s\S]*?\n}\n\nexport\s+async\s+function\s+POST/);
+    expect(getMatch?.[0]).toBeDefined();
+
+    const getSource = getMatch?.[0] || '';
+    const guardIndex = getSource.search(/\brequireAttachmentView\s*\(/);
+    const selectIndex = getSource.indexOf('SELECT attachment_id');
+
+    expect(guardIndex).toBeGreaterThanOrEqual(0);
+    expect(selectIndex).toBeGreaterThanOrEqual(0);
+    expect(guardIndex).toBeLessThan(selectIndex);
+
+    const helperSource = fs.readFileSync(path.join(repoRoot, 'src/lib/attachmentAccess.ts'), 'utf8');
+    expect(helperSource).toMatch(/\brequireAnyPermission\s*\(/);
+    expect(helperSource).toContain('documents.attachment.view');
   });
 });

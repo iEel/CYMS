@@ -70,6 +70,8 @@ export const PERMISSION_SEEDS: PermissionSeed[] = [
   { code: 'billing.credit_note.approve', module: 'billing', action: 'credit_note_approve', description: 'อนุมัติใบลดหนี้', risk: 'high' },
   { code: 'billing.invoice.cancel', module: 'billing', action: 'invoice_cancel', description: 'ยกเลิกใบแจ้งหนี้', risk: 'high' },
   { code: 'billing.receipt.cancel', module: 'billing', action: 'receipt_cancel', description: 'ยกเลิกใบเสร็จรับเงิน', risk: 'high' },
+  { code: 'documents.attachment.view', module: 'documents', action: 'attachment_view', description: 'ดูเอกสารแนบของรายการที่มีสิทธิ์' },
+  { code: 'documents.attachment.upload', module: 'documents', action: 'attachment_upload', description: 'อัปโหลดหรือผูกเอกสารแนบกับรายการที่มีสิทธิ์' },
   { code: 'booking.manage', module: 'bookings', action: 'manage', description: 'จัดการ Booking และยอดรับ/ปล่อยตู้' },
   { code: 'mnr.eor.create', module: 'mnr', action: 'eor_create', description: 'สร้างใบประเมินซ่อม EOR' },
   { code: 'mnr.eor.approve', module: 'mnr', action: 'eor_approve', description: 'อนุมัติหรือปฏิเสธใบ EOR', risk: 'high' },
@@ -91,8 +93,8 @@ export const PERMISSION_SEEDS: PermissionSeed[] = [
 ];
 
 export const ROLE_GRANTS: Record<string, string[]> = {
-  gate_clerk: ['gate.in', 'gate.out', 'gate.eir.print', 'booking.manage', 'integration.logs.view', 'reefer.check.read'],
-  surveyor: ['survey.inspect', 'survey.damage.update', 'survey.grade.change', 'yard.location.assign', 'mnr.eor.create', 'reports.view', 'reefer.check.read', 'reefer.check.record', 'reefer.exception.manage'],
+  gate_clerk: ['gate.in', 'gate.out', 'gate.eir.print', 'documents.attachment.view', 'documents.attachment.upload', 'booking.manage', 'integration.logs.view', 'reefer.check.read'],
+  surveyor: ['survey.inspect', 'survey.damage.update', 'survey.grade.change', 'yard.location.assign', 'mnr.eor.create', 'reports.view', 'documents.attachment.view', 'documents.attachment.upload', 'reefer.check.read', 'reefer.check.record', 'reefer.exception.manage'],
   yard_planner: ['yard.slot.move', 'yard.location.assign', 'booking.manage', 'reports.view', 'reefer.check.read'],
   rs_driver: ['yard.slot.move', 'yard.location.assign'],
   billing_officer: [
@@ -100,6 +102,7 @@ export const ROLE_GRANTS: Record<string, string[]> = {
     'billing.payment.receive',
     'billing.waive.request',
     'billing.credit_note.create',
+    'documents.attachment.view',
     'document_templates.view',
     'document_templates.test_print',
     'document_templates.export',
@@ -130,6 +133,8 @@ export const ROLE_GRANTS: Record<string, string[]> = {
     'billing.credit_note.approve',
     'billing.invoice.cancel',
     'billing.receipt.cancel',
+    'documents.attachment.view',
+    'documents.attachment.upload',
     'booking.manage',
     'mnr.eor.create',
     'mnr.eor.approve',
