@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import Yard3DCameraToolbar from './Yard3DCameraToolbar';
+import Yard3DLegend from './Yard3DLegend';
 import {
   computeContainerFocusPose,
   computeYardHomePose,
@@ -188,14 +189,22 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
   const [containers, setContainers] = useState<ContainerBlock[]>([]);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [colorMode, setColorMode] = useState<YardColorMode>('shipping');
+  const [colorMode, setColorMode] = useState<YardColorMode>('status');
   const [selectedContainerNumber, setSelectedContainerNumber] = useState<string | null>(null);
 
   const activeShippingLegend = Array.from(
-    new Set(containers.map(c => c.shipping_line).filter(Boolean))
+    containers.reduce((map, c) => {
+      if (!c.shipping_line) return map;
+      map.set(c.shipping_line, (map.get(c.shipping_line) || 0) + 1);
+      return map;
+    }, new Map<string, number>())
   )
-    .slice(0, 5)
-    .map(line => ({ label: line, color: hexColor(SHIPPING_COLORS[line] || STATUS_COLORS.in_yard) }));
+    .sort((a, b) => b[1] - a[1])
+    .map(([line, count]) => ({
+      label: line,
+      color: hexColor(SHIPPING_COLORS[line] || STATUS_COLORS.in_yard),
+      count,
+    }));
 
   const moveCameraTo = useCallback((endPosition: THREE.Vector3, endTarget: THREE.Vector3) => {
     const camera = cameraRef.current;
@@ -779,8 +788,8 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       <div className="absolute top-3 left-3 z-10 flex items-center gap-1 bg-slate-900/80 backdrop-blur rounded-lg p-1 border border-slate-700">
         <span className="px-2 text-[10px] text-slate-400 font-semibold">สีตู้</span>
         {[
-          { key: 'shipping' as const, label: 'สายเรือ' },
           { key: 'status' as const, label: 'สถานะ' },
+          { key: 'shipping' as const, label: 'สายเรือ' },
         ].map(option => (
           <button
             key={option.key}
@@ -798,23 +807,18 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
       </div>
 
       {/* Legend */}
-      <div className="absolute bottom-3 left-3 right-3 z-10 flex flex-wrap items-center gap-2 bg-slate-900/80 backdrop-blur rounded-lg px-3 py-2 border border-slate-700">
-        <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mr-1">
-          {colorMode === 'shipping' ? 'สีตู้: สายเรือ' : 'สีตู้: สถานะ'}
-        </span>
-        {(colorMode === 'shipping' ? activeShippingLegend : STATUS_LEGEND.map(s => ({
-          label: s.label,
-          color: hexColor(STATUS_COLORS[s.key] || STATUS_COLORS.in_yard),
-        }))).map((s, i) => (
-          <span key={`${s.label}-${i}`} className="flex items-center gap-1 text-[10px] text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: s.color }} />
-            {s.label}
-          </span>
-        ))}
-        {colorMode === 'shipping' && (
-          <span className="text-[10px] text-slate-500">Hold/Repair แสดงสีสถานะ</span>
-        )}
-      </div>
+      <Yard3DLegend
+        title={colorMode === 'shipping' ? 'สีตู้: สายเรือ' : 'สีตู้: สถานะ'}
+        items={colorMode === 'shipping'
+          ? activeShippingLegend
+          : STATUS_LEGEND.map(s => ({
+              label: s.label,
+              color: hexColor(STATUS_COLORS[s.key] || STATUS_COLORS.in_yard),
+            }))
+        }
+        note={colorMode === 'shipping' ? 'Hold/Repair แสดงสีสถานะ' : undefined}
+        maxVisibleItems={colorMode === 'shipping' ? 4 : 6}
+      />
 
       <Yard3DCameraToolbar
         canFocusSelected={Boolean(selectedContainerNumber || highlightContainerNumber)}
