@@ -281,12 +281,12 @@ Offline queue blocked:
 
 **Steps:**
 
-- [ ] Write tests for allowed and blocked operations.
-- [ ] Add `canQueueOfflineOperation(operation, context)`.
-- [ ] Add structured blocked reasons for UI text.
-- [ ] Ensure `offlineFetch` requires an operation type for new usage.
-- [ ] Show queued/synced/conflict only for allowed operational workflows.
-- [ ] Keep financial and permission-changing actions online-only with clear disabled/error state.
+- [x] Write tests for allowed and blocked operations.
+- [x] Add `canQueueOfflineOperation(operation, context)`.
+- [x] Add structured blocked reasons for UI text.
+- [x] Ensure `offlineFetch` requires an operation type for new usage.
+- [x] Show queued/synced/conflict only for allowed operational workflows.
+- [x] Keep financial and permission-changing actions online-only with clear disabled/error state.
 
 **Acceptance Criteria:**
 

@@ -5,6 +5,8 @@
  * Works alongside Service Worker caching for a full offline experience.
  */
 
+import { canQueueOfflineOperation, type OfflineOperationDecision } from './offlineOperationPolicy';
+
 const DB_NAME = 'cyms_offline';
 const DB_VERSION = 1;
 const STORE_NAME = 'sync_queue';
@@ -40,6 +42,18 @@ export interface OfflineQueuedPayload {
   message: string;
 }
 
+export interface OfflineBlockedPayload {
+  success: false;
+  error: string;
+  offline: true;
+  queued: false;
+  blocked: true;
+  status: 'blocked';
+  operation?: string;
+  reason?: string;
+  message: string;
+}
+
 export function shouldQueueOfflineRequest(options: RequestInit = {}) {
   const method = (options.method || 'GET').toUpperCase();
   return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
@@ -66,6 +80,23 @@ export function buildOfflineQueuedPayload(operation?: string): OfflineQueuedPayl
     status: 'queued',
     ...(operation ? { operation } : {}),
     message: 'บันทึกแบบออฟไลน์ — จะซิงค์อัตโนมัติเมื่อเชื่อมต่ออินเทอร์เน็ต',
+  };
+}
+
+export function buildOfflineBlockedPayload(
+  decision: OfflineOperationDecision,
+  operation?: string,
+): OfflineBlockedPayload {
+  return {
+    success: false,
+    error: decision.message,
+    offline: true,
+    queued: false,
+    blocked: true,
+    status: 'blocked',
+    ...(operation ? { operation } : {}),
+    ...(decision.reasonCode ? { reason: decision.reasonCode } : {}),
+    message: decision.message,
   };
 }
 
@@ -294,13 +325,26 @@ export async function offlineFetch(
   meta: OfflineRequestMeta = {}
 ): Promise<Response> {
   const canQueue = shouldQueueOfflineRequest(options);
+  const method = (options.method || 'GET').toUpperCase();
+  const queueDecision = canQueue
+    ? canQueueOfflineOperation(meta.operation, { url, method })
+    : null;
   const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
 
   if (!isOnline && canQueue) {
+    if (!queueDecision?.allowed) {
+      return new Response(JSON.stringify(buildOfflineBlockedPayload(
+        queueDecision || canQueueOfflineOperation(meta.operation, { url, method }),
+        meta.operation,
+      )), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     // Queue the request for later
     await enqueue({
       url,
-      method: (options.method || 'GET').toUpperCase(),
+      method,
       body: options.body as string | null,
       headers: normalizeOfflineHeaders(options.headers),
       timestamp: Date.now(),
@@ -322,10 +366,10 @@ export async function offlineFetch(
     return await fetch(url, options);
   } catch (err) {
     // Network error — queue it
-    if (canQueue) {
+    if (canQueue && queueDecision?.allowed) {
       await enqueue({
         url,
-        method: (options.method || 'GET').toUpperCase(),
+        method,
         body: options.body as string | null,
         headers: normalizeOfflineHeaders(options.headers),
         timestamp: Date.now(),
@@ -338,6 +382,15 @@ export async function offlineFetch(
       }
       return new Response(JSON.stringify(buildOfflineQueuedPayload(meta.operation)), {
         status: 202,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (canQueue && !queueDecision?.allowed) {
+      return new Response(JSON.stringify(buildOfflineBlockedPayload(
+        queueDecision || canQueueOfflineOperation(meta.operation, { url, method }),
+        meta.operation,
+      )), {
+        status: 409,
         headers: { 'Content-Type': 'application/json' },
       });
     }

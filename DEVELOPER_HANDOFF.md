@@ -37,6 +37,7 @@
 - **Remaining resolver adoption**: `documents/activity` ยังไม่ถูกย้ายเข้าระบบ resolver ในรอบนี้ เพราะต้อง normalize document lifecycle type เพิ่มเติมให้ครอบคลุม receipt/credit note ก่อน เพื่อไม่ให้ reject เอกสารบัญชีเดิมผิดพลาด
 - **Business party resolver**: เพิ่ม `src/lib/businessPartyResolver.ts` เพื่อ normalize party context กลาง (`legacyCustomerId`, `bookingCustomerId`, `billToCustomerId`, owner/line/forwarder/shipper/consignee/trucking) พร้อม validation positive integer; `POST /api/mnr`, M&R invoice creation, `POST/PUT /api/edi/bookings`, และ `POST /api/billing/invoices` ใช้ helper นี้แทน fallback ตรง `billing_customer_id || customer_id` / `booking_customer_id || customer_id`; booking update และ invoice create reject party id ที่ไม่ใช่ positive integer ก่อน bind SQL
 - **Invoice bill-to rule**: การสร้าง invoice ใช้ `billToCustomerId` เป็น `Invoices.customer_id` เสมอ (รองรับ `bill_to_customer_id`, `billing_customer_id`, และ legacy `customer_id`) เพื่อให้ invoice grant จำกัดเฉพาะ bill-to/customer ของ invoice ไม่ inherit จาก owner/booking party อื่น
+- **Offline operation policy**: เพิ่ม `src/lib/offlineOperationPolicy.ts` และผูก `offlineFetch()` ให้ queue ได้เฉพาะ allowlist งานภาคสนาม (`gate_in`, `gate_out`, `gate_out_pickup_request`, `photo_upload`, `reefer_check`, `yard_audit`, `yard_position_*`) ส่วน invoice/payment/billing clearance/portal visibility/customer master/document template publish/import และ operation ที่ไม่ระบุชนิดงานจะถูก block เป็น online-only พร้อม payload `blocked/error/message` โดยไม่เข้า IndexedDB queue
 - **Migration**: ไม่มี schema migration ใหม่ในรอบนี้ แต่ deployment ต้องรัน runtime core migration เดิมให้ครบก่อน serve routes เหล่านี้
 
 Verification รอบนี้:
@@ -50,11 +51,12 @@ npm test -- src/lib/__tests__/businessPartyResolver.test.ts src/app/api/__tests_
 npm test -- src/app/api/__tests__/edi-api-hardening.test.ts src/app/api/__tests__/booking-business-context-ui.test.ts src/app/api/__tests__/gate-in-business-context-ui.test.ts src/lib/__tests__/businessPartyResolver.test.ts --runInBand --cacheDirectory .tmp\jest
 npm test -- src/app/api/__tests__/edi-api-hardening.test.ts src/lib/__tests__/businessPartyResolver.test.ts --runInBand --cacheDirectory .tmp\jest
 npm test -- src/app/api/__tests__/billing-api-permissions.test.ts src/app/api/__tests__/billing.test.ts src/lib/__tests__/businessPartyResolver.test.ts --runInBand --cacheDirectory .tmp\jest
+npm test -- src/lib/__tests__/offlineOperationPolicy.test.ts src/lib/__tests__/offlineQueue.test.ts --runInBand --cacheDirectory .tmp\jest
 npx tsc --noEmit --pretty false
 npm run lint
 ```
 
-ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน, entity resolver + attachment access tests `10/10` ผ่าน, read-route resolver regression `43/43` ผ่าน, business party + M&R tests `20/20` ผ่าน, EDI booking party regression `27/27` ผ่าน, EDI booking update party regression `12/12` ผ่าน, billing invoice party regression `29/29` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
+ผลล่าสุด: schema capability + no runtime probe tests `429/429` ผ่าน, related route tests `46/46` ผ่าน, entity resolver + attachment access tests `10/10` ผ่าน, read-route resolver regression `43/43` ผ่าน, business party + M&R tests `20/20` ผ่าน, EDI booking party regression `27/27` ผ่าน, EDI booking update party regression `12/12` ผ่าน, billing invoice party regression `29/29` ผ่าน, offline operation policy regression `17/17` ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน
 
 ### อัปเดตล่าสุด: Next Hardening + Maintainability Slice (28 พ.ค. 2569)
 

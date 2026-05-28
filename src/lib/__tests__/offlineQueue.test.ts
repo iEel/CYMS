@@ -1,5 +1,6 @@
 import {
   buildOfflineQueuedPayload,
+  buildOfflineBlockedPayload,
   clearSynced,
   enqueue,
   getAll,
@@ -9,6 +10,7 @@ import {
   normalizeOfflineHeaders,
   remove,
   retryQueuedRequest,
+  offlineFetch,
   shouldQueueOfflineRequest,
 } from '@/lib/offlineQueue';
 
@@ -140,6 +142,87 @@ describe('offline queue helpers', () => {
     expect(isOfflineQueuedResponse({ offline: true, queued: true, status: 'queued' })).toBe(true);
     expect(isOfflineQueuedResponse({ success: true })).toBe(false);
     expect(isOfflineQueuedResponse(null)).toBe(false);
+  });
+
+  it('builds a blocked payload for online-only operations', () => {
+    expect(buildOfflineBlockedPayload({
+      allowed: false,
+      reasonCode: 'invoice_create',
+      message: 'ต้องออนไลน์',
+    }, 'invoice_create')).toEqual({
+      success: false,
+      error: 'ต้องออนไลน์',
+      offline: true,
+      queued: false,
+      blocked: true,
+      status: 'blocked',
+      operation: 'invoice_create',
+      reason: 'invoice_create',
+      message: 'ต้องออนไลน์',
+    });
+  });
+
+  it('queues allowed mutations when the device is offline', async () => {
+    Object.defineProperty(global, 'navigator', {
+      value: { onLine: false },
+      configurable: true,
+    });
+
+    const res = await offlineFetch('/api/gate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"transaction_type":"gate_in"}',
+    }, { operation: 'gate_in' });
+    const data = await res.json();
+
+    expect(res.status).toBe(202);
+    expect(data).toMatchObject({ queued: true, operation: 'gate_in' });
+    expect(await getAll()).toHaveLength(1);
+  });
+
+  it('blocks online-only mutations instead of queueing them offline', async () => {
+    Object.defineProperty(global, 'navigator', {
+      value: { onLine: false },
+      configurable: true,
+    });
+
+    const res = await offlineFetch('/api/billing/invoices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"customer_id":1}',
+    }, { operation: 'invoice_create' });
+    const data = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(data).toMatchObject({
+      queued: false,
+      blocked: true,
+      status: 'blocked',
+      reason: 'invoice_create',
+    });
+    expect(await getAll()).toHaveLength(0);
+  });
+
+  it('requires an operation type before queueing mutating requests', async () => {
+    Object.defineProperty(global, 'navigator', {
+      value: { onLine: false },
+      configurable: true,
+    });
+
+    const res = await offlineFetch('/api/gate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(data).toMatchObject({
+      queued: false,
+      blocked: true,
+      reason: 'missing_operation',
+    });
+    expect(await getAll()).toHaveLength(0);
   });
 
   it('lists queue items newest first and can remove one item', async () => {
