@@ -33,11 +33,11 @@ async function migrate() {
       BEGIN
         CREATE TABLE SchemaMigrations (
           migration_key NVARCHAR(150) NOT NULL PRIMARY KEY,
-          migration_name NVARCHAR(200) NULL,
+          migration_name NVARCHAR(255) NOT NULL,
           checksum NVARCHAR(128) NULL,
-          applied_at DATETIME2 NOT NULL CONSTRAINT DF_SchemaMigrations_AppliedAt DEFAULT GETDATE(),
-          applied_by NVARCHAR(128) NULL,
-          status NVARCHAR(30) NULL
+          applied_at DATETIME2 NOT NULL CONSTRAINT DF_SchemaMigrations_AppliedAt DEFAULT SYSUTCDATETIME(),
+          applied_by NVARCHAR(100) NULL,
+          status NVARCHAR(30) NOT NULL CONSTRAINT DF_SchemaMigrations_Status DEFAULT 'applied'
         );
       END;
     `);
@@ -1319,10 +1319,10 @@ async function migrate() {
       USING (
         SELECT
           CAST('runtime-core-schema' AS NVARCHAR(150)) AS migration_key,
-          CAST('Runtime Core Schema' AS NVARCHAR(200)) AS migration_name,
+          CAST('Runtime Core Schema' AS NVARCHAR(255)) AS migration_name,
           CAST(NULL AS NVARCHAR(128)) AS checksum,
-          GETDATE() AS applied_at,
-          CAST(SYSTEM_USER AS NVARCHAR(128)) AS applied_by,
+          SYSUTCDATETIME() AS applied_at,
+          CAST(SYSTEM_USER AS NVARCHAR(100)) AS applied_by,
           CAST('applied' AS NVARCHAR(30)) AS status
       ) AS source
         ON target.migration_key = source.migration_key

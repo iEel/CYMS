@@ -14,11 +14,11 @@
 -- ===================================
 CREATE TABLE SchemaMigrations (
     migration_key   NVARCHAR(150) NOT NULL PRIMARY KEY,
-    migration_name  NVARCHAR(200),
-    checksum        NVARCHAR(128),
-    applied_at      DATETIME2 DEFAULT GETDATE(),
-    applied_by      NVARCHAR(128),
-    status          NVARCHAR(30)
+    migration_name  NVARCHAR(255) NOT NULL,
+    checksum        NVARCHAR(128) NULL,
+    applied_at      DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    applied_by      NVARCHAR(100) NULL,
+    status          NVARCHAR(30) NOT NULL DEFAULT 'applied'
 );
 
 -- ===================================
