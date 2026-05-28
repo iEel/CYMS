@@ -6,9 +6,11 @@ import * as XLSX from 'xlsx';
 import {
   Loader2, Search, Upload, Plus, Ship, Package,
   XCircle, RotateCcw, Anchor,
-  FileSpreadsheet, Trash2, ClipboardCheck, BarChart3,
-  Eye, Link2, ChevronLeft, ChevronRight, Download,
+  Trash2, ClipboardCheck, BarChart3,
+  Eye, Link2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
+import BookingCreateForm from './components/BookingCreateForm';
+import BookingImportTemplatePanel from './components/BookingImportTemplatePanel';
 
 type UtilizationStatus = 'in_progress' | 'expired' | 'fully_received' | 'fully_released' | 'over_received';
 
@@ -587,6 +589,8 @@ export default function BookingPage() {
   };
   const inputClass = "w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors";
   const labelClass = "text-[10px] font-semibold text-slate-400 uppercase mb-1 block";
+  const bookingImportHelperCopy = 'รองรับ .csv, .xlsx, .xls — คอลัมน์หลัก: booking_number, booking_customer_id, shipping_line_id, forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id';
+  const bookingImportGuidanceCopy = 'ใช้ customer_id จากหน้า ตั้งค่าระบบ > ลูกค้า; Template มีชีต Column Guide สำหรับคำอธิบายทุกคอลัมน์';
   const customerOptions = (kind: CustomerOptionKind) => customerList.filter(customer => {
     if (kind === 'line') return Boolean(customer.is_line);
     if (kind === 'forwarder') return Boolean(customer.is_forwarder);
@@ -944,143 +948,56 @@ export default function BookingPage() {
               </div>
             </div>
 
-            {/* File Upload */}
-            <div className="px-5 pt-4">
-              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden"
-                onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }} />
-              <div onClick={() => fileRef.current?.click()}
-                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-blue-400', 'bg-blue-50/50'); }}
-                onDragLeave={e => { e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50/50'); }}
-                onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50/50'); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }}
-                className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all">
-                <FileSpreadsheet size={32} className="mx-auto text-slate-400 mb-2" />
-                <p className="text-sm font-medium text-slate-600 dark:text-slate-300">ลากไฟล์มาวางที่นี่ หรือ คลิกเพื่อเลือกไฟล์</p>
-                <p className="text-[10px] text-slate-400 mt-1">รองรับ .csv, .xlsx, .xls — คอลัมน์หลัก: booking_number, booking_customer_id, shipping_line_id, forwarder_id, shipper_id, consignee_id, trucking_company_id, bill_to_customer_id</p>
-                <p className="text-[10px] text-slate-400 mt-1">ใช้ customer_id จากหน้า ตั้งค่าระบบ &gt; ลูกค้า; Template มีชีต Column Guide สำหรับคำอธิบายทุกคอลัมน์</p>
-              </div>
-              <div className="flex items-center justify-center gap-3 mt-2">
-                <button onClick={downloadTemplate}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 rounded-lg transition-colors">
-                  <Download size={12} /> ดาวน์โหลด Template (.xlsx)
-                </button>
-              </div>
+            <BookingImportTemplatePanel
+              fileRef={fileRef}
+              fileRows={fileRows}
+              fileName={fileName}
+              fileBatchLoading={fileBatchLoading}
+              fileBatchResult={fileBatchResult}
+              canManageBookings={canManageBookings}
+              helperCopy={bookingImportHelperCopy}
+              guidanceCopy={bookingImportGuidanceCopy}
+              onFileUpload={handleFileUpload}
+              onDownloadTemplate={downloadTemplate}
+              onClearFile={() => { setFileRows([]); setFileName(''); setFileBatchResult(null); }}
+              onBatchImport={handleBatchImport}
+              mapRow={mapRow}
+            />
 
-              {fileRows.length > 0 && (
-                <div className="mt-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <FileSpreadsheet size={14} className="text-emerald-500" /> {fileName} — {fileRows.length} รายการ
-                    </p>
-                    <button onClick={() => { setFileRows([]); setFileName(''); setFileBatchResult(null); }}
-                      className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"><Trash2 size={12} /> ลบ</button>
+            <BookingCreateForm
+              createForm={createForm}
+              setCreateForm={setCreateForm}
+              containerNumbers={containerNumbers}
+              setContainerNumbers={setContainerNumbers}
+              createLoading={createLoading}
+              createResult={createResult}
+              canManageBookings={canManageBookings}
+              inputClass={inputClass}
+              labelClass={labelClass}
+              onSubmit={handleCreate}
+              businessRelationshipFields={(
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3 overflow-visible">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-white">Business Relationship</h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Party context for portal access grants and EIR visibility</p>
                   </div>
-                  <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                    <table className="w-full text-xs">
-                      <thead><tr className="bg-slate-50 dark:bg-slate-700/50">
-                        <th className="px-2 py-2 text-left">#</th><th className="px-2 py-2 text-left">Booking No.</th>
-                        <th className="px-2 py-2 text-left">Type</th><th className="px-2 py-2 text-left">Vessel</th>
-                        <th className="px-2 py-2 text-left">Size</th><th className="px-2 py-2 text-left">Seal</th>
-                      </tr></thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {fileRows.slice(0, 10).map((row, i) => { const m = mapRow(row); return (
-                          <tr key={i} className={m.booking_number ? '' : 'bg-red-50/50 dark:bg-red-900/10'}>
-                            <td className="px-2 py-1.5 text-slate-400">{i + 1}</td>
-                            <td className="px-2 py-1.5 font-mono font-semibold">{m.booking_number || <span className="text-red-400">ไม่มี</span>}</td>
-                            <td className="px-2 py-1.5">{m.booking_type}</td><td className="px-2 py-1.5">{m.vessel_name}</td>
-                            <td className="px-2 py-1.5">{m.container_size}&apos;{m.container_type}</td>
-                            <td className="px-2 py-1.5 font-mono">{m.seal_number || '—'}</td>
-                          </tr>); })}
-                      </tbody>
-                    </table>
-                    {fileRows.length > 10 && <div className="p-2 text-center text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-700/30">แสดง 10 จาก {fileRows.length} รายการ</div>}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <CustomerCombobox label="Booking Customer" required value={createForm.booking_customer_id} options={customerOptions('any')} onChange={value => setCreateForm(prev => ({ ...prev, booking_customer_id: value, bill_to_customer_id: !prev.bill_to_customer_id || prev.bill_to_customer_id === prev.booking_customer_id ? value : prev.bill_to_customer_id }))} />
+                    <CustomerCombobox label="Shipping Line / Container Owner" value={createForm.shipping_line_id} options={customerOptions('line')} onChange={value => setPartyId('shipping_line_id', value)} />
+                    <CustomerCombobox label="Forwarder" value={createForm.forwarder_id} options={customerOptions('forwarder')} onChange={value => setPartyId('forwarder_id', value)} />
+                    <CustomerCombobox label="Shipper" value={createForm.shipper_id} options={customerOptions('any')} onChange={value => setPartyId('shipper_id', value)} />
+                    <CustomerCombobox label="Consignee" value={createForm.consignee_id} options={customerOptions('any')} onChange={value => setPartyId('consignee_id', value)} />
+                    <CustomerCombobox label="Trucking Company" value={createForm.trucking_company_id} options={customerOptions('trucking')} onChange={value => setPartyId('trucking_company_id', value)} />
+                    <CustomerCombobox label="Bill To Customer" value={createForm.bill_to_customer_id} options={customerOptions('any')} onChange={value => setPartyId('bill_to_customer_id', value)} />
+                    {createForm.bill_to_customer_id && (
+                      <div className="flex items-end">
+                        <p className="text-[10px] text-slate-400 pb-2">Billing: {customerName(createForm.bill_to_customer_id)}</p>
+                      </div>
+                    )}
                   </div>
-                  <button onClick={handleBatchImport} disabled={fileBatchLoading || !canManageBookings}
-                    className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-all">
-                    {fileBatchLoading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                    นำเข้าทั้งหมด ({fileRows.length} รายการ)
-                  </button>
-                  {fileBatchResult && (
-                    <div className={`p-3 rounded-xl text-sm ${fileBatchResult.failed === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                      ✅ สำเร็จ {fileBatchResult.success} รายการ{fileBatchResult.failed > 0 && ` | ❌ ล้มเหลว ${fileBatchResult.failed} รายการ`}
-                    </div>
-                  )}
                 </div>
               )}
-            </div>
-
-            {/* Manual form */}
-            <div className="mx-5 mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
-              <p className="text-xs text-slate-400 font-medium mb-3">หรือ กรอกข้อมูลด้วยตนเอง</p>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="col-span-2"><label className={labelClass}>เลข Booking *</label><input type="text" value={createForm.booking_number} onChange={e => setCreateForm({ ...createForm, booking_number: e.target.value })} className={`${inputClass} font-mono`} placeholder="BK-2024-001" /></div>
-                <div><label className={labelClass}>ประเภท</label>
-                  <select value={createForm.booking_type} onChange={e => setCreateForm({ ...createForm, booking_type: e.target.value })} className={inputClass}>
-                    <option value="import">นำเข้า</option><option value="export">ส่งออก</option>
-                    <option value="empty_pickup">รับตู้เปล่า</option><option value="empty_return">คืนตู้เปล่า</option>
-                  </select>
-                </div>
-                <div><label className={labelClass}>จำนวนตู้</label><input type="number" min={1} value={createForm.container_count} onChange={e => setCreateForm({ ...createForm, container_count: parseInt(e.target.value) || 1 })} className={inputClass} /></div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div><label className={labelClass}>ชื่อเรือ</label><input type="text" value={createForm.vessel_name} onChange={e => setCreateForm({ ...createForm, vessel_name: e.target.value })} className={inputClass} placeholder="EVER GIVEN" /></div>
-                <div><label className={labelClass}>Voyage No.</label><input type="text" value={createForm.voyage_number} onChange={e => setCreateForm({ ...createForm, voyage_number: e.target.value })} className={inputClass} placeholder="V001E" /></div>
-                <div><label className={labelClass}>ขนาดตู้</label>
-                  <select value={createForm.container_size} onChange={e => setCreateForm({ ...createForm, container_size: e.target.value })} className={inputClass}>
-                    <option value="20">20 ฟุต</option><option value="40">40 ฟุต</option><option value="45">45 ฟุต</option>
-                  </select>
-                </div>
-                <div><label className={labelClass}>ประเภทตู้</label>
-                  <select value={createForm.container_type} onChange={e => setCreateForm({ ...createForm, container_type: e.target.value })} className={inputClass}>
-                    <option value="GP">GP (แห้ง)</option><option value="HC">HC (สูง)</option><option value="RF">RF (เย็น)</option><option value="OT">OT (เปิดบน)</option><option value="FR">FR (แร็ค)</option><option value="TK">TK (แท็งค์)</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div><label className={labelClass}>ETA</label><input type="datetime-local" value={createForm.eta} onChange={e => setCreateForm({ ...createForm, eta: e.target.value })} className={inputClass} /></div>
-                <div><label className={labelClass}>Valid From</label><input type="date" value={createForm.valid_from} onChange={e => setCreateForm({ ...createForm, valid_from: e.target.value })} className={inputClass} /></div>
-                <div><label className={labelClass}>Valid To</label><input type="date" value={createForm.valid_to} onChange={e => setCreateForm({ ...createForm, valid_to: e.target.value })} className={inputClass} /></div>
-                <div><label className={labelClass}>เลขซีล</label><input type="text" value={createForm.seal_number} onChange={e => setCreateForm({ ...createForm, seal_number: e.target.value })} className={inputClass} placeholder="SEAL123456" /></div>
-              </div>
-                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3 overflow-visible">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-700 dark:text-white">Business Relationship</h4>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Party context for portal access grants and EIR visibility</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <CustomerCombobox label="Booking Customer" required value={createForm.booking_customer_id} options={customerOptions('any')} onChange={value => setCreateForm(prev => ({ ...prev, booking_customer_id: value, bill_to_customer_id: !prev.bill_to_customer_id || prev.bill_to_customer_id === prev.booking_customer_id ? value : prev.bill_to_customer_id }))} />
-                      <CustomerCombobox label="Shipping Line / Container Owner" value={createForm.shipping_line_id} options={customerOptions('line')} onChange={value => setPartyId('shipping_line_id', value)} />
-                      <CustomerCombobox label="Forwarder" value={createForm.forwarder_id} options={customerOptions('forwarder')} onChange={value => setPartyId('forwarder_id', value)} />
-                      <CustomerCombobox label="Shipper" value={createForm.shipper_id} options={customerOptions('any')} onChange={value => setPartyId('shipper_id', value)} />
-                      <CustomerCombobox label="Consignee" value={createForm.consignee_id} options={customerOptions('any')} onChange={value => setPartyId('consignee_id', value)} />
-                      <CustomerCombobox label="Trucking Company" value={createForm.trucking_company_id} options={customerOptions('trucking')} onChange={value => setPartyId('trucking_company_id', value)} />
-                      <CustomerCombobox label="Bill To Customer" value={createForm.bill_to_customer_id} options={customerOptions('any')} onChange={value => setPartyId('bill_to_customer_id', value)} />
-                  {createForm.bill_to_customer_id && (
-                    <div className="flex items-end">
-                      <p className="text-[10px] text-slate-400 pb-2">Billing: {customerName(createForm.bill_to_customer_id)}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div><label className={labelClass}>เลขตู้ล่วงหน้า (ถ้ามี — คั่นด้วย , หรือ Enter)</label>
-                <textarea value={containerNumbers} onChange={e => setContainerNumbers(e.target.value)}
-                  className="w-full h-20 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-slate-800 dark:text-white font-mono outline-none focus:border-blue-500"
-                  placeholder="ABCU1234567, TCLU7654321" />
-              </div>
-              <div><label className={labelClass}>หมายเหตุ</label><input type="text" value={createForm.notes} onChange={e => setCreateForm({ ...createForm, notes: e.target.value })} className={inputClass} placeholder="หมายเหตุ..." /></div>
-
-              <button onClick={handleCreate} disabled={createLoading || !canManageBookings || !createForm.booking_number || !createForm.booking_customer_id}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all">
-                {createLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} สร้าง Booking
-              </button>
-
-              {createResult && (
-                <div className={`p-3 rounded-xl text-sm ${createResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                  {createResult.message}
-                </div>
-              )}
-            </div>
+            />
           </div>
         </div>
       )}
