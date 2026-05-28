@@ -5,6 +5,12 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import Yard3DCameraToolbar from './Yard3DCameraToolbar';
 import {
+  computeContainerFocusPose,
+  computeYardHomePose,
+  computeYardTopDownPose,
+  type YardCameraPose,
+} from './yard3dCamera';
+import {
   YARD_SCENE_THEME,
   applyRendererQuality,
   createConcreteMaterial,
@@ -54,11 +60,7 @@ interface Props {
 
 type YardColorMode = 'shipping' | 'status';
 
-interface CameraPose {
-  position: THREE.Vector3;
-  target: THREE.Vector3;
-  span: number;
-}
+type CameraPose = YardCameraPose;
 
 const STATUS_COLORS: Record<string, number> = {
   in_yard: 0x10B981,  // emerald
@@ -228,11 +230,8 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
   const showTopDownView = useCallback(() => {
     const home = cameraHomeRef.current;
     if (!home) return;
-    const height = Math.max(18, home.span * 1.15);
-    moveCameraTo(
-      new THREE.Vector3(home.target.x, height, home.target.z + 0.01),
-      home.target.clone(),
-    );
+    const topDown = computeYardTopDownPose(home);
+    moveCameraTo(topDown.position.clone(), topDown.target.clone());
   }, [moveCameraTo]);
 
   const focusSelectedContainer = useCallback(() => {
@@ -245,10 +244,8 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
 
     const target = new THREE.Vector3();
     entry.mesh.getWorldPosition(target);
-    moveCameraTo(
-      new THREE.Vector3(target.x + 10, target.y + 10, target.z + 10),
-      target.clone(),
-    );
+    const focusPose = computeContainerFocusPose(target);
+    moveCameraTo(focusPose.position, focusPose.target);
   }, [highlightContainerNumber, moveCameraTo, selectedContainerNumber]);
 
   // Fetch data
@@ -405,11 +402,15 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
 
     // Center camera
     const totalWidth = Math.max(zoneOffsetX - ZONE_GAP, 20);
-    const homeTarget = new THREE.Vector3(totalWidth / 2, 1, 3);
-    const homePosition = new THREE.Vector3(totalWidth / 2, Math.max(12, totalWidth * 0.4), totalWidth * 0.6);
-    cameraHomeRef.current = { position: homePosition.clone(), target: homeTarget.clone(), span: totalWidth };
-    camera.position.copy(homePosition);
-    controls.target.copy(homeTarget);
+    const maxDepth = filteredZones.reduce((max, zone) => Math.max(max, zone.max_row * (CD + GAP_Z)), 8);
+    const home = computeYardHomePose({ totalWidth, maxDepth });
+    cameraHomeRef.current = {
+      position: home.position.clone(),
+      target: home.target.clone(),
+      span: home.span,
+    };
+    camera.position.copy(home.position);
+    controls.target.copy(home.target);
     controls.update();
 
     // Animate
@@ -558,12 +559,9 @@ export default function YardViewer3D({ yardId, selectedZone, onSelectContainer, 
     const startTarget = controls.target.clone();
     const startPos = camera.position.clone();
 
-    const endTarget = targetPos.clone();
-    const endPos = new THREE.Vector3(
-      targetPos.x + 10,
-      targetPos.y + 10,
-      targetPos.z + 10,
-    );
+    const focusPose = computeContainerFocusPose(targetPos);
+    const endTarget = focusPose.target;
+    const endPos = focusPose.position;
 
     let progress = 0;
     const animateCam = () => {
