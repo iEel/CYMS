@@ -12,6 +12,7 @@ describe('E2E smoke test script', () => {
   const root = process.cwd();
   const scriptPath = path.join(root, 'scripts/e2e-smoke.mjs');
   // Jest/ts-jest cannot import the .mjs smoke CLI directly without ESM VM flags, so test the shared helper it uses.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const helpers = require(path.join(root, 'scripts/e2e-smoke-helpers.cjs')) as SmokeHelpers;
   const baseUrl = 'http://localhost:3005';
 
