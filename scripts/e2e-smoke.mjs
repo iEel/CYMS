@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const { assertProtectedPageRedirect } = require('./e2e-smoke-helpers.cjs');
 
 const baseUrl = (process.env.CYMS_E2E_BASE_URL || 'http://localhost:3005').replace(/\/$/, '');
 
@@ -31,32 +35,7 @@ function assertContains(result, needle) {
   }
 }
 
-export function assertProtectedPageRedirect(result) {
-  if (![302, 307, 308].includes(result.status)) {
-    return;
-  }
-
-  const location = String(result.location || '');
-  if (!location) {
-    throw new Error(`${result.path} redirected to missing location`);
-  }
-
-  let redirectUrl;
-  try {
-    redirectUrl = new URL(location, baseUrl);
-  } catch {
-    throw new Error(`${result.path} redirected to invalid location: ${location}`);
-  }
-
-  const expectedPath =
-    redirectUrl.pathname === '/login' ||
-    redirectUrl.pathname.startsWith('/login/') ||
-    redirectUrl.pathname === '/auth' ||
-    redirectUrl.pathname.startsWith('/auth/');
-  if (redirectUrl.origin !== new URL(baseUrl).origin || !expectedPath) {
-    throw new Error(`${result.path} redirected to unexpected location: ${location}`);
-  }
-}
+export { assertProtectedPageRedirect };
 
 async function run() {
   const checks = [];

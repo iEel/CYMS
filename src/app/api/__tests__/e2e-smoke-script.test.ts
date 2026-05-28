@@ -1,40 +1,19 @@
-import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { pathToFileURL } from 'url';
+
+type SmokeHelpers = {
+  assertProtectedPageRedirect: (
+    result: { path: string; status: number; location?: string | null },
+    baseUrl?: string,
+  ) => void;
+};
 
 describe('E2E smoke test script', () => {
   const root = process.cwd();
   const scriptPath = path.join(root, 'scripts/e2e-smoke.mjs');
-
-  function runImportedHelperCase(result: { path: string; status: number; location?: string | null }) {
-    const code = `
-      globalThis.fetch = () => {
-        throw new Error('import performed network call');
-      };
-      const imported = await import(${JSON.stringify(pathToFileURL(scriptPath).href)});
-      if (typeof imported.assertProtectedPageRedirect !== 'function') {
-        throw new Error('assertProtectedPageRedirect export is not a function');
-      }
-      imported.assertProtectedPageRedirect(${JSON.stringify(result)});
-    `;
-
-    execFileSync(process.execPath, ['--input-type=module', '--eval', code], {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-  }
-
-  function expectImportedHelperRejection(result: { path: string; status: number; location?: string | null }, message: string) {
-    try {
-      runImportedHelperCase(result);
-      throw new Error('Expected imported smoke helper to reject');
-    } catch (error) {
-      const stderr = error && typeof error === 'object' && 'stderr' in error ? String(error.stderr) : '';
-      expect(stderr).toContain(message);
-    }
-  }
+  // Jest/ts-jest cannot import the .mjs smoke CLI directly without ESM VM flags, so test the shared helper it uses.
+  const helpers = require(path.join(root, 'scripts/e2e-smoke-helpers.cjs')) as SmokeHelpers;
+  const baseUrl = 'http://localhost:3005';
 
   it('adds a dependency-free smoke script for the running app', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
@@ -50,7 +29,8 @@ describe('E2E smoke test script', () => {
     expect(script).toContain('/portal/containers');
     expect(script).toContain('/settings?tab=document-templates');
     expect(script).toContain('/billing/print/continuous');
-    expect(script).toContain('export function assertProtectedPageRedirect');
+    expect(script).toContain("require('./e2e-smoke-helpers.cjs')");
+    expect(script).toContain('export { assertProtectedPageRedirect }');
     expect(script).toContain('assertStatus(portalContainers, [200, 302, 307, 308])');
     expect(script).toContain('assertStatus(documentTemplates, [200, 302, 307, 308])');
     expect(script).toContain('assertStatus(continuousPrint, [200, 302, 307, 308])');
@@ -59,33 +39,40 @@ describe('E2E smoke test script', () => {
   });
 
   it('accepts protected-page redirects to same-origin login paths', () => {
+    expect(typeof helpers.assertProtectedPageRedirect).toBe('function');
     expect(() =>
-      runImportedHelperCase({ path: '/settings', status: 307, location: 'http://localhost:3005/login?next=%2Fsettings' }),
+      helpers.assertProtectedPageRedirect({ path: '/settings', status: 307, location: `${baseUrl}/login?next=%2Fsettings` }, baseUrl),
     ).not.toThrow();
-    expect(() => runImportedHelperCase({ path: '/settings', status: 307, location: '/login?next=%2Fsettings' })).not.toThrow();
+    expect(() =>
+      helpers.assertProtectedPageRedirect({ path: '/settings', status: 307, location: '/login?next=%2Fsettings' }, baseUrl),
+    ).not.toThrow();
   });
 
   it('rejects protected-page redirects to external login paths', () => {
-    expectImportedHelperRejection(
-      { path: '/settings', status: 307, location: 'https://evil.test/login' },
+    expect(() =>
+      helpers.assertProtectedPageRedirect({ path: '/settings', status: 307, location: 'https://evil.test/login' }, baseUrl),
+    ).toThrow(
       '/settings redirected to unexpected location: https://evil.test/login',
     );
   });
 
   it('rejects protected-page redirects to same-origin non-auth paths', () => {
-    expectImportedHelperRejection(
-      { path: '/settings', status: 307, location: '/dashboard' },
+    expect(() =>
+      helpers.assertProtectedPageRedirect({ path: '/settings', status: 307, location: '/dashboard' }, baseUrl),
+    ).toThrow(
       '/settings redirected to unexpected location: /dashboard',
     );
-    expectImportedHelperRejection(
-      { path: '/settings', status: 307, location: '/not-login' },
+    expect(() =>
+      helpers.assertProtectedPageRedirect({ path: '/settings', status: 307, location: '/not-login' }, baseUrl),
+    ).toThrow(
       '/settings redirected to unexpected location: /not-login',
     );
   });
 
   it('rejects protected-page redirects without a Location header', () => {
-    expectImportedHelperRejection(
-      { path: '/settings', status: 307, location: null },
+    expect(() =>
+      helpers.assertProtectedPageRedirect({ path: '/settings', status: 307, location: null }, baseUrl),
+    ).toThrow(
       '/settings redirected to missing location',
     );
   });
