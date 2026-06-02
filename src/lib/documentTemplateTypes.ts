@@ -5,6 +5,15 @@ export type DocumentTemplateTextAlign = 'left' | 'center' | 'right';
 export type DocumentTemplateFontWeight = 'normal' | 'medium' | 'semibold' | 'bold';
 export type DocumentTemplateFieldLayer = 'form' | 'data' | 'calibration';
 export type DocumentTemplateLineItemFormat = 'text' | 'number' | 'currency:THB';
+export type DocumentTemplateElementType =
+  | 'text'
+  | 'bound_text'
+  | 'box'
+  | 'line'
+  | 'image'
+  | 'checkbox'
+  | 'line_items'
+  | 'totals_table';
 
 export interface DocumentTemplateCalibrationProfile {
   profile_id: string;
@@ -55,6 +64,27 @@ export interface DocumentTemplateField {
   sample_value?: string;
 }
 
+export interface DocumentTemplateElement {
+  element_id: string;
+  type: DocumentTemplateElementType;
+  label: string;
+  binding_source?: string;
+  text?: string;
+  x_mm: number;
+  y_mm: number;
+  width_mm: number;
+  height_mm: number;
+  font_size?: number;
+  font_weight?: DocumentTemplateFontWeight;
+  text_align?: DocumentTemplateTextAlign;
+  visible: boolean;
+  layer: DocumentTemplateFieldLayer;
+  locked: boolean;
+  border?: boolean;
+  border_width_mm?: number;
+  class_name?: string;
+}
+
 export interface DocumentTemplateLineItemsSection {
   section_id: string;
   binding_source: string;
@@ -81,6 +111,7 @@ export interface DocumentTemplateConfig {
   copy_labels: string[];
   print_policy: DocumentTemplatePrintPolicy;
   fields: DocumentTemplateField[];
+  elements?: DocumentTemplateElement[];
   sections: {
     line_items: DocumentTemplateLineItemsSection;
   };

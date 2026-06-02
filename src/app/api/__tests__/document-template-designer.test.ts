@@ -16,9 +16,50 @@ import {
   undoDesignerHistory,
   validateDesignerTemplateConfig,
 } from '@/lib/documentTemplateDesigner';
+import { normalizeTemplateCanvasConfig } from '@/lib/documentTemplateCanvas';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplates';
 
+function expectElementsInsidePaper(config: ReturnType<typeof normalizeTemplateCanvasConfig>) {
+  expect(config.elements?.every(element => element.x_mm >= 0)).toBe(true);
+  expect(config.elements?.every(element => element.y_mm >= 0)).toBe(true);
+  expect(config.elements?.every(element => element.width_mm >= 1)).toBe(true);
+  expect(config.elements?.every(element => element.height_mm >= 1)).toBe(true);
+  expect(config.elements?.every(element => element.x_mm + element.width_mm <= config.paper.width_mm)).toBe(true);
+  expect(config.elements?.every(element => element.y_mm + element.height_mm <= config.paper.height_mm)).toBe(true);
+}
+
 describe('document template designer helpers', () => {
+  it('normalizes legacy full-form templates into canvas elements', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const legacy = { ...config };
+    delete (legacy as { elements?: unknown }).elements;
+
+    const normalized = normalizeTemplateCanvasConfig(legacy);
+
+    expect(normalized.elements?.some(element => element.element_id === 'sonic-company-header')).toBe(true);
+    expect(normalized.elements?.some(element => element.type === 'line_items')).toBe(true);
+    expectElementsInsidePaper(normalized);
+  });
+
+  it('clamps default canvas elements into smaller custom paper', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const legacy = {
+      ...config,
+      paper: {
+        ...config.paper,
+        width_mm: 90,
+        height_mm: 80,
+      },
+    };
+    delete (legacy as { elements?: unknown }).elements;
+
+    const normalized = normalizeTemplateCanvasConfig(legacy);
+
+    expectElementsInsidePaper(normalized);
+    expect(normalized.elements?.find(element => element.element_id === 'sonic-copy-box')?.x_mm).toBeLessThan(90);
+    expect(normalized.elements?.find(element => element.element_id === 'sonic-footer')?.y_mm).toBeLessThan(80);
+  });
+
   it('snaps and nudges field geometry in mm without storing pixels', () => {
     const config = buildDefaultContinuousTemplateConfig();
     const moved = nudgeField(config, 'customer-name', { dxMm: 1.24, dyMm: -0.24, snapMm: 0.5 });
