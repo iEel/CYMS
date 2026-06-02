@@ -17,7 +17,12 @@ import {
   validateDesignerTemplateConfig,
 } from '@/lib/documentTemplateDesigner';
 import { normalizeTemplateCanvasConfig } from '@/lib/documentTemplateCanvas';
-import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplates';
+import { buildDefaultContinuousTemplateConfig as buildFallbackDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
+import {
+  buildDefaultContinuousTemplateConfig,
+  normalizeTemplateConfig,
+  parseStoredTemplateConfig,
+} from '@/lib/documentTemplates';
 
 function expectElementsInsidePaper(config: ReturnType<typeof normalizeTemplateCanvasConfig>) {
   expect(config.elements?.every(element => element.x_mm >= 0)).toBe(true);
@@ -29,6 +34,42 @@ function expectElementsInsidePaper(config: ReturnType<typeof normalizeTemplateCa
 }
 
 describe('document template designer helpers', () => {
+  it('creates default continuous templates with full-form canvas elements', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+
+    expect(config.elements?.map(element => element.element_id)).toEqual(expect.arrayContaining([
+      'sonic-logo',
+      'sonic-company-header',
+      'sonic-copy-box',
+      'sonic-customer-box',
+      'sonic-line-items',
+    ]));
+  });
+
+  it('creates fallback default continuous templates with full-form canvas elements', () => {
+    const config = buildFallbackDefaultContinuousTemplateConfig();
+
+    expect(config.elements?.map(element => element.element_id)).toEqual(expect.arrayContaining([
+      'sonic-logo',
+      'sonic-company-header',
+      'sonic-copy-box',
+      'sonic-customer-box',
+      'sonic-line-items',
+    ]));
+  });
+
+  it('normalizes stored legacy templates with generated canvas elements', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const legacy = { ...config };
+    delete (legacy as { elements?: unknown }).elements;
+
+    const normalized = normalizeTemplateConfig(legacy).config;
+    const parsed = parseStoredTemplateConfig(JSON.stringify(legacy));
+
+    expect(normalized?.elements?.some(element => element.element_id === 'sonic-line-items')).toBe(true);
+    expect(parsed?.elements?.some(element => element.element_id === 'sonic-line-items')).toBe(true);
+  });
+
   it('normalizes legacy full-form templates into canvas elements', () => {
     const config = buildDefaultContinuousTemplateConfig();
     const legacy = { ...config };

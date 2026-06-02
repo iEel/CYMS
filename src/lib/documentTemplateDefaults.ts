@@ -1,4 +1,5 @@
 import type { DocumentTemplateConfig, DocumentTemplateField } from './documentTemplateTypes';
+import { buildSonicFullFormElements } from './documentTemplateCanvas';
 
 const THAI_COPY_LABELS = [
   'ต้นฉบับใบกำกับภาษี/ใบเสร็จรับเงิน',
@@ -18,7 +19,7 @@ function field(input: Omit<DocumentTemplateField, 'visible' | 'layer' | 'locked'
 }
 
 export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
-  return {
+  const config: DocumentTemplateConfig = {
     paper: {
       width_mm: 241.3,
       height_mm: 139.7,
@@ -297,4 +298,6 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
       },
     },
   };
+
+  return { ...config, elements: buildSonicFullFormElements(config) };
 }

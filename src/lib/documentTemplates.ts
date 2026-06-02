@@ -1,6 +1,7 @@
 import type { DocumentTemplateConfig, DocumentTemplateField } from './documentTemplateTypes';
 import sql from 'mssql';
 import { validateDesignerTemplateConfig } from './documentTemplateDesigner';
+import { buildSonicFullFormElements, normalizeTemplateCanvasConfig } from './documentTemplateCanvas';
 
 const THAI_COPY_LABELS = [
   'ต้นฉบับใบกำกับภาษี/ใบเสร็จรับเงิน',
@@ -96,7 +97,7 @@ function repairStoredTemplateConfig(config: unknown) {
 }
 
 export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
-  return {
+  const config: DocumentTemplateConfig = {
     paper: {
       width_mm: 241.3,
       height_mm: 139.7,
@@ -374,6 +375,8 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
     calibration_profiles: [],
     default_calibration_profile_id: undefined,
   };
+
+  return { ...config, elements: buildSonicFullFormElements(config) };
 }
 
 export function validateTemplateConfig(config: unknown): { valid: boolean; errors: string[] } {
@@ -498,7 +501,7 @@ export function normalizeTemplateConfig(config: unknown): {
   const designerValidation = validateDesignerTemplateConfig(withDefaults);
   const errors = [...validation.errors, ...designerValidation.errors];
   if (errors.length > 0) return { config: null, errors };
-  return { config: withDefaults as DocumentTemplateConfig, errors: [] };
+  return { config: normalizeTemplateCanvasConfig(withDefaults as DocumentTemplateConfig), errors: [] };
 }
 
 export function parseStoredTemplateConfig(value: unknown): DocumentTemplateConfig | null {
