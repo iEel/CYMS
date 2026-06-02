@@ -175,6 +175,17 @@ function fieldStyle(field: DocumentTemplateField): CSSProperties {
   };
 }
 
+function shouldRenderElement(mode: DocumentTemplateMode, element: DocumentTemplateElement) {
+  if (!element.visible) return false;
+  if (mode === 'overlay') return element.layer === 'data';
+  return true;
+}
+
+function shouldRenderOverlayField(field: DocumentTemplateField) {
+  if (!field.visible) return false;
+  return field.layer === 'data';
+}
+
 function CompanyLogo({ payload }: { payload: ContinuousPrintPayload }) {
   if (payload.company.logo_url) {
     return (
@@ -484,11 +495,7 @@ export function TemplateCanvasReceipt({
   testPrint = false,
 }: TemplateCanvasReceiptProps) {
   const normalizedConfig = normalizeTemplateCanvasConfig(config);
-  const elements = (normalizedConfig.elements || []).filter((element) => {
-    if (!element.visible) return false;
-    if (mode === 'full') return true;
-    return element.layer === 'data';
-  });
+  const elements = (normalizedConfig.elements || []).filter((element) => shouldRenderElement(mode, element));
   const rendersLineItems = elements.some((element) => element.type === 'line_items');
   const rendersCompanyHeader = elements.some((element) => element.type === 'bound_text' && isCompanyHeaderElement(element));
   const rendersCopyBox = elements.some((element) => element.type === 'box' && isCopyElement(element));
@@ -572,7 +579,7 @@ export function TemplateCanvasReceipt({
         .ctr-ruler-v { height: 0.15mm; left: 0; width: 100%; }
       `}</style>
       {elements.map((element) => renderElement(element, payload, normalizedConfig, mode, copyLabel, reprintLabel))}
-      {mode === 'overlay' ? normalizedConfig.fields.filter((field) => field.visible).map((field) => (
+      {mode === 'overlay' ? normalizedConfig.fields.filter(shouldRenderOverlayField).map((field) => (
         <div
           key={field.field_id}
           className="ctr-overlay-field"

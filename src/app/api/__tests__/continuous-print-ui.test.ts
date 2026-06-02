@@ -185,6 +185,15 @@ describe('continuous print UI', () => {
     expect(source).toContain('normalizedConfig.elements || []');
   });
 
+  it('uses an explicit helper to filter full and overlay template layers', () => {
+    const source = fs.readFileSync(rendererPath, 'utf8');
+
+    expect(source).toContain('function shouldRenderElement(mode: DocumentTemplateMode, element: DocumentTemplateElement)');
+    expect(source).toContain("mode === 'overlay'");
+    expect(source).toContain("element.layer === 'data'");
+    expect(source).toContain('shouldRenderElement(mode, element)');
+  });
+
   it('keeps the full-form continuous receipt table inside the paper frame', () => {
     const source = fs.readFileSync(rendererPath, 'utf8');
 
@@ -219,6 +228,66 @@ describe('continuous print UI', () => {
     expect(overlayMarkup).not.toContain('Customer Name');
     expect(overlayMarkup).not.toContain('ต้นฉบับใบกำกับภาษี/ใบเสร็จรับเงิน');
     expect(overlayMarkup).not.toContain('ctr-company-header');
+  });
+
+  it('renders overlay mode with only data layer elements', () => {
+    const payload = buildSampleContinuousPrintPayload();
+    const baseConfig = buildDefaultContinuousTemplateConfig();
+    const config = {
+      ...baseConfig,
+      elements: [
+        {
+          element_id: 'form-label',
+          type: 'text',
+          label: 'FORM SHOULD NOT PRINT',
+          text: 'FORM SHOULD NOT PRINT',
+          x_mm: 10,
+          y_mm: 10,
+          width_mm: 50,
+          height_mm: 5,
+          visible: true,
+          layer: 'form',
+          locked: true,
+        },
+        {
+          element_id: 'data-label',
+          type: 'text',
+          label: 'DATA SHOULD PRINT',
+          text: 'DATA SHOULD PRINT',
+          x_mm: 10,
+          y_mm: 20,
+          width_mm: 50,
+          height_mm: 5,
+          visible: true,
+          layer: 'data',
+          locked: false,
+        },
+        {
+          element_id: 'calibration-label',
+          type: 'text',
+          label: 'CALIBRATION SHOULD NOT PRINT',
+          text: 'CALIBRATION SHOULD NOT PRINT',
+          x_mm: 10,
+          y_mm: 30,
+          width_mm: 50,
+          height_mm: 5,
+          visible: true,
+          layer: 'calibration',
+          locked: true,
+        },
+      ],
+    } satisfies DocumentTemplateConfig;
+
+    const overlayMarkup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'overlay',
+      copyLabel: config.copy_labels[0],
+    }));
+
+    expect(overlayMarkup).not.toContain('FORM SHOULD NOT PRINT');
+    expect(overlayMarkup).toContain('DATA SHOULD PRINT');
+    expect(overlayMarkup).not.toContain('CALIBRATION SHOULD NOT PRINT');
   });
 
   it('does not render editor text or labels when bound text has no value', () => {

@@ -56,6 +56,14 @@ describe('document template visual designer UI', () => {
     expect(source).toContain('element.type ===');
   });
 
+  it('shows a compact print mode hint in the designer toolbar area', () => {
+    const source = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+
+    expect(source).toContain('Full mode: form + data layers print');
+    expect(source).toContain('Overlay mode: data layer only prints');
+    expect(source).toContain('modePrintHint');
+  });
+
   it('keeps preview tied to the selected draft config instead of falling back to an unrelated sample', () => {
     const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
 

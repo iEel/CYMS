@@ -100,6 +100,9 @@ export function DocumentTemplateDesigner({
     : selectedField
       ? `${selectedField.label} · ${selectedField.binding_source}`
       : 'No field selected';
+  const modePrintHint = history.current.mode === 'overlay'
+    ? 'Overlay mode: data layer only prints'
+    : 'Full mode: form + data layers print';
 
   const commit = (nextConfig: DocumentTemplateConfig) => {
     currentSerializedRef.current = JSON.stringify(nextConfig);
@@ -199,6 +202,9 @@ export function DocumentTemplateDesigner({
           </span>
           <span className="truncate text-xs text-slate-500">
             {selectedLabel}
+          </span>
+          <span className="text-xs text-slate-500">
+            {modePrintHint}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
