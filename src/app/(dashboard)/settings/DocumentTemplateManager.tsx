@@ -15,7 +15,7 @@ import { DocumentTemplateDesigner } from '@/components/document-templates/Docume
 import { PrintHistoryPanel } from '@/components/document-templates/PrintHistoryPanel';
 import { PublishDiffDialog } from '@/components/document-templates/PublishDiffDialog';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
-import { summarizeTemplateDiff, validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
+import { applyPaperPatchToConfig, summarizeTemplateDiff, validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
 import type {
   DocumentTemplateConfig,
   DocumentTemplateCopyMode,
@@ -512,13 +512,7 @@ export default function DocumentTemplateManager() {
 
   const updatePaper = (key: keyof DocumentTemplateConfig['paper'], value: number) => {
     if (!Number.isFinite(value)) return;
-    setConfig(current => ({
-      ...current,
-      paper: {
-        ...current.paper,
-        [key]: value,
-      },
-    }));
+    setConfig(current => applyPaperPatchToConfig(current, { [key]: value }));
   };
 
   return (

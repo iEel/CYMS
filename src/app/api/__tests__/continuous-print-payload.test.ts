@@ -31,12 +31,19 @@ describe('continuous billing print payload', () => {
     expect(payload.company.company_name).toBeTruthy();
     expect(payload.customer.customer_name).toBeTruthy();
     expect(payload.customer.branch_name).toBeTruthy();
-    expect(payload.document.document_title).toContain('ใบกำกับภาษี');
+    expect(payload.document.document_title).toBe('ใบกำกับภาษี/ใบเสร็จรับเงิน');
     expect(payload.document.document_date).toBeTruthy();
     expect(payload.document.tax_invoice_number).toBe(payload.document.invoice_number);
     expect(payload.document.receipt_number).toBeDefined();
-    expect(payload.lines.length).toBeGreaterThan(0);
+    expect(payload.lines).toEqual(expect.arrayContaining([
+      expect.objectContaining({ description: 'CONTAINER REPAIR CHARGES', qty: 1, amount: 3105 }),
+      expect.objectContaining({ description: 'DEPOT REFUND', qty: 1, amount: -110.5 }),
+      expect.objectContaining({ description: 'DEPOT TRUCKING CHARGES', qty: 1, amount: 1100 }),
+    ]));
     expect(payload.lines[0].qty).toBeGreaterThan(0);
+    expect(payload.totals.subtotal).toBe(4094.5);
+    expect(payload.totals.vat_amount).toBe(286.61);
+    expect(payload.totals.grand_total).toBe(4381.11);
     expect(payload.totals.amount_text_th).toContain('บาท');
   });
 

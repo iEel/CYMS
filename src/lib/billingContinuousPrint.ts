@@ -19,7 +19,14 @@ type ParsedNotes = {
   charges?: unknown;
   payment_method?: unknown;
   payment_status?: unknown;
+  cheque_no?: unknown;
+  bank_name?: unknown;
+  cheque_date?: unknown;
+  payment_ref?: unknown;
+  collector_name?: unknown;
   document_type?: unknown;
+  reference_no?: unknown;
+  red_ref_no?: unknown;
   ref_invoice_number?: unknown;
 };
 
@@ -142,8 +149,8 @@ function documentTitle(type: string, row: InvoiceRow) {
   const invoiceNumber = asString(row.invoice_number);
   const isCreditNote = row.status === 'credit_note' || row.document_type === 'credit_note' || invoiceNumber.startsWith('CN-');
   if (isCreditNote) return 'ใบลดหนี้';
-  if (type === 'receipt') return 'ใบเสร็จรับเงิน / ใบกำกับภาษี';
-  return 'ใบกำกับภาษี / ใบแจ้งหนี้';
+  if (type === 'receipt' || type === 'tax_invoice_receipt') return 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+  return 'ใบกำกับภาษี/ใบแจ้งหนี้';
 }
 
 function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload {
@@ -194,6 +201,8 @@ function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload
       tax_invoice_number: invoiceNumber,
       receipt_number: receiptNumber,
       document_number: documentNumber,
+      reference_no: asString(row.reference_no || notes.reference_no || invoiceNumber),
+      red_ref_no: asString(row.red_ref_no || notes.red_ref_no),
       issue_date: issueDate,
       document_date: issueDate,
       due_date: dateText(row.due_date),
@@ -215,6 +224,11 @@ function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload
       status: asString(notes.payment_status || (type === 'receipt' ? 'paid' : row.status)),
       receipt_number: receiptNumber,
       paid_at: dateText(row.paid_at),
+      cheque_no: asString(row.cheque_no || notes.cheque_no),
+      bank_name: asString(row.bank_name || notes.bank_name),
+      cheque_date: dateText(row.cheque_date || notes.cheque_date),
+      payment_ref: asString(row.payment_ref || notes.payment_ref),
+      collector_name: asString(row.collector_name || notes.collector_name),
     },
   };
 }
