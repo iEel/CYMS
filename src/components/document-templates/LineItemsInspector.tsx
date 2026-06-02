@@ -146,11 +146,12 @@ export function LineItemsInspector({ config, readOnly, onChange }: LineItemsInsp
 
                 <label className="block text-xs font-medium text-slate-500">
                   label
-                  <input
+                  <textarea
                     value={column.label}
                     onChange={event => onChange(applyLineItemColumnPatch(config, column.column_id, { label: event.target.value }))}
                     disabled={readOnly}
-                    className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    rows={2}
+                    className="mt-1 min-h-14 w-full resize-y rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs leading-tight text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                   />
                 </label>
 

@@ -10,7 +10,8 @@ import {
   resizeLineItems,
   snapMm,
 } from '@/lib/documentTemplateDesigner';
-import type { DocumentTemplateConfig, DocumentTemplateField, DocumentTemplateFieldLayer, DocumentTemplateLineItemsSection } from '@/lib/documentTemplateTypes';
+import { normalizeTemplateCanvasConfig } from '@/lib/documentTemplateCanvas';
+import type { DocumentTemplateConfig, DocumentTemplateElement, DocumentTemplateField, DocumentTemplateFieldLayer, DocumentTemplateLineItemsSection } from '@/lib/documentTemplateTypes';
 import type { LayerState } from './LayerList';
 
 type TemplateCanvasProps = {
@@ -71,6 +72,43 @@ function fieldStyle(field: DocumentTemplateField, zoom: number): CSSProperties {
   };
 }
 
+function elementStyle(element: DocumentTemplateElement, zoom: number): CSSProperties {
+  return {
+    left: mmToPx(element.x_mm, zoom),
+    top: mmToPx(element.y_mm, zoom),
+    width: mmToPx(element.width_mm, zoom),
+    height: mmToPx(element.height_mm, zoom),
+    fontSize: element.font_size ? `${Math.max(7, element.font_size * zoom)}px` : undefined,
+    fontWeight: element.font_weight === 'bold' ? 700 : element.font_weight === 'semibold' ? 600 : element.font_weight === 'medium' ? 500 : 400,
+    textAlign: element.text_align,
+    borderWidth: element.border ? Math.max(1, mmToPx(element.border_width_mm ?? 0.2, zoom)) : undefined,
+  };
+}
+
+function elementText(element: DocumentTemplateElement) {
+  if (element.type === 'text') return element.text || element.label;
+  if (element.type === 'bound_text') return element.text || element.label || element.binding_source;
+  return element.label;
+}
+
+function renderElementContent(element: DocumentTemplateElement) {
+  if (element.type === 'image') {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[9px] font-semibold text-slate-500">
+        {element.label}
+      </div>
+    );
+  }
+
+  if (element.type === 'checkbox') {
+    return <span className="block h-3 w-3 border border-slate-500" />;
+  }
+
+  if (element.type === 'box' || element.type === 'line') return null;
+
+  return <span className="whitespace-pre-line">{elementText(element)}</span>;
+}
+
 function lineItemsStyle(lineRegion: DocumentTemplateLineItemsSection, zoom: number, lineItemsCanvasHeightMm: number): CSSProperties {
   return {
     left: mmToPx(lineRegion.x_mm, zoom),
@@ -103,6 +141,7 @@ export function TemplateCanvas({
 }: TemplateCanvasProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const normalizedConfig = normalizeTemplateCanvasConfig(config);
 
   const beginDrag = (event: PointerEvent<HTMLElement>, field: DocumentTemplateField, mode: DragMode) => {
     event.preventDefault();
@@ -119,7 +158,7 @@ export function TemplateCanvas({
     onSelectLineItems();
     if (!canEdit || layerLocked(layerState, 'data')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    setDrag({ kind: 'line_items', mode, lineRegion: config.sections.line_items, startX: event.clientX, startY: event.clientY });
+    setDrag({ kind: 'line_items', mode, lineRegion: normalizedConfig.sections.line_items, startX: event.clientX, startY: event.clientY });
   };
 
   const handleLineItemsKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -185,12 +224,12 @@ export function TemplateCanvas({
   };
 
   const pageStyle: CSSProperties = {
-    width: mmToPx(config.paper.width_mm, zoom),
-    height: mmToPx(config.paper.height_mm, zoom),
+    width: mmToPx(normalizedConfig.paper.width_mm, zoom),
+    height: mmToPx(normalizedConfig.paper.height_mm, zoom),
     backgroundSize: `${mmToPx(snapStep, zoom)}px ${mmToPx(snapStep, zoom)}px`,
   };
 
-  const lineRegion = config.sections.line_items;
+  const lineRegion = normalizedConfig.sections.line_items;
   const lineItemsLocked = layerLocked(layerState, 'data');
   const lineItemsVisible = layerVisible(layerState, 'data');
   const lineItemsGridTemplate = lineRegion.columns
@@ -214,19 +253,30 @@ export function TemplateCanvas({
           backgroundSize: pageStyle.backgroundSize,
         }} />
         <div aria-hidden className="pointer-events-none absolute -left-6 top-0 h-full w-5 border-r border-slate-300 bg-slate-50 text-[9px] text-slate-400">
-          {Array.from({ length: Math.ceil(config.paper.height_mm / 20) }).map((_, index) => (
+          {Array.from({ length: Math.ceil(normalizedConfig.paper.height_mm / 20) }).map((_, index) => (
             <span key={index} className="absolute right-1" style={{ top: mmToPx(index * 20, zoom) }}>{index * 20}</span>
           ))}
         </div>
         <div aria-hidden className="pointer-events-none absolute -top-6 left-0 h-5 w-full border-b border-slate-300 bg-slate-50 text-[9px] text-slate-400">
-          {Array.from({ length: Math.ceil(config.paper.width_mm / 20) }).map((_, index) => (
+          {Array.from({ length: Math.ceil(normalizedConfig.paper.width_mm / 20) }).map((_, index) => (
             <span key={index} className="absolute top-1" style={{ left: mmToPx(index * 20, zoom) }}>{index * 20}</span>
           ))}
         </div>
 
+        {normalizedConfig.elements?.filter(element => element.visible && element.type !== 'line_items' && layerVisible(layerState, element.layer)).map(element => (
+          <div
+            key={element.element_id}
+            className={`pointer-events-none absolute z-0 flex items-center overflow-hidden border-slate-500 px-1 leading-tight text-slate-600 ${element.border ? 'border' : ''} ${element.type === 'line' ? 'border-t' : ''}`}
+            style={elementStyle(element, zoom)}
+            title={`${element.label}${element.binding_source ? ` · ${element.binding_source}` : ''}`}
+          >
+            {renderElementContent(element)}
+          </div>
+        ))}
+
         {lineItemsVisible ? (
           <div
-            className={`absolute overflow-hidden rounded-sm border bg-white/70 text-[10px] shadow-sm ${selectedLineItems ? 'border-blue-500 ring-2 ring-blue-400/60' : 'border-dashed border-slate-400'} ${lineItemsLocked ? 'cursor-not-allowed opacity-75' : 'cursor-move'}`}
+            className={`absolute z-10 overflow-hidden rounded-sm border bg-white/70 text-[10px] shadow-sm ${selectedLineItems ? 'border-blue-500 ring-2 ring-blue-400/60' : 'border-dashed border-slate-400'} ${lineItemsLocked ? 'cursor-not-allowed opacity-75' : 'cursor-move'}`}
             style={lineItemsStyle(lineRegion, zoom, lineItemsCanvasHeightMm)}
             onClick={event => event.stopPropagation()}
             onPointerDown={event => beginLineItemsDrag(event, 'move')}
@@ -253,7 +303,7 @@ export function TemplateCanvas({
               {lineRegion.columns.map(column => (
                 <div
                   key={column.column_id}
-                  className="truncate border-r border-slate-300 px-1 py-0.5 font-semibold last:border-r-0"
+                  className="flex items-center justify-center overflow-hidden whitespace-pre-line border-r border-slate-300 px-1 py-0.5 font-semibold leading-tight last:border-r-0"
                   style={{ textAlign: column.text_align }}
                   title={`${column.label} · ${column.field_key}`}
                 >
@@ -288,14 +338,15 @@ export function TemplateCanvas({
           </div>
         ) : null}
 
-        {config.fields.filter(field => field.visible && layerVisible(layerState, field.layer)).map(field => {
+        {normalizedConfig.fields.filter(field => field.visible && layerVisible(layerState, field.layer)).map(field => {
           const selected = selectedFieldId === field.field_id;
           const locked = field.locked || layerLocked(layerState, field.layer);
           return (
             <div
               key={field.field_id}
-              className={`absolute flex items-center overflow-hidden rounded-sm border px-1 leading-tight ${selected ? 'border-blue-500 bg-blue-50/80 text-blue-900' : 'border-slate-300 bg-white/80 text-slate-700'} ${locked ? 'cursor-not-allowed opacity-75' : 'cursor-move'}`}
+              className={`absolute z-20 flex items-center overflow-hidden rounded-sm border px-1 leading-tight ${selected ? 'border-blue-500 bg-blue-50/80 text-blue-900' : 'border-slate-300 bg-white/80 text-slate-700'} ${locked ? 'cursor-not-allowed opacity-75' : 'cursor-move'}`}
               style={fieldStyle(field, zoom)}
+              onClick={event => event.stopPropagation()}
               onPointerDown={event => beginDrag(event, field, 'move')}
               onPointerMove={moveDrag}
               onPointerUp={endDrag}

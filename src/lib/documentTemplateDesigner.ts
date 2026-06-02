@@ -225,6 +225,29 @@ function lineItemsHeaderHeight(startYMm: number, yMm: number) {
   return roundMm(Math.max(0, startYMm - yMm));
 }
 
+function lineItemsCanvasHeight(lineItems: DocumentTemplateConfig['sections']['line_items']) {
+  return roundMm(lineItemsHeaderHeight(lineItems.start_y_mm, lineItems.y_mm) + lineItems.row_height_mm * lineItems.max_rows);
+}
+
+function syncLineItemsElementGeometry(config: DocumentTemplateConfig): DocumentTemplateConfig {
+  if (!Array.isArray(config.elements)) return config;
+
+  const lineItems = config.sections.line_items;
+  return {
+    ...config,
+    elements: config.elements.map(element => {
+      if (element.type !== 'line_items') return element;
+      return {
+        ...element,
+        x_mm: lineItems.x_mm,
+        y_mm: lineItems.y_mm,
+        width_mm: lineItems.width_mm,
+        height_mm: lineItemsCanvasHeight(lineItems),
+      };
+    }),
+  };
+}
+
 function safeLineItemColumnPatch(patch: LineItemColumnPatch, sectionWidthMm: number): LineItemColumnPatch {
   const next = { ...patch };
   const fieldKey = normalizeLineItemFieldKey(next.field_key);
@@ -310,7 +333,7 @@ export function applyLineItemsPatch(config: DocumentTemplateConfig, patch: LineI
       },
     },
   });
-  return next;
+  return syncLineItemsElementGeometry(next);
 }
 
 export function resizeLineItems(
@@ -413,7 +436,28 @@ export function applyCalibrationProfileToConfig(
   next.fields = next.fields.map(field => clampFieldToPaper(next, field));
   next.sections.line_items = clampLineItemsToPaper(next);
   next.default_calibration_profile_id = profile.profile_id;
-  return next;
+  return syncLineItemsElementGeometry(next);
+}
+
+export function applyPaperPatchToConfig(
+  config: DocumentTemplateConfig,
+  patch: Partial<Pick<
+    DocumentTemplateConfig['paper'],
+    | 'width_mm'
+    | 'height_mm'
+    | 'top_offset_mm'
+    | 'left_offset_mm'
+    | 'print_scale'
+  >>,
+): DocumentTemplateConfig {
+  const next = cloneConfig(config);
+  for (const key of ['width_mm', 'height_mm', 'top_offset_mm', 'left_offset_mm', 'print_scale'] as const) {
+    const value = patch[key];
+    if (finiteNumber(value)) next.paper[key] = value;
+  }
+  next.fields = next.fields.map(field => clampFieldToPaper(next, field));
+  next.sections.line_items = clampLineItemsToPaper(next);
+  return syncLineItemsElementGeometry(next);
 }
 
 export function applyFieldPatch(

@@ -5,6 +5,7 @@ import {
   applyFieldPatch,
   applyLineItemColumnPatch,
   applyLineItemsPatch,
+  applyPaperPatchToConfig,
   canUseTemplateBinding,
   createDesignerHistory,
   moveLineItemColumn,
@@ -80,6 +81,36 @@ describe('document template designer helpers', () => {
     expect(normalized.elements?.some(element => element.element_id === 'sonic-company-header')).toBe(true);
     expect(normalized.elements?.some(element => element.type === 'line_items')).toBe(true);
     expectElementsInsidePaper(normalized);
+  });
+
+  it('syncs line item element geometry when line item section geometry changes', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const next = applyLineItemsPatch(config, {
+      x_mm: 22,
+      y_mm: 68,
+      width_mm: 180,
+      row_height_mm: 7,
+      max_rows: 8,
+    });
+    const lineItems = next.sections.line_items;
+    const element = next.elements?.find(item => item.type === 'line_items');
+
+    expect(element).toMatchObject({
+      x_mm: lineItems.x_mm,
+      y_mm: lineItems.y_mm,
+      width_mm: lineItems.width_mm,
+      height_mm: (lineItems.start_y_mm - lineItems.y_mm) + lineItems.row_height_mm * lineItems.max_rows,
+    });
+  });
+
+  it('does not persist generated line item elements for legacy configs during line item edits', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const legacy = { ...config };
+    delete (legacy as { elements?: unknown }).elements;
+
+    const next = applyLineItemsPatch(legacy, { x_mm: 18 });
+
+    expect(next.elements).toBeUndefined();
   });
 
   it('clamps default canvas elements into smaller custom paper', () => {
@@ -252,7 +283,7 @@ describe('document template designer 2.1 validation', () => {
     const config = buildDefaultContinuousTemplateConfig();
     const next = applyLineItemColumnPatch(config, 'description', { label: '<script>alert(1)</script>' });
 
-    expect(next.sections.line_items.columns[0].label).toBe('Description');
+    expect(next.sections.line_items.columns[0].label).toBe(config.sections.line_items.columns[0].label);
   });
 
   it('ignores invalid line item column field key patches', () => {
@@ -493,6 +524,23 @@ describe('document template designer 2.1 validation', () => {
     expect(calibrated.paper.left_offset_mm).toBe(3);
     expect(calibrated.paper.print_scale).toBe(0.98);
     expect(calibrated.calibration_profiles?.[0].profile_name).toBe('Epson LQ-310 9.5 x 5.5');
+  });
+
+  it('keeps direct A4 paper size edits valid by clamping layout into the new paper', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const a4 = applyPaperPatchToConfig(config, {
+      width_mm: 210,
+      height_mm: 297,
+    });
+    const lineItems = a4.sections.line_items;
+
+    expect(a4.paper.width_mm).toBe(210);
+    expect(a4.paper.height_mm).toBe(297);
+    expect(validateDesignerTemplateConfig(a4)).toEqual({ valid: true, errors: [] });
+    expect(a4.fields.every(field => field.x_mm + field.width_mm <= a4.paper.width_mm)).toBe(true);
+    expect(a4.fields.every(field => field.y_mm + field.height_mm <= a4.paper.height_mm)).toBe(true);
+    expect(lineItems.x_mm + lineItems.width_mm).toBeLessThanOrEqual(a4.paper.width_mm);
   });
 
   it('keeps geometry valid when applying a smaller calibration profile', () => {

@@ -48,6 +48,14 @@ describe('document template visual designer UI', () => {
     expect(toolbar).toContain('Publish');
   });
 
+  it('renders full-form template elements in the designer canvas', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(source).toContain('normalizeTemplateCanvasConfig(config)');
+    expect(source).toContain('normalizedConfig.elements');
+    expect(source).toContain('element.type ===');
+  });
+
   it('keeps preview tied to the selected draft config instead of falling back to an unrelated sample', () => {
     const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
 
@@ -136,6 +144,15 @@ describe('document template designer line item UI wiring', () => {
     expect(source).toContain('event.preventDefault()');
   });
 
+  it('keeps field clicks from being cleared by the canvas click handler', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+    const stopClickPropagationCount = (source.match(/onClick=\{event => event\.stopPropagation\(\)\}/g) || []).length;
+
+    expect(source).toContain('onClick={onClearSelection}');
+    expect(source).toContain('onSelectField(field.field_id)');
+    expect(stopClickPropagationCount).toBeGreaterThanOrEqual(2);
+  });
+
   it('shows line items in status and layer list', () => {
     expect(read('src/components/document-templates/DesignerStatusBar.tsx')).toContain('selectedKind');
     expect(read('src/components/document-templates/LayerList.tsx')).toContain('onSelectLineItems');
@@ -152,6 +169,16 @@ describe('line item inspector source wiring', () => {
     expect(source).toContain('addLineItemColumn');
     expect(source).toContain('moveLineItemColumn');
     expect(source).toContain('removeLineItemColumn');
+  });
+
+  it('lets line item labels be edited and previewed across multiple lines', () => {
+    const inspector = read('src/components/document-templates/LineItemsInspector.tsx');
+    const canvas = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(inspector).toContain('<textarea');
+    expect(inspector).toContain('rows={2}');
+    expect(canvas).toContain('whitespace-pre-line');
+    expect(canvas).not.toContain('className="truncate border-r border-slate-300 px-1 py-0.5 font-semibold last:border-r-0"');
   });
 
   it('shows LineItemsInspector for line item selection', () => {
