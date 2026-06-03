@@ -10,7 +10,7 @@ import {
 } from '@/lib/documentTemplates';
 import {
   buildContinuousPrintPayload,
-  buildSampleContinuousPrintPayload,
+  buildSampleContinuousPrintPayloadWithCompanyProfile,
 } from '@/lib/billingContinuousPrint';
 import { applyCalibrationProfileToConfig } from '@/lib/documentTemplateDesigner';
 import type {
@@ -80,10 +80,12 @@ async function currentTemplateConfig(
       reprint_label_template?: string;
       red_ref_source?: string;
       template_code?: string;
+      template_name?: string;
       version_no?: number;
     }>(`
       SELECT TOP 1
         t.template_code,
+        t.template_name,
         v.version_no,
         v.config_json,
         v.reprint_label_template,
@@ -120,11 +122,13 @@ async function currentTemplateConfig(
 
   const row = result.recordset[0];
   const config = parseStoredTemplateConfig(row?.config_json);
-  return {
-    config: config && row ? applyStoredPrintPolicy(config, row) : buildDefaultContinuousTemplateConfig(),
-    template_code: row?.template_code || documentType.toUpperCase(),
-    template_version: Number(row?.version_no || 1),
-  };
+      return {
+        config: config && row ? applyStoredPrintPolicy(config, row) : buildDefaultContinuousTemplateConfig(),
+        template_code: row?.template_code || documentType.toUpperCase(),
+        template_name: row?.template_name || '',
+        template_family: config?.template_family || 'continuous_tax_receipt',
+        template_version: Number(row?.version_no || 1),
+      };
 }
 
 function applyPreviewOverrides(
@@ -169,7 +173,7 @@ export async function GET(request: NextRequest) {
     const template = await currentTemplateConfig(db, documentType, templateId, versionNo);
     const config = applyPreviewOverrides(template.config, mode, copyMode, calibrationProfileId);
     const payload = useSample
-      ? buildSampleContinuousPrintPayload()
+      ? await buildSampleContinuousPrintPayloadWithCompanyProfile(db)
       : await buildContinuousPrintPayload(db, { invoiceId, type: documentType });
 
     await logAudit({
@@ -190,10 +194,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       payload,
       config,
-      template: {
-        template_code: template.template_code,
-        template_version: template.template_version,
-      },
+        template: {
+          template_code: template.template_code,
+          template_name: template.template_name,
+          template_family: config.template_family || template.template_family,
+          template_version: template.template_version,
+        },
     });
   } catch (error) {
     console.error('GET document template preview error:', error);

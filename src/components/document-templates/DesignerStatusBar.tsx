@@ -7,13 +7,18 @@ type DesignerStatusBarProps = {
   zoom: number;
   snapStep: number;
   selectedFieldId: string | null;
-  selectedKind: 'field' | 'line_items' | null;
+  selectedElementId: string | null;
+  selectedKind: 'field' | 'element' | 'line_items' | null;
   canEdit: boolean;
 };
 
-export function DesignerStatusBar({ config, zoom, snapStep, selectedFieldId, selectedKind, canEdit }: DesignerStatusBarProps) {
+export function DesignerStatusBar({ config, zoom, snapStep, selectedFieldId, selectedElementId, selectedKind, canEdit }: DesignerStatusBarProps) {
   const fields = config.fields.filter(field => field.visible).length;
-  const selectedLabel = selectedKind === 'line_items' ? 'Line items · lines[]' : selectedFieldId || 'No field selected';
+  const selectedLabel = selectedKind === 'line_items'
+    ? 'Line items · lines[]'
+    : selectedKind === 'element'
+      ? selectedElementId || 'No element selected'
+      : selectedFieldId || 'No field selected';
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-400">
       <span>

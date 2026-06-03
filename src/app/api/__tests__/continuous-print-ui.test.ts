@@ -6,7 +6,7 @@ import { lineItemsBoxStyle, lineItemValue } from '@/components/billing/Continuou
 import { TemplateCanvasReceipt } from '@/components/billing/TemplateCanvasReceipt';
 import { sanitizeContinuousPrintReturnTo } from '@/app/billing/print/continuous/returnPath';
 import { buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrintSample';
-import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
+import { buildDefaultA4TaxReceiptTemplateConfig, buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
 import type { DocumentTemplateConfig } from '@/lib/documentTemplateTypes';
 
 const source = fs.readFileSync(path.join(process.cwd(), 'src/components/billing/ContinuousTaxReceipt.tsx'), 'utf8');
@@ -17,8 +17,8 @@ describe('continuous tax receipt section-driven line items', () => {
   it('reads line item geometry from template config', () => {
     expect(source).toContain('const lineItemsSection = normalizedConfig.sections.line_items');
     expect(rendererSource).toContain('const lineItemsSection = normalizedConfig.sections.line_items');
-    expect(rendererSource).toContain('lineItemsSection.row_height_mm');
-    expect(rendererSource).toContain('lineItemsSection.max_rows');
+    expect(rendererSource).toContain('lineItemDataRowHeight(lineItemsSection)');
+    expect(rendererSource).toContain('lineItemEmptyRowHeight(lineItemsSection');
   });
 
   it('renders configured columns proportionally without letting the table escape the page', () => {
@@ -201,6 +201,8 @@ describe('continuous print UI', () => {
     expect(source).toContain('const totalColumnWidthMm');
     expect(source).toContain('<colgroup>');
     expect(source).toContain('overflow-wrap: anywhere');
+    expect(source).toContain('.ctr-element-line_items::after');
+    expect(source).toContain('border-bottom: 0.25mm solid #374151');
   });
 
   it('renders form chrome in full mode and excludes it from overlay mode', () => {
@@ -228,6 +230,180 @@ describe('continuous print UI', () => {
     expect(overlayMarkup).not.toContain('Customer Name');
     expect(overlayMarkup).not.toContain('ต้นฉบับใบกำกับภาษี/ใบเสร็จรับเงิน');
     expect(overlayMarkup).not.toContain('ctr-company-header');
+  });
+
+  it('does not duplicate the company name when no English company name is configured', () => {
+    const companyName = 'บริษัท ทดสอบ จำกัด';
+    const basePayload = buildSampleContinuousPrintPayload();
+    const payload = {
+      ...basePayload,
+      company: {
+        ...basePayload.company,
+        name: companyName,
+        company_name: companyName,
+        name_th: companyName,
+        name_en: '',
+      },
+    };
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const markup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'full',
+      copyLabel: config.copy_labels[0],
+    }));
+
+    expect(markup.split(companyName).length - 1).toBe(1);
+  });
+
+  it('shows the issued document number in the customer reference box instead of an external reference', () => {
+    const basePayload = buildSampleContinuousPrintPayload();
+    const payload = {
+      ...basePayload,
+      document: {
+        ...basePayload.document,
+        invoice_number: 'INV-202606-000012',
+        tax_invoice_number: 'TAX-202606-000012',
+        receipt_number: 'RCT-202606-000012',
+        document_number: 'RCT-202606-000012',
+        reference_no: 'BOOKING-ABC-001',
+      },
+    };
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const markup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'full',
+      copyLabel: config.copy_labels[0],
+    }));
+
+    expect(markup).toContain('เลขที่ / Reference');
+    expect(markup).toContain('RCT-202606-000012');
+    expect(markup).not.toContain('BOOKING-ABC-001');
+  });
+
+  it('fills remaining configured line item rows with blank rows for stable print layout', () => {
+    const basePayload = buildSampleContinuousPrintPayload();
+    const payload = {
+      ...basePayload,
+      lines: basePayload.lines.slice(0, 2).map((line) => ({
+        ...line,
+        container_refs: undefined,
+        job_refs: undefined,
+      })),
+    };
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const markup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'full',
+      copyLabel: config.copy_labels[0],
+    }));
+
+    const emptyRowCount = (markup.match(/class="ctr-lines-empty"/g) || []).length;
+
+    expect(config.sections.line_items.max_rows).toBe(5);
+    expect(markup).toContain('ctr-lines-data');
+    expect(emptyRowCount).toBe(3);
+  });
+
+  it('does not render container or job references as trailing text inside the line item table', () => {
+    const payload = buildSampleContinuousPrintPayload();
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const markup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'full',
+      copyLabel: config.copy_labels[0],
+    }));
+    const emptyRowCount = (markup.match(/class="ctr-lines-empty"/g) || []).length;
+
+    expect(markup).not.toContain('ctr-lines-reference');
+    expect(markup).not.toContain('CNSI26030029');
+    expect(emptyRowCount).toBe(config.sections.line_items.max_rows - payload.lines.length);
+  });
+
+  it('left-aligns item description values while keeping the header centered', () => {
+    const payload = buildSampleContinuousPrintPayload();
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const markup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'full',
+      copyLabel: config.copy_labels[0],
+    }));
+
+    expect(markup).toContain('style="height:8mm;text-align:center">รายการ');
+    expect(markup).toContain('style="height:5.6mm;text-align:left">CONTAINER REPAIR CHARGES');
+  });
+
+  it('keeps filled line item rows compact while blank rows absorb the remaining table height', () => {
+    const payload = buildSampleContinuousPrintPayload();
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const markup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'full',
+      copyLabel: config.copy_labels[0],
+    }));
+
+    expect(config.sections.line_items.row_height_mm).toBe(8);
+    expect(markup).toContain('style="height:5.6mm;text-align:left">CONTAINER REPAIR CHARGES');
+    expect(markup).toContain('style="height:11.6mm;text-align:left"></td>');
+  });
+
+  it('keeps payment labels in fixed no-wrap columns', () => {
+    const payload = buildSampleContinuousPrintPayload();
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const markup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'full',
+      copyLabel: config.copy_labels[0],
+    }));
+
+    expect(markup).toContain('class="ctr-payment-row ctr-payment-row-cheque"');
+    expect(markup).toContain('class="ctr-payment-label">เช็ค เลขที่</span>');
+    expect(markup).toContain('grid-template-columns: 7mm 24mm 42mm 18mm 34mm;');
+    expect(markup).toContain('.ctr-payment-label, .ctr-payment-date-label { white-space: nowrap; }');
+  });
+
+  it('centers the payment checkbox tick inside the checkbox', () => {
+    const payload = buildSampleContinuousPrintPayload();
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const markup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'full',
+      copyLabel: config.copy_labels[0],
+    }));
+
+    expect(markup).toContain(".ctr-checkbox.checked::after { color: #111827; content: '✓'; font-size: 8.5pt; font-weight: 700; left: 50%; line-height: 1; position: absolute; top: 50%; transform: translate(-50%, -58%); }");
+    expect(markup).not.toContain("left: -2mm; position: absolute; top: -3mm;");
+  });
+
+  it('does not append collector signature line to footer notes but keeps the collector line', () => {
+    const payload = buildSampleContinuousPrintPayload();
+    const config = buildDefaultA4TaxReceiptTemplateConfig();
+
+    const markup = renderToStaticMarkup(React.createElement(TemplateCanvasReceipt, {
+      payload,
+      config,
+      mode: 'full',
+      copyLabel: config.copy_labels[0],
+    }));
+
+    expect(markup).toContain('บริษัทฯ กำหนดเวลาในการแก้ไขใบเสร็จรับเงิน/ใบกำกับภาษีภายใน 7 วัน นับจากวันที่ออกเอกสาร หากพ้นกำหนดทางบริษัทฯ ถือว่าถูกต้องแล้ว</div>');
+    expect(markup).toContain('ผู้รับเงิน / Collector<span class="ctr-collector-value"></span>');
+    expect(markup).not.toContain('>KIT</span>');
   });
 
   it('renders overlay mode with only data layer elements', () => {

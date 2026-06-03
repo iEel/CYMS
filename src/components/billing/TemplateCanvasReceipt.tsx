@@ -21,6 +21,7 @@ type TemplateCanvasReceiptProps = {
 };
 
 type LineItemColumn = DocumentTemplateConfig['sections']['line_items']['columns'][number];
+type LineItemsSection = DocumentTemplateConfig['sections']['line_items'];
 
 function mm(value: number) {
   return `${value}mm`;
@@ -54,6 +55,15 @@ function branchLabel(branchType: string, branchNumber: string) {
 
 function nonEmpty(...values: Array<string | undefined | null>) {
   return values.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim() || '';
+}
+
+function documentDisplayNumber(payload: ContinuousPrintPayload) {
+  return nonEmpty(
+    payload.document.document_number,
+    payload.document.receipt_number,
+    payload.document.tax_invoice_number,
+    payload.document.invoice_number,
+  );
 }
 
 function companyBranchText(payload: ContinuousPrintPayload) {
@@ -139,15 +149,25 @@ function lineItemValue(line: ContinuousPrintLine, column: LineItemColumn) {
   return String(value);
 }
 
-function lineReferenceText(lines: ContinuousPrintLine[]) {
-  const refs = new Set<string>();
-  for (const line of lines) {
-    [...(line.container_refs || []), ...(line.job_refs || [])]
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .forEach((value) => refs.add(value));
-  }
-  return Array.from(refs).join(' - ');
+function lineItemBodyAlign(column: LineItemColumn) {
+  const key = column.field_key.replace(/^lines\[\]\./, '');
+  if (key === 'description') return 'left';
+  return column.text_align;
+}
+
+function lineItemHeight(value: number) {
+  return `${Number(value.toFixed(2))}mm`;
+}
+
+function lineItemDataRowHeight(section: LineItemsSection) {
+  return Math.max(0, Math.min(section.row_height_mm, 5.6));
+}
+
+function lineItemEmptyRowHeight(section: LineItemsSection, filledRowCount: number, emptyRowCount: number) {
+  if (emptyRowCount <= 0) return lineItemDataRowHeight(section);
+  const totalBodyHeightMm = section.row_height_mm * Math.max(0, section.max_rows);
+  const filledRowsHeightMm = lineItemDataRowHeight(section) * filledRowCount;
+  return Math.max(lineItemDataRowHeight(section), (totalBodyHeightMm - filledRowsHeightMm) / emptyRowCount);
 }
 
 function elementStyle(element: DocumentTemplateElement): CSSProperties {
@@ -214,14 +234,14 @@ function CompanyLogo({ payload }: { payload: ContinuousPrintPayload }) {
 
 function CompanyHeader({ payload }: { payload: ContinuousPrintPayload }) {
   const companyNameTh = nonEmpty(payload.company.name_th, payload.company.company_name, payload.company.name);
-  const companyNameEn = nonEmpty(payload.company.name_en, payload.company.name);
+  const companyNameEn = nonEmpty(payload.company.name_en);
   const companyAddressTh = nonEmpty(payload.company.address_th, payload.company.address);
   const companyAddressEn = nonEmpty(payload.company.address_en);
 
   return (
     <div className="ctr-company-header">
       <h1>{companyNameTh}</h1>
-      <h2>{companyNameEn}</h2>
+      {companyNameEn ? <h2>{companyNameEn}</h2> : null}
       <p>{companyAddressTh}</p>
       {companyAddressEn ? <p>{companyAddressEn}</p> : null}
       <p>{companyBranchText(payload)}</p>
@@ -233,7 +253,7 @@ function CompanyHeader({ payload }: { payload: ContinuousPrintPayload }) {
 function CustomerBox({ payload }: { payload: ContinuousPrintPayload }) {
   const customerName = nonEmpty(payload.customer.customer_name, payload.customer.name);
   const customerTaxLabel = `${payload.customer.tax_id || '-'} ${payload.customer.branch_name || branchLabel(payload.customer.branch_type, payload.customer.branch_number)}`;
-  const referenceNo = nonEmpty(payload.document.reference_no, payload.document.ref_invoice_number, payload.document.document_number, payload.document.invoice_number);
+  const referenceNo = documentDisplayNumber(payload);
   const documentDate = dateNumericText(payload.document.document_date || payload.document.issue_date);
 
   return (
@@ -263,21 +283,26 @@ function CustomerBox({ payload }: { payload: ContinuousPrintPayload }) {
 function PaymentBox({ payload }: { payload: ContinuousPrintPayload }) {
   return (
     <div className="ctr-payment-box">
-      <div className="ctr-payment-row">
+      <div className="ctr-payment-row ctr-payment-row-cash">
         <span className={`ctr-checkbox ${paymentMethodMatches(payload, 'cash') ? 'checked' : ''}`} />
-        <span>เงินสด</span>
+        <span className="ctr-payment-label">เงินสด</span>
+        <span className="ctr-payment-value" />
+        <span className="ctr-payment-date-label" />
+        <span className="ctr-payment-value ctr-payment-date" />
       </div>
-      <div className="ctr-payment-row">
+      <div className="ctr-payment-row ctr-payment-row-cheque">
         <span className={`ctr-checkbox ${paymentMethodMatches(payload, 'cheque') ? 'checked' : ''}`} />
-        <span>เช็ค เลขที่</span>
+        <span className="ctr-payment-label">เช็ค เลขที่</span>
         <span className="ctr-payment-value">{payload.payment.cheque_no || ''}</span>
         <span className="ctr-payment-date-label">ลงวันที่</span>
         <span className="ctr-payment-value ctr-payment-date">{dateNumericText(payload.payment.cheque_date || '')}</span>
       </div>
-      <div className="ctr-payment-row">
+      <div className="ctr-payment-row ctr-payment-row-bank">
         <span className="ctr-checkbox ghost" />
-        <span>ธนาคาร</span>
+        <span className="ctr-payment-label">ธนาคาร</span>
         <span className="ctr-payment-value">{payload.payment.bank_name || payload.payment.payment_ref || ''}</span>
+        <span className="ctr-payment-date-label" />
+        <span className="ctr-payment-value ctr-payment-date" />
       </div>
     </div>
   );
@@ -307,17 +332,18 @@ function TotalsTable({ payload }: { payload: ContinuousPrintPayload }) {
 function LineItems({
   normalizedConfig,
   payload,
-  mode,
 }: {
   normalizedConfig: DocumentTemplateConfig;
   payload: ContinuousPrintPayload;
-  mode: DocumentTemplateMode;
 }) {
   const lineItemsSection = normalizedConfig.sections.line_items;
   const totalColumnWidthMm = lineItemColumnTotal(lineItemsSection);
   const headerHeightMm = Math.max(0, lineItemsSection.start_y_mm - lineItemsSection.y_mm);
-  const visibleLines = payload.lines.slice(0, lineItemsSection.max_rows);
-  const referenceText = mode === 'full' ? lineReferenceText(visibleLines) : '';
+  const maxRows = Math.max(0, lineItemsSection.max_rows);
+  const visibleLines = payload.lines.slice(0, maxRows);
+  const emptyRowCount = Math.max(0, maxRows - visibleLines.length);
+  const dataRowHeight = lineItemDataRowHeight(lineItemsSection);
+  const emptyRowHeight = lineItemEmptyRowHeight(lineItemsSection, visibleLines.length, emptyRowCount);
 
   return (
     <table
@@ -349,13 +375,13 @@ function LineItems({
       </thead>
       <tbody>
         {visibleLines.map((line, index) => (
-          <tr key={`${line.description}-${index}`}>
+          <tr className="ctr-lines-data" key={`${line.description}-${index}`}>
             {lineItemsSection.columns.map((column) => (
               <td
                 key={column.column_id}
                 style={{
-                  height: `${lineItemsSection.row_height_mm}mm`,
-                  textAlign: column.text_align,
+                  height: lineItemHeight(dataRowHeight),
+                  textAlign: lineItemBodyAlign(column),
                 }}
               >
                 {lineItemValue(line, column)}
@@ -363,11 +389,19 @@ function LineItems({
             ))}
           </tr>
         ))}
-        {referenceText ? (
-          <tr className="ctr-lines-reference">
-            <td colSpan={lineItemsSection.columns.length}>{referenceText}</td>
+        {Array.from({ length: emptyRowCount }).map((_, index) => (
+          <tr className="ctr-lines-empty" key={`empty-${index}`} aria-hidden="true">
+            {lineItemsSection.columns.map((column) => (
+              <td
+                key={column.column_id}
+                style={{
+                  height: lineItemHeight(emptyRowHeight),
+                  textAlign: lineItemBodyAlign(column),
+                }}
+              />
+            ))}
           </tr>
-        ) : null}
+        ))}
       </tbody>
     </table>
   );
@@ -419,8 +453,8 @@ function isCompanyHeaderElement(element: DocumentTemplateElement) {
   return hasElementHint(element, 'company-header') || hasElementHint(element, 'company header');
 }
 
-function isFooterElement(element: DocumentTemplateElement) {
-  return hasElementHint(element, 'footer') || hasElementHint(element, 'collector') || hasElementHint(element, 'ผู้รับเงิน');
+function isCollectorElement(element: DocumentTemplateElement) {
+  return hasElementHint(element, 'collector') || hasElementHint(element, 'ผู้รับเงิน');
 }
 
 function renderBoxContent(element: DocumentTemplateElement, payload: ContinuousPrintPayload, copyLabel: string): ReactNode {
@@ -461,19 +495,19 @@ function renderElement(
 
   if (element.type === 'box') content = renderBoxContent(element, payload, copyLabel);
   if (element.type === 'text') {
-    const footerElement = isFooterElement(element);
+    const collectorElement = isCollectorElement(element);
     content = (
       <>
-        {element.text || (footerElement ? 'ผู้รับเงิน / Collector' : element.label)}
-        {footerElement ? (
-          <span className="ctr-collector-value">{payload.payment.collector_name || ''}</span>
-        ) : null}
-      </>
-    );
+            {element.text || (collectorElement ? 'ผู้รับเงิน / Collector' : element.label)}
+            {collectorElement ? (
+              <span className="ctr-collector-value" />
+            ) : null}
+          </>
+        );
   }
   if (element.type === 'bound_text') content = renderBoundText(element, payload, copyLabel);
   if (element.type === 'image') content = <CompanyLogo payload={payload} />;
-  if (element.type === 'line_items') content = <LineItems normalizedConfig={config} payload={payload} mode={mode} />;
+  if (element.type === 'line_items') content = <LineItems normalizedConfig={config} payload={payload} />;
   if (element.type === 'checkbox') content = <span className="ctr-checkbox" />;
   if (element.type === 'totals_table') content = <TotalsTable payload={payload} />;
   if (element.type === 'line') content = <span className="ctr-line-rule" />;
@@ -501,7 +535,7 @@ export function TemplateCanvasReceipt({
   const rendersCopyBox = elements.some((element) => element.type === 'box' && isCopyElement(element));
   const rendersCustomerBox = elements.some((element) => element.type === 'box' && isCustomerElement(element));
   const rendersPaymentBox = elements.some((element) => element.type === 'box' && isPaymentElement(element));
-  const rendersFooter = elements.some((element) => element.type === 'text' && isFooterElement(element));
+  const rendersCollector = elements.some((element) => element.type === 'text' && isCollectorElement(element));
 
   return (
     <div className="ctr-canvas-receipt" data-mode={mode}>
@@ -510,6 +544,8 @@ export function TemplateCanvasReceipt({
         .ctr-canvas-element { box-sizing: border-box; line-height: 1.2; overflow: hidden; position: absolute; white-space: pre-wrap; }
         .ctr-element-box { background: transparent; }
         .ctr-element-line { border: 0 !important; }
+        .ctr-element-line_items { border: 0 !important; }
+        .ctr-element-line_items::after { border-bottom: 0.25mm solid #374151; bottom: 0.15mm; content: ''; left: 0; pointer-events: none; position: absolute; right: 0; }
         .ctr-line-rule { border-top: 0.25mm solid #374151; display: block; margin-top: 50%; width: 100%; }
         ${rendersCompanyHeader ? `
         .ctr-logo-image { display: block; height: 100%; object-fit: contain; width: 100%; }
@@ -542,29 +578,29 @@ export function TemplateCanvasReceipt({
         .ctr-reference-box strong { color: #374151; font-size: 11pt; font-weight: 500; }
         ` : ''}
         ${rendersLineItems ? `
-        .ctr-lines { border-collapse: collapse; font-size: 8pt; line-height: 1.1; width: 100%; }
+        .ctr-lines { border-collapse: collapse; font-size: 8pt; height: 100%; line-height: 1.1; width: 100%; }
         .ctr-lines, .ctr-lines tr, .ctr-lines th, .ctr-lines td { box-sizing: border-box; }
         .ctr-lines th { background: #fff; border: 0.25mm solid #374151; font-size: 8.4pt; font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; padding: 0.2mm 0.8mm; white-space: pre-line; }
-        .ctr-lines td { border-left: 0.25mm solid #374151; border-right: 0.25mm solid #374151; color: #374151; font-size: 8.5pt; overflow: hidden; overflow-wrap: anywhere; padding: 0.2mm 0.8mm; vertical-align: top; }
+        .ctr-lines td { border-left: 0.25mm solid #374151; border-right: 0.25mm solid #374151; color: #374151; font-size: 8.5pt; overflow: hidden; overflow-wrap: anywhere; padding: 0.1mm 0.8mm; vertical-align: top; }
+        .ctr-lines-empty td { color: transparent; }
         .ctr-lines tbody tr:last-child td { border-bottom: 0.25mm solid #374151; }
-        .ctr-lines-reference td { font-size: 8.2pt; padding-top: 2mm; }
         ` : ''}
         ${rendersPaymentBox ? `
-        .ctr-payment-box { display: flex; flex-direction: column; height: 100%; justify-content: space-around; padding: 1.2mm 4mm; }
-        .ctr-payment-row { align-items: center; display: flex; font-size: 9pt; gap: 3mm; min-height: 5mm; }
-        .ctr-checkbox { border: 0.35mm solid #374151; box-sizing: border-box; display: inline-block; height: 4mm; position: relative; width: 7mm; }
-        .ctr-checkbox.checked::after { content: '✓'; font-size: 9pt; font-weight: 700; left: -2mm; position: absolute; top: -3mm; }
-        .ctr-checkbox.ghost { opacity: 0; }
-        .ctr-payment-value { border-bottom: 0.2mm solid transparent; color: #374151; min-width: 28mm; }
-        .ctr-payment-date-label { margin-left: auto; }
-        .ctr-payment-date { min-width: 24mm; }
+        .ctr-payment-box { display: grid; grid-template-rows: repeat(3, 1fr); height: 100%; padding: 1mm 4mm; row-gap: 0.2mm; }
+        .ctr-payment-row { align-items: center; column-gap: 3mm; display: grid; font-size: 9pt; grid-template-columns: 7mm 24mm 42mm 18mm 34mm; min-height: 4.2mm; }
+        .ctr-payment-label, .ctr-payment-date-label { white-space: nowrap; }
+        .ctr-payment-box .ctr-checkbox { align-self: center; border: 0.35mm solid #374151; box-sizing: border-box; display: block; height: 4mm; justify-self: start; min-height: 4mm; min-width: 7mm; position: relative; width: 7mm; }
+        .ctr-payment-box .ctr-checkbox.checked::after { color: #111827; content: '✓'; font-size: 8.5pt; font-weight: 700; left: 50%; line-height: 1; position: absolute; top: 50%; transform: translate(-50%, -58%); }
+        .ctr-payment-box .ctr-checkbox.ghost { opacity: 0; }
+        .ctr-payment-value { border-bottom: 0.2mm solid transparent; color: #374151; min-height: 3.8mm; min-width: 0; }
+        .ctr-payment-date-label { text-align: right; }
         ` : ''}
         .ctr-totals-table { border-collapse: collapse; table-layout: fixed; width: 100%; }
         .ctr-totals-table th, .ctr-totals-table td { border-bottom: 0.25mm solid #374151; box-sizing: border-box; font-size: 8.8pt; line-height: 1.15; padding: 1mm 1.5mm; }
         .ctr-totals-table tr:last-child th, .ctr-totals-table tr:last-child td { border-bottom: 0; font-weight: 700; }
         .ctr-totals-table th { font-weight: 600; text-align: left; width: 55mm; }
         .ctr-totals-table td { color: #374151; text-align: right; width: 23mm; }
-        ${rendersFooter ? `
+        ${rendersCollector ? `
         .ctr-collector-value { border-bottom: 0.2mm solid #374151; color: #374151; display: inline-block; margin-left: 3mm; min-height: 5mm; min-width: 34mm; }
         ` : ''}
         .ctr-overlay-field { box-sizing: border-box; line-height: 1.2; overflow: hidden; position: absolute; white-space: pre-wrap; }

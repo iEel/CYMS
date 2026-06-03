@@ -16,7 +16,11 @@ import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { requireAnyPermission, requirePermission, requireYardAccess } from '@/lib/apiAuth';
 import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplates';
-import { buildContinuousPrintPayload, buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrint';
+import {
+  buildContinuousPrintPayload,
+  buildSampleContinuousPrintPayload,
+  buildSampleContinuousPrintPayloadWithCompanyProfile,
+} from '@/lib/billingContinuousPrint';
 import { nextDocumentNumber } from '@/lib/documentNumber';
 
 jest.mock('@/lib/db', () => ({
@@ -44,6 +48,11 @@ jest.mock('@/lib/billingContinuousPrint', () => ({
     lines: [],
     totals: { subtotal: 0, vat_rate: 0, vat_amount: 0, grand_total: 0, amount_text_th: 'ศูนย์บาทถ้วน' },
   })),
+  buildSampleContinuousPrintPayloadWithCompanyProfile: jest.fn(async () => ({
+    document: { invoice_id: 0, document_type: 'sample' },
+    lines: [],
+    totals: { subtotal: 0, vat_rate: 0, vat_amount: 0, grand_total: 0, amount_text_th: 'ศูนย์บาทถ้วน' },
+  })),
 }));
 
 jest.mock('@/lib/documentNumber', () => ({
@@ -57,6 +66,7 @@ const mockedRequirePermission = requirePermission as jest.Mock;
 const mockedRequireYardAccess = requireYardAccess as jest.Mock;
 const mockedBuildContinuousPrintPayload = buildContinuousPrintPayload as jest.Mock;
 const mockedBuildSampleContinuousPrintPayload = buildSampleContinuousPrintPayload as jest.Mock;
+const mockedBuildSampleContinuousPrintPayloadWithCompanyProfile = buildSampleContinuousPrintPayloadWithCompanyProfile as jest.Mock;
 const mockedNextDocumentNumber = nextDocumentNumber as jest.Mock;
 
 type QueryPlan = Array<{ recordset?: unknown[] }>;
@@ -96,6 +106,11 @@ describe('document template API', () => {
       totals: { subtotal: 0, vat_rate: 0, vat_amount: 0, grand_total: 0, amount_text_th: 'ศูนย์บาทถ้วน' },
     });
     mockedBuildSampleContinuousPrintPayload.mockReturnValue({
+      document: { invoice_id: 0, document_type: 'sample' },
+      lines: [],
+      totals: { subtotal: 0, vat_rate: 0, vat_amount: 0, grand_total: 0, amount_text_th: 'ศูนย์บาทถ้วน' },
+    });
+    mockedBuildSampleContinuousPrintPayloadWithCompanyProfile.mockResolvedValue({
       document: { invoice_id: 0, document_type: 'sample' },
       lines: [],
       totals: { subtotal: 0, vat_rate: 0, vat_amount: 0, grand_total: 0, amount_text_th: 'ศูนย์บาทถ้วน' },
@@ -527,7 +542,8 @@ describe('document template API', () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'document_templates.view', expect.any(String));
     expect(mockedRequireAnyPermission).not.toHaveBeenCalled();
     expect(mockedRequireYardAccess).not.toHaveBeenCalled();
-    expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
+    expect(mockedBuildSampleContinuousPrintPayloadWithCompanyProfile).toHaveBeenCalledWith(db);
+    expect(mockedBuildSampleContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
     expect(db.queries[0]).toContain("t.document_type IN ('receipt', 'tax_invoice_receipt')");
@@ -551,7 +567,7 @@ describe('document template API', () => {
 
   it('returns designer draft preview when template id and version are specified', async () => {
     const config = buildDefaultContinuousTemplateConfig();
-    const db = makeDb([{ recordset: [{ template_code: 'TAX_CONTINUOUS', version_no: 3, status: 'draft', config_json: JSON.stringify(config) }] }]);
+    const db = makeDb([{ recordset: [{ template_code: 'TAX_CONTINUOUS', template_name: 'Continuous Tax Invoice / Receipt', version_no: 3, status: 'draft', config_json: JSON.stringify(config) }] }]);
     mockedGetDb.mockResolvedValue(db);
     const request = makeRequest('/api/document-templates/preview?preview=sample&type=tax_invoice_receipt&templateId=12&versionNo=3');
 
@@ -565,7 +581,12 @@ describe('document template API', () => {
     ]));
     expect(db.queries[0]).toContain('t.template_id = @templateId');
     expect(db.queries[0]).toContain('v.version_no = @versionNo');
-    expect(body.template).toEqual({ template_code: 'TAX_CONTINUOUS', template_version: 3 });
+    expect(body.template).toEqual({
+      template_code: 'TAX_CONTINUOUS',
+      template_name: 'Continuous Tax Invoice / Receipt',
+      template_family: 'continuous_tax_receipt',
+      template_version: 3,
+    });
   });
 
   it('returns real invoice preview payload without allocating document numbers', async () => {
@@ -595,6 +616,7 @@ describe('document template API', () => {
       invoiceId: 77,
       type: 'tax_invoice_receipt',
     });
+    expect(mockedBuildSampleContinuousPrintPayloadWithCompanyProfile).not.toHaveBeenCalled();
     expect(mockedBuildSampleContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
     expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
@@ -650,7 +672,8 @@ describe('document template API', () => {
     expect(response.status).toBe(200);
     expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'document_templates.test_print', expect.any(String));
     expect(mockedRequireAnyPermission).not.toHaveBeenCalled();
-    expect(mockedBuildSampleContinuousPrintPayload).toHaveBeenCalled();
+    expect(mockedBuildSampleContinuousPrintPayloadWithCompanyProfile).toHaveBeenCalledWith(db);
+    expect(mockedBuildSampleContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedBuildContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
     expect(db.queries.join('\n')).not.toContain('DocumentPrintLogs');
@@ -726,6 +749,7 @@ describe('document template API', () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(request, db, 'document_templates.test_print', expect.any(String));
     expect(body.error).toBe('JSON body ไม่ถูกต้อง');
     expect(db.query).not.toHaveBeenCalled();
+    expect(mockedBuildSampleContinuousPrintPayloadWithCompanyProfile).not.toHaveBeenCalled();
     expect(mockedBuildSampleContinuousPrintPayload).not.toHaveBeenCalled();
     expect(mockedNextDocumentNumber).not.toHaveBeenCalled();
     expect(mockedLogAudit).not.toHaveBeenCalled();

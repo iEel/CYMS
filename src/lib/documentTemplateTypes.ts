@@ -105,6 +105,7 @@ export interface DocumentTemplateLineItemsSection {
 }
 
 export interface DocumentTemplateConfig {
+  template_family?: 'continuous_tax_receipt' | 'a4_tax_receipt';
   paper: DocumentTemplatePaper;
   mode: DocumentTemplateMode;
   copy_mode: DocumentTemplateCopyMode;

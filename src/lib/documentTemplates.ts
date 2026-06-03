@@ -98,6 +98,7 @@ function repairStoredTemplateConfig(config: unknown) {
 
 export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
   const config: DocumentTemplateConfig = {
+    template_family: 'continuous_tax_receipt',
     paper: {
       width_mm: 241.3,
       height_mm: 139.7,

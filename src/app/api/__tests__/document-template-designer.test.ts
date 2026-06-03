@@ -2,6 +2,7 @@ import {
   addFieldFromBinding,
   addLineItemColumn,
   applyCalibrationProfileToConfig,
+  applyElementPatch,
   applyFieldPatch,
   applyLineItemColumnPatch,
   applyLineItemsPatch,
@@ -9,16 +10,21 @@ import {
   canUseTemplateBinding,
   createDesignerHistory,
   moveLineItemColumn,
+  nudgeElement,
   nudgeField,
   pushDesignerHistory,
   redoDesignerHistory,
+  resizeElement,
   snapMm,
   summarizeTemplateDiff,
   undoDesignerHistory,
   validateDesignerTemplateConfig,
 } from '@/lib/documentTemplateDesigner';
 import { normalizeTemplateCanvasConfig } from '@/lib/documentTemplateCanvas';
-import { buildDefaultContinuousTemplateConfig as buildFallbackDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
+import {
+  buildDefaultA4TaxReceiptTemplateConfig,
+  buildDefaultContinuousTemplateConfig as buildFallbackDefaultContinuousTemplateConfig,
+} from '@/lib/documentTemplateDefaults';
 import {
   buildDefaultContinuousTemplateConfig,
   normalizeTemplateConfig,
@@ -59,6 +65,26 @@ describe('document template designer helpers', () => {
     ]));
   });
 
+  it('creates A4 tax invoice receipt templates as a separate layout family', () => {
+    const continuous = buildDefaultContinuousTemplateConfig();
+    const a4 = buildDefaultA4TaxReceiptTemplateConfig();
+
+    expect(continuous.paper.width_mm).toBe(241.3);
+    expect(continuous.paper.height_mm).toBe(139.7);
+    expect(a4.template_family).toBe('a4_tax_receipt');
+    expect(a4.paper.width_mm).toBe(210);
+    expect(a4.paper.height_mm).toBe(297);
+    expect(a4.sections.line_items.max_rows).toBeGreaterThan(continuous.sections.line_items.max_rows);
+    expect(a4.elements?.map(element => element.element_id)).toEqual(expect.arrayContaining([
+      'a4-company-header',
+      'a4-customer-box',
+      'a4-line-items',
+      'a4-totals-table',
+      'a4-payment-box',
+    ]));
+    expectElementsInsidePaper(normalizeTemplateCanvasConfig(a4));
+  });
+
   it('normalizes stored legacy templates with generated canvas elements', () => {
     const config = buildDefaultContinuousTemplateConfig();
     const legacy = { ...config };
@@ -81,6 +107,21 @@ describe('document template designer helpers', () => {
     expect(normalized.elements?.some(element => element.element_id === 'sonic-company-header')).toBe(true);
     expect(normalized.elements?.some(element => element.type === 'line_items')).toBe(true);
     expectElementsInsidePaper(normalized);
+  });
+
+  it('unlocks legacy generated SONIC form elements so existing templates are editable', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const legacyLocked = {
+      ...config,
+      elements: config.elements?.map(element => element.type === 'line_items'
+        ? element
+        : { ...element, locked: true }),
+    };
+
+    const normalized = normalizeTemplateCanvasConfig(legacyLocked);
+
+    expect(normalized.elements?.find(element => element.element_id === 'sonic-customer-box')?.locked).toBe(false);
+    expect(normalized.elements?.find(element => element.element_id === 'sonic-line-items')?.locked).toBe(false);
   });
 
   it('syncs line item element geometry when line item section geometry changes', () => {
@@ -154,6 +195,42 @@ describe('document template designer helpers', () => {
 
     expect(moved.fields[0]).toEqual(locked.fields[0]);
     expect(patched.fields[0]).toEqual(locked.fields[0]);
+  });
+
+  it('snaps and edits full-form canvas element geometry in mm', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+
+    const moved = nudgeElement(config, 'sonic-customer-box', { dxMm: 2.4, dyMm: 3.6, snapMm: 1 });
+    const resized = resizeElement(moved, 'sonic-customer-box', { widthMm: 120.4, heightMm: 24.4, snapMm: 1 });
+    const patched = applyElementPatch(resized, 'sonic-customer-box', { label: 'Customer details box' });
+    const element = patched.elements?.find(item => item.element_id === 'sonic-customer-box');
+
+    expect(element).toMatchObject({
+      x_mm: 6,
+      y_mm: 38,
+      width_mm: 120,
+      height_mm: 24,
+      label: 'Customer details box',
+    });
+  });
+
+  it('does not move, resize, or edit locked full-form canvas elements', () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const locked = {
+      ...config,
+      elements: config.elements?.map(element => element.element_id === 'sonic-customer-box'
+        ? { ...element, locked: true }
+        : element),
+    };
+    const original = locked.elements?.find(element => element.element_id === 'sonic-customer-box');
+
+    const moved = nudgeElement(locked, 'sonic-customer-box', { dxMm: 10, dyMm: 10, snapMm: 1 });
+    const resized = resizeElement(locked, 'sonic-customer-box', { widthMm: 20, heightMm: 20, snapMm: 1 });
+    const patched = applyElementPatch(locked, 'sonic-customer-box', { label: 'Changed' });
+
+    expect(moved.elements?.find(element => element.element_id === 'sonic-customer-box')).toEqual(original);
+    expect(resized.elements?.find(element => element.element_id === 'sonic-customer-box')).toEqual(original);
+    expect(patched.elements?.find(element => element.element_id === 'sonic-customer-box')).toEqual(original);
   });
 
   it('validates bindings against the continuous receipt allowlist', () => {

@@ -1,12 +1,69 @@
 import { amountToThaiBahtText } from '@/lib/thaiBahtText';
 import type { ContinuousPrintPayload } from './billingContinuousPrintTypes';
 
-export function buildSampleContinuousPrintPayload(): ContinuousPrintPayload {
+export type CompanyProfileSampleSource = Partial<{
+  company_name: unknown;
+  name: unknown;
+  name_th: unknown;
+  name_en: unknown;
+  tax_id: unknown;
+  address: unknown;
+  address_th: unknown;
+  address_en: unknown;
+  phone: unknown;
+  email: unknown;
+  logo_url: unknown;
+  branch_type: unknown;
+  branch_number: unknown;
+  yard_name: unknown;
+  yard_code: unknown;
+}>;
+
+function sampleString(value: unknown, fallback = '') {
+  if (value === null || value === undefined) return fallback;
+  return String(value).trim() || fallback;
+}
+
+export function mergeCompanyProfileIntoContinuousPrintPayload(
+  payload: ContinuousPrintPayload,
+  companyProfile?: CompanyProfileSampleSource | null,
+): ContinuousPrintPayload {
+  if (!companyProfile) return payload;
+
+  const companyName = sampleString(
+    companyProfile.company_name ?? companyProfile.name_th ?? companyProfile.name,
+    payload.company.company_name,
+  );
+
+  return {
+    ...payload,
+    company: {
+      ...payload.company,
+      name: companyName,
+      company_name: companyName,
+      name_th: sampleString(companyProfile.name_th ?? companyProfile.company_name, companyName),
+      name_en: sampleString(companyProfile.name_en, ''),
+      tax_id: sampleString(companyProfile.tax_id, payload.company.tax_id),
+      address: sampleString(companyProfile.address, payload.company.address),
+      address_th: sampleString(companyProfile.address_th ?? companyProfile.address, payload.company.address),
+      address_en: sampleString(companyProfile.address_en, ''),
+      phone: sampleString(companyProfile.phone, payload.company.phone),
+      email: sampleString(companyProfile.email, payload.company.email),
+      logo_url: sampleString(companyProfile.logo_url, ''),
+      branch_type: sampleString(companyProfile.branch_type, payload.company.branch_type),
+      branch_number: sampleString(companyProfile.branch_number, payload.company.branch_number),
+      yard_name: sampleString(companyProfile.yard_name, payload.company.yard_name),
+      yard_code: sampleString(companyProfile.yard_code, payload.company.yard_code),
+    },
+  };
+}
+
+export function buildSampleContinuousPrintPayload(companyProfile?: CompanyProfileSampleSource | null): ContinuousPrintPayload {
   const subtotal = 4094.5;
   const vatAmount = 286.61;
   const grandTotal = 4381.11;
 
-  return {
+  const payload: ContinuousPrintPayload = {
     company: {
       name: 'บริษัท โซนิค อินเตอร์เฟรท จำกัด (มหาชน)',
       company_name: 'บริษัท โซนิค อินเตอร์เฟรท จำกัด (มหาชน)',
@@ -87,4 +144,6 @@ export function buildSampleContinuousPrintPayload(): ContinuousPrintPayload {
       collector_name: 'KIT',
     },
   };
+
+  return mergeCompanyProfileIntoContinuousPrintPayload(payload, companyProfile);
 }

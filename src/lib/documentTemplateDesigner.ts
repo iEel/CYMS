@@ -1,6 +1,7 @@
 import type {
   DocumentTemplateCalibrationProfile,
   DocumentTemplateConfig,
+  DocumentTemplateElement,
   DocumentTemplateField,
   DocumentTemplateFieldLayer,
   DocumentTemplateFontWeight,
@@ -84,6 +85,25 @@ export type FieldPatch = Partial<Pick<
   | 'layer'
   | 'format'
   | 'sample_value'
+>>;
+
+export type ElementPatch = Partial<Pick<
+  DocumentTemplateElement,
+  | 'label'
+  | 'binding_source'
+  | 'text'
+  | 'x_mm'
+  | 'y_mm'
+  | 'width_mm'
+  | 'height_mm'
+  | 'font_size'
+  | 'font_weight'
+  | 'text_align'
+  | 'visible'
+  | 'locked'
+  | 'layer'
+  | 'border'
+  | 'border_width_mm'
 >>;
 
 export type FieldNudge = {
@@ -336,6 +356,59 @@ export function applyLineItemsPatch(config: DocumentTemplateConfig, patch: LineI
   return syncLineItemsElementGeometry(next);
 }
 
+function clampElementToPaper(config: DocumentTemplateConfig, element: DocumentTemplateElement): DocumentTemplateElement {
+  const width = clampMm(element.width_mm, 1, config.paper.width_mm);
+  const height = clampMm(element.height_mm, 1, config.paper.height_mm);
+  const x = clampMm(element.x_mm, 0, Math.max(0, config.paper.width_mm - width));
+  const y = clampMm(element.y_mm, 0, Math.max(0, config.paper.height_mm - height));
+  const maxWidth = Math.max(1, config.paper.width_mm - x);
+  const maxHeight = Math.max(1, config.paper.height_mm - y);
+
+  return {
+    ...element,
+    x_mm: x,
+    y_mm: y,
+    width_mm: clampMm(width, 1, maxWidth),
+    height_mm: clampMm(height, 1, maxHeight),
+  };
+}
+
+function safeElementPatch(patch: ElementPatch): ElementPatch {
+  const next = { ...patch };
+  if (next.binding_source && !canUseTemplateBinding(next.binding_source)) {
+    delete next.binding_source;
+  }
+  if (next.font_weight && !['normal', 'medium', 'semibold', 'bold'].includes(next.font_weight)) {
+    delete next.font_weight;
+  }
+  if (next.text_align && !['left', 'center', 'right'].includes(next.text_align)) {
+    delete next.text_align;
+  }
+  if (next.layer && !['form', 'data', 'calibration'].includes(next.layer)) {
+    delete next.layer;
+  }
+  if (next.border_width_mm !== undefined) {
+    if (finiteNumber(next.border_width_mm)) {
+      next.border_width_mm = clampMm(next.border_width_mm, 0, 5);
+    } else {
+      delete next.border_width_mm;
+    }
+  }
+  if (hasUnsafeText(next.label) || hasUnsafeText(next.text)) {
+    delete next.label;
+    delete next.text;
+  }
+  return next;
+}
+
+function clampElementsToPaper(config: DocumentTemplateConfig): DocumentTemplateConfig {
+  if (!Array.isArray(config.elements)) return config;
+  return {
+    ...config,
+    elements: config.elements.map(element => clampElementToPaper(config, element)),
+  };
+}
+
 export function resizeLineItems(
   config: DocumentTemplateConfig,
   size: { widthMm: number; heightMm: number; snapMm: number },
@@ -436,7 +509,7 @@ export function applyCalibrationProfileToConfig(
   next.fields = next.fields.map(field => clampFieldToPaper(next, field));
   next.sections.line_items = clampLineItemsToPaper(next);
   next.default_calibration_profile_id = profile.profile_id;
-  return syncLineItemsElementGeometry(next);
+  return clampElementsToPaper(syncLineItemsElementGeometry(next));
 }
 
 export function applyPaperPatchToConfig(
@@ -457,7 +530,7 @@ export function applyPaperPatchToConfig(
   }
   next.fields = next.fields.map(field => clampFieldToPaper(next, field));
   next.sections.line_items = clampLineItemsToPaper(next);
-  return syncLineItemsElementGeometry(next);
+  return clampElementsToPaper(syncLineItemsElementGeometry(next));
 }
 
 export function applyFieldPatch(
@@ -474,6 +547,51 @@ export function applyFieldPatch(
     });
   });
   return next;
+}
+
+export function applyElementPatch(
+  config: DocumentTemplateConfig,
+  elementId: string,
+  patch: ElementPatch,
+): DocumentTemplateConfig {
+  if (!Array.isArray(config.elements)) return config;
+  const next = cloneConfig(config);
+  next.elements = next.elements?.map(element => {
+    if (element.element_id !== elementId || element.locked || element.type === 'line_items') return element;
+    return clampElementToPaper(next, {
+      ...element,
+      ...safeElementPatch(patch),
+    });
+  });
+  return next;
+}
+
+export function nudgeElement(
+  config: DocumentTemplateConfig,
+  elementId: string,
+  nudge: FieldNudge,
+): DocumentTemplateConfig {
+  const element = config.elements?.find(item => item.element_id === elementId);
+  if (!element || element.locked || element.type === 'line_items') return config;
+
+  return applyElementPatch(config, elementId, {
+    x_mm: snapMm(element.x_mm + nudge.dxMm, nudge.snapMm),
+    y_mm: snapMm(element.y_mm + nudge.dyMm, nudge.snapMm),
+  });
+}
+
+export function resizeElement(
+  config: DocumentTemplateConfig,
+  elementId: string,
+  size: { widthMm: number; heightMm: number; snapMm: number },
+): DocumentTemplateConfig {
+  const element = config.elements?.find(item => item.element_id === elementId);
+  if (!element || element.locked || element.type === 'line_items') return config;
+
+  return applyElementPatch(config, elementId, {
+    width_mm: snapMm(size.widthMm, size.snapMm),
+    height_mm: snapMm(size.heightMm, size.snapMm),
+  });
 }
 
 export function nudgeField(

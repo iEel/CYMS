@@ -555,6 +555,7 @@ container-yard-system/
 │   ├── seed-users.js             # Seed 5 demo users
 │   ├── seed-permissions.js       # Seed 33 permissions × 6 roles (incl. customers module)
 │   ├── seed-containers.js        # Seed 10 zones + 925 containers
+│   ├── clear-business-data-preserve-users.js # ล้าง business/transaction data โดยรักษา Users.password_hash + auth config
 │   ├── migrate-storage-tiers.js  # สร้างตาราง StorageRateTiers + ค่าเริ่มต้น 4 ขั้น
 │   ├── migrate-edi-endpoints.js  # สร้างตาราง EDIEndpoints + EDISendLog (SFTP config)
 │   ├── migrate-edi-schedule.js   # **เพิ่ม schedule columns** (schedule_enabled, schedule_cron, schedule_last_run, schedule_yard_id)

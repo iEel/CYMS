@@ -822,27 +822,37 @@ node scripts/seed-permissions.js
 # ❌ ไม่ต้องรัน seed-containers.js (ข้อมูลตัวอย่าง)
 ```
 
-### วิธีที่ 2: 🧹 ลบเฉพาะข้อมูลทดสอบ (เก็บตั้งค่าไว้)
+### วิธีที่ 2: 🧹 ล้างข้อมูลธุรกิจ/ธุรกรรม แต่เก็บ User Password
 
-ใช้ script สำเร็จรูป — ลบข้อมูลธุรกรรม แต่เก็บการตั้งค่าไว้:
+ใช้ script สำเร็จรูปตัวใหม่ — ล้างข้อมูลปฏิบัติงานหลัก แต่ **ไม่แตะ `Users.password_hash` / 2FA / trusted device / role / permission**:
 
 ```bash
 cd /var/www/container-yard-system
-node scripts/clear-test-data.js --confirm
+
+# ดู preview ก่อนว่าตารางไหนจะถูกลบกี่รายการ
+node scripts/clear-business-data-preserve-users.js
+
+# ลบจริง
+node scripts/clear-business-data-preserve-users.js --confirm
 ```
 
 | ลบ | เก็บ |
 |-----|------|
-| ตู้คอนเทนเนอร์, บิล, Gate, Work Orders | Users, Yards, Zones |
-| M&R, Audit Logs, Holds | Customers, Tariff |
-| EDI Logs, Bookings | CEDEX Codes, Company Profile |
+| Containers, Bookings, Gate/EIR, Work Orders | Users + password_hash + 2FA |
+| Invoice/Receipt/Statement/Payment, Billing Clearance | Roles, Permissions, RolePermissions |
+| M&R, Reefer Checks/Exceptions, Portal Grants/Requests | Yards, YardZones, UserYardAccess |
+| EDI Logs, Audit Logs, Attachments, Document Lifecycle/Print Logs | Customers, Tariff, Document Templates, CEDEX, Company Profile |
 
-หลังรันเสร็จ ลบไฟล์รูป/เอกสารทดสอบด้วย โดยระวังอย่าลบไฟล์ production:
+ถ้าต้องการล้างรูป/เอกสารแนบใน `public/uploads` ด้วย ให้เพิ่ม flag:
 
 ```bash
-# ถ้าเป็น DB ทดสอบล้วนและยืนยันว่าไม่มีไฟล์จริง:
-rm -rf public/uploads/*
-mkdir -p public/uploads
+node scripts/clear-business-data-preserve-users.js --confirm --delete-uploads
+```
+
+หลังรันเสร็จให้ตรวจ schema ล่าสุดและ restart:
+
+```bash
+node scripts/migrate-runtime-core-schema.js
 pm2 restart cyms
 ```
 

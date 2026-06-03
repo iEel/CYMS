@@ -8,7 +8,7 @@ import {
   buildDefaultContinuousTemplateConfig,
   parseStoredTemplateConfig,
 } from '@/lib/documentTemplates';
-import { buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrint';
+import { buildSampleContinuousPrintPayloadWithCompanyProfile } from '@/lib/billingContinuousPrint';
 import { applyCalibrationProfileToConfig } from '@/lib/documentTemplateDesigner';
 import type {
   DocumentTemplateConfig,
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
       copyMode,
       calibrationProfileId,
     );
-    const payload = buildSampleContinuousPrintPayload();
+    const payload = await buildSampleContinuousPrintPayloadWithCompanyProfile(db);
 
     await logAudit({
       userId: actor.userId,
