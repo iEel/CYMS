@@ -4,7 +4,10 @@ import {
   parseStoredTemplateConfig,
   validateTemplateConfig,
 } from '@/lib/documentTemplates';
-import { buildDefaultContinuousTemplateConfig as buildDefaultFallbackTemplateConfig } from '@/lib/documentTemplateDefaults';
+import {
+  buildDefaultA4TaxReceiptTemplateConfig,
+  buildDefaultContinuousTemplateConfig as buildDefaultFallbackTemplateConfig,
+} from '@/lib/documentTemplateDefaults';
 import { validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
 
 describe('document template helpers', () => {
@@ -60,6 +63,18 @@ describe('document template helpers', () => {
       config.sections.line_items.y_mm + config.sections.line_items.row_height_mm,
     );
     expect(validateDesignerTemplateConfig(config)).toEqual({ valid: true, errors: [] });
+  });
+
+  it('normalizes the default A4 tax invoice receipt config for API creation', () => {
+    const config = buildDefaultA4TaxReceiptTemplateConfig();
+
+    expect(normalizeTemplateConfig(config)).toMatchObject({
+      config: expect.objectContaining({
+        template_family: 'a4_tax_receipt',
+        paper: expect.objectContaining({ width_mm: 210, height_mm: 297 }),
+      }),
+      errors: [],
+    });
   });
 
   it('normalizes legacy stored line item start position before designer validation', () => {

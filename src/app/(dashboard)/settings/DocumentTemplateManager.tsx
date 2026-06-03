@@ -14,8 +14,12 @@ import { CalibrationProfilesPanel } from '@/components/document-templates/Calibr
 import { DocumentTemplateDesigner } from '@/components/document-templates/DocumentTemplateDesigner';
 import { PrintHistoryPanel } from '@/components/document-templates/PrintHistoryPanel';
 import { PublishDiffDialog } from '@/components/document-templates/PublishDiffDialog';
-import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
-import { summarizeTemplateDiff, validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
+import { buildSampleContinuousPrintPayload, type CompanyProfileSampleSource } from '@/lib/billingContinuousPrintSample';
+import {
+  buildDefaultA4TaxReceiptTemplateConfig,
+  buildDefaultContinuousTemplateConfig,
+} from '@/lib/documentTemplateDefaults';
+import { applyPaperPatchToConfig, summarizeTemplateDiff, validateDesignerTemplateConfig } from '@/lib/documentTemplateDesigner';
 import type {
   DocumentTemplateConfig,
   DocumentTemplateCopyMode,
@@ -71,6 +75,8 @@ type PublishDraftContext = {
   changes: string[];
 };
 
+type DefaultTemplateKind = 'continuous' | 'a4';
+
 const defaultConfig = buildDefaultContinuousTemplateConfig();
 
 function cloneDefaultConfig(): DocumentTemplateConfig {
@@ -79,6 +85,26 @@ function cloneDefaultConfig(): DocumentTemplateConfig {
 
 function cloneTemplateConfig(config: DocumentTemplateConfig): DocumentTemplateConfig {
   return JSON.parse(JSON.stringify(config)) as DocumentTemplateConfig;
+}
+
+function defaultTemplateDefinition(kind: DefaultTemplateKind) {
+  if (kind === 'a4') {
+    return {
+      template_code: `A4_TAX_RECEIPT_${Date.now().toString().slice(-5)}`,
+      template_name: 'A4 Tax Invoice / Receipt',
+      document_type: 'tax_invoice_receipt',
+      description: 'Default A4 tax invoice / receipt template',
+      config: buildDefaultA4TaxReceiptTemplateConfig(),
+    };
+  }
+
+  return {
+    template_code: `CONT_TAX_RECEIPT_${Date.now().toString().slice(-5)}`,
+    template_name: 'Continuous Tax Invoice / Receipt',
+    document_type: 'tax_invoice_receipt',
+    description: 'Default continuous tax invoice / receipt template',
+    config: cloneDefaultConfig(),
+  };
 }
 
 function statusTone(status?: string | null) {
@@ -128,6 +154,7 @@ export default function DocumentTemplateManager() {
   const [actionId, setActionId] = useState<string | null>(null);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishDraftContext, setPublishDraftContext] = useState<PublishDraftContext | null>(null);
+  const [companyPreview, setCompanyPreview] = useState<CompanyProfileSampleSource | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -137,6 +164,7 @@ export default function DocumentTemplateManager() {
   );
   const canEditDraft = editingVersion?.status === 'draft';
   const selectedTemplateVersion = editingVersion?.version_no || selectedTemplate?.current_version_no || selectedTemplate?.version_no || undefined;
+  const designerSamplePayload = useMemo(() => buildSampleContinuousPrintPayload(companyPreview), [companyPreview]);
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -157,6 +185,17 @@ export default function DocumentTemplateManager() {
     }
   };
 
+  const loadCompanyPreview = async () => {
+    try {
+      const response = await fetch('/api/settings/company');
+      if (!response.ok) return;
+      const data = await response.json() as CompanyProfileSampleSource | null;
+      setCompanyPreview(data || null);
+    } catch {
+      setCompanyPreview(null);
+    }
+  };
+
   const loadDetail = async (templateId: number) => {
     setError('');
     const response = await fetch(`/api/document-templates/${templateId}`);
@@ -172,6 +211,7 @@ export default function DocumentTemplateManager() {
 
   useEffect(() => {
     loadTemplates();
+    loadCompanyPreview();
   }, []);
 
   useEffect(() => {
@@ -228,27 +268,22 @@ export default function DocumentTemplateManager() {
     }
   };
 
-  const createDefaultTemplate = async () => {
-    setActionId('create-default');
+  const createDefaultTemplate = async (kind: DefaultTemplateKind) => {
+    setActionId(`create-default-${kind}`);
     setError('');
     setMessage('');
+    const definition = defaultTemplateDefinition(kind);
     try {
       const response = await fetch('/api/document-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          template_code: `CONT_TAX_RECEIPT_${Date.now().toString().slice(-5)}`,
-          template_name: 'Continuous Tax Invoice / Receipt',
-          document_type: 'tax_invoice_receipt',
-          description: 'Default continuous tax invoice / receipt template',
-          config: cloneDefaultConfig(),
-        }),
+        body: JSON.stringify(definition),
       });
       const data = await response.json() as { error?: string; template?: DocumentTemplateRow };
       if (!response.ok) throw new Error(data.error || 'Unable to create default template');
       await loadTemplates();
       if (data.template?.template_id) setSelectedId(data.template.template_id);
-      setMessage('สร้าง default continuous template แล้ว');
+      setMessage(kind === 'a4' ? 'สร้าง default A4 template แล้ว' : 'สร้าง default continuous template แล้ว');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create default template');
     } finally {
@@ -512,14 +547,22 @@ export default function DocumentTemplateManager() {
 
   const updatePaper = (key: keyof DocumentTemplateConfig['paper'], value: number) => {
     if (!Number.isFinite(value)) return;
-    setConfig(current => ({
-      ...current,
-      paper: {
-        ...current.paper,
-        [key]: value,
-      },
-    }));
+    setConfig(current => applyPaperPatchToConfig(current, { [key]: value }));
   };
+
+  const isContinuousFamily = config.template_family === 'continuous_tax_receipt'
+    || selectedTemplate?.template_code?.startsWith('CONT_')
+    || selectedTemplate?.template_name?.toLowerCase().includes('continuous');
+  const isA4Family = config.template_family === 'a4_tax_receipt'
+    || selectedTemplate?.template_code?.startsWith('A4_')
+    || selectedTemplate?.template_name?.toLowerCase().includes('a4');
+  const paperSummary = isA4Family
+    ? 'A4 layout'
+    : isContinuousFamily
+      ? 'Continuous 9.5 x 5.5 layout'
+      : 'Custom layout';
+  const showContinuousPaperWarning = isContinuousFamily
+    && (Math.abs(config.paper.width_mm - 241.3) > 0.1 || Math.abs(config.paper.height_mm - 139.7) > 0.1);
 
   return (
     <div className="space-y-4">
@@ -527,7 +570,7 @@ export default function DocumentTemplateManager() {
         <div>
           <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Document Templates</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Canvas designer สำหรับ Continuous Tax Invoice / Receipt, draft workflow และ test print
+            Canvas designer สำหรับ A4 และ Continuous Tax Invoice / Receipt, draft workflow และ test print
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -588,9 +631,13 @@ export default function DocumentTemplateManager() {
             ))}
           </div>
           <div className="space-y-2 border-t border-slate-200 p-4 dark:border-slate-700">
-            <button type="button" onClick={createDefaultTemplate} disabled={actionId !== null}
+            <button type="button" onClick={() => createDefaultTemplate('continuous')} disabled={actionId !== null}
               className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
-              <FilePlus2 size={14} /> Create Default Template
+              <FilePlus2 size={14} /> Create Continuous Template
+            </button>
+            <button type="button" onClick={() => createDefaultTemplate('a4')} disabled={actionId !== null}
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-40">
+              <FilePlus2 size={14} /> Create A4 Template
             </button>
             <button type="button" onClick={() => runAction('duplicate')} disabled={!selectedTemplate || actionId !== null}
               className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300">
@@ -619,6 +666,9 @@ export default function DocumentTemplateManager() {
                     </h4>
                     <p className="mt-1 text-xs text-slate-500">
                       Editing {editingVersion.status || 'none'} version {editingVersion.version_no || '-'} · Published version {detail?.template.current_version_no || '-'}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-slate-500">
+                      {paperSummary} · A4 layout เป็น template แยกจาก continuous form
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -673,6 +723,11 @@ export default function DocumentTemplateManager() {
                       className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-800 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
                   </label>
                 </div>
+                {showContinuousPaperWarning ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Continuous template ถูกออกแบบสำหรับ 241.3 x 139.7 mm ถ้าต้องการปริ้น A4 ให้สร้าง A4 layout เป็น template แยก เพื่อไม่ให้ตำแหน่งกรอบและตารางเพี้ยน
+                  </div>
+                ) : null}
               </section>
 
               <CalibrationProfilesPanel
@@ -691,6 +746,7 @@ export default function DocumentTemplateManager() {
                 config={config}
                 canEdit={canEditDraft}
                 canPreview={Boolean(selectedTemplate && editingVersion)}
+                samplePayload={designerSamplePayload}
                 saving={saving}
                 onChange={setConfig}
                 onCreateDraft={createDraft}
@@ -712,9 +768,13 @@ export default function DocumentTemplateManager() {
                   className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-blue-300 dark:border-slate-700 dark:text-slate-300">
                   <RefreshCw size={14} /> Refresh
                 </button>
-                <button type="button" onClick={createDefaultTemplate} disabled={actionId !== null}
+                <button type="button" onClick={() => createDefaultTemplate('continuous')} disabled={actionId !== null}
                   className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
-                  <FilePlus2 size={14} /> Create Default Template
+                  <FilePlus2 size={14} /> Create Continuous Template
+                </button>
+                <button type="button" onClick={() => createDefaultTemplate('a4')} disabled={actionId !== null}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-40">
+                  <FilePlus2 size={14} /> Create A4 Template
                 </button>
               </div>
             </section>

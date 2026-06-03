@@ -1,4 +1,5 @@
 import type { DocumentTemplateConfig, DocumentTemplateField } from './documentTemplateTypes';
+import { buildA4TaxReceiptElements, buildSonicFullFormElements } from './documentTemplateCanvas';
 
 const THAI_COPY_LABELS = [
   'ต้นฉบับใบกำกับภาษี/ใบเสร็จรับเงิน',
@@ -18,17 +19,18 @@ function field(input: Omit<DocumentTemplateField, 'visible' | 'layer' | 'locked'
 }
 
 export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
-  return {
+  const config: DocumentTemplateConfig = {
+    template_family: 'continuous_tax_receipt',
     paper: {
       width_mm: 241.3,
       height_mm: 139.7,
       top_offset_mm: 0,
       left_offset_mm: 0,
       print_scale: 1,
-      margin_top_mm: 6,
-      margin_right_mm: 6,
-      margin_bottom_mm: 6,
-      margin_left_mm: 6,
+      margin_top_mm: 4,
+      margin_right_mm: 4,
+      margin_bottom_mm: 4,
+      margin_left_mm: 4,
     },
     mode: 'full',
     copy_mode: 'carbonless',
@@ -43,11 +45,11 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
         field_key: 'document.document_title',
         label: 'Document title',
         binding_source: 'document.document_title',
-        x_mm: 9,
-        y_mm: 6,
-        width_mm: 110,
+        x_mm: 158,
+        y_mm: 8,
+        width_mm: 72,
         height_mm: 8,
-        font_size: 13,
+        font_size: 14,
         font_weight: 'bold',
         text_align: 'left',
         format: 'text',
@@ -254,42 +256,42 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
       line_items: {
         section_id: 'line-items',
         binding_source: 'lines',
-        x_mm: 9,
-        y_mm: 55,
-        start_y_mm: 61,
-        width_mm: 222,
-        row_height_mm: 6,
-        max_rows: 7,
+        x_mm: 4,
+        y_mm: 59,
+        start_y_mm: 67,
+        width_mm: 233,
+        row_height_mm: 8,
+        max_rows: 5,
         columns: [
           {
             column_id: 'description',
             field_key: 'lines[].description',
-            label: 'Description',
-            width_mm: 120,
-            text_align: 'left',
+            label: 'รายการ\nDescription',
+            width_mm: 151,
+            text_align: 'center',
             format: 'text',
           },
           {
             column_id: 'quantity',
             field_key: 'lines[].qty',
-            label: 'Qty',
-            width_mm: 22,
-            text_align: 'right',
+            label: 'จำนวน\nQty.',
+            width_mm: 26,
+            text_align: 'center',
             format: 'number',
           },
           {
             column_id: 'unit_price',
             field_key: 'lines[].unit_price',
-            label: 'Unit price',
-            width_mm: 36,
+            label: 'ราคาต่อหน่วย\nQty./Unit',
+            width_mm: 30,
             text_align: 'right',
             format: 'currency:THB',
           },
           {
             column_id: 'amount',
             field_key: 'lines[].amount',
-            label: 'Amount',
-            width_mm: 44,
+            label: 'ราคารวม\nAmount',
+            width_mm: 26,
             text_align: 'right',
             format: 'currency:THB',
           },
@@ -297,4 +299,91 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
       },
     },
   };
+
+  return { ...config, elements: buildSonicFullFormElements(config) };
+}
+
+export function buildDefaultA4TaxReceiptTemplateConfig(): DocumentTemplateConfig {
+  const base = buildDefaultContinuousTemplateConfig();
+  const config: DocumentTemplateConfig = {
+    ...base,
+    template_family: 'a4_tax_receipt',
+    paper: {
+      width_mm: 210,
+      height_mm: 297,
+      top_offset_mm: 0,
+      left_offset_mm: 0,
+      print_scale: 1,
+      margin_top_mm: 10,
+      margin_right_mm: 12,
+      margin_bottom_mm: 10,
+      margin_left_mm: 12,
+    },
+    fields: base.fields.map(field => {
+      if (field.field_id === 'document-title') {
+        return { ...field, x_mm: 150, y_mm: 15, width_mm: 48, height_mm: 10, font_size: 13, text_align: 'center' };
+      }
+      if (field.field_id === 'invoice-number') return { ...field, x_mm: 150, y_mm: 47, width_mm: 44, height_mm: 6 };
+      if (field.field_id === 'receipt-number') return { ...field, x_mm: 150, y_mm: 54, width_mm: 44, height_mm: 6 };
+      if (field.field_id === 'tax-invoice-number') return { ...field, x_mm: 150, y_mm: 61, width_mm: 44, height_mm: 6 };
+      if (field.field_id === 'document-date') return { ...field, x_mm: 150, y_mm: 68, width_mm: 44, height_mm: 6 };
+      if (field.field_id === 'company-name') return { ...field, x_mm: 40, y_mm: 17, width_mm: 104, height_mm: 7 };
+      if (field.field_id === 'company-tax-id') return { ...field, x_mm: 40, y_mm: 33, width_mm: 104, height_mm: 5 };
+      if (field.field_id === 'customer-name') return { ...field, x_mm: 35, y_mm: 50, width_mm: 90, height_mm: 6 };
+      if (field.field_id === 'customer-tax-id') return { ...field, x_mm: 35, y_mm: 70, width_mm: 60, height_mm: 5 };
+      if (field.field_id === 'customer-branch') return { ...field, x_mm: 98, y_mm: 70, width_mm: 42, height_mm: 5 };
+      if (field.field_id === 'totals-subtotal') return { ...field, x_mm: 168, y_mm: 220, width_mm: 28, height_mm: 5 };
+      if (field.field_id === 'totals-vat') return { ...field, x_mm: 168, y_mm: 228, width_mm: 28, height_mm: 5 };
+      if (field.field_id === 'totals-grand-total') return { ...field, x_mm: 168, y_mm: 236, width_mm: 28, height_mm: 6 };
+      if (field.field_id === 'totals-amount-text-th') return { ...field, x_mm: 43, y_mm: 249, width_mm: 120, height_mm: 6 };
+      return field;
+    }),
+    sections: {
+      line_items: {
+        ...base.sections.line_items,
+        x_mm: 12,
+        y_mm: 92,
+        start_y_mm: 101,
+        width_mm: 186,
+        row_height_mm: 9,
+        max_rows: 12,
+        columns: [
+          {
+            column_id: 'description',
+            field_key: 'lines[].description',
+            label: 'รายการ\nDescription',
+            width_mm: 104,
+            text_align: 'center',
+            format: 'text',
+          },
+          {
+            column_id: 'quantity',
+            field_key: 'lines[].qty',
+            label: 'จำนวน\nQty.',
+            width_mm: 24,
+            text_align: 'center',
+            format: 'number',
+          },
+          {
+            column_id: 'unit_price',
+            field_key: 'lines[].unit_price',
+            label: 'ราคาต่อหน่วย\nQty./Unit',
+            width_mm: 30,
+            text_align: 'right',
+            format: 'currency:THB',
+          },
+          {
+            column_id: 'amount',
+            field_key: 'lines[].amount',
+            label: 'ราคารวม\nAmount',
+            width_mm: 28,
+            text_align: 'right',
+            format: 'currency:THB',
+          },
+        ],
+      },
+    },
+  };
+
+  return { ...config, elements: buildA4TaxReceiptElements(config) };
 }

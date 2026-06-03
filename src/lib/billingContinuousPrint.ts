@@ -1,6 +1,10 @@
 import sql from 'mssql';
 import { amountToThaiBahtText } from '@/lib/thaiBahtText';
 import type { ContinuousPrintLine, ContinuousPrintPayload } from './billingContinuousPrintTypes';
+import {
+  buildSampleContinuousPrintPayload as buildStaticSampleContinuousPrintPayload,
+  mergeCompanyProfileIntoContinuousPrintPayload,
+} from './billingContinuousPrintSample';
 export type { ContinuousPrintLine, ContinuousPrintPayload } from './billingContinuousPrintTypes';
 export { buildSampleContinuousPrintPayload } from './billingContinuousPrintSample';
 
@@ -19,7 +23,15 @@ type ParsedNotes = {
   charges?: unknown;
   payment_method?: unknown;
   payment_status?: unknown;
+  cheque_no?: unknown;
+  bank_name?: unknown;
+  cheque_date?: unknown;
+  payment_ref?: unknown;
+  collector_name?: unknown;
   document_type?: unknown;
+  reference_no?: unknown;
+  tax_invoice_number?: unknown;
+  red_ref_no?: unknown;
   ref_invoice_number?: unknown;
 };
 
@@ -142,8 +154,25 @@ function documentTitle(type: string, row: InvoiceRow) {
   const invoiceNumber = asString(row.invoice_number);
   const isCreditNote = row.status === 'credit_note' || row.document_type === 'credit_note' || invoiceNumber.startsWith('CN-');
   if (isCreditNote) return 'ใบลดหนี้';
-  if (type === 'receipt') return 'ใบเสร็จรับเงิน / ใบกำกับภาษี';
-  return 'ใบกำกับภาษี / ใบแจ้งหนี้';
+  if (type === 'receipt' || type === 'tax_invoice_receipt') return 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+  return 'ใบกำกับภาษี/ใบแจ้งหนี้';
+}
+
+function taxInvoiceNumberFor(row: InvoiceRow, notes: ParsedNotes, invoiceNumber: string) {
+  return asString(row.tax_invoice_number || notes.tax_invoice_number || invoiceNumber);
+}
+
+function documentNumberFor(type: string, receiptNumber: string, taxInvoiceNumber: string, invoiceNumber: string) {
+  if ((type === 'receipt' || type === 'tax_invoice_receipt') && receiptNumber) return receiptNumber;
+  if (type === 'tax_invoice_receipt' && taxInvoiceNumber) return taxInvoiceNumber;
+  return invoiceNumber;
+}
+
+function documentDateFor(type: string, row: InvoiceRow) {
+  const explicitDate = dateText(row.document_date || row.issue_date);
+  if (explicitDate) return explicitDate;
+  if ((type === 'receipt' || type === 'tax_invoice_receipt') && row.paid_at) return dateText(row.paid_at);
+  return dateText(row.created_at);
 }
 
 function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload {
@@ -155,10 +184,11 @@ function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload
   const vatRate = subtotal === 0 ? 0 : Number((vatAmount / subtotal).toFixed(4));
   const receiptNumber = asString(row.receipt_number);
   const invoiceNumber = asString(row.invoice_number);
-  const documentNumber = type === 'receipt' && receiptNumber ? receiptNumber : asString(row.invoice_number);
+  const taxInvoiceNumber = taxInvoiceNumberFor(row, notes, invoiceNumber);
+  const documentNumber = documentNumberFor(type, receiptNumber, taxInvoiceNumber, invoiceNumber);
   const companyName = asString(row.company_name, DEFAULT_COMPANY.name);
   const customerName = asString(row.customer_name, 'ลูกค้าทั่วไป');
-  const issueDate = dateText(row.created_at);
+  const issueDate = documentDateFor(type, row);
   const customerBranchType = asString(row.customer_branch_type, 'head_office');
   const customerBranchNumber = asString(row.customer_branch_number, '00000');
 
@@ -191,9 +221,11 @@ function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload
       document_type: type,
       invoice_id: asNumber(row.invoice_id),
       invoice_number: invoiceNumber,
-      tax_invoice_number: invoiceNumber,
+      tax_invoice_number: taxInvoiceNumber,
       receipt_number: receiptNumber,
       document_number: documentNumber,
+      reference_no: asString(row.reference_no || notes.reference_no || row.booking_number || row.ref_invoice_number),
+      red_ref_no: asString(row.red_ref_no || notes.red_ref_no),
       issue_date: issueDate,
       document_date: issueDate,
       due_date: dateText(row.due_date),
@@ -215,6 +247,11 @@ function normalizePayload(row: InvoiceRow, type: string): ContinuousPrintPayload
       status: asString(notes.payment_status || (type === 'receipt' ? 'paid' : row.status)),
       receipt_number: receiptNumber,
       paid_at: dateText(row.paid_at),
+      cheque_no: asString(row.cheque_no || notes.cheque_no),
+      bank_name: asString(row.bank_name || notes.bank_name),
+      cheque_date: dateText(row.cheque_date || notes.cheque_date),
+      payment_ref: asString(row.payment_ref || notes.payment_ref),
+      collector_name: asString(row.collector_name || notes.collector_name),
     },
   };
 }
@@ -271,4 +308,28 @@ export async function buildContinuousPrintPayload(
   if (!row) throw new Error('Invoice not found');
 
   return normalizePayload(row, options.type);
+}
+
+export async function buildSampleContinuousPrintPayloadWithCompanyProfile(
+  db: DbLike,
+): Promise<ContinuousPrintPayload> {
+  const result = await db.request()
+    .query<InvoiceRow>(`
+      SELECT TOP 1
+        company_name,
+        tax_id,
+        address,
+        phone,
+        email,
+        logo_url,
+        ISNULL(branch_type, 'head_office') AS branch_type,
+        ISNULL(branch_number, '00000') AS branch_number
+      FROM CompanyProfile
+      ORDER BY company_id ASC
+    `);
+
+  return mergeCompanyProfileIntoContinuousPrintPayload(
+    buildStaticSampleContinuousPrintPayload(),
+    result.recordset[0],
+  );
 }

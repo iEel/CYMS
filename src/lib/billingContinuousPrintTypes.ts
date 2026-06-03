@@ -11,8 +11,12 @@ export type ContinuousPrintPayload = {
   company: {
     name: string;
     company_name: string;
+    name_th?: string;
+    name_en?: string;
     tax_id: string;
     address: string;
+    address_th?: string;
+    address_en?: string;
     phone: string;
     email: string;
     logo_url: string;
@@ -38,6 +42,9 @@ export type ContinuousPrintPayload = {
     tax_invoice_number: string;
     receipt_number: string;
     document_number: string;
+    reference_no?: string;
+    copy_label?: string;
+    red_ref_no?: string;
     issue_date: string;
     document_date: string;
     due_date: string;
@@ -59,5 +66,10 @@ export type ContinuousPrintPayload = {
     status: string;
     receipt_number: string;
     paid_at: string;
+    cheque_no?: string;
+    bank_name?: string;
+    cheque_date?: string;
+    payment_ref?: string;
+    collector_name?: string;
   };
 };

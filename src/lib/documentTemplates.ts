@@ -1,6 +1,7 @@
 import type { DocumentTemplateConfig, DocumentTemplateField } from './documentTemplateTypes';
 import sql from 'mssql';
 import { validateDesignerTemplateConfig } from './documentTemplateDesigner';
+import { buildSonicFullFormElements, normalizeTemplateCanvasConfig } from './documentTemplateCanvas';
 
 const THAI_COPY_LABELS = [
   'ต้นฉบับใบกำกับภาษี/ใบเสร็จรับเงิน',
@@ -96,17 +97,18 @@ function repairStoredTemplateConfig(config: unknown) {
 }
 
 export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
-  return {
+  const config: DocumentTemplateConfig = {
+    template_family: 'continuous_tax_receipt',
     paper: {
       width_mm: 241.3,
       height_mm: 139.7,
       top_offset_mm: 0,
       left_offset_mm: 0,
       print_scale: 1,
-      margin_top_mm: 6,
-      margin_right_mm: 6,
-      margin_bottom_mm: 6,
-      margin_left_mm: 6,
+      margin_top_mm: 4,
+      margin_right_mm: 4,
+      margin_bottom_mm: 4,
+      margin_left_mm: 4,
     },
     mode: 'full',
     copy_mode: 'carbonless',
@@ -118,11 +120,11 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
         field_key: 'document.document_title',
         label: 'Document title',
         binding_source: 'document.document_title',
-        x_mm: 9,
-        y_mm: 6,
-        width_mm: 110,
+        x_mm: 158,
+        y_mm: 8,
+        width_mm: 72,
         height_mm: 8,
-        font_size: 13,
+        font_size: 14,
         font_weight: 'bold',
         text_align: 'left',
         format: 'text',
@@ -329,42 +331,42 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
       line_items: {
         section_id: 'line-items',
         binding_source: 'lines',
-        x_mm: 9,
-        y_mm: 55,
-        start_y_mm: 61,
-        width_mm: 222,
-        row_height_mm: 6,
-        max_rows: 7,
+        x_mm: 4,
+        y_mm: 59,
+        start_y_mm: 67,
+        width_mm: 233,
+        row_height_mm: 8,
+        max_rows: 5,
         columns: [
           {
             column_id: 'description',
             field_key: 'lines[].description',
-            label: 'Description',
-            width_mm: 120,
-            text_align: 'left',
+            label: 'รายการ\nDescription',
+            width_mm: 151,
+            text_align: 'center',
             format: 'text',
           },
           {
             column_id: 'quantity',
             field_key: 'lines[].qty',
-            label: 'Qty',
-            width_mm: 22,
-            text_align: 'right',
+            label: 'จำนวน\nQty.',
+            width_mm: 26,
+            text_align: 'center',
             format: 'number',
           },
           {
             column_id: 'unit_price',
             field_key: 'lines[].unit_price',
-            label: 'Unit price',
-            width_mm: 36,
+            label: 'ราคาต่อหน่วย\nQty./Unit',
+            width_mm: 30,
             text_align: 'right',
             format: 'currency:THB',
           },
           {
             column_id: 'amount',
             field_key: 'lines[].amount',
-            label: 'Amount',
-            width_mm: 44,
+            label: 'ราคารวม\nAmount',
+            width_mm: 26,
             text_align: 'right',
             format: 'currency:THB',
           },
@@ -374,6 +376,8 @@ export function buildDefaultContinuousTemplateConfig(): DocumentTemplateConfig {
     calibration_profiles: [],
     default_calibration_profile_id: undefined,
   };
+
+  return { ...config, elements: buildSonicFullFormElements(config) };
 }
 
 export function validateTemplateConfig(config: unknown): { valid: boolean; errors: string[] } {
@@ -498,7 +502,7 @@ export function normalizeTemplateConfig(config: unknown): {
   const designerValidation = validateDesignerTemplateConfig(withDefaults);
   const errors = [...validation.errors, ...designerValidation.errors];
   if (errors.length > 0) return { config: null, errors };
-  return { config: withDefaults as DocumentTemplateConfig, errors: [] };
+  return { config: normalizeTemplateCanvasConfig(withDefaults as DocumentTemplateConfig), errors: [] };
 }
 
 export function parseStoredTemplateConfig(value: unknown): DocumentTemplateConfig | null {

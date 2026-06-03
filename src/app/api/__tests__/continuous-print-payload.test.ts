@@ -1,5 +1,6 @@
 import {
   buildContinuousPrintPayload,
+  buildSampleContinuousPrintPayloadWithCompanyProfile,
   buildSampleContinuousPrintPayload,
 } from '@/lib/billingContinuousPrint';
 
@@ -31,13 +32,47 @@ describe('continuous billing print payload', () => {
     expect(payload.company.company_name).toBeTruthy();
     expect(payload.customer.customer_name).toBeTruthy();
     expect(payload.customer.branch_name).toBeTruthy();
-    expect(payload.document.document_title).toContain('ใบกำกับภาษี');
+    expect(payload.document.document_title).toBe('ใบกำกับภาษี/ใบเสร็จรับเงิน');
     expect(payload.document.document_date).toBeTruthy();
     expect(payload.document.tax_invoice_number).toBe(payload.document.invoice_number);
     expect(payload.document.receipt_number).toBeDefined();
-    expect(payload.lines.length).toBeGreaterThan(0);
+    expect(payload.lines).toEqual(expect.arrayContaining([
+      expect.objectContaining({ description: 'CONTAINER REPAIR CHARGES', qty: 1, amount: 3105 }),
+      expect.objectContaining({ description: 'DEPOT REFUND', qty: 1, amount: -110.5 }),
+      expect.objectContaining({ description: 'DEPOT TRUCKING CHARGES', qty: 1, amount: 1100 }),
+    ]));
     expect(payload.lines[0].qty).toBeGreaterThan(0);
+    expect(payload.totals.subtotal).toBe(4094.5);
+    expect(payload.totals.vat_amount).toBe(286.61);
+    expect(payload.totals.grand_total).toBe(4381.11);
     expect(payload.totals.amount_text_th).toContain('บาท');
+  });
+
+  it('can merge company profile logo into sample preview payloads', async () => {
+    const db = makeDb([
+      {
+        company_name: 'CYMS Yard Co., Ltd.',
+        tax_id: '0105566000001',
+        address: '1 Port Road, Bangkok',
+        phone: '02-000-0000',
+        email: 'billing@example.test',
+        logo_url: '/uploads/company-logo.png',
+        branch_type: 'branch',
+        branch_number: '00002',
+      },
+    ]);
+
+    const payload = await buildSampleContinuousPrintPayloadWithCompanyProfile(db);
+
+    expect(db.queries.join('\n')).toContain('CompanyProfile');
+    expect(payload.company.company_name).toBe('CYMS Yard Co., Ltd.');
+    expect(payload.company.name_th).toBe('CYMS Yard Co., Ltd.');
+    expect(payload.company.name_en).toBe('');
+    expect(payload.company.tax_id).toBe('0105566000001');
+    expect(payload.company.address).toBe('1 Port Road, Bangkok');
+    expect(payload.company.logo_url).toBe('/uploads/company-logo.png');
+    expect(payload.company.branch_type).toBe('branch');
+    expect(payload.company.branch_number).toBe('00002');
   });
 
   it('parses invoice notes JSON charges for receipts and preserves negative lines', async () => {
@@ -97,9 +132,10 @@ describe('continuous billing print payload', () => {
     expect(payload.customer.customer_name).toBe('ACME Logistics');
     expect(payload.customer.branch_name).toBe('สำนักงานใหญ่');
     expect(payload.document.document_title).toContain('ใบเสร็จรับเงิน');
-    expect(payload.document.document_date).toBe('2026-05-20T03:00:00.000Z');
+    expect(payload.document.document_date).toBe('2026-05-26T03:00:00.000Z');
     expect(payload.document.tax_invoice_number).toBe('INV-202605-000007');
     expect(payload.document.receipt_number).toBe('RCT-202605-000007');
+    expect(payload.document.document_number).toBe('RCT-202605-000007');
     expect(payload.totals.amount_text_th).toContain('บาท');
     expect(payload.lines[0].qty).toBe(1);
     expect(payload.lines).toEqual(expect.arrayContaining([
@@ -110,6 +146,41 @@ describe('continuous billing print payload', () => {
         amount: -100,
       }),
     ]));
+  });
+
+  it('uses issued receipt and tax invoice numbers instead of external references for combined tax invoice receipts', async () => {
+    const db = makeDb([
+      {
+        invoice_id: 9,
+        invoice_number: 'INV-202606-000009',
+        receipt_number: 'RCT-202606-000009',
+        status: 'paid',
+        document_type: 'invoice',
+        charge_type: 'storage',
+        description: 'Storage charge',
+        quantity: 1,
+        unit_price: 1200,
+        total_amount: 1200,
+        vat_amount: 84,
+        grand_total: 1284,
+        created_at: '2026-06-01T02:00:00.000Z',
+        paid_at: '2026-06-02T04:30:00.000Z',
+        reference_no: 'BOOKING-ABC-001',
+        notes: JSON.stringify({
+          reference_no: 'NOTE-REF-001',
+          tax_invoice_number: 'TAX-202606-000009',
+        }),
+      },
+    ]);
+
+    const payload = await buildContinuousPrintPayload(db, { invoiceId: 9, type: 'tax_invoice_receipt' });
+
+    expect(payload.document.invoice_number).toBe('INV-202606-000009');
+    expect(payload.document.tax_invoice_number).toBe('TAX-202606-000009');
+    expect(payload.document.receipt_number).toBe('RCT-202606-000009');
+    expect(payload.document.document_number).toBe('RCT-202606-000009');
+    expect(payload.document.reference_no).toBe('BOOKING-ABC-001');
+    expect(payload.document.document_date).toBe('2026-06-02T04:30:00.000Z');
   });
 
   it('falls back to the invoice row line when notes charges are malformed', async () => {

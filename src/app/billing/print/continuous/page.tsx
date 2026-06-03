@@ -19,6 +19,8 @@ type PreviewResponse = {
   config?: DocumentTemplateConfig;
   template?: {
     template_code?: string;
+    template_name?: string;
+    template_family?: string;
     template_version?: number;
   };
   preview?: {
@@ -26,6 +28,8 @@ type PreviewResponse = {
     config?: DocumentTemplateConfig;
     template?: {
       template_code?: string;
+      template_name?: string;
+      template_family?: string;
       template_version?: number;
     };
   };
@@ -140,6 +144,7 @@ function ContinuousPrintContent() {
   const [payload, setPayload] = useState<ContinuousPrintPayload>(fallback.payload);
   const [config, setConfig] = useState<DocumentTemplateConfig>(fallback.config);
   const [templateCode, setTemplateCode] = useState('');
+  const [templateName, setTemplateName] = useState('');
   const [templateVersion, setTemplateVersion] = useState(1);
   const [reprintLabel, setReprintLabel] = useState<string | null>(previewLabel);
   const [status, setStatus] = useState<'loading' | 'ready' | 'fallback' | 'error'>('loading');
@@ -173,6 +178,7 @@ function ContinuousPrintContent() {
           setPayload(nextPayload);
           setConfig({ ...nextConfig, mode, copy_mode: copyMode });
           setTemplateCode(nextTemplate?.template_code || nextPayload.document.document_type.toUpperCase());
+          setTemplateName(nextTemplate?.template_name || '');
           setTemplateVersion(nextTemplate?.template_version || 1);
           setReprintLabel(previewLabel);
           setStatus('ready');
@@ -259,6 +265,9 @@ function ContinuousPrintContent() {
     window.location.href = returnTo;
   }
 
+  const previewTitle = templateName
+    || (config.template_family === 'a4_tax_receipt' ? 'A4 Tax Invoice / Receipt' : 'Continuous Tax Invoice / Receipt');
+
   return (
     <>
       <style jsx global>{`
@@ -326,7 +335,7 @@ function ContinuousPrintContent() {
             กลับไป Document Templates
           </a>
           <div className="continuous-print-toolbar-title">
-            <strong>Continuous Tax Invoice / Receipt</strong>
+            <strong>{previewTitle}</strong>
             <div className="continuous-print-status">
               {status === 'loading'
                 ? 'Loading preview...'

@@ -48,6 +48,60 @@ describe('document template visual designer UI', () => {
     expect(toolbar).toContain('Publish');
   });
 
+  it('renders full-form template elements in the designer canvas', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(source).toContain('normalizeTemplateCanvasConfig(config)');
+    expect(source).toContain('normalizedConfig.elements');
+    expect(source).toContain('element.type ===');
+  });
+
+  it('lets full-form canvas elements be selected and moved instead of staying passive background', () => {
+    const designer = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+    const canvas = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(designer).toContain("type: 'element'");
+    expect(designer).toContain('nudgeElement');
+    expect(designer).toContain('<ElementInspector');
+    expect(canvas).toContain('onSelectElement');
+    expect(canvas).toContain('beginElementDrag');
+    expect(canvas).toContain('resizeElement');
+    expect(canvas).not.toContain('className={`pointer-events-none absolute z-0');
+  });
+
+  it('shows a compact print mode hint in the designer toolbar area', () => {
+    const source = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+
+    expect(source).toContain('Full mode: canvas elements print');
+    expect(source).toContain('Overlay mode: data layer only prints');
+    expect(source).toContain('modePrintHint');
+  });
+
+  it('defaults designer selection to the table region instead of the first data field', () => {
+    const source = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+
+    expect(source).toContain('const firstSelection = (config: DocumentTemplateConfig): DesignerSelection =>');
+    expect(source).toContain("return { type: 'line_items' };");
+    expect(source).not.toContain("config.fields[0]?.field_id ? { type: 'field'");
+  });
+
+  it('separates designer work modes for layout, data fields, and table editing', () => {
+    const designer = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+    const canvas = read('src/components/document-templates/TemplateCanvas.tsx');
+    const layers = read('src/components/document-templates/LayerList.tsx');
+
+    expect(designer).toContain("type DesignerWorkMode = 'layout' | 'data' | 'table'");
+    expect(designer).toContain("setWorkMode('layout')");
+    expect(designer).toContain("setWorkMode('data')");
+    expect(designer).toContain("setWorkMode('table')");
+    expect(canvas).toContain('workMode: DesignerWorkMode');
+    expect(canvas).toContain("workMode === 'data'");
+    expect(canvas).toContain("workMode === 'table'");
+    expect(layers).toContain('Form elements');
+    expect(layers).toContain('Data fields');
+    expect(layers).toContain('Line item table');
+  });
+
   it('keeps preview tied to the selected draft config instead of falling back to an unrelated sample', () => {
     const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
 
@@ -63,6 +117,17 @@ describe('document template visual designer UI', () => {
     expect(manager).toContain("returnTo: '/settings?tab=document-templates'");
     expect(manager).toContain('templateId: String(selectedTemplate.template_id)');
     expect(manager).toContain('versionNo: String(editingVersion.version_no)');
+  });
+
+  it('labels print preview from the selected template family instead of hard-coded continuous text', () => {
+    const previewPage = read('src/app/billing/print/continuous/page.tsx');
+    const previewRoute = read('src/app/api/document-templates/preview/route.ts');
+
+    expect(previewRoute).toContain('t.template_name');
+    expect(previewRoute).toContain('template_family');
+    expect(previewPage).toContain("config.template_family === 'a4_tax_receipt'");
+    expect(previewPage).toContain('previewTitle');
+    expect(previewPage).not.toContain('<strong>Continuous Tax Invoice / Receipt</strong>');
   });
 
   it('lets settings deep-link back into the document template designer tab', () => {
@@ -136,6 +201,26 @@ describe('document template designer line item UI wiring', () => {
     expect(source).toContain('event.preventDefault()');
   });
 
+  it('offers separate default template creation for continuous and A4 receipt layouts', () => {
+    const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
+
+    expect(manager).toContain('buildDefaultA4TaxReceiptTemplateConfig');
+    expect(manager).toContain("createDefaultTemplate('continuous')");
+    expect(manager).toContain("createDefaultTemplate('a4')");
+    expect(manager).toContain('Create Continuous Template');
+    expect(manager).toContain('Create A4 Template');
+    expect(manager).toContain('A4 layout เป็น template แยก');
+  });
+
+  it('keeps field clicks from being cleared by the canvas click handler', () => {
+    const source = read('src/components/document-templates/TemplateCanvas.tsx');
+    const stopClickPropagationCount = (source.match(/onClick=\{event => event\.stopPropagation\(\)\}/g) || []).length;
+
+    expect(source).toContain('onClick={onClearSelection}');
+    expect(source).toContain('onSelectField(field.field_id)');
+    expect(stopClickPropagationCount).toBeGreaterThanOrEqual(2);
+  });
+
   it('shows line items in status and layer list', () => {
     expect(read('src/components/document-templates/DesignerStatusBar.tsx')).toContain('selectedKind');
     expect(read('src/components/document-templates/LayerList.tsx')).toContain('onSelectLineItems');
@@ -152,6 +237,47 @@ describe('line item inspector source wiring', () => {
     expect(source).toContain('addLineItemColumn');
     expect(source).toContain('moveLineItemColumn');
     expect(source).toContain('removeLineItemColumn');
+  });
+
+  it('lets line item labels be edited and previewed across multiple lines', () => {
+    const inspector = read('src/components/document-templates/LineItemsInspector.tsx');
+    const canvas = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(inspector).toContain('<textarea');
+    expect(inspector).toContain('rows={2}');
+    expect(canvas).toContain('whitespace-pre-line');
+    expect(canvas).not.toContain('className="truncate border-r border-slate-300 px-1 py-0.5 font-semibold last:border-r-0"');
+  });
+
+  it('uses the print renderer as the layout canvas backdrop so designer and preview align', () => {
+    const canvas = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(canvas).toContain("import { TemplateCanvasReceipt } from '@/components/billing/TemplateCanvasReceipt'");
+    expect(canvas).toContain("import { buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrintSample'");
+    expect(canvas).toContain('function printContentOriginMm(config: DocumentTemplateConfig)');
+    expect(canvas).toContain('margin_left_mm');
+    expect(canvas).toContain('const showPrintBackdrop = workMode ===');
+    expect(canvas).toContain('<TemplateCanvasReceipt');
+    expect(canvas).toContain('payload={previewPayload}');
+    expect(canvas).toContain('style={previewBackplateStyle}');
+  });
+
+  it('feeds company profile sample data into the designer canvas logo preview', () => {
+    const manager = read('src/app/(dashboard)/settings/DocumentTemplateManager.tsx');
+    const designer = read('src/components/document-templates/DocumentTemplateDesigner.tsx');
+    const canvas = read('src/components/document-templates/TemplateCanvas.tsx');
+
+    expect(manager).toContain("import { buildSampleContinuousPrintPayload, type CompanyProfileSampleSource } from '@/lib/billingContinuousPrintSample'");
+    expect(manager).toContain('loadCompanyPreview');
+    expect(manager).toContain("fetch('/api/settings/company')");
+    expect(manager).toContain('buildSampleContinuousPrintPayload(companyPreview)');
+    expect(manager).toContain('samplePayload={designerSamplePayload}');
+    expect(designer).toContain('samplePayload?: ContinuousPrintPayload');
+    expect(designer).toContain('samplePayload={samplePayload}');
+    expect(canvas).toContain('samplePayload?: ContinuousPrintPayload');
+    expect(canvas).toContain('const previewPayload = samplePayload || fallbackSamplePayload');
+    expect(canvas).toContain('payload={previewPayload}');
+    expect(canvas).not.toContain('payload={samplePayload}');
   });
 
   it('shows LineItemsInspector for line item selection', () => {

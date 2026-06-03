@@ -5,20 +5,25 @@ import type { KeyboardEvent } from 'react';
 import { Boxes, Layers3, SlidersHorizontal } from 'lucide-react';
 import {
   addFieldFromBinding,
+  applyElementPatch,
   applyFieldPatch,
   createDesignerHistory,
   deleteField,
+  nudgeElement,
   nudgeField,
   nudgeLineItems,
   pushDesignerHistory,
   redoDesignerHistory,
   undoDesignerHistory,
   type FieldPatch,
+  type ElementPatch,
 } from '@/lib/documentTemplateDesigner';
+import type { ContinuousPrintPayload } from '@/lib/billingContinuousPrintTypes';
 import type { DocumentTemplateConfig, DocumentTemplateFieldLayer } from '@/lib/documentTemplateTypes';
 import { BindingPalette } from './BindingPalette';
 import { DesignerStatusBar } from './DesignerStatusBar';
 import { DesignerToolbar } from './DesignerToolbar';
+import { ElementInspector } from './ElementInspector';
 import { FieldInspector } from './FieldInspector';
 import { LayerList, type LayerState } from './LayerList';
 import { LineItemsInspector } from './LineItemsInspector';
@@ -28,6 +33,7 @@ type DocumentTemplateDesignerProps = {
   config: DocumentTemplateConfig;
   canEdit: boolean;
   canPreview?: boolean;
+  samplePayload?: ContinuousPrintPayload;
   saving?: boolean;
   onChange: (config: DocumentTemplateConfig) => void;
   onCreateDraft: () => void;
@@ -38,9 +44,11 @@ type DocumentTemplateDesignerProps = {
 };
 
 type DesignerPanel = 'inspector' | 'bindings' | 'layers';
+type DesignerWorkMode = 'layout' | 'data' | 'table';
 
 type DesignerSelection =
   | { type: 'field'; fieldId: string }
+  | { type: 'element'; elementId: string }
   | { type: 'line_items' }
   | null;
 
@@ -50,14 +58,19 @@ const DEFAULT_LAYER_STATE: LayerState = {
   calibration: { visible: true, locked: false },
 };
 
-const firstSelection = (config: DocumentTemplateConfig): DesignerSelection =>
-  config.fields[0]?.field_id ? { type: 'field', fieldId: config.fields[0].field_id } : { type: 'line_items' };
+const firstSelection = (config: DocumentTemplateConfig): DesignerSelection => {
+  void config;
+  return { type: 'line_items' };
+};
 
 const preserveSelection = (
   config: DocumentTemplateConfig,
   current: DesignerSelection,
 ): DesignerSelection => {
   if (current?.type === 'field' && config.fields.some(field => field.field_id === current.fieldId)) {
+    return current;
+  }
+  if (current?.type === 'element' && config.elements?.some(element => element.element_id === current.elementId)) {
     return current;
   }
   if (current?.type === 'line_items') return current;
@@ -68,6 +81,7 @@ export function DocumentTemplateDesigner({
   config,
   canEdit,
   canPreview = true,
+  samplePayload,
   saving = false,
   onChange,
   onCreateDraft,
@@ -82,6 +96,7 @@ export function DocumentTemplateDesigner({
   const [snapStep, setSnapStep] = useState(1);
   const [layerState, setLayerState] = useState<LayerState>(DEFAULT_LAYER_STATE);
   const [activePanel, setActivePanel] = useState<DesignerPanel>('inspector');
+  const [workMode, setWorkMode] = useState<DesignerWorkMode>('table');
   const currentSerializedRef = useRef(JSON.stringify(config));
 
   useEffect(() => {
@@ -93,13 +108,36 @@ export function DocumentTemplateDesigner({
   }, [config]);
 
   const selectedFieldId = selection?.type === 'field' ? selection.fieldId : null;
+  const selectedElementId = selection?.type === 'element' ? selection.elementId : null;
   const selectedKind = selection?.type || null;
   const selectedField = history.current.fields.find(field => field.field_id === selectedFieldId) || null;
+  const selectedElement = history.current.elements?.find(element => element.element_id === selectedElementId) || null;
   const selectedLabel = selectedKind === 'line_items'
     ? 'Line items · lines[]'
+    : selectedElement
+      ? `${selectedElement.label} · canvas element`
     : selectedField
       ? `${selectedField.label} · ${selectedField.binding_source}`
       : 'No field selected';
+  const modePrintHint = history.current.mode === 'overlay'
+    ? 'Overlay mode: data layer only prints'
+    : 'Full mode: canvas elements print';
+
+  const switchWorkMode = (mode: DesignerWorkMode) => {
+    setWorkMode(mode);
+    setActivePanel('inspector');
+    if (mode === 'table') {
+      setSelection({ type: 'line_items' });
+      return;
+    }
+    if (mode === 'layout') {
+      const firstElement = history.current.elements?.find(element => element.visible && element.type !== 'line_items');
+      setSelection(firstElement ? { type: 'element', elementId: firstElement.element_id } : { type: 'line_items' });
+      return;
+    }
+    const firstField = history.current.fields.find(field => field.visible);
+    setSelection(firstField ? { type: 'field', fieldId: firstField.field_id } : null);
+  };
 
   const commit = (nextConfig: DocumentTemplateConfig) => {
     currentSerializedRef.current = JSON.stringify(nextConfig);
@@ -110,6 +148,11 @@ export function DocumentTemplateDesigner({
   const patchSelected = (patch: FieldPatch) => {
     if (!selectedFieldId) return;
     commit(applyFieldPatch(history.current, selectedFieldId, patch));
+  };
+
+  const patchSelectedElement = (patch: ElementPatch) => {
+    if (!selectedElementId) return;
+    commit(applyElementPatch(history.current, selectedElementId, patch));
   };
 
   const handleDelete = () => {
@@ -171,6 +214,11 @@ export function DocumentTemplateDesigner({
       commit(nudgeLineItems(history.current, nudge));
       return;
     }
+    if (selection.type === 'element') {
+      if (!selectedElement || selectedElement.locked || layerState[selectedElement.layer].locked) return;
+      commit(nudgeElement(history.current, selection.elementId, nudge));
+      return;
+    }
     if (!selectedField || selectedField.locked || layerState[selectedField.layer].locked) return;
     commit(nudgeField(history.current, selection.fieldId, nudge));
   };
@@ -200,8 +248,27 @@ export function DocumentTemplateDesigner({
           <span className="truncate text-xs text-slate-500">
             {selectedLabel}
           </span>
+          <span className="text-xs text-slate-500">
+            {modePrintHint}
+          </span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900">
+            {[
+              { id: 'layout' as const, label: 'Layout' },
+              { id: 'data' as const, label: 'Data' },
+              { id: 'table' as const, label: 'Table' },
+            ].map(item => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => switchWorkMode(item.id)}
+                className={`h-7 rounded-md px-3 ${workMode === item.id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
             Zoom
             <input type="range" min="0.45" max="1.35" step="0.05" value={zoom} onChange={event => setZoom(Number(event.target.value))}
@@ -227,13 +294,26 @@ export function DocumentTemplateDesigner({
           <TemplateCanvas
             config={history.current}
             selectedFieldId={selectedFieldId}
+            selectedElementId={selectedElementId}
             selectedLineItems={selection?.type === 'line_items'}
+            workMode={workMode}
             zoom={zoom}
             snapStep={snapStep}
+            samplePayload={samplePayload}
             canEdit={canEdit}
             layerState={layerState}
-            onSelectField={fieldId => setSelection({ type: 'field', fieldId })}
-            onSelectLineItems={() => setSelection({ type: 'line_items' })}
+            onSelectField={fieldId => {
+              setWorkMode('data');
+              setSelection({ type: 'field', fieldId });
+            }}
+            onSelectElement={elementId => {
+              setWorkMode('layout');
+              setSelection({ type: 'element', elementId });
+            }}
+            onSelectLineItems={() => {
+              setWorkMode('table');
+              setSelection({ type: 'line_items' });
+            }}
             onClearSelection={() => setSelection(null)}
             onChange={commit}
           />
@@ -267,7 +347,14 @@ export function DocumentTemplateDesigner({
                 onChange={commit}
               />
             ) : null}
-            {activePanel === 'inspector' && selection?.type !== 'line_items' ? (
+            {activePanel === 'inspector' && selection?.type === 'element' ? (
+              <ElementInspector
+                element={selectedElement}
+                readOnly={!canEdit}
+                onPatch={patchSelectedElement}
+              />
+            ) : null}
+            {activePanel === 'inspector' && selection?.type !== 'line_items' && selection?.type !== 'element' ? (
               <FieldInspector
                 field={selectedField}
                 readOnly={!canEdit}
@@ -282,13 +369,21 @@ export function DocumentTemplateDesigner({
               <LayerList
                 config={history.current}
                 selectedFieldId={selectedFieldId}
+                selectedElementId={selectedElementId}
                 selectedLineItems={selection?.type === 'line_items'}
                 layerState={layerState}
                 onSelectField={fieldId => {
+                  setWorkMode('data');
                   setSelection({ type: 'field', fieldId });
                   setActivePanel('inspector');
                 }}
+                onSelectElement={elementId => {
+                  setWorkMode('layout');
+                  setSelection({ type: 'element', elementId });
+                  setActivePanel('inspector');
+                }}
                 onSelectLineItems={() => {
+                  setWorkMode('table');
                   setSelection({ type: 'line_items' });
                   setActivePanel('inspector');
                 }}
@@ -305,6 +400,7 @@ export function DocumentTemplateDesigner({
         zoom={zoom}
         snapStep={snapStep}
         selectedFieldId={selectedFieldId}
+        selectedElementId={selectedElementId}
         selectedKind={selectedKind}
         canEdit={canEdit}
       />
