@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { useToast } from '@/components/providers/ToastProvider';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface PortalGrantRow {
   access_id: number;
@@ -45,6 +46,7 @@ export default function PortalAccessControl() {
   const [repairing, setRepairing] = useState(false);
   const [reconcile, setReconcile] = useState<{ missing?: unknown[]; stale?: unknown[] } | null>(null);
   const [reason, setReason] = useState('');
+  const [repairConfirmOpen, setRepairConfirmOpen] = useState(false);
 
   const loadGrants = useCallback(async () => {
     setLoading(true);
@@ -90,7 +92,6 @@ export default function PortalAccessControl() {
 
   const repairReconcile = async () => {
     if (!reconcile || repairing) return;
-    if (!window.confirm('ยืนยันซ่อมแซม portal grants จากผล preview ล่าสุด?')) return;
 
     setRepairing(true);
     try {
@@ -203,18 +204,30 @@ export default function PortalAccessControl() {
             <p className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={14} /> Reconcile Grants</p>
             <div className="mt-3 flex gap-2">
               <button onClick={previewReconcile} className="rounded-lg border px-3 py-2 text-xs">Preview</button>
-              <button
-                onClick={repairReconcile}
-                disabled={repairing || !reconcile}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-xs text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                <button
+                  onClick={() => setRepairConfirmOpen(true)}
+                  disabled={repairing || !reconcile}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs text-white disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {repairing ? 'Repairing...' : 'Repair'}
               </button>
             </div>
             {reconcile && <pre className="mt-3 max-h-52 overflow-auto rounded-lg bg-slate-950 p-3 text-[10px] text-slate-100">{JSON.stringify(reconcile, null, 2)}</pre>}
           </div>
+          </div>
         </div>
+        <ConfirmDialog
+          open={repairConfirmOpen}
+          title="ยืนยันซ่อมแซม Portal Grants"
+          message="ระบบจะซ่อมแซม grants จากผล preview ล่าสุด และบันทึก audit ตาม backend policy"
+          confirmLabel="ซ่อมแซม"
+          variant="warning"
+          onCancel={() => setRepairConfirmOpen(false)}
+          onConfirm={() => {
+            setRepairConfirmOpen(false);
+            repairReconcile();
+          }}
+        />
       </div>
-    </div>
-  );
-}
+    );
+  }

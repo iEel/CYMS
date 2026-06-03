@@ -13,6 +13,7 @@ import { buildGateDecisionSignals, buildGateOutWorkflow } from '@/lib/gateWorkfl
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
+import ActionInputDialog from '@/components/ui/ActionInputDialog';
 import GateOutSearchSection from './components/GateOutSearchSection';
 import type { GateOutFormState, GateOutPhase } from './components/GateOutReleaseRequestSection';
 import GateOutStatusRail, { GateOutSelectedStatusCards } from './components/GateOutStatusRail';
@@ -158,6 +159,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [chargeOverrides, setChargeOverrides] = useState<Record<number, number>>({});
   const [customCharges, setCustomCharges] = useState<BillingCharge[]>([]);
   const [selectedCustom, setSelectedCustom] = useState<Set<number>>(new Set());
+  const [waiveDialogOpen, setWaiveDialogOpen] = useState(false);
 
   // Manual customer selection (when no auto-match)
   const [customerList, setCustomerList] = useState<{ customer_id: number; customer_name: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean; credit_term: number }[]>([]);
@@ -475,14 +477,21 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     } catch (err) { console.error(err); }
   };
 
+  const submitGateOutWaiver = async (reason: string) => {
+    try {
+      await createGateOutClearance('waived', null, reason);
+      setWaiveDialogOpen(false);
+    } catch (err) { console.error(err); }
+  };
+
   const handleRequestApproval = async () => {
     try {
       const isWaived = originalSelectedTotal > 0;
-      const reason = isWaived
-        ? window.prompt('ระบุเหตุผลการยกเว้นค่าใช้จ่าย') || ''
-        : 'ไม่มีค่าบริการ';
-      if (isWaived && !reason.trim()) return;
-      await createGateOutClearance(isWaived ? 'waived' : 'no_charge', null, reason);
+      if (isWaived) {
+        setWaiveDialogOpen(true);
+        return;
+      }
+      await createGateOutClearance('no_charge', null, 'ไม่มีค่าบริการ');
     } catch (err) { console.error(err); }
   };
 
@@ -1175,6 +1184,19 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           onClose={() => setShowOCR(null)}
         />
       )}
+      <ActionInputDialog
+        open={waiveDialogOpen}
+        title="ยกเว้นค่าใช้จ่าย Gate-Out"
+        description="ระบุเหตุผลเพื่อเก็บใน billing clearance และ audit trail"
+        fields={[{ name: 'reason', label: 'เหตุผล', type: 'textarea', required: true }]}
+        confirmLabel="ยืนยันยกเว้น"
+        onCancel={() => setWaiveDialogOpen(false)}
+        onSubmit={({ reason }) => {
+          const trimmed = reason.trim();
+          if (!trimmed) return;
+          void submitGateOutWaiver(trimmed);
+        }}
+      />
     </div>
   );
 }

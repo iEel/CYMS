@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import ActionInputDialog from '@/components/ui/ActionInputDialog';
 import PhotoCapture from '@/components/gate/PhotoCapture';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 
@@ -195,6 +196,7 @@ export default function ReeferMonitoringPage() {
   const [policyForm, setPolicyForm] = useState<PolicyForm>(initialPolicyForm);
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [policyError, setPolicyError] = useState('');
+  const [exceptionActionDialog, setExceptionActionDialog] = useState<{ item: ReeferItem; action: 'resolve' | 'ignore' } | null>(null);
 
   const loadQueue = useCallback(async () => {
     if (!activeYardId) return;
@@ -398,14 +400,8 @@ export default function ReeferMonitoringPage() {
     }
   };
 
-  const updateException = async (item: ReeferItem, action: 'acknowledge' | 'resolve' | 'ignore') => {
+  const patchException = async (item: ReeferItem, action: 'acknowledge' | 'resolve' | 'ignore', note = '') => {
     if (!item.active_exception_id) return;
-    const note = action === 'resolve'
-      ? window.prompt('บันทึกการแก้ไข exception', item.active_exception_action || '')
-      : action === 'ignore'
-        ? window.prompt('เหตุผลที่ ignore exception', '')
-        : '';
-    if ((action === 'resolve' || action === 'ignore') && note === null) return;
 
     await fetch('/api/reefer/exceptions', {
       method: 'PATCH',
@@ -416,7 +412,16 @@ export default function ReeferMonitoringPage() {
         resolution_note: note,
       }),
     });
+    setExceptionActionDialog(null);
     loadQueue();
+  };
+
+  const updateException = async (item: ReeferItem, action: 'acknowledge' | 'resolve' | 'ignore') => {
+    if (action === 'acknowledge') {
+      await patchException(item, action);
+      return;
+    }
+    setExceptionActionDialog({ item, action });
   };
 
   if (!activeYardId) {
@@ -871,6 +876,26 @@ export default function ReeferMonitoringPage() {
           </form>
         </div>
       )}
+      <ActionInputDialog
+        open={Boolean(exceptionActionDialog)}
+        title={exceptionActionDialog?.action === 'resolve' ? 'ปิด Reefer Exception' : 'Ignore Reefer Exception'}
+        description={exceptionActionDialog?.item.container_number}
+        fields={[{
+          name: 'note',
+          label: exceptionActionDialog?.action === 'resolve' ? 'บันทึกการแก้ไข exception' : 'เหตุผลที่ ignore exception',
+          type: 'textarea',
+          defaultValue: exceptionActionDialog?.action === 'resolve' ? exceptionActionDialog.item.active_exception_action || '' : '',
+          required: true,
+        }]}
+        confirmLabel={exceptionActionDialog?.action === 'resolve' ? 'ปิดงาน' : 'Ignore'}
+        onCancel={() => setExceptionActionDialog(null)}
+        onSubmit={({ note }) => {
+          if (!exceptionActionDialog) return;
+          const trimmed = note.trim();
+          if (!trimmed) return;
+          void patchException(exceptionActionDialog.item, exceptionActionDialog.action, trimmed);
+        }}
+      />
     </div>
   );
 }

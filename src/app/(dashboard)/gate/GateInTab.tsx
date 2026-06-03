@@ -18,6 +18,7 @@ import { buildGateDecisionSignals, buildGateInWorkflow } from '@/lib/gateWorkflo
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
+import ActionInputDialog from '@/components/ui/ActionInputDialog';
 import GateInContainerSection, { type GateInBookingOption, type GateInFormState } from './components/GateInContainerSection';
 import GateInBusinessRelationshipSection from './components/GateInBusinessRelationshipSection';
 import GateInDriverSection from './components/GateInDriverSection';
@@ -102,6 +103,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [gateInCustomCharges, setGateInCustomCharges] = useState<BillingCharge[]>([]);
   const [gateInSelectedCustom, setGateInSelectedCustom] = useState<Set<number>>(new Set());
   const [gateInPayLoading, setGateInPayLoading] = useState(false);
+  const [gateInWaiveDialogOpen, setGateInWaiveDialogOpen] = useState(false);
 
   // Manual customer selection (when no auto-match)
   const [customerList, setCustomerList] = useState<{ customer_id: number; customer_name: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean; credit_term: number }[]>([]);
@@ -705,6 +707,34 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     return data.clearance_id as number;
   };
 
+  const submitGateInWaiver = async (reason: string) => {
+    setGateInPayLoading(true);
+    try {
+      await createGateInClearance('waived', null, reason);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGateInPayLoading(false);
+      setGateInWaiveDialogOpen(false);
+    }
+  };
+
+  const handleGateInNoChargeOrWaive = async () => {
+    if (gateInOriginalSelectedTotal > 0) {
+      setGateInWaiveDialogOpen(true);
+      return;
+    }
+
+    setGateInPayLoading(true);
+    try {
+      await createGateInClearance('no_charge', null, 'ไม่มีค่าบริการ');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGateInPayLoading(false);
+    }
+  };
+
   // Resolved customer: auto-matched or manually selected
   const resolvedCustomer = useMemo(() => {
     if (billingCustomerId) {
@@ -1186,18 +1216,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
                   ) : (
                     <>
                       {gateInSelectedGrand <= 0 && (
-                        <button disabled={gateInPayLoading || !resolvedCustomer || !canWaive} onClick={async () => {
-                          setGateInPayLoading(true);
-                          try {
-                            const isWaived = gateInOriginalSelectedTotal > 0;
-                            const reason = isWaived
-                              ? window.prompt('ระบุเหตุผลการยกเว้นค่าใช้จ่าย') || ''
-                              : 'ไม่มีค่าบริการ';
-                            if (isWaived && !reason.trim()) return;
-                            await createGateInClearance(isWaived ? 'waived' : 'no_charge', null, reason);
-                          } catch (err) { console.error(err); }
-                          finally { setGateInPayLoading(false); }
-                        }}
+                        <button disabled={gateInPayLoading || !resolvedCustomer || !canWaive} onClick={handleGateInNoChargeOrWaive}
                           className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
                           {gateInPayLoading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                           {gateInOriginalSelectedTotal > 0 ? 'อนุมัติยกเว้นค่าใช้จ่าย' : 'ยืนยัน No Charge ฿0'}
@@ -1339,6 +1358,20 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           onClose={() => setShowOCR(null)}
         />
       )}
+      <ActionInputDialog
+        open={gateInWaiveDialogOpen}
+        title="ยกเว้นค่าใช้จ่าย Gate-In"
+        description="ระบุเหตุผลเพื่อเก็บใน billing clearance และ audit trail"
+        fields={[{ name: 'reason', label: 'เหตุผล', type: 'textarea', required: true }]}
+        confirmLabel="ยืนยันยกเว้น"
+        loading={gateInPayLoading}
+        onCancel={() => setGateInWaiveDialogOpen(false)}
+        onSubmit={({ reason }) => {
+          const trimmed = reason.trim();
+          if (!trimmed) return;
+          void submitGateInWaiver(trimmed);
+        }}
+      />
 
       {/* === HALT RULE POPUP: Multi-customer prefix conflict === */}
       {showHaltPopup && (

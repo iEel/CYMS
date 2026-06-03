@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, RotateCcw, Upload, XCircle } from 'lucide-react';
 import { useToast } from '@/components/providers/ToastProvider';
+import ActionInputDialog from '@/components/ui/ActionInputDialog';
 
 interface PaymentReconciliationRow {
   reconciliation_id: number;
@@ -44,6 +45,7 @@ export default function PaymentReconciliationTab({ yardId, labels, endpoint }: {
   const [importText, setImportText] = useState('');
   const [importing, setImporting] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [actionDialog, setActionDialog] = useState<{ row: PaymentReconciliationRow; action: 'match' | 'ignore' } | null>(null);
 
   const fetchRows = useCallback(async () => {
     setLoading(true);
@@ -87,13 +89,9 @@ export default function PaymentReconciliationTab({ yardId, labels, endpoint }: {
     }
   };
 
-  const updateRow = async (row: PaymentReconciliationRow, action: 'match' | 'ignore') => {
-    const invoiceId = action === 'match'
-      ? Number(window.prompt('Invoice ID ที่ต้องการ Match', row.invoice_id ? String(row.invoice_id) : ''))
-      : null;
+  const updateRow = async (row: PaymentReconciliationRow, action: 'match' | 'ignore', invoiceIdText: string, note: string) => {
+    const invoiceId = action === 'match' ? Number(invoiceIdText) : null;
     if (action === 'match' && (!invoiceId || !Number.isInteger(invoiceId))) return;
-    const note = window.prompt(action === 'match' ? 'หมายเหตุการ Match Invoice' : 'เหตุผลที่ Ignore', '');
-    if (note === null) return;
     setBusyId(row.reconciliation_id);
     try {
       const res = await fetch(endpoint, {
@@ -104,6 +102,7 @@ export default function PaymentReconciliationTab({ yardId, labels, endpoint }: {
       const data = await res.json();
       if (data.success) {
         toast('success', action === 'match' ? 'Match Invoice แล้ว' : 'Ignore รายการแล้ว');
+        setActionDialog(null);
         fetchRows();
       } else {
         toast('error', data.error || 'อัปเดตไม่สำเร็จ');
@@ -175,10 +174,10 @@ export default function PaymentReconciliationTab({ yardId, labels, endpoint }: {
                     <td className="p-3 text-right">
                       {row.status === 'pending' && (
                         <div className="flex justify-end gap-2">
-                          <button onClick={() => updateRow(row, 'match')} disabled={busyId === row.reconciliation_id} className={`${inputClass} inline-flex items-center gap-1 bg-emerald-50 text-emerald-700`}>
+                          <button onClick={() => setActionDialog({ row, action: 'match' })} disabled={busyId === row.reconciliation_id} className={`${inputClass} inline-flex items-center gap-1 bg-emerald-50 text-emerald-700`}>
                             <CheckCircle2 size={13} /> {labels.matchLabel}
                           </button>
-                          <button onClick={() => updateRow(row, 'ignore')} disabled={busyId === row.reconciliation_id} className={`${inputClass} inline-flex items-center gap-1 bg-slate-50 text-slate-500`}>
+                          <button onClick={() => setActionDialog({ row, action: 'ignore' })} disabled={busyId === row.reconciliation_id} className={`${inputClass} inline-flex items-center gap-1 bg-slate-50 text-slate-500`}>
                             <XCircle size={13} /> Ignore
                           </button>
                         </div>
@@ -191,6 +190,26 @@ export default function PaymentReconciliationTab({ yardId, labels, endpoint }: {
           </div>
         )}
       </div>
+      <ActionInputDialog
+        open={Boolean(actionDialog)}
+        title={actionDialog?.action === 'match' ? 'Match Invoice' : 'Ignore รายการ Statement'}
+        description={actionDialog?.row.statement_ref}
+        fields={actionDialog?.action === 'match'
+          ? [
+            { name: 'invoice_id', label: 'Invoice ID ที่ต้องการ Match', type: 'number', defaultValue: actionDialog.row.invoice_id ? String(actionDialog.row.invoice_id) : '', required: true },
+            { name: 'note', label: 'หมายเหตุการ Match Invoice', type: 'textarea' },
+          ]
+          : [
+            { name: 'note', label: 'เหตุผลที่ Ignore', type: 'textarea', required: true },
+          ]}
+        confirmLabel={actionDialog?.action === 'match' ? 'Match' : 'Ignore'}
+        loading={Boolean(actionDialog && busyId === actionDialog.row.reconciliation_id)}
+        onCancel={() => setActionDialog(null)}
+        onSubmit={({ invoice_id, note }) => {
+          if (!actionDialog) return;
+          void updateRow(actionDialog.row, actionDialog.action, invoice_id || '', note || '');
+        }}
+      />
     </div>
   );
 }
