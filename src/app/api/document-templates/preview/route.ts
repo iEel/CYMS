@@ -8,6 +8,7 @@ import {
   buildDefaultContinuousTemplateConfig,
   parseStoredTemplateConfig,
 } from '@/lib/documentTemplates';
+import { buildDefaultA4TaxReceiptTemplateConfig } from '@/lib/documentTemplateDefaults';
 import {
   buildContinuousPrintPayload,
   buildSampleContinuousPrintPayloadWithCompanyProfile,
@@ -61,8 +62,19 @@ function copyModeFrom(value: string | null): DocumentTemplateCopyMode | null {
   return null;
 }
 
+function templateFamilyFrom(value: string | null): DocumentTemplateConfig['template_family'] | null {
+  if (value === 'a4_tax_receipt' || value === 'continuous_tax_receipt') return value;
+  return null;
+}
+
 function cleanString(value: string | null): string {
   return value?.trim() || '';
+}
+
+function defaultConfigForTemplateFamily(templateFamily: DocumentTemplateConfig['template_family'] | null) {
+  return templateFamily === 'a4_tax_receipt'
+    ? buildDefaultA4TaxReceiptTemplateConfig()
+    : buildDefaultContinuousTemplateConfig();
 }
 
 async function currentTemplateConfig(
@@ -70,11 +82,13 @@ async function currentTemplateConfig(
   documentType: string,
   templateId: number | null,
   versionNo: number | null,
+  templateFamily: DocumentTemplateConfig['template_family'] | null,
 ) {
   const result = await db.request()
     .input('documentType', sql.NVarChar(50), documentType)
     .input('templateId', sql.Int, templateId)
     .input('versionNo', sql.Int, versionNo)
+    .input('templateFamily', sql.NVarChar(80), templateFamily)
     .query<{
       config_json?: string;
       reprint_label_template?: string;
@@ -111,9 +125,14 @@ async function currentTemplateConfig(
             )
           )
         )
+        AND (
+          @templateFamily IS NULL
+          OR JSON_VALUE(v.config_json, '$.template_family') = @templateFamily
+        )
       ORDER BY
         CASE WHEN @templateId IS NOT NULL AND t.template_id = @templateId THEN 0 ELSE 1 END,
         CASE WHEN @versionNo IS NOT NULL AND v.version_no = @versionNo THEN 0 ELSE 1 END,
+        CASE WHEN @templateFamily IS NOT NULL AND JSON_VALUE(v.config_json, '$.template_family') = @templateFamily THEN 0 ELSE 1 END,
         CASE WHEN t.document_type = @documentType THEN 0 ELSE 1 END,
         t.is_default DESC,
         CASE WHEN v.status = 'published' THEN 0 ELSE 1 END,
@@ -123,10 +142,10 @@ async function currentTemplateConfig(
   const row = result.recordset[0];
   const config = parseStoredTemplateConfig(row?.config_json);
       return {
-        config: config && row ? applyStoredPrintPolicy(config, row) : buildDefaultContinuousTemplateConfig(),
+        config: config && row ? applyStoredPrintPolicy(config, row) : defaultConfigForTemplateFamily(templateFamily),
         template_code: row?.template_code || documentType.toUpperCase(),
         template_name: row?.template_name || '',
-        template_family: config?.template_family || 'continuous_tax_receipt',
+        template_family: config?.template_family || templateFamily || 'continuous_tax_receipt',
         template_version: Number(row?.version_no || 1),
       };
 }
@@ -159,6 +178,7 @@ export async function GET(request: NextRequest) {
     const documentType = searchParams.get('type') || 'tax_invoice_receipt';
     const templateId = parseInvoiceId(searchParams.get('templateId'));
     const versionNo = parseInvoiceId(searchParams.get('versionNo'));
+    const templateFamily = templateFamilyFrom(searchParams.get('templateFamily'));
     const mode = modeFrom(searchParams.get('mode'));
     const copyMode = copyModeFrom(searchParams.get('copyMode'));
     const calibrationProfileId = cleanString(searchParams.get('calibrationProfileId'));
@@ -170,7 +190,7 @@ export async function GET(request: NextRequest) {
       if (yardAccess instanceof NextResponse) return yardAccess;
     }
 
-    const template = await currentTemplateConfig(db, documentType, templateId, versionNo);
+    const template = await currentTemplateConfig(db, documentType, templateId, versionNo, templateFamily);
     const config = applyPreviewOverrides(template.config, mode, copyMode, calibrationProfileId);
     const payload = useSample
       ? await buildSampleContinuousPrintPayloadWithCompanyProfile(db)
@@ -185,6 +205,7 @@ export async function GET(request: NextRequest) {
         document_type: documentType,
         preview: useSample ? 'sample' : 'real',
         invoice_id: invoiceId,
+        template_family: templateFamily || config.template_family || template.template_family,
         mode: config.mode,
         copy_mode: config.copy_mode,
         ...(calibrationProfileId ? { calibration_profile_id: calibrationProfileId } : {}),

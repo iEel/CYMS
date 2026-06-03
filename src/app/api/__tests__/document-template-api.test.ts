@@ -565,6 +565,28 @@ describe('document template API', () => {
     expect(body.config.print_policy.red_ref_source).toBe('invoice_number');
   });
 
+  it('selects a document template by template family when printing from gate flows', async () => {
+    const config = buildDefaultContinuousTemplateConfig();
+    const db = makeDb([{ recordset: [{ config_json: JSON.stringify(config) }] }]);
+    mockedGetDb.mockResolvedValue(db);
+    const request = makeRequest('/api/document-templates/preview?preview=sample&type=tax_invoice_receipt&templateFamily=continuous_tax_receipt');
+
+    const response = await previewTemplate(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(db.inputs).toEqual(expect.arrayContaining([
+      { name: 'templateFamily', value: 'continuous_tax_receipt' },
+    ]));
+    expect(db.queries[0]).toContain("JSON_VALUE(v.config_json, '$.template_family') = @templateFamily");
+    expect(mockedLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        template_family: 'continuous_tax_receipt',
+      }),
+    }));
+    expect(body.template.template_family).toBe('continuous_tax_receipt');
+  });
+
   it('returns designer draft preview when template id and version are specified', async () => {
     const config = buildDefaultContinuousTemplateConfig();
     const db = makeDb([{ recordset: [{ template_code: 'TAX_CONTINUOUS', template_name: 'Continuous Tax Invoice / Receipt', version_no: 3, status: 'draft', config_json: JSON.stringify(config) }] }]);

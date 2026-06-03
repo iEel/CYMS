@@ -24,6 +24,38 @@ interface GateOutTabProps {
   userId?: number;
   onViewEIR: (eirNumber: string) => void;
 }
+
+type GateBillingPrintTemplateFamily = 'a4_tax_receipt' | 'continuous_tax_receipt';
+
+const GATE_OUT_PRINT_DRAFT_KEY = 'cyms.gateOut.printDraft.v1';
+const GATE_OUT_PRINT_DRAFT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+
+type GateOutPrintDraft = {
+  saved_at?: number;
+  yard_id?: number;
+  searchQuery?: string;
+  selectedContainer?: ContainerResult | null;
+  selectedGateOutRequest?: GateOutRequest | null;
+  gateOutForm?: GateOutFormState;
+  gateOutPhotos?: string[];
+  gateOutPhase?: GateOutPhase;
+  billingData?: BillingData | null;
+  paymentMethod?: 'cash' | 'transfer' | 'credit';
+  billingPaid?: boolean;
+  billingInvoiceNumber?: string;
+  billingInvoiceId?: number | null;
+  billingClearance?: BillingClearance | null;
+  selectedCharges?: number[];
+  chargeOverrides?: Record<number, number>;
+  customCharges?: BillingCharge[];
+  selectedCustom?: number[];
+  manualCustomerId?: number | null;
+  customerSearch?: string;
+  selectedBooking?: GateOutBooking | null;
+  bookingSearch?: string;
+  bookingWarning?: string;
+};
+
 function gateOutPhaseFromRequest(request: GateOutRequest): GateOutPhase {
   const status = request.display_status || request.status;
   if (status === 'at_gate' || request.work_order_status === 'completed') return 'confirm_release';
@@ -140,6 +172,87 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [bookingLoading, setBookingLoading] = useState(false);
   const [showBookingPicker, setShowBookingPicker] = useState(false);
   const [bookingWarning, setBookingWarning] = useState('');
+
+  const restoreGateOutPrintDraft = () => {
+    try {
+      const raw = localStorage.getItem(GATE_OUT_PRINT_DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as GateOutPrintDraft;
+      if (draft.yard_id !== yardId || !draft.saved_at || Date.now() - draft.saved_at > GATE_OUT_PRINT_DRAFT_MAX_AGE_MS) {
+        localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
+        return;
+      }
+
+      setSearchQuery(draft.searchQuery || draft.selectedContainer?.container_number || '');
+      setSearchResults([]);
+      setSelectedContainer(draft.selectedContainer || null);
+      setSelectedGateOutRequest(draft.selectedGateOutRequest || null);
+      if (draft.gateOutForm) setGateOutForm(draft.gateOutForm);
+      setGateOutPhotos(draft.gateOutPhotos || []);
+      setGateOutPhase(draft.gateOutPhase || (draft.selectedContainer ? 'confirm_release' : 'search'));
+      if (draft.billingData) setBillingData(draft.billingData);
+      if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
+      setBillingPaid(Boolean(draft.billingPaid));
+      setBillingInvoiceNumber(draft.billingInvoiceNumber || '');
+      setBillingInvoiceId(draft.billingInvoiceId || null);
+      setBillingClearance(draft.billingClearance || null);
+      if (draft.selectedCharges) setSelectedCharges(new Set(draft.selectedCharges));
+      if (draft.chargeOverrides) setChargeOverrides(draft.chargeOverrides);
+      if (draft.customCharges) setCustomCharges(draft.customCharges);
+      if (draft.selectedCustom) setSelectedCustom(new Set(draft.selectedCustom));
+      setManualCustomerId(draft.manualCustomerId || null);
+      setCustomerSearch(draft.customerSearch || '');
+      setSelectedBooking(draft.selectedBooking || null);
+      setBookingSearch(draft.bookingSearch || '');
+      setBookingResults([]);
+      setBookingWarning(draft.bookingWarning || '');
+      setShowCustomerPicker(false);
+      setShowBookingPicker(false);
+      setGateOutResult(null);
+      localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
+    } catch (error) {
+      console.warn('Restore Gate-Out print draft failed:', error);
+      localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
+    }
+  };
+
+  const persistGateOutPrintDraft = () => {
+    try {
+      localStorage.setItem(GATE_OUT_PRINT_DRAFT_KEY, JSON.stringify({
+        saved_at: Date.now(),
+        yard_id: yardId,
+        searchQuery,
+        selectedContainer,
+        selectedGateOutRequest,
+        gateOutForm,
+        gateOutPhotos,
+        gateOutPhase,
+        billingData,
+        paymentMethod,
+        billingPaid,
+        billingInvoiceNumber,
+        billingInvoiceId,
+        billingClearance,
+        selectedCharges: Array.from(selectedCharges),
+        chargeOverrides,
+        customCharges,
+        selectedCustom: Array.from(selectedCustom),
+        manualCustomerId,
+        customerSearch,
+        selectedBooking,
+        bookingSearch,
+        bookingWarning,
+      }));
+    } catch (error) {
+      console.warn('Persist Gate-Out print draft failed:', error);
+    }
+  };
+
+  useEffect(() => {
+    restoreGateOutPrintDraft();
+    // Restore once when the Gate-Out workstation mounts after returning from a print tab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yardId]);
 
   // Fetch customer list for manual selection
   useEffect(() => {
@@ -415,16 +528,27 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     await createGateOutClearance('no_charge', null, 'ไม่มีค่าบริการ Gate-Out');
   };
 
-  const handlePrintBillingDocument = (continuous = false) => {
+  const openGateOutBillingPrint = (options: { templateFamily: GateBillingPrintTemplateFamily }) => {
     const invId = billingInvoiceId || billingData?.paid_invoices?.[0]?.invoice_id;
     if (!invId) return;
+    persistGateOutPrintDraft();
+    const params = new URLSearchParams({
+      id: String(invId),
+      type: 'tax_invoice_receipt',
+      templateFamily: options.templateFamily,
+      returnTo: '/gate?tab=gate_out',
+    });
+    const url = `/billing/print/continuous?${params.toString()}`;
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) window.location.href = url;
+  };
+
+  const handlePrintBillingDocument = (continuous = false) => {
     if (continuous) {
-      const printType = billingClearance?.clearance_type === 'credit' ? 'tax_invoice_receipt' : 'receipt';
-      window.open(`/billing/print/continuous?id=${invId}&type=${printType}`, '_blank');
+      openGateOutBillingPrint({ templateFamily: 'continuous_tax_receipt' });
       return;
     }
-    const printType = billingClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt';
-    window.open(`/billing/print?id=${invId}&type=${printType}`, '_blank');
+    openGateOutBillingPrint({ templateFamily: 'a4_tax_receipt' });
   };
 
   const loadGateOutBilling = async (container: ContainerResult, billingCustomerId?: number | null, bookingRef?: string) => {
@@ -768,6 +892,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       const data = await res.json();
       if (isOfflineQueuedResponse(data)) {
         setGateOutResult({ success: true, message: `บันทึก Gate-Out ${selectedContainer.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
+        localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
         clearGateOutSearch();
         setSelectedGateOutRequest(null);
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
@@ -784,6 +909,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       }
       if (data.success) {
         setGateOutResult({ success: true, message: `✅ ปล่อยตู้ ${selectedContainer.container_number} ออกจากลานสำเร็จ`, eir_number: data.eir_number });
+        localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
         clearGateOutSearch();
         setSelectedGateOutRequest(null);
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });

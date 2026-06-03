@@ -5,7 +5,7 @@ import { validateContainerNumber } from '@/lib/containerValidation';
 import {
   Loader2, CheckCircle2,
   CreditCard,
-  Printer, Users,
+  Users,
   AlertTriangle,
   ArrowDownToLine,
 } from 'lucide-react';
@@ -24,6 +24,7 @@ import GateInDriverSection from './components/GateInDriverSection';
 import GateInInspectionSection, { type GateInInspectionReport } from './components/GateInInspectionSection';
 import GateInSubmitSection, { type GateInResultState } from './components/GateInSubmitSection';
 import GateInVisibilityPreviewPanel, { type GateInVisibilityPreviewRow } from './components/GateInVisibilityPreviewPanel';
+import GateInDocumentActionStrip from './components/GateInDocumentActionStrip';
 
 interface GateInTabProps {
   yardId: number;
@@ -38,6 +39,11 @@ interface BookingDerivedContext {
   billingCustomerId?: number | null;
   truckCompanyName?: string | null;
 }
+
+type GateBillingPrintTemplateFamily = 'a4_tax_receipt' | 'continuous_tax_receipt';
+
+const GATE_IN_PRINT_DRAFT_KEY = 'cyms.gateIn.printDraft.v1';
+const GATE_IN_PRINT_DRAFT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps) {
   const { hasPermission } = useAuth();
@@ -90,6 +96,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [gateInInvoiceNumber, setGateInInvoiceNumber] = useState('');
   const [gateInInvoiceId, setGateInInvoiceId] = useState<number | null>(null);
   const [gateInClearance, setGateInClearance] = useState<BillingClearance | null>(null);
+  const [gateInReceiptPrintOpened, setGateInReceiptPrintOpened] = useState(false);
   const [gateInSelectedCharges, setGateInSelectedCharges] = useState<Set<number>>(new Set());
   const [gateInChargeOverrides, setGateInChargeOverrides] = useState<Record<number, number>>({});
   const [gateInCustomCharges, setGateInCustomCharges] = useState<BillingCharge[]>([]);
@@ -170,6 +177,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [visibilityPreviewLoading, setVisibilityPreviewLoading] = useState(false);
   const [visibilityPreviewError, setVisibilityPreviewError] = useState('');
   const visibilityPreviewRequestRef = useRef(0);
+  const restoredGateInInvoiceIdRef = useRef<number | null>(null);
+  const restoredGateInBillingSnapshotRef = useRef(false);
   const resolvedTruckingCompanyId = useMemo(
     () => selectedBooking?.trucking_company_id || customerList.find(c => c.customer_name === gateInForm.truck_company)?.customer_id || null,
     [selectedBooking, customerList, gateInForm.truck_company]
@@ -218,6 +227,122 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     setTruckCompanySearch('');
     bookingDerivedContextRef.current = {};
   };
+
+  const restoreGateInPrintDraft = () => {
+    try {
+      const raw = localStorage.getItem(GATE_IN_PRINT_DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as {
+        saved_at?: number;
+        yard_id?: number;
+        gateInForm?: GateInFormState;
+        gateInPaymentMethod?: 'cash' | 'transfer';
+        gateInBillingPaid?: boolean;
+        gateInInvoiceNumber?: string;
+        gateInInvoiceId?: number | null;
+        gateInClearance?: BillingClearance | null;
+        gateInReceiptPrintOpened?: boolean;
+        gateInBillingData?: GateInBillingData | null;
+        gateInSelectedCharges?: number[];
+        gateInChargeOverrides?: Record<number, number>;
+        gateInCustomCharges?: BillingCharge[];
+        gateInSelectedCustom?: number[];
+        containerOwnerId?: number | null;
+        billingCustomerId?: number | null;
+        billingDiffFromOwner?: boolean;
+        ownerSearch?: string;
+        billingSearch?: string;
+        manualCustomerId?: number | null;
+        customerSearch?: string;
+        selectedBooking?: GateInBookingOption | null;
+        bookingSearch?: string;
+        truckCompanySearch?: string;
+        isSoc?: boolean;
+        inspectionReport?: GateInInspectionReport | null;
+        sealPhoto?: string;
+        driverSignature?: string;
+      };
+      if (draft.yard_id !== yardId || !draft.saved_at || Date.now() - draft.saved_at > GATE_IN_PRINT_DRAFT_MAX_AGE_MS) {
+        localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
+        return;
+      }
+      if (draft.gateInForm) setGateInForm(draft.gateInForm);
+      if (draft.gateInPaymentMethod) setGateInPaymentMethod(draft.gateInPaymentMethod);
+      setGateInBillingPaid(Boolean(draft.gateInBillingPaid));
+      setGateInInvoiceNumber(draft.gateInInvoiceNumber || '');
+      setGateInInvoiceId(draft.gateInInvoiceId || null);
+      setGateInClearance(draft.gateInClearance || null);
+      setGateInReceiptPrintOpened(Boolean(draft.gateInReceiptPrintOpened));
+      if (draft.gateInBillingData) setGateInBillingData(draft.gateInBillingData);
+      if (draft.gateInSelectedCharges) setGateInSelectedCharges(new Set(draft.gateInSelectedCharges));
+      if (draft.gateInChargeOverrides) setGateInChargeOverrides(draft.gateInChargeOverrides);
+      if (draft.gateInCustomCharges) setGateInCustomCharges(draft.gateInCustomCharges);
+      if (draft.gateInSelectedCustom) setGateInSelectedCustom(new Set(draft.gateInSelectedCustom));
+      setContainerOwnerId(draft.containerOwnerId || null);
+      setBillingCustomerId(draft.billingCustomerId || null);
+      setBillingDiffFromOwner(Boolean(draft.billingDiffFromOwner));
+      setOwnerSearch(draft.ownerSearch || '');
+      setBillingSearch(draft.billingSearch || '');
+      setManualCustomerId(draft.manualCustomerId || null);
+      setCustomerSearch(draft.customerSearch || '');
+      setSelectedBooking(draft.selectedBooking || null);
+      setBookingSearch(draft.bookingSearch || '');
+      setTruckCompanySearch(draft.truckCompanySearch || '');
+      setIsSoc(Boolean(draft.isSoc));
+      setInspectionReport(draft.inspectionReport || null);
+      setSealPhoto(draft.sealPhoto || '');
+      setDriverSignature(draft.driverSignature || '');
+      restoredGateInInvoiceIdRef.current = draft.gateInInvoiceId || null;
+      restoredGateInBillingSnapshotRef.current = Boolean(draft.gateInBillingData);
+      localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
+    } catch (error) {
+      console.warn('Restore Gate-In print draft failed:', error);
+      localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
+    }
+  };
+
+  const persistGateInPrintDraft = (overrides?: { gateInReceiptPrintOpened?: boolean }) => {
+    try {
+      localStorage.setItem(GATE_IN_PRINT_DRAFT_KEY, JSON.stringify({
+        saved_at: Date.now(),
+        yard_id: yardId,
+        gateInForm,
+        gateInPaymentMethod,
+        gateInBillingPaid,
+        gateInInvoiceNumber,
+        gateInInvoiceId,
+        gateInClearance,
+        gateInReceiptPrintOpened: overrides?.gateInReceiptPrintOpened ?? gateInReceiptPrintOpened,
+        gateInBillingData,
+        gateInSelectedCharges: Array.from(gateInSelectedCharges),
+        gateInChargeOverrides,
+        gateInCustomCharges,
+        gateInSelectedCustom: Array.from(gateInSelectedCustom),
+        containerOwnerId,
+        billingCustomerId,
+        billingDiffFromOwner,
+        ownerSearch,
+        billingSearch,
+        manualCustomerId,
+        customerSearch,
+        selectedBooking,
+        bookingSearch,
+        truckCompanySearch,
+        isSoc,
+        inspectionReport,
+        sealPhoto,
+        driverSignature,
+      }));
+    } catch (error) {
+      console.warn('Persist Gate-In print draft failed:', error);
+    }
+  };
+
+  useEffect(() => {
+    restoreGateInPrintDraft();
+    // Restore once when the Gate-In workstation mounts after returning from a print tab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yardId]);
 
   const applyGateInBooking = (booking: GateInBookingOption | null) => {
     clearBookingDerivedContext();
@@ -452,8 +577,17 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   // Fetch gate-in billing when form has valid data
   useEffect(() => {
     if (containerValid !== true) {
+      if (restoredGateInBillingSnapshotRef.current && containerValid === null) return;
+      restoredGateInBillingSnapshotRef.current = false;
+      restoredGateInInvoiceIdRef.current = null;
       setGateInBillingData(null);
       setGateInBillingPaid(false);
+      setGateInReceiptPrintOpened(false);
+      return;
+    }
+    if (restoredGateInBillingSnapshotRef.current) {
+      restoredGateInBillingSnapshotRef.current = false;
+      restoredGateInInvoiceIdRef.current = null;
       return;
     }
     setGateInBillingLoading(true);
@@ -482,12 +616,17 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           setGateInChargeOverrides({});
           setGateInCustomCharges([]);
           setGateInSelectedCustom(new Set());
-          setGateInBillingPaid(false);
-          setGateInClearance(null);
-          setGateInInvoiceNumber('');
-          setGateInInvoiceId(null);
-          setManualCustomerId(null);
-          setShowCustomerPicker(false);
+          if (restoredGateInInvoiceIdRef.current) {
+            restoredGateInInvoiceIdRef.current = null;
+          } else {
+            setGateInBillingPaid(false);
+            setGateInReceiptPrintOpened(false);
+            setGateInClearance(null);
+            setGateInInvoiceNumber('');
+            setGateInInvoiceId(null);
+            setManualCustomerId(null);
+            setShowCustomerPicker(false);
+          }
         }
       })
       .catch(err => console.error('Gate-in billing fetch error:', err))
@@ -626,10 +765,12 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       }, { operation: 'gate_in' });
       const data = await res.json();
       if (isOfflineQueuedResponse(data)) {
+        localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
         setGateInResult({ success: true, message: `บันทึก Gate-In ${gateInForm.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
         resetGateInOwnerBillingContext();
         setGateInClearance(null);
+        setGateInReceiptPrintOpened(false);
         setInspectionReport(null);
         setBoxtechResult(null);
         setContainerValid(null);
@@ -656,9 +797,11 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         }
 
         setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
+        localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
         resetGateInOwnerBillingContext();
         setGateInClearance(null);
+        setGateInReceiptPrintOpened(false);
         setInspectionReport(null);
         setBoxtechResult(null);
         setContainerValid(null);
@@ -668,6 +811,21 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       }
     } catch (err) { console.error(err); setGateInResult({ success: false, message: '❌ เกิดข้อผิดพลาด' }); }
     finally { setGateInLoading(false); }
+  };
+
+  const openGateInBillingPrint = (options: { templateFamily: GateBillingPrintTemplateFamily }) => {
+    if (!gateInInvoiceId) return;
+    persistGateInPrintDraft({ gateInReceiptPrintOpened: true });
+    setGateInReceiptPrintOpened(true);
+    const params = new URLSearchParams({
+      id: String(gateInInvoiceId),
+      type: 'tax_invoice_receipt',
+      templateFamily: options.templateFamily,
+      returnTo: '/gate?tab=gate_in',
+    });
+    const url = `/billing/print/continuous?${params.toString()}`;
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) window.location.href = url;
   };
 
   // OCR callback
@@ -738,6 +896,15 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     inspectionReport,
     sealPhoto,
   ]);
+  const gateInEirStep = gateInWorkflow.steps.find(step => step.id === 'eir');
+  const gateInEirStepActive = gateInEirStep?.status === 'active';
+  const gateInEirIssued = gateInEirStep?.status === 'done';
+  const gateInClearanceLabel =
+    gateInClearance?.clearance_type === 'no_charge' ? 'No Charge ยืนยันแล้ว' :
+    gateInClearance?.clearance_type === 'waived' ? 'อนุมัติยกเว้นค่าใช้จ่ายแล้ว' :
+    gateInClearance?.clearance_type === 'credit' ? 'วางบิลเรียบร้อยแล้ว' :
+    gateInBillingCleared ? 'ชำระเงินเรียบร้อยแล้ว' :
+    'ยังไม่เคลียร์ค่าใช้จ่าย';
 
   return (
     <>
@@ -1095,28 +1262,14 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
               {/* Paid confirmation */}
               {gateInBillingPaid && (
                 <div className="px-4 py-3 bg-emerald-50 dark:bg-emerald-900/10 border-t border-emerald-200 dark:border-emerald-800">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-emerald-600">
-                      <CheckCircle2 size={16} />
-                      <span className="text-sm font-bold">✅ {
-                        gateInClearance?.clearance_type === 'no_charge' ? 'No Charge' :
-                        gateInClearance?.clearance_type === 'waived' ? 'Waived' :
-                        resolvedIsCredit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'
-                      }</span>
-                      {gateInInvoiceNumber && <span className="text-xs font-mono text-emerald-500">({gateInInvoiceNumber})</span>}
-                    </div>
-                    {gateInInvoiceId && (
-                      <div className="flex flex-wrap justify-end gap-1">
-                        <button onClick={() => window.open(`/billing/print?id=${gateInInvoiceId}&type=${gateInClearance?.clearance_type === 'credit' ? 'invoice' : 'receipt'}`, '_blank')}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
-                          <Printer size={12} /> 🖨️ พิมพ์{gateInClearance?.clearance_type === 'credit' ? 'ใบแจ้งหนี้' : 'ใบเสร็จ'}
-                        </button>
-                        <button onClick={() => window.open(`/billing/print/continuous?id=${gateInInvoiceId}&type=${gateInClearance?.clearance_type === 'credit' ? 'tax_invoice_receipt' : 'receipt'}`, '_blank')}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white text-emerald-700 border border-emerald-200 text-xs font-bold hover:bg-emerald-50 transition-colors">
-                          <Printer size={12} /> ฟอร์มต่อเนื่อง
-                        </button>
-                      </div>
-                    )}
+                  <div className="flex items-center gap-2 text-emerald-600">
+                    <CheckCircle2 size={16} />
+                    <span className="text-sm font-bold">✅ {
+                      gateInClearance?.clearance_type === 'no_charge' ? 'No Charge' :
+                      gateInClearance?.clearance_type === 'waived' ? 'Waived' :
+                      resolvedIsCredit ? 'วางบิลแล้ว' : 'ชำระเงินแล้ว'
+                    }</span>
+                    {gateInInvoiceNumber && <span className="text-xs font-mono text-emerald-500">({gateInInvoiceNumber})</span>}
                   </div>
                 </div>
               )}
@@ -1133,6 +1286,20 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
               )}
             </div>
           ) : null}
+
+          {(gateInBillingData || gateInBillingCleared) && (
+            <GateInDocumentActionStrip
+              billingCleared={gateInBillingCleared}
+              invoiceId={gateInInvoiceId}
+              invoiceNumber={gateInInvoiceNumber}
+              receiptPrintOpened={gateInReceiptPrintOpened}
+              readyForEir={gateInEirStepActive}
+              eirIssued={gateInEirIssued}
+              clearanceLabel={gateInClearanceLabel}
+              onPrintA4={() => openGateInBillingPrint({ templateFamily: 'a4_tax_receipt' })}
+              onPrintContinuous={() => openGateInBillingPrint({ templateFamily: 'continuous_tax_receipt' })}
+            />
+          )}
 
           <GateInSubmitSection
             gateInForm={gateInForm}

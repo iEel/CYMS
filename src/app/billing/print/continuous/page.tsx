@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { ContinuousTaxReceipt } from '@/components/billing/ContinuousTaxReceipt';
 import { buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrintSample';
-import { buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
+import { buildDefaultA4TaxReceiptTemplateConfig, buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
 import { sanitizeContinuousPrintReturnTo } from './returnPath';
 import type { ContinuousPrintPayload } from '@/lib/billingContinuousPrintTypes';
 import type {
@@ -56,6 +56,11 @@ function copyModeFrom(value: string | null): DocumentTemplateCopyMode {
   return value === 'separate' ? 'separate' : 'carbonless';
 }
 
+function templateFamilyFrom(value: string | null): DocumentTemplateConfig['template_family'] | null {
+  if (value === 'a4_tax_receipt' || value === 'continuous_tax_receipt') return value;
+  return null;
+}
+
 function booleanFrom(value: string | null) {
   return value === '1' || value === 'true' || value === 'yes';
 }
@@ -73,7 +78,7 @@ function positiveIntFrom(value: unknown) {
 
 function withPreviewParams(searchParams: URLSearchParams): PreviewRequest {
   const previewParams = new URLSearchParams();
-  for (const key of ['id', 'type', 'mode', 'copyMode', 'copyIndex', 'preview', 'testPrint', 'templateId', 'versionNo', 'calibrationProfileId']) {
+  for (const key of ['id', 'type', 'mode', 'copyMode', 'copyIndex', 'preview', 'testPrint', 'templateId', 'versionNo', 'templateFamily', 'calibrationProfileId']) {
     const value = searchParams.get(key);
     if (value !== null) previewParams.set(key, value);
   }
@@ -88,6 +93,7 @@ function withTestPrintParams(
   const templateId = positiveIntFrom(searchParams.get('templateId'));
   const versionNo = positiveIntFrom(searchParams.get('versionNo'));
   const calibrationProfileId = searchParams.get('calibrationProfileId')?.trim();
+  const templateFamily = templateFamilyFrom(searchParams.get('templateFamily'));
   return {
     url: '/api/document-templates/test-print',
     init: {
@@ -99,6 +105,7 @@ function withTestPrintParams(
         copyMode,
         template_id: templateId,
         version_no: versionNo,
+        ...(templateFamily ? { templateFamily } : {}),
         ...(calibrationProfileId ? { calibrationProfileId } : {}),
       }),
     },
@@ -117,8 +124,20 @@ function previewRequestFromSearchParams(
     : withPreviewParams(searchParams);
 }
 
-function fallbackPreview(mode: DocumentTemplateMode, copyMode: DocumentTemplateCopyMode) {
-  const config = buildDefaultContinuousTemplateConfig();
+function returnLabelFrom(returnTo: string) {
+  if (returnTo.startsWith('/gate')) return 'กลับไป Gate';
+  if (returnTo.startsWith('/billing')) return 'กลับไปบัญชี';
+  return 'กลับไป Document Templates';
+}
+
+function fallbackPreview(
+  mode: DocumentTemplateMode,
+  copyMode: DocumentTemplateCopyMode,
+  templateFamily: DocumentTemplateConfig['template_family'] | null,
+) {
+  const config = templateFamily === 'a4_tax_receipt'
+    ? buildDefaultA4TaxReceiptTemplateConfig()
+    : buildDefaultContinuousTemplateConfig();
   return {
     payload: buildSampleContinuousPrintPayload(),
     config: {
@@ -139,8 +158,9 @@ function ContinuousPrintContent() {
   const returnTo = sanitizeContinuousPrintReturnTo(searchParams.get('returnTo'));
   const templateId = searchParams.get('templateId');
   const versionNo = searchParams.get('versionNo');
+  const templateFamily = templateFamilyFrom(searchParams.get('templateFamily'));
   const hasInvoiceId = Boolean(searchParams.get('id'));
-  const fallback = useMemo(() => fallbackPreview(mode, copyMode), [mode, copyMode]);
+  const fallback = useMemo(() => fallbackPreview(mode, copyMode, templateFamily), [mode, copyMode, templateFamily]);
   const [payload, setPayload] = useState<ContinuousPrintPayload | null>(null);
   const [config, setConfig] = useState<DocumentTemplateConfig | null>(null);
   const [templateCode, setTemplateCode] = useState('');
@@ -351,7 +371,7 @@ function ContinuousPrintContent() {
             aria-label="Back to document template designer"
           >
             <ArrowLeft size={16} />
-            กลับไป Document Templates
+            {returnLabelFrom(returnTo)}
           </a>
           <div className="continuous-print-toolbar-title">
             <strong>{previewTitle}</strong>

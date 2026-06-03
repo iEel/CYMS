@@ -3,6 +3,7 @@ import path from 'path';
 
 describe('Gate In workstation UI', () => {
   const gateIn = fs.readFileSync(path.join(process.cwd(), 'src/app/(dashboard)/gate/GateInTab.tsx'), 'utf8');
+  const documentActionStrip = fs.readFileSync(path.join(process.cwd(), 'src/app/(dashboard)/gate/components/GateInDocumentActionStrip.tsx'), 'utf8');
 
   it('uses a two-column workstation layout with a primary workspace and side rail', () => {
     expect(gateIn).toContain('gate-in-workstation-shell');
@@ -47,5 +48,14 @@ describe('Gate In workstation UI', () => {
     expect(gateIn).toContain('Business relationship');
     expect(gateIn).toContain('Container owner');
     expect(gateIn).toContain('Billing customer');
+  });
+
+  it('extends the existing guided workflow with a document action strip instead of adding a second workflow', () => {
+    expect(gateIn).toContain('GateInDocumentActionStrip');
+    expect(gateIn).toContain('gateInReceiptPrintOpened');
+    expect(gateIn).toContain('readyForEir={gateInEirStepActive}');
+    expect(documentActionStrip).toContain('ต่อจาก Billing clearance ใน guided workflow เดิม');
+    expect(documentActionStrip).toContain('งานเอกสารถัดไป');
+    expect(documentActionStrip).toContain('เปิดหน้าพิมพ์แล้ว กลับมาทำ Gate-In ต่อได้');
   });
 });

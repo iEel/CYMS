@@ -505,6 +505,8 @@ describe('continuous print UI', () => {
     expect(source).toContain('handleBackToTemplate');
     expect(source).toContain('returnTo');
     expect(source).toContain("sanitizeContinuousPrintReturnTo(searchParams.get('returnTo'))");
+    expect(source).toContain('returnLabelFrom(returnTo)');
+    expect(source).toContain("returnTo.startsWith('/gate')");
     expect(source).not.toContain("searchParams.get('returnTo') || '/settings?tab=document-templates'");
     expect(source).toContain('กลับไป Document Templates');
     expect(source).toContain('href={returnTo}');
@@ -570,8 +572,76 @@ describe('continuous print UI', () => {
     ].forEach((sourcePath) => {
       const source = fs.readFileSync(sourcePath, 'utf8');
 
-      expect(source).toContain('/billing/print/continuous?id=');
+      const expectedPath = [gateInTabPath, gateOutTabPath].includes(sourcePath)
+        ? '/billing/print/continuous?'
+        : '/billing/print/continuous?id=';
+      expect(source).toContain(expectedPath);
     });
+  });
+
+  it('routes gate billing print actions through document templates with stable return paths', () => {
+    const gateIn = fs.readFileSync(gateInTabPath, 'utf8');
+    const gateOut = fs.readFileSync(gateOutTabPath, 'utf8');
+
+    expect(gateIn).toContain('openGateInBillingPrint');
+    expect(gateIn).toContain("templateFamily: 'a4_tax_receipt'");
+    expect(gateIn).toContain("templateFamily: 'continuous_tax_receipt'");
+    expect(gateIn).toContain("type: 'tax_invoice_receipt'");
+    expect(gateIn).toContain("returnTo: '/gate?tab=gate_in'");
+    expect(gateIn).toContain('persistGateInPrintDraft');
+    expect(gateIn).not.toContain('/billing/print?id=${gateInInvoiceId}');
+
+    expect(gateOut).toContain('openGateOutBillingPrint');
+    expect(gateOut).toContain("templateFamily: 'a4_tax_receipt'");
+    expect(gateOut).toContain("templateFamily: 'continuous_tax_receipt'");
+    expect(gateOut).toContain("type: 'tax_invoice_receipt'");
+    expect(gateOut).toContain("returnTo: '/gate?tab=gate_out'");
+    expect(gateOut).not.toContain('/billing/print?id=${invId}');
+  });
+
+  it('preserves the gate-in payment draft before opening a print preview', () => {
+    const gateIn = fs.readFileSync(gateInTabPath, 'utf8');
+
+    expect(gateIn).toContain('GATE_IN_PRINT_DRAFT_KEY');
+    expect(gateIn).toContain('localStorage.setItem(GATE_IN_PRINT_DRAFT_KEY');
+    expect(gateIn).toContain('localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY)');
+    expect(gateIn).not.toContain('sessionStorage.setItem(GATE_IN_PRINT_DRAFT_KEY');
+    expect(gateIn).toContain('restoreGateInPrintDraft');
+    expect(gateIn).toContain('persistGateInPrintDraft');
+    expect(gateIn).toContain('localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);');
+  });
+
+  it('preserves gate-in billing charge state when returning from receipt print', () => {
+    const gateIn = fs.readFileSync(gateInTabPath, 'utf8');
+
+    expect(gateIn).toContain('gateInBillingData');
+    expect(gateIn).toContain('gateInSelectedCharges: Array.from(gateInSelectedCharges)');
+    expect(gateIn).toContain('gateInChargeOverrides');
+    expect(gateIn).toContain('gateInCustomCharges');
+    expect(gateIn).toContain('gateInSelectedCustom: Array.from(gateInSelectedCustom)');
+    expect(gateIn).toContain('if (draft.gateInBillingData) setGateInBillingData(draft.gateInBillingData)');
+    expect(gateIn).toContain('if (draft.gateInSelectedCharges) setGateInSelectedCharges(new Set(draft.gateInSelectedCharges))');
+    expect(gateIn).toContain('if (draft.gateInSelectedCustom) setGateInSelectedCustom(new Set(draft.gateInSelectedCustom))');
+    expect(gateIn).toContain('restoredGateInBillingSnapshotRef.current = Boolean(draft.gateInBillingData)');
+  });
+
+  it('preserves gate-out billing and release state when returning from receipt print', () => {
+    const gateOut = fs.readFileSync(gateOutTabPath, 'utf8');
+
+    expect(gateOut).toContain('GATE_OUT_PRINT_DRAFT_KEY');
+    expect(gateOut).toContain('localStorage.setItem(GATE_OUT_PRINT_DRAFT_KEY');
+    expect(gateOut).toContain('localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY)');
+    expect(gateOut).not.toContain('sessionStorage.setItem(GATE_OUT_PRINT_DRAFT_KEY');
+    expect(gateOut).toContain('restoreGateOutPrintDraft');
+    expect(gateOut).toContain('persistGateOutPrintDraft');
+    expect(gateOut).toContain('selectedContainer');
+    expect(gateOut).toContain('selectedGateOutRequest');
+    expect(gateOut).toContain('billingData');
+    expect(gateOut).toContain('selectedCharges: Array.from(selectedCharges)');
+    expect(gateOut).toContain('selectedCustom: Array.from(selectedCustom)');
+    expect(gateOut).toContain('if (draft.billingData) setBillingData(draft.billingData)');
+    expect(gateOut).toContain('if (draft.selectedCharges) setSelectedCharges(new Set(draft.selectedCharges))');
+    expect(gateOut).toContain('if (draft.selectedCustom) setSelectedCustom(new Set(draft.selectedCustom))');
   });
 
   it('guards sample previews from real print-log posting', () => {

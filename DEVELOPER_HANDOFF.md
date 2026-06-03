@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 2 มิถุนายน 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer + Continuous Receipt Canvas Renderer + Billing API Permission Hardening + Settings API Hardening + EDI/Booking API Permission Hardening + Remaining Operational API Hardening + Attachment Center Hardening + CODECO Export Guard + Smoke Coverage + Migration Ledger + Preview Navigation Hardening + Yard 3D Workspace Polish** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 3 มิถุนายน 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer + Continuous Receipt Canvas Renderer + Billing API Permission Hardening + Settings API Hardening + EDI/Booking API Permission Hardening + Remaining Operational API Hardening + Attachment Center Hardening + CODECO Export Guard + Smoke Coverage + Migration Ledger + Preview Navigation Hardening + Yard 3D Workspace Polish + Gate Billing Print Return Restore** (~100%)
 
 ---
 
@@ -22,7 +22,39 @@
 | **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Continuous Tax Invoice/Receipt Template, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
 
-### อัปเดตล่าสุด: Continuous Receipt Canvas Renderer (2 มิ.ย. 2569)
+### อัปเดตล่าสุด: Gate Billing Print Return Restore + Document Actions (3 มิ.ย. 2569)
+
+รอบนี้แก้ปัญหาหน้างาน Gate หลังพิมพ์ใบเสร็จ/ใบกำกับภาษีแล้วกดกลับมาที่ Gate แล้วข้อมูลเรียกเก็บหาย หรือ workflow ถูก reset ก่อนออก EIR:
+
+- **Gate-In document action strip**: เพิ่ม `GateInDocumentActionStrip` ให้ใช้ร่วมกับ `Gate-In guided workflow` เดิม ไม่สร้าง workflow ซ้ำ; หลังชำระ/วางบิล/No Charge แล้วจะแสดงงานเอกสารถัดไป, ปุ่มพิมพ์ A4/ฟอร์มต่อเนื่อง, สถานะใบเสร็จ และ action ไปออก EIR ในบริบทเดียวกัน
+- **Gate-In print draft restore**: ก่อนเปิด `/billing/print/continuous` จะ snapshot `gateInForm`, payment/invoice/clearance, billing data, selected charges, custom charges, owner/billing customer, booking, SOC/COC, inspection, seal photo และ signature ลง `localStorage` ชั่วคราว แล้ว restore เมื่อกลับ `/gate?tab=gate_in`
+- **Gate-Out print draft restore**: เพิ่ม `GATE_OUT_PRINT_DRAFT_KEY` เพื่อ snapshot/restore `selectedContainer`, `selectedGateOutRequest`, Gate-Out phase, driver/truck form, exit photos, booking, billing customer, billing data, selected/custom charges, invoice id/number และ clearance ก่อนเปิด print; หลังกลับ `/gate?tab=gate_out` จึงยังเห็นยอดเรียกเก็บ/เลขใบเสร็จ/ปุ่มออก EIR ครบ
+- **Stable print return paths**: Gate In/Out ใช้ `/billing/print/continuous?...&returnTo=/gate?tab=...` ผ่าน document template flow เดียวกับ Billing และหน้า print แสดงปุ่มกลับตาม context ของ Gate/Settings
+- **Draft cleanup**: draft ถูกลบทันทีหลัง restore หรือเมื่อ Gate In/Gate Out submit สำเร็จ/เข้า offline queue เพื่อลดโอกาสเอา state เก่ามาปนงานใหม่
+
+ไฟล์หลัก:
+- `src/app/(dashboard)/gate/GateInTab.tsx`
+- `src/app/(dashboard)/gate/GateOutTab.tsx`
+- `src/app/(dashboard)/gate/components/GateInDocumentActionStrip.tsx`
+- `src/app/billing/print/continuous/page.tsx`
+- `src/app/api/document-templates/preview/route.ts`
+- `src/app/api/__tests__/continuous-print-ui.test.ts`
+- `src/app/api/__tests__/gate-in-workstation-ui.test.ts`
+
+Verification รอบนี้:
+
+```bash
+npx jest src/app/api/__tests__/continuous-print-ui.test.ts --runInBand --cacheDirectory ./.jest-cache
+npx jest src/app/api/__tests__/gate-out-request-persistence.test.ts --runInBand --cacheDirectory ./.jest-cache
+npx jest src/app/api/__tests__/gate-in-workstation-ui.test.ts --runInBand --cacheDirectory ./.jest-cache
+npx tsc --noEmit
+npm run lint
+npx jest --runInBand --cacheDirectory ./.jest-cache
+```
+
+ผลล่าสุด: `continuous-print-ui` 42/42 ผ่าน, `gate-out-request-persistence` 4/4 ผ่าน, `gate-in-workstation-ui` 7/7 ผ่าน, `tsc` ผ่าน, `eslint` ผ่าน และ full Jest `144 suites / 1489 tests` ผ่าน; Browser proof ยืนยันว่า Gate-Out หลัง restore ยังมีค่าใช้จ่าย, เลขใบเสร็จ, driver/truck และปุ่มออก EIR อยู่ครบ
+
+### อัปเดตล่าสุดก่อนหน้า: Continuous Receipt Canvas Renderer (2 มิ.ย. 2569)
 
 รอบนี้รวม Full Form print preview ของ Continuous Tax Invoice / Receipt เข้ากับ model เดียวกับ Visual Designer เพื่อไม่ให้หน้า Document Templates กับหน้า Preview เป็นคนละชุดฟอร์ม:
 
@@ -2228,7 +2260,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ~~ใช้ `window.confirm()` ทุกจุด~~ → **แก้แล้ว** เปลี่ยนเป็น `ConfirmDialog` custom modal ทั้ง 8 จุด |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --cacheDirectory .tmp\jest --runInBand` ผ่าน 144 suites / 1437 tests; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Portal entity access grants + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning + Yard 3D Workspace Polish + Reefer Monitoring/Exception + Document Template Designer + Billing/Settings/API/EDI Attachment hardening tests แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npx jest --runInBand --cacheDirectory ./.jest-cache` ผ่าน 144 suites / 1489 tests; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Portal entity access grants + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning + Yard 3D Workspace Polish + Reefer Monitoring/Exception + Document Template Designer + Billing/Settings/API/EDI Attachment hardening tests + Gate print-return restore แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
@@ -2310,5 +2342,5 @@ node scripts/migrate-runtime-core-schema.js
 ---
 
 > **ผู้สร้าง**: AI Assistant (Antigravity)  
-> **วันที่อัพเดทล่าสุด**: 21 พฤษภาคม 2569
+> **วันที่อัพเดทล่าสุด**: 3 มิถุนายน 2569
 > **เอกสารเพิ่มเติม**: `src/lib/schema.sql` (SQL schema), `.env.local` (config)
