@@ -71,8 +71,18 @@ describe('derived yard access for read routes', () => {
     jest.clearAllMocks();
   });
 
-  it('documents activity selects lifecycle yard ids for post-query access checks', async () => {
+  it('documents activity resolves invoice yard access before querying lifecycle rows', async () => {
     const db = makeDb((statement) => {
+      if (statement.includes('FROM Invoices')) {
+        return {
+          recordset: [{
+            entity_id: 10,
+            entity_ref: 'INV-001',
+            yard_id: 5,
+            customer_id: 12,
+          }],
+        };
+      }
       if (statement.includes('FROM DocumentLifecycle dl')) {
         return {
           recordset: [{
@@ -96,6 +106,7 @@ describe('derived yard access for read routes', () => {
     const res = await documentActivityRoute.GET(makeRequest('http://localhost/api/documents/activity?document_number=INV-001'));
 
     expect(res.status).toBe(200);
+    expect(db.statements.find(statement => statement.includes('FROM Invoices'))).toBeTruthy();
     const documentQuery = db.statements.find(statement => statement.includes('FROM DocumentLifecycle dl'));
     expect(documentQuery).toMatch(/SELECT TOP \(@limit\)[\s\S]*\bdl\.yard_id\b[\s\S]*FROM DocumentLifecycle dl/);
     expect(db.yardAccessChecks).toEqual([5]);
@@ -161,8 +172,18 @@ describe('derived yard access for read routes', () => {
     expect(body.timeline[1]).not.toHaveProperty('yard_id');
   });
 
-  it('documents activity returns 403 when derived yard access is denied after querying', async () => {
+  it('documents activity returns 403 when resolved yard access is denied before lifecycle query', async () => {
     const db = makeDb((statement) => {
+      if (statement.includes('FROM Invoices')) {
+        return {
+          recordset: [{
+            entity_id: 10,
+            entity_ref: 'INV-001',
+            yard_id: 5,
+            customer_id: 12,
+          }],
+        };
+      }
       if (statement.includes('FROM DocumentLifecycle dl')) {
         return {
           recordset: [{
@@ -189,6 +210,7 @@ describe('derived yard access for read routes', () => {
     expect(res.status).toBe(403);
     expect(body.error).toContain('ลานนี้');
     expect(db.yardAccessChecks).toEqual([5]);
+    expect(db.statements.some(statement => statement.includes('FROM DocumentLifecycle dl'))).toBe(false);
   });
 
   it('entity timeline returns 403 when derived yard access is denied before timeline querying', async () => {
