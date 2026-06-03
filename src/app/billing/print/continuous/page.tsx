@@ -141,8 +141,8 @@ function ContinuousPrintContent() {
   const versionNo = searchParams.get('versionNo');
   const hasInvoiceId = Boolean(searchParams.get('id'));
   const fallback = useMemo(() => fallbackPreview(mode, copyMode), [mode, copyMode]);
-  const [payload, setPayload] = useState<ContinuousPrintPayload>(fallback.payload);
-  const [config, setConfig] = useState<DocumentTemplateConfig>(fallback.config);
+  const [payload, setPayload] = useState<ContinuousPrintPayload | null>(null);
+  const [config, setConfig] = useState<DocumentTemplateConfig | null>(null);
   const [templateCode, setTemplateCode] = useState('');
   const [templateName, setTemplateName] = useState('');
   const [templateVersion, setTemplateVersion] = useState(1);
@@ -151,10 +151,10 @@ function ContinuousPrintContent() {
   const [errorMessage, setErrorMessage] = useState('');
   const [printError, setPrintError] = useState('');
   const [printing, setPrinting] = useState(false);
-  const isSamplePreview = searchParams.get('preview') === 'sample' || payload.document.document_type === 'sample';
+  const isSamplePreview = searchParams.get('preview') === 'sample' || payload?.document.document_type === 'sample';
   const realDocumentId = isSamplePreview
     ? null
-    : positiveIntFrom(payload.document.invoice_id) || positiveIntFrom(searchParams.get('id'));
+    : positiveIntFrom(payload?.document.invoice_id) || positiveIntFrom(searchParams.get('id'));
   const effectiveTestPrint = testPrint && !realDocumentId;
 
   useEffect(() => {
@@ -163,6 +163,11 @@ function ContinuousPrintContent() {
     async function loadPreview() {
       setStatus('loading');
       setErrorMessage('');
+      setPayload(null);
+      setConfig(null);
+      setTemplateCode('');
+      setTemplateName('');
+      setReprintLabel(previewLabel);
       try {
         const previewRequest = previewRequestFromSearchParams(searchParams, mode, copyMode, testPrint, hasInvoiceId);
         const response = await fetch(previewRequest.url, previewRequest.init);
@@ -204,6 +209,7 @@ function ContinuousPrintContent() {
   }, [copyMode, fallback, hasInvoiceId, mode, previewLabel, searchParams, testPrint]);
 
   async function postPrintLog(documentId: number, reprintReason?: string | null): Promise<PrintLogResponse> {
+    if (!payload || !config) return { error: 'Preview is not ready' };
     const policy = config.print_policy;
     const response = await fetch('/api/document-templates/print-log', {
       method: 'POST',
@@ -232,6 +238,7 @@ function ContinuousPrintContent() {
 
   async function handlePrint() {
     setPrintError('');
+    if (!payload || !config) return;
     if (!realDocumentId || isSamplePreview) {
       window.print();
       return;
@@ -266,7 +273,7 @@ function ContinuousPrintContent() {
   }
 
   const previewTitle = templateName
-    || (config.template_family === 'a4_tax_receipt' ? 'A4 Tax Invoice / Receipt' : 'Continuous Tax Invoice / Receipt');
+    || (config?.template_family === 'a4_tax_receipt' ? 'A4 Tax Invoice / Receipt' : 'Document Preview');
 
   return (
     <>
@@ -318,6 +325,18 @@ function ContinuousPrintContent() {
         .continuous-print-status { color: #d1d5db; font-size: 12px; }
         .continuous-print-error { color: #fecaca; font-size: 12px; margin-top: 2px; }
         .continuous-print-shell { padding: 76px 16px 24px; }
+        .continuous-print-loading {
+          align-items: center;
+          background: #fff;
+          color: #475569;
+          display: flex;
+          font-size: 14px;
+          justify-content: center;
+          margin: 0 auto;
+          min-height: 320px;
+          max-width: 760px;
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+        }
         @media print {
           .continuous-print-toolbar { display: none !important; }
           .continuous-print-shell { padding: 0; }
@@ -353,7 +372,7 @@ function ContinuousPrintContent() {
         <button
           type="button"
           onClick={handlePrint}
-          disabled={status === 'error' || status === 'loading' || printing}
+          disabled={status === 'error' || status === 'loading' || !payload || !config || printing}
           aria-label="Print continuous receipt"
         >
           <Printer size={16} />
@@ -366,6 +385,8 @@ function ContinuousPrintContent() {
             <h1 className="text-lg font-bold">ไม่สามารถโหลดข้อมูลเอกสารได้</h1>
             <p className="mt-2 text-sm text-slate-500">{errorMessage || 'กรุณาตรวจสอบสิทธิ์หรือข้อมูลใบแจ้งหนี้'}</p>
           </div>
+        ) : status === 'loading' || !payload || !config ? (
+          <div className="continuous-print-loading">Loading preview...</div>
         ) : (
           <ContinuousTaxReceipt
             payload={payload}

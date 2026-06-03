@@ -125,7 +125,7 @@ describe('document template visual designer UI', () => {
 
     expect(previewRoute).toContain('t.template_name');
     expect(previewRoute).toContain('template_family');
-    expect(previewPage).toContain("config.template_family === 'a4_tax_receipt'");
+    expect(previewPage).toContain("config?.template_family === 'a4_tax_receipt'");
     expect(previewPage).toContain('previewTitle');
     expect(previewPage).not.toContain('<strong>Continuous Tax Invoice / Receipt</strong>');
   });

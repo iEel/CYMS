@@ -533,6 +533,17 @@ describe('continuous print UI', () => {
     expect(source).toContain("Template {templateId || '-'} / v{versionNo || '-'}");
   });
 
+  it('does not render fallback receipt content while the selected preview is loading', () => {
+    const source = fs.readFileSync(pagePath, 'utf8');
+
+    expect(source).toContain('useState<ContinuousPrintPayload | null>(null)');
+    expect(source).toContain('useState<DocumentTemplateConfig | null>(null)');
+    expect(source).toContain("status === 'loading' || !payload || !config");
+    expect(source).toContain('continuous-print-loading');
+    expect(source).not.toContain('useState<ContinuousPrintPayload>(fallback.payload)');
+    expect(source).not.toContain('useState<DocumentTemplateConfig>(fallback.config)');
+  });
+
   it('wires document template management into settings', () => {
     const source = fs.readFileSync(settingsPath, 'utf8');
 
@@ -570,7 +581,7 @@ describe('continuous print UI', () => {
     expect(source).toMatch(/if \(!realDocumentId \|\| isSamplePreview\)/);
     expect(source).not.toMatch(/if \(!realDocumentId \|\| testPrint \|\| isSamplePreview\)/);
     expect(source).toContain("searchParams.get('preview') === 'sample'");
-    expect(source).toContain("payload.document.document_type === 'sample'");
+    expect(source).toContain("payload?.document.document_type === 'sample'");
   });
 
   it('opens settings test prints as sample-only without a real invoice id', () => {
