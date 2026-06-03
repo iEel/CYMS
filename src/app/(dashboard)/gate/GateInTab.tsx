@@ -26,6 +26,7 @@ import GateInInspectionSection, { type GateInInspectionReport } from './componen
 import GateInSubmitSection, { type GateInResultState } from './components/GateInSubmitSection';
 import GateInVisibilityPreviewPanel, { type GateInVisibilityPreviewRow } from './components/GateInVisibilityPreviewPanel';
 import GateInDocumentActionStrip from './components/GateInDocumentActionStrip';
+import { useGatePrintReturnDraft } from './hooks/useGatePrintReturnDraft';
 
 interface GateInTabProps {
   yardId: number;
@@ -42,6 +43,37 @@ interface BookingDerivedContext {
 }
 
 type GateBillingPrintTemplateFamily = 'a4_tax_receipt' | 'continuous_tax_receipt';
+
+type GateInPrintDraft = {
+  saved_at?: number;
+  yard_id?: number;
+  gateInForm?: GateInFormState;
+  gateInPaymentMethod?: 'cash' | 'transfer';
+  gateInBillingPaid?: boolean;
+  gateInInvoiceNumber?: string;
+  gateInInvoiceId?: number | null;
+  gateInClearance?: BillingClearance | null;
+  gateInReceiptPrintOpened?: boolean;
+  gateInBillingData?: GateInBillingData | null;
+  gateInSelectedCharges?: number[];
+  gateInChargeOverrides?: Record<number, number>;
+  gateInCustomCharges?: BillingCharge[];
+  gateInSelectedCustom?: number[];
+  containerOwnerId?: number | null;
+  billingCustomerId?: number | null;
+  billingDiffFromOwner?: boolean;
+  ownerSearch?: string;
+  billingSearch?: string;
+  manualCustomerId?: number | null;
+  customerSearch?: string;
+  selectedBooking?: GateInBookingOption | null;
+  bookingSearch?: string;
+  truckCompanySearch?: string;
+  isSoc?: boolean;
+  inspectionReport?: GateInInspectionReport | null;
+  sealPhoto?: string;
+  driverSignature?: string;
+};
 
 const GATE_IN_PRINT_DRAFT_KEY = 'cyms.gateIn.printDraft.v1';
 const GATE_IN_PRINT_DRAFT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
@@ -181,6 +213,13 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const visibilityPreviewRequestRef = useRef(0);
   const restoredGateInInvoiceIdRef = useRef<number | null>(null);
   const restoredGateInBillingSnapshotRef = useRef(false);
+  const gateInPrintDraft = useGatePrintReturnDraft<GateInPrintDraft>({
+    storageKey: GATE_IN_PRINT_DRAFT_KEY,
+    label: 'Gate-In print draft',
+    isValidDraft: draft => draft.yard_id === yardId
+      && Boolean(draft.saved_at)
+      && Date.now() - Number(draft.saved_at) <= GATE_IN_PRINT_DRAFT_MAX_AGE_MS,
+  });
   const resolvedTruckingCompanyId = useMemo(
     () => selectedBooking?.trucking_company_id || customerList.find(c => c.customer_name === gateInForm.truck_company)?.customer_id || null,
     [selectedBooking, customerList, gateInForm.truck_company]
@@ -231,113 +270,69 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   };
 
   const restoreGateInPrintDraft = () => {
-    try {
-      const raw = localStorage.getItem(GATE_IN_PRINT_DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw) as {
-        saved_at?: number;
-        yard_id?: number;
-        gateInForm?: GateInFormState;
-        gateInPaymentMethod?: 'cash' | 'transfer';
-        gateInBillingPaid?: boolean;
-        gateInInvoiceNumber?: string;
-        gateInInvoiceId?: number | null;
-        gateInClearance?: BillingClearance | null;
-        gateInReceiptPrintOpened?: boolean;
-        gateInBillingData?: GateInBillingData | null;
-        gateInSelectedCharges?: number[];
-        gateInChargeOverrides?: Record<number, number>;
-        gateInCustomCharges?: BillingCharge[];
-        gateInSelectedCustom?: number[];
-        containerOwnerId?: number | null;
-        billingCustomerId?: number | null;
-        billingDiffFromOwner?: boolean;
-        ownerSearch?: string;
-        billingSearch?: string;
-        manualCustomerId?: number | null;
-        customerSearch?: string;
-        selectedBooking?: GateInBookingOption | null;
-        bookingSearch?: string;
-        truckCompanySearch?: string;
-        isSoc?: boolean;
-        inspectionReport?: GateInInspectionReport | null;
-        sealPhoto?: string;
-        driverSignature?: string;
-      };
-      if (draft.yard_id !== yardId || !draft.saved_at || Date.now() - draft.saved_at > GATE_IN_PRINT_DRAFT_MAX_AGE_MS) {
-        localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
-        return;
-      }
-      if (draft.gateInForm) setGateInForm(draft.gateInForm);
-      if (draft.gateInPaymentMethod) setGateInPaymentMethod(draft.gateInPaymentMethod);
-      setGateInBillingPaid(Boolean(draft.gateInBillingPaid));
-      setGateInInvoiceNumber(draft.gateInInvoiceNumber || '');
-      setGateInInvoiceId(draft.gateInInvoiceId || null);
-      setGateInClearance(draft.gateInClearance || null);
-      setGateInReceiptPrintOpened(Boolean(draft.gateInReceiptPrintOpened));
-      if (draft.gateInBillingData) setGateInBillingData(draft.gateInBillingData);
-      if (draft.gateInSelectedCharges) setGateInSelectedCharges(new Set(draft.gateInSelectedCharges));
-      if (draft.gateInChargeOverrides) setGateInChargeOverrides(draft.gateInChargeOverrides);
-      if (draft.gateInCustomCharges) setGateInCustomCharges(draft.gateInCustomCharges);
-      if (draft.gateInSelectedCustom) setGateInSelectedCustom(new Set(draft.gateInSelectedCustom));
-      setContainerOwnerId(draft.containerOwnerId || null);
-      setBillingCustomerId(draft.billingCustomerId || null);
-      setBillingDiffFromOwner(Boolean(draft.billingDiffFromOwner));
-      setOwnerSearch(draft.ownerSearch || '');
-      setBillingSearch(draft.billingSearch || '');
-      setManualCustomerId(draft.manualCustomerId || null);
-      setCustomerSearch(draft.customerSearch || '');
-      setSelectedBooking(draft.selectedBooking || null);
-      setBookingSearch(draft.bookingSearch || '');
-      setTruckCompanySearch(draft.truckCompanySearch || '');
-      setIsSoc(Boolean(draft.isSoc));
-      setInspectionReport(draft.inspectionReport || null);
-      setSealPhoto(draft.sealPhoto || '');
-      setDriverSignature(draft.driverSignature || '');
-      restoredGateInInvoiceIdRef.current = draft.gateInInvoiceId || null;
-      restoredGateInBillingSnapshotRef.current = Boolean(draft.gateInBillingData);
-      localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
-    } catch (error) {
-      console.warn('Restore Gate-In print draft failed:', error);
-      localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
-    }
+    const draft = gateInPrintDraft.restoreDraft();
+    if (!draft) return;
+    if (draft.gateInForm) setGateInForm(draft.gateInForm);
+    if (draft.gateInPaymentMethod) setGateInPaymentMethod(draft.gateInPaymentMethod);
+    setGateInBillingPaid(Boolean(draft.gateInBillingPaid));
+    setGateInInvoiceNumber(draft.gateInInvoiceNumber || '');
+    setGateInInvoiceId(draft.gateInInvoiceId || null);
+    setGateInClearance(draft.gateInClearance || null);
+    setGateInReceiptPrintOpened(Boolean(draft.gateInReceiptPrintOpened));
+    if (draft.gateInBillingData) setGateInBillingData(draft.gateInBillingData);
+    if (draft.gateInSelectedCharges) setGateInSelectedCharges(new Set(draft.gateInSelectedCharges));
+    if (draft.gateInChargeOverrides) setGateInChargeOverrides(draft.gateInChargeOverrides);
+    if (draft.gateInCustomCharges) setGateInCustomCharges(draft.gateInCustomCharges);
+    if (draft.gateInSelectedCustom) setGateInSelectedCustom(new Set(draft.gateInSelectedCustom));
+    setContainerOwnerId(draft.containerOwnerId || null);
+    setBillingCustomerId(draft.billingCustomerId || null);
+    setBillingDiffFromOwner(Boolean(draft.billingDiffFromOwner));
+    setOwnerSearch(draft.ownerSearch || '');
+    setBillingSearch(draft.billingSearch || '');
+    setManualCustomerId(draft.manualCustomerId || null);
+    setCustomerSearch(draft.customerSearch || '');
+    setSelectedBooking(draft.selectedBooking || null);
+    setBookingSearch(draft.bookingSearch || '');
+    setTruckCompanySearch(draft.truckCompanySearch || '');
+    setIsSoc(Boolean(draft.isSoc));
+    setInspectionReport(draft.inspectionReport || null);
+    setSealPhoto(draft.sealPhoto || '');
+    setDriverSignature(draft.driverSignature || '');
+    restoredGateInInvoiceIdRef.current = draft.gateInInvoiceId || null;
+    restoredGateInBillingSnapshotRef.current = Boolean(draft.gateInBillingData);
   };
 
   const persistGateInPrintDraft = (overrides?: { gateInReceiptPrintOpened?: boolean }) => {
-    try {
-      localStorage.setItem(GATE_IN_PRINT_DRAFT_KEY, JSON.stringify({
-        saved_at: Date.now(),
-        yard_id: yardId,
-        gateInForm,
-        gateInPaymentMethod,
-        gateInBillingPaid,
-        gateInInvoiceNumber,
-        gateInInvoiceId,
-        gateInClearance,
-        gateInReceiptPrintOpened: overrides?.gateInReceiptPrintOpened ?? gateInReceiptPrintOpened,
-        gateInBillingData,
-        gateInSelectedCharges: Array.from(gateInSelectedCharges),
-        gateInChargeOverrides,
-        gateInCustomCharges,
-        gateInSelectedCustom: Array.from(gateInSelectedCustom),
-        containerOwnerId,
-        billingCustomerId,
-        billingDiffFromOwner,
-        ownerSearch,
-        billingSearch,
-        manualCustomerId,
-        customerSearch,
-        selectedBooking,
-        bookingSearch,
-        truckCompanySearch,
-        isSoc,
-        inspectionReport,
-        sealPhoto,
-        driverSignature,
-      }));
-    } catch (error) {
-      console.warn('Persist Gate-In print draft failed:', error);
-    }
+    gateInPrintDraft.saveDraft({
+      saved_at: Date.now(),
+      yard_id: yardId,
+      gateInForm,
+      gateInPaymentMethod,
+      gateInBillingPaid,
+      gateInInvoiceNumber,
+      gateInInvoiceId,
+      gateInClearance,
+      gateInReceiptPrintOpened: overrides?.gateInReceiptPrintOpened ?? gateInReceiptPrintOpened,
+      gateInBillingData,
+      gateInSelectedCharges: Array.from(gateInSelectedCharges),
+      gateInChargeOverrides,
+      gateInCustomCharges,
+      gateInSelectedCustom: Array.from(gateInSelectedCustom),
+      containerOwnerId,
+      billingCustomerId,
+      billingDiffFromOwner,
+      ownerSearch,
+      billingSearch,
+      manualCustomerId,
+      customerSearch,
+      selectedBooking,
+      bookingSearch,
+      truckCompanySearch,
+      isSoc,
+      inspectionReport,
+      sealPhoto,
+      driverSignature,
+    });
   };
 
   useEffect(() => {
@@ -795,7 +790,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       }, { operation: 'gate_in' });
       const data = await res.json();
       if (isOfflineQueuedResponse(data)) {
-        localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
+        gateInPrintDraft.clearDraft();
         setGateInResult({ success: true, message: `บันทึก Gate-In ${gateInForm.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
         resetGateInOwnerBillingContext();
@@ -827,7 +822,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         }
 
         setGateInResult({ success: true, message: `✅ รับตู้ ${gateInForm.container_number} เข้าลานสำเร็จ`, eir_number: data.eir_number, assigned_location: data.assigned_location });
-        localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);
+        gateInPrintDraft.clearDraft();
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
         resetGateInOwnerBillingContext();
         setGateInClearance(null);

@@ -19,6 +19,7 @@ import type { GateOutFormState, GateOutPhase } from './components/GateOutRelease
 import GateOutStatusRail, { GateOutSelectedStatusCards } from './components/GateOutStatusRail';
 import { useGateOutSearch } from './hooks/useGateOutSearch';
 import { useGateOutVisibilityPreview } from './hooks/useGateOutVisibilityPreview';
+import { useGatePrintReturnDraft } from './hooks/useGatePrintReturnDraft';
 
 interface GateOutTabProps {
   yardId: number;
@@ -174,80 +175,72 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [bookingLoading, setBookingLoading] = useState(false);
   const [showBookingPicker, setShowBookingPicker] = useState(false);
   const [bookingWarning, setBookingWarning] = useState('');
+  const gateOutPrintDraft = useGatePrintReturnDraft<GateOutPrintDraft>({
+    storageKey: GATE_OUT_PRINT_DRAFT_KEY,
+    label: 'Gate-Out print draft',
+    isValidDraft: draft => draft.yard_id === yardId
+      && Boolean(draft.saved_at)
+      && Date.now() - Number(draft.saved_at) <= GATE_OUT_PRINT_DRAFT_MAX_AGE_MS,
+  });
 
   const restoreGateOutPrintDraft = () => {
-    try {
-      const raw = localStorage.getItem(GATE_OUT_PRINT_DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw) as GateOutPrintDraft;
-      if (draft.yard_id !== yardId || !draft.saved_at || Date.now() - draft.saved_at > GATE_OUT_PRINT_DRAFT_MAX_AGE_MS) {
-        localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
-        return;
-      }
+    const draft = gateOutPrintDraft.restoreDraft();
+    if (!draft) return;
 
-      setSearchQuery(draft.searchQuery || draft.selectedContainer?.container_number || '');
-      setSearchResults([]);
-      setSelectedContainer(draft.selectedContainer || null);
-      setSelectedGateOutRequest(draft.selectedGateOutRequest || null);
-      if (draft.gateOutForm) setGateOutForm(draft.gateOutForm);
-      setGateOutPhotos(draft.gateOutPhotos || []);
-      setGateOutPhase(draft.gateOutPhase || (draft.selectedContainer ? 'confirm_release' : 'search'));
-      if (draft.billingData) setBillingData(draft.billingData);
-      if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
-      setBillingPaid(Boolean(draft.billingPaid));
-      setBillingInvoiceNumber(draft.billingInvoiceNumber || '');
-      setBillingInvoiceId(draft.billingInvoiceId || null);
-      setBillingClearance(draft.billingClearance || null);
-      if (draft.selectedCharges) setSelectedCharges(new Set(draft.selectedCharges));
-      if (draft.chargeOverrides) setChargeOverrides(draft.chargeOverrides);
-      if (draft.customCharges) setCustomCharges(draft.customCharges);
-      if (draft.selectedCustom) setSelectedCustom(new Set(draft.selectedCustom));
-      setManualCustomerId(draft.manualCustomerId || null);
-      setCustomerSearch(draft.customerSearch || '');
-      setSelectedBooking(draft.selectedBooking || null);
-      setBookingSearch(draft.bookingSearch || '');
-      setBookingResults([]);
-      setBookingWarning(draft.bookingWarning || '');
-      setShowCustomerPicker(false);
-      setShowBookingPicker(false);
-      setGateOutResult(null);
-      localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
-    } catch (error) {
-      console.warn('Restore Gate-Out print draft failed:', error);
-      localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
-    }
+    setSearchQuery(draft.searchQuery || draft.selectedContainer?.container_number || '');
+    setSearchResults([]);
+    setSelectedContainer(draft.selectedContainer || null);
+    setSelectedGateOutRequest(draft.selectedGateOutRequest || null);
+    if (draft.gateOutForm) setGateOutForm(draft.gateOutForm);
+    setGateOutPhotos(draft.gateOutPhotos || []);
+    setGateOutPhase(draft.gateOutPhase || (draft.selectedContainer ? 'confirm_release' : 'search'));
+    if (draft.billingData) setBillingData(draft.billingData);
+    if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
+    setBillingPaid(Boolean(draft.billingPaid));
+    setBillingInvoiceNumber(draft.billingInvoiceNumber || '');
+    setBillingInvoiceId(draft.billingInvoiceId || null);
+    setBillingClearance(draft.billingClearance || null);
+    if (draft.selectedCharges) setSelectedCharges(new Set(draft.selectedCharges));
+    if (draft.chargeOverrides) setChargeOverrides(draft.chargeOverrides);
+    if (draft.customCharges) setCustomCharges(draft.customCharges);
+    if (draft.selectedCustom) setSelectedCustom(new Set(draft.selectedCustom));
+    setManualCustomerId(draft.manualCustomerId || null);
+    setCustomerSearch(draft.customerSearch || '');
+    setSelectedBooking(draft.selectedBooking || null);
+    setBookingSearch(draft.bookingSearch || '');
+    setBookingResults([]);
+    setBookingWarning(draft.bookingWarning || '');
+    setShowCustomerPicker(false);
+    setShowBookingPicker(false);
+    setGateOutResult(null);
   };
 
   const persistGateOutPrintDraft = () => {
-    try {
-      localStorage.setItem(GATE_OUT_PRINT_DRAFT_KEY, JSON.stringify({
-        saved_at: Date.now(),
-        yard_id: yardId,
-        searchQuery,
-        selectedContainer,
-        selectedGateOutRequest,
-        gateOutForm,
-        gateOutPhotos,
-        gateOutPhase,
-        billingData,
-        paymentMethod,
-        billingPaid,
-        billingInvoiceNumber,
-        billingInvoiceId,
-        billingClearance,
-        selectedCharges: Array.from(selectedCharges),
-        chargeOverrides,
-        customCharges,
-        selectedCustom: Array.from(selectedCustom),
-        manualCustomerId,
-        customerSearch,
-        selectedBooking,
-        bookingSearch,
-        bookingWarning,
-      }));
-    } catch (error) {
-      console.warn('Persist Gate-Out print draft failed:', error);
-    }
+    gateOutPrintDraft.saveDraft({
+      saved_at: Date.now(),
+      yard_id: yardId,
+      searchQuery,
+      selectedContainer,
+      selectedGateOutRequest,
+      gateOutForm,
+      gateOutPhotos,
+      gateOutPhase,
+      billingData,
+      paymentMethod,
+      billingPaid,
+      billingInvoiceNumber,
+      billingInvoiceId,
+      billingClearance,
+      selectedCharges: Array.from(selectedCharges),
+      chargeOverrides,
+      customCharges,
+      selectedCustom: Array.from(selectedCustom),
+      manualCustomerId,
+      customerSearch,
+      selectedBooking,
+      bookingSearch,
+      bookingWarning,
+    });
   };
 
   useEffect(() => {
@@ -901,7 +894,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       const data = await res.json();
       if (isOfflineQueuedResponse(data)) {
         setGateOutResult({ success: true, message: `บันทึก Gate-Out ${selectedContainer.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
-        localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
+        gateOutPrintDraft.clearDraft();
         clearGateOutSearch();
         setSelectedGateOutRequest(null);
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
@@ -918,7 +911,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       }
       if (data.success) {
         setGateOutResult({ success: true, message: `✅ ปล่อยตู้ ${selectedContainer.container_number} ออกจากลานสำเร็จ`, eir_number: data.eir_number });
-        localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
+        gateOutPrintDraft.clearDraft();
         clearGateOutSearch();
         setSelectedGateOutRequest(null);
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
