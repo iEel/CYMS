@@ -441,13 +441,12 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
         description={bookingActionDialog?.booking.booking_number}
         fields={[{
           name: 'note',
-          label={
+          label:
             bookingActionDialog?.action === 'approve'
               ? 'หมายเหตุการอนุมัติ Booking'
               : bookingActionDialog?.action === 'reject'
                 ? 'เหตุผลที่ปฏิเสธ Booking'
-                : 'ข้อมูลเพิ่มเติมที่ต้องการจากลูกค้า'
-          },
+                : 'ข้อมูลเพิ่มเติมที่ต้องการจากลูกค้า',
           type: 'textarea',
           required: bookingActionDialog?.action !== 'approve',
         }]}
@@ -471,7 +470,7 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
         description={amendmentActionDialog?.amendment.booking_number}
         fields={[{
           name: 'note',
-          label={amendmentActionDialog?.action === 'approve' ? 'หมายเหตุการอนุมัติคำขอแก้ไข' : 'เหตุผลที่ปฏิเสธคำขอแก้ไข'},
+          label: amendmentActionDialog?.action === 'approve' ? 'หมายเหตุการอนุมัติคำขอแก้ไข' : 'เหตุผลที่ปฏิเสธคำขอแก้ไข',
           type: 'textarea',
           required: amendmentActionDialog?.action === 'reject',
         }]}
