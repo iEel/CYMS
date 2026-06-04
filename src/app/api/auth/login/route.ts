@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       .query(`
         SELECT u.user_id, u.username, u.password_hash, u.full_name, u.status,
                u.failed_login_count, u.locked_at, u.two_fa_enabled, u.two_fa_secret,
-               u.bound_device_mac,
+               u.bound_device_mac, u.customer_portal_role,
                r.role_code
         FROM Users u
         JOIN Roles r ON u.role_id = r.role_id
@@ -217,11 +217,13 @@ export async function POST(request: NextRequest) {
 
     // ดึง customer_id สำหรับ customer role
     let customerId: number | undefined;
+    let customerPortalRole: string | null = null;
     if (user.role_code === 'customer') {
       const custResult = await db.request()
         .input('uid', sql.Int, user.user_id)
         .query(`SELECT customer_id FROM Users WHERE user_id = @uid AND customer_id IS NOT NULL`);
       customerId = custResult.recordset[0]?.customer_id || undefined;
+      customerPortalRole = user.customer_portal_role || 'customer_admin';
     }
 
     // สร้าง JWT token
@@ -233,6 +235,7 @@ export async function POST(request: NextRequest) {
       yardIds,
       activeYardId: yardIds[0] || 1,
       customerId,
+      customerPortalRole,
     });
 
     // บันทึก Audit Log
@@ -256,6 +259,7 @@ export async function POST(request: NextRequest) {
       yardIds,
       activeYardId: yardIds[0] || 1,
       customerId,
+      customerPortalRole,
       token,
     };
 

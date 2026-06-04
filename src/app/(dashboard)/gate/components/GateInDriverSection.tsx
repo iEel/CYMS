@@ -14,6 +14,12 @@ interface GateCustomerOption {
   credit_term: number;
 }
 
+interface DriverPortalUserOption {
+  user_id: number;
+  full_name: string;
+  username: string;
+}
+
 interface GateInDriverSectionProps {
   gateInForm: GateInFormState;
   setGateInForm: Dispatch<SetStateAction<GateInFormState>>;
@@ -23,6 +29,10 @@ interface GateInDriverSectionProps {
   truckCompanyOpen: boolean;
   setTruckCompanyOpen: Dispatch<SetStateAction<boolean>>;
   truckCompanyRef: RefObject<HTMLDivElement | null>;
+  driverUsers: DriverPortalUserOption[];
+  selectedDriverUserId: number | null;
+  setSelectedDriverUserId: Dispatch<SetStateAction<number | null>>;
+  driverUsersLoading: boolean;
   setShowOCR: Dispatch<SetStateAction<'container' | 'plate' | 'seal' | null>>;
 }
 
@@ -35,6 +45,10 @@ export default function GateInDriverSection({
   truckCompanyOpen,
   setTruckCompanyOpen,
   truckCompanyRef,
+  driverUsers,
+  selectedDriverUserId,
+  setSelectedDriverUserId,
+  driverUsersLoading,
   setShowOCR,
 }: GateInDriverSectionProps) {
   return (
@@ -71,12 +85,13 @@ export default function GateInDriverSection({
                 setTruckCompanySearch(e.target.value);
                 setTruckCompanyOpen(true);
                 setGateInForm({ ...gateInForm, truck_company: e.target.value });
+                setSelectedDriverUserId(null);
               }}
               onFocus={() => setTruckCompanyOpen(true)}
               className={inputClass}
             />
             {gateInForm.truck_company && !truckCompanyOpen && (
-              <button onClick={() => { setGateInForm({ ...gateInForm, truck_company: '' }); setTruckCompanySearch(''); setTruckCompanyOpen(true); }}
+              <button onClick={() => { setGateInForm({ ...gateInForm, truck_company: '' }); setTruckCompanySearch(''); setTruckCompanyOpen(true); setSelectedDriverUserId(null); }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors">
                 <X size={14} />
               </button>
@@ -96,6 +111,7 @@ export default function GateInDriverSection({
                         setGateInForm({ ...gateInForm, truck_company: c.customer_name });
                         setTruckCompanySearch(c.customer_name);
                         setTruckCompanyOpen(false);
+                        setSelectedDriverUserId(null);
                       }}
                       className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center justify-between ${
                         gateInForm.truck_company === c.customer_name ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-slate-700 dark:text-slate-200'
@@ -110,6 +126,22 @@ export default function GateInDriverSection({
               </div>
             )}
           </div>
+        </div>
+        <div>
+          <label className={labelClass}>Driver Portal User</label>
+          <select
+            value={selectedDriverUserId || ''}
+            onChange={e => setSelectedDriverUserId(e.target.value ? Number(e.target.value) : null)}
+            className={inputClass}
+            disabled={driverUsersLoading || driverUsers.length === 0}
+          >
+            <option value="">{driverUsersLoading ? 'กำลังโหลดคนขับ...' : 'ไม่ผูกผู้ใช้ Driver Portal'}</option>
+            {driverUsers.map(driver => (
+              <option key={driver.user_id} value={driver.user_id}>
+                {driver.full_name || driver.username}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
     </div>

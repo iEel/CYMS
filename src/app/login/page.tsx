@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { getDefaultPostLoginPath } from '@/lib/portalRouting';
 import { Container, Eye, EyeOff, LogIn, AlertCircle, Shield } from 'lucide-react';
 
 export default function LoginPage() {
@@ -49,7 +50,7 @@ function LoginForm() {
     if (result.success) {
       // Redirect กลับไปหน้าที่ต้องการ (จาก ?from=) หรือ default ตาม role
       const session = JSON.parse(localStorage.getItem('cyms_session') || '{}');
-      const defaultPath = session.role === 'customer' ? '/portal' : '/dashboard';
+      const defaultPath = getDefaultPostLoginPath(session);
       router.push(fromPath || defaultPath);
     } else {
       if (result.requires_2fa) {

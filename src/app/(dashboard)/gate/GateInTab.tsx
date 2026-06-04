@@ -42,6 +42,12 @@ interface BookingDerivedContext {
   truckCompanyName?: string | null;
 }
 
+type DriverPortalUserOption = {
+  user_id: number;
+  full_name: string;
+  username: string;
+};
+
 type GateBillingPrintTemplateFamily = 'a4_tax_receipt' | 'continuous_tax_receipt';
 
 type GateInPrintDraft = {
@@ -69,6 +75,7 @@ type GateInPrintDraft = {
   selectedBooking?: GateInBookingOption | null;
   bookingSearch?: string;
   truckCompanySearch?: string;
+  selectedDriverUserId?: number | null;
   isSoc?: boolean;
   inspectionReport?: GateInInspectionReport | null;
   sealPhoto?: string;
@@ -159,6 +166,10 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
   const [truckCompanySearch, setTruckCompanySearch] = useState('');
   const [truckCompanyOpen, setTruckCompanyOpen] = useState(false);
   const truckCompanyRef = useRef<HTMLDivElement>(null);
+  const [driverUsers, setDriverUsers] = useState<DriverPortalUserOption[]>([]);
+  const [driverUsersLoading, setDriverUsersLoading] = useState(false);
+  const [selectedDriverUserId, setSelectedDriverUserId] = useState<number | null>(null);
+  const driverUsersTruckingCompanyIdRef = useRef<number | null>(null);
 
   // Close owner search dropdown on click outside
   useEffect(() => {
@@ -225,6 +236,41 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     [selectedBooking, customerList, gateInForm.truck_company]
   );
 
+  useEffect(() => {
+    const truckingCompanyId = resolvedTruckingCompanyId;
+    const previousTruckingCompanyId = driverUsersTruckingCompanyIdRef.current;
+    if (previousTruckingCompanyId !== null && previousTruckingCompanyId !== truckingCompanyId) {
+      setSelectedDriverUserId(null);
+    }
+    driverUsersTruckingCompanyIdRef.current = truckingCompanyId;
+    if (!truckingCompanyId) {
+      setDriverUsers([]);
+      setDriverUsersLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setDriverUsersLoading(true);
+    fetch(`/api/settings/customers/drivers?trucking_company_id=${truckingCompanyId}`, { signal: controller.signal })
+      .then(res => res.ok ? res.json() : { drivers: [] })
+      .then(data => {
+        if (!controller.signal.aborted) {
+          setDriverUsers(Array.isArray(data.drivers) ? data.drivers : []);
+        }
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          console.error('Load Gate-In driver portal users error:', err);
+          setDriverUsers([]);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDriverUsersLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [resolvedTruckingCompanyId]);
+
   const clearBookingDerivedContext = () => {
     const context = bookingDerivedContextRef.current;
     if (context.manualCustomerId) {
@@ -266,6 +312,8 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     setShowBookingPicker(false);
     setBookingSearchError('');
     setTruckCompanySearch('');
+    setSelectedDriverUserId(null);
+    setDriverUsers([]);
     bookingDerivedContextRef.current = {};
   };
 
@@ -294,6 +342,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
     setSelectedBooking(draft.selectedBooking || null);
     setBookingSearch(draft.bookingSearch || '');
     setTruckCompanySearch(draft.truckCompanySearch || '');
+    setSelectedDriverUserId(draft.selectedDriverUserId || null);
     setIsSoc(Boolean(draft.isSoc));
     setInspectionReport(draft.inspectionReport || null);
     setSealPhoto(draft.sealPhoto || '');
@@ -328,6 +377,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
       selectedBooking,
       bookingSearch,
       truckCompanySearch,
+      selectedDriverUserId,
       isSoc,
       inspectionReport,
       sealPhoto,
@@ -777,7 +827,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
           booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || manualCustomerId || undefined,
           billing_customer_id: billingCustomerId || undefined,
           trucking_company_id: resolvedTruckingCompanyId || undefined,
-          driver_user_id: undefined,
+          driver_user_id: selectedDriverUserId || undefined,
           billing_clearance_id: gateInClearance?.clearance_id || undefined,
           tare_weight_kg: boxtechTareWeightKg || null,
           max_gross_weight_kg: boxtechMaxGrossWeightKg || null,
@@ -794,6 +844,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         setGateInResult({ success: true, message: `บันทึก Gate-In ${gateInForm.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
         resetGateInOwnerBillingContext();
+        setSelectedDriverUserId(null);
         setGateInClearance(null);
         setGateInReceiptPrintOpened(false);
         setInspectionReport(null);
@@ -825,6 +876,7 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
         gateInPrintDraft.clearDraft();
         setGateInForm({ container_number: '', size: '20', type: 'GP', shipping_line: '', is_laden: false, seal_number: '', driver_name: '', driver_license: '', truck_plate: '', truck_company: '', booking_ref: '', notes: '', actual_gross_weight_kg: '', weight_source: 'manual' });
         resetGateInOwnerBillingContext();
+        setSelectedDriverUserId(null);
         setGateInClearance(null);
         setGateInReceiptPrintOpened(false);
         setInspectionReport(null);
@@ -1008,6 +1060,10 @@ export default function GateInTab({ yardId, userId, onViewEIR }: GateInTabProps)
             truckCompanyOpen={truckCompanyOpen}
             setTruckCompanyOpen={setTruckCompanyOpen}
             truckCompanyRef={truckCompanyRef}
+            driverUsers={driverUsers}
+            selectedDriverUserId={selectedDriverUserId}
+            setSelectedDriverUserId={setSelectedDriverUserId}
+            driverUsersLoading={driverUsersLoading}
             setShowOCR={setShowOCR}
           />
 

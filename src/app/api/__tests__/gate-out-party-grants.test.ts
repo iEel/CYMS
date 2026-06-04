@@ -46,8 +46,10 @@ describe('Gate Out party grants', () => {
     expect(submitBody).toContain('billing_customer_id: resolvedCustomer?.customer_id || selectedBooking?.bill_to_customer_id || selectedBooking?.booking_customer_id || selectedBooking?.customer_id || undefined');
     expect(submitBody).toContain('container_owner_id: selectedContainer.container_owner_id || billingData?.owner?.customer_id || undefined');
     expect(submitBody).toContain('booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || undefined');
-    expect(submitBody).toContain('trucking_company_id: selectedBooking?.trucking_company_id || undefined');
-    expect(submitBody).toContain('driver_user_id: undefined');
+    expect(submitBody).toContain('trucking_company_id: resolvedGateOutTruckingCompanyId || undefined');
+    expect(submitBody).toContain('driver_user_id: selectedDriverUserId || undefined');
+    expect(gateOut).toContain('/api/settings/customers/drivers');
+    expect(gateOut).toContain('setSelectedDriverUserId(null)');
   });
 
   it('uses booking party model for Gate Out booking compatibility and billing defaults', () => {

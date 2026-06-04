@@ -31,6 +31,8 @@ export interface AuthSession {
   role: UserRole;
   yardIds: number[];
   activeYardId: number;
+  customerId?: number | null;
+  customerPortalRole?: string | null;
   token: string;
 }
 

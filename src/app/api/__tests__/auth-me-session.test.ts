@@ -19,4 +19,14 @@ describe('/api/auth/me session hardening', () => {
     expect(source).toContain("request.headers.get('x-cyms-token')");
     expect(source).toContain("request.cookies.get('cyms_token')");
   });
+
+  it('returns customer portal role in restored customer sessions', () => {
+    const source = read('src/app/api/auth/me/route.ts');
+    const sessionStart = source.indexOf('const session = {');
+    const sessionEnd = source.indexOf('return NextResponse.json({ authenticated: true, session })');
+    const sessionSource = source.slice(sessionStart, sessionEnd);
+
+    expect(source).toContain('u.customer_portal_role');
+    expect(sessionSource).toContain('customerPortalRole');
+  });
 });

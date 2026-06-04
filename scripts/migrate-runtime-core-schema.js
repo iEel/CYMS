@@ -107,6 +107,8 @@ async function migrate() {
           container_id INT NOT NULL,
           booking_id INT NULL,
           booking_ref NVARCHAR(100) NULL,
+          trucking_company_id INT NULL,
+          driver_user_id INT NULL,
           billing_customer_id INT NULL,
           billing_clearance_id INT NULL,
           work_order_id INT NULL,
@@ -132,6 +134,22 @@ async function migrate() {
       IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('GateOutRequests') AND name = 'IX_GateOutRequests_Container_Open')
         CREATE INDEX IX_GateOutRequests_Container_Open
           ON GateOutRequests (container_id, status, requested_at DESC);
+
+      IF COL_LENGTH('GateOutRequests', 'trucking_company_id') IS NULL
+        ALTER TABLE GateOutRequests ADD trucking_company_id INT NULL;
+      IF COL_LENGTH('GateOutRequests', 'driver_user_id') IS NULL
+        ALTER TABLE GateOutRequests ADD driver_user_id INT NULL;
+
+      UPDATE gor
+      SET trucking_company_id = b.trucking_company_id
+      FROM GateOutRequests gor
+      JOIN Bookings b ON b.booking_id = gor.booking_id
+      WHERE gor.trucking_company_id IS NULL
+        AND b.trucking_company_id IS NOT NULL;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('GateOutRequests') AND name = 'IX_GateOutRequests_Transport')
+        CREATE INDEX IX_GateOutRequests_Transport
+          ON GateOutRequests (trucking_company_id, driver_user_id, status, requested_at DESC);
     `);
 
     await runStep(pool, 'Portal grant party columns', `

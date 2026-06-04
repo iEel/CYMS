@@ -17,10 +17,20 @@ export interface GateOutFormState {
 
 export type GateOutPhase = 'search' | 'pending_pickup' | 'confirm_release';
 
+interface DriverPortalUserOption {
+  user_id: number;
+  full_name: string;
+  username: string;
+}
+
 interface GateOutReleaseRequestSectionProps {
   gateOutPhase: GateOutPhase;
   gateOutForm: GateOutFormState;
   setGateOutForm: Dispatch<SetStateAction<GateOutFormState>>;
+  driverUsers: DriverPortalUserOption[];
+  selectedDriverUserId: number | null;
+  setSelectedDriverUserId: Dispatch<SetStateAction<number | null>>;
+  driverUsersLoading: boolean;
   setShowOCR: Dispatch<SetStateAction<'plate' | 'seal' | null>>;
   loadBookingByNumber: (bookingNumber: string) => void;
   handleRequestRelease: () => void;
@@ -39,6 +49,10 @@ export default function GateOutReleaseRequestSection({
   gateOutPhase,
   gateOutForm,
   setGateOutForm,
+  driverUsers,
+  selectedDriverUserId,
+  setSelectedDriverUserId,
+  driverUsersLoading,
   setShowOCR,
   loadBookingByNumber,
   handleRequestRelease,
@@ -91,6 +105,22 @@ export default function GateOutReleaseRequestSection({
                   onChange={e => setGateOutForm({ ...gateOutForm, booking_ref: e.target.value })}
                   onBlur={e => loadBookingByNumber(e.target.value)}
                   className={inputClass} placeholder="BK-123456" />
+              </div>
+              <div>
+                <label className={labelClass}>Driver Portal User</label>
+                <select
+                  value={selectedDriverUserId || ''}
+                  onChange={e => setSelectedDriverUserId(e.target.value ? Number(e.target.value) : null)}
+                  className={inputClass}
+                  disabled={driverUsersLoading || driverUsers.length === 0}
+                >
+                  <option value="">{driverUsersLoading ? 'กำลังโหลดคนขับ...' : 'ไม่ผูกผู้ใช้ Driver Portal'}</option>
+                  {driverUsers.map(driver => (
+                    <option key={driver.user_id} value={driver.user_id}>
+                      {driver.full_name || driver.username}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className={labelClass}>หมายเหตุ</label>

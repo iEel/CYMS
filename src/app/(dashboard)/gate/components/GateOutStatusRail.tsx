@@ -15,6 +15,12 @@ interface GateOutStatusRailProps {
   visibilityPreviewError: string;
 }
 
+type DriverPortalUserOption = {
+  user_id: number;
+  full_name: string;
+  username: string;
+};
+
 export default function GateOutStatusRail({
   gateOutDecisionSignals,
   gateOutGuardrails,
@@ -110,6 +116,10 @@ interface GateOutSelectedStatusCardsProps {
   billingCleared: boolean;
   gateOutForm: GateOutFormState;
   setGateOutForm: Dispatch<SetStateAction<GateOutFormState>>;
+  driverUsers: DriverPortalUserOption[];
+  selectedDriverUserId: number | null;
+  setSelectedDriverUserId: Dispatch<SetStateAction<number | null>>;
+  driverUsersLoading: boolean;
   setShowOCR: Dispatch<SetStateAction<'plate' | 'seal' | null>>;
   loadBookingByNumber: (bookingNumber: string, container?: ContainerResult | null) => Promise<void>;
   handleRequestRelease: () => Promise<void>;
@@ -189,6 +199,10 @@ export function GateOutSelectedStatusCards({
   billingCleared,
   gateOutForm,
   setGateOutForm,
+  driverUsers,
+  selectedDriverUserId,
+  setSelectedDriverUserId,
+  driverUsersLoading,
   setShowOCR,
   loadBookingByNumber,
   handleRequestRelease,
@@ -633,6 +647,10 @@ export function GateOutSelectedStatusCards({
               gateOutPhase={gateOutPhase}
               gateOutForm={gateOutForm}
               setGateOutForm={setGateOutForm}
+              driverUsers={driverUsers}
+              selectedDriverUserId={selectedDriverUserId}
+              setSelectedDriverUserId={setSelectedDriverUserId}
+              driverUsersLoading={driverUsersLoading}
               setShowOCR={setShowOCR}
               loadBookingByNumber={loadBookingByNumber}
               handleRequestRelease={handleRequestRelease}

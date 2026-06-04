@@ -266,6 +266,8 @@ CREATE TABLE GateOutRequests (
     container_id        INT NOT NULL,
     booking_id          INT NULL,
     booking_ref         NVARCHAR(100) NULL,
+    trucking_company_id INT NULL,
+    driver_user_id INT NULL,
     billing_customer_id INT NULL,
     billing_clearance_id INT NULL,
     work_order_id       INT NULL,
@@ -288,6 +290,9 @@ ON GateOutRequests (yard_id, status, requested_at DESC);
 
 CREATE INDEX IX_GateOutRequests_Container_Open
 ON GateOutRequests (container_id, status, requested_at DESC);
+
+CREATE INDEX IX_GateOutRequests_Transport
+ON GateOutRequests (trucking_company_id, driver_user_id, status, requested_at DESC);
 
 -- Optional party columns used by portal grant rules when Bookings is present.
 IF OBJECT_ID('Bookings', 'U') IS NOT NULL
