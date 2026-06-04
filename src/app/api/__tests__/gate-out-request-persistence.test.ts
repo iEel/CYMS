@@ -25,6 +25,14 @@ describe('Gate Out request persistence', () => {
     expect(schema).toContain('IX_GateOutRequests_Transport');
   });
 
+  it('guards GateOutRequests trucking backfill from SQL Server compile-time missing columns', () => {
+    expect(migration).toContain("IF OBJECT_ID('Bookings', 'U') IS NOT NULL");
+    expect(migration).toContain("COL_LENGTH('Bookings', 'trucking_company_id') IS NULL");
+    expect(migration).toContain('EXEC sp_executesql');
+    expect(migration).toContain('UPDATE gor');
+    expect(migration).toContain('JOIN Bookings b ON b.booking_id = gor.booking_id');
+  });
+
   it('exposes a yard-scoped API for listing, creating, and updating Gate Out requests', () => {
     expect(route).toContain('export async function GET');
     expect(route).toContain('export async function POST');

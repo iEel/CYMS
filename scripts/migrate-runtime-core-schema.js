@@ -139,17 +139,32 @@ async function migrate() {
         ALTER TABLE GateOutRequests ADD trucking_company_id INT NULL;
       IF COL_LENGTH('GateOutRequests', 'driver_user_id') IS NULL
         ALTER TABLE GateOutRequests ADD driver_user_id INT NULL;
+      IF OBJECT_ID('Bookings', 'U') IS NOT NULL AND COL_LENGTH('Bookings', 'trucking_company_id') IS NULL
+        ALTER TABLE Bookings ADD trucking_company_id INT NULL;
 
-      UPDATE gor
-      SET trucking_company_id = b.trucking_company_id
-      FROM GateOutRequests gor
-      JOIN Bookings b ON b.booking_id = gor.booking_id
-      WHERE gor.trucking_company_id IS NULL
-        AND b.trucking_company_id IS NOT NULL;
+      IF OBJECT_ID('Bookings', 'U') IS NOT NULL
+        AND COL_LENGTH('Bookings', 'trucking_company_id') IS NOT NULL
+        AND COL_LENGTH('GateOutRequests', 'trucking_company_id') IS NOT NULL
+      BEGIN
+        EXEC sp_executesql N'
+          UPDATE gor
+          SET trucking_company_id = b.trucking_company_id
+          FROM GateOutRequests gor
+          JOIN Bookings b ON b.booking_id = gor.booking_id
+          WHERE gor.trucking_company_id IS NULL
+            AND b.trucking_company_id IS NOT NULL;
+        ';
+      END;
 
       IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('GateOutRequests') AND name = 'IX_GateOutRequests_Transport')
-        CREATE INDEX IX_GateOutRequests_Transport
-          ON GateOutRequests (trucking_company_id, driver_user_id, status, requested_at DESC);
+        AND COL_LENGTH('GateOutRequests', 'trucking_company_id') IS NOT NULL
+        AND COL_LENGTH('GateOutRequests', 'driver_user_id') IS NOT NULL
+      BEGIN
+        EXEC sp_executesql N'
+          CREATE INDEX IX_GateOutRequests_Transport
+            ON GateOutRequests (trucking_company_id, driver_user_id, status, requested_at DESC);
+        ';
+      END;
     `);
 
     await runStep(pool, 'Portal grant party columns', `
