@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 4 มิถุนายน 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer + Continuous Receipt Canvas Renderer + Billing API Permission Hardening + Settings API Hardening + EDI/Booking API Permission Hardening + Remaining Operational API Hardening + Attachment Center Hardening + CODECO Export Guard + Smoke Coverage + Migration Ledger + Preview Navigation Hardening + Yard 3D Workspace Polish + Gate Billing Print Return Restore + Document Activity Resolver-First Access + Native Action Dialog Cleanup + Gate Print Draft Helper + Driver/Trucking Transport Portal MVP** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 4 มิถุนายน 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer + Continuous Receipt Canvas Renderer + Billing API Permission Hardening + Settings API Hardening + EDI/Booking API Permission Hardening + Remaining Operational API Hardening + Attachment Center Hardening + CODECO Export Guard + Smoke Coverage + Migration Ledger + Preview Navigation Hardening + Yard 3D Workspace Polish + Gate Billing Print Return Restore + Document Activity Resolver-First Access + Native Action Dialog Cleanup + Gate Print Draft Helper + Driver/Trucking Transport Portal MVP + Transport Portal Action Workflow** (~100%)
 
 ---
 
@@ -22,46 +22,67 @@
 | **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Continuous Tax Invoice/Receipt Template, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
 
-### อัปเดตล่าสุด: Driver / Trucking Transport Portal MVP (4 มิ.ย. 2569)
+### อัปเดตล่าสุด: Driver / Trucking Transport Portal Action Workflow (4 มิ.ย. 2569)
 
-รอบนี้เพิ่ม MVP ฝั่งคนขับ/บริษัทรถขนส่ง โดยแยกออกจาก Customer Portal ปกติ เพื่อคุม scope ให้เป็นงาน operational เท่านั้นและลดความเสี่ยง data leakage:
+รอบนี้ต่อยอด MVP ฝั่งคนขับ/บริษัทรถขนส่งจาก read-only worklist ให้เป็น workflow แบบจำกัดสิทธิ์: ยืนยันงาน, แจ้งถึงลาน, แจ้งปัญหา, แนบหลักฐาน และดูประวัติงาน โดยยังให้ Gate/Internal เป็นผู้ควบคุมการปล่อยตู้และออก EIR เท่านั้น:
 
 - **Transport routing/session**: `customer_portal_role = trucking_coordinator` และ `driver_user` หลัง login จะไป `/transport`; customer role อื่นยังไป `/portal`, internal role ไป `/dashboard`
-- **Transport policy helper**: เพิ่ม `src/lib/transportPortalAccess.ts` สำหรับ resolve actor จาก `x-user-id` เท่านั้น, เช็ค role/action (`portal.trucking.view` / `portal.driver.view`) และสร้าง SQL predicate แบบ driver user-specific หรือ trucking company-specific
+- **Transport policy helper**: `src/lib/transportPortalAccess.ts` resolve actor จาก `x-user-id` เท่านั้น, เช็ค role/action (`portal.trucking.view` / `portal.driver.view`) และรองรับ action scope `transport.jobs.action` / `transport.activity.view`
 - **Gate staff assignment**: Gate In/Gate Out เพิ่ม optional `Driver Portal User` selector จาก `/api/settings/customers/drivers?trucking_company_id=...`; submit ส่ง `driver_user_id` พร้อม `trucking_company_id` เพื่อให้ driver เห็นเฉพาะงานของตัวเอง
 - **GateOutRequests transport fields**: เพิ่ม `trucking_company_id`, `driver_user_id` ใน schema/migration, backfill trucking จาก Booking และเพิ่ม index `IX_GateOutRequests_Transport`
-- **Transport APIs**: เพิ่ม `/api/transport/jobs`, `/api/transport/eir`, `/api/transport/capabilities`; jobs API return เฉพาะ field operational whitelist และ EIR API ใช้ `eirVisibility.ts` view type `driver` / `trucking` พร้อม `EIRAccessLog`
-- **Transport UI**: เพิ่ม `/transport` พร้อม mobile-first worklist, summary, filter, job card, และ modal ดู Driver Copy / Trucking Copy จาก sanitized backend payload; ไม่แสดงเมนู invoice/customer inventory ใน shell นี้
+- **Transport APIs**: เพิ่ม `/api/transport/actions` และ `/api/transport/activity` ต่อจาก `/api/transport/jobs`, `/api/transport/eir`, `/api/transport/capabilities`; jobs API return เฉพาะ operational whitelist พร้อม `availableActions`, `proofCount`, `lastActivityAt`
+- **Transport action rules**: `requested/pending -> confirm_job/report_issue/add_proof`, `confirmed -> mark_arrived/report_issue/add_proof`, `issue_reported -> confirm_job/mark_arrived/add_proof`, `at_gate -> report_issue/add_proof`; `released/completed/cancelled/rejected` และ `gate_transaction` เป็น actionless จาก Transport Portal
+- **Transport activity/proof tables**: migration กลางเพิ่ม `TransportJobActivities` และ `TransportJobProofs` พร้อม index ตาม `job_source/job_id/created_at`; ทุก action เขียน activity log และ proof upload อ้าง URL จาก `/api/uploads`
+- **Transport UI**: `/transport` มี mobile-first worklist, summary, filter, job card, action dialog, proof upload, activity drawer, และ modal ดู Driver Copy / Trucking Copy จาก sanitized backend payload; ไม่แสดงเมนูหรือข้อมูล invoice/customer inventory/billing ใน shell นี้
+- **Security policy**: driver เห็น/ทำ action เฉพาะงานที่ `driver_user_id` ตรงตัวเอง; trucking coordinator เห็น/ทำ action เฉพาะ `trucking_company_id` หรือ active trucking grant; action endpoint ไม่รับ `customer_id` จาก body/query และไม่ mutate `GateTransactions` ที่เสร็จแล้ว
 
 ไฟล์หลัก:
 - `src/lib/portalRouting.ts`
 - `src/lib/transportPortalAccess.ts`
+- `src/app/api/transport/actions/route.ts`
+- `src/app/api/transport/activity/route.ts`
 - `src/app/api/transport/jobs/route.ts`
 - `src/app/api/transport/eir/route.ts`
 - `src/app/api/transport/capabilities/route.ts`
 - `src/app/(transport)/layout.tsx`
 - `src/app/(transport)/transport/page.tsx`
 - `src/components/transport/*`
+- `src/app/api/__tests__/transport-actions.test.ts`
+- `src/app/api/__tests__/transport-activity.test.ts`
+- `src/app/api/__tests__/transport-jobs.test.ts`
+- `src/app/api/__tests__/transport-portal-ui.test.ts`
 - `src/app/api/settings/customers/drivers/route.ts`
 - `src/app/(dashboard)/gate/GateInTab.tsx`
 - `src/app/(dashboard)/gate/GateOutTab.tsx`
 - `src/lib/schema.sql`
 - `scripts/migrate-runtime-core-schema.js`
 
+Migration ที่ต้องรันหลัง pull:
+
+```bash
+node scripts/migrate-runtime-core-schema.js
+```
+
+รันบน DB จริงแล้วเมื่อ 4 มิ.ย. 2569 และ log ผ่าน step `Transport job action workflow tables`
+
 Verification รอบนี้:
 
 ```bash
-npm test -- --cacheDirectory .tmp\jest --runInBand src/lib/__tests__/portalRouting.test.ts src/lib/__tests__/transportPortalAccess.test.ts src/app/api/__tests__/gate-in-party-grants.test.ts src/app/api/__tests__/gate-out-party-grants.test.ts src/app/api/__tests__/gate-out-request-persistence.test.ts
-npm test -- --cacheDirectory .tmp\jest --runInBand src/app/api/__tests__/transport-jobs.test.ts src/app/api/__tests__/transport-eir.test.ts src/app/api/__tests__/transport-capabilities.test.ts src/app/api/__tests__/transport-portal-ui.test.ts
-npx tsc --noEmit --pretty false
+npm test -- src/lib/__tests__/transportPortalAccess.test.ts src/app/api/__tests__/transport-capabilities.test.ts src/app/api/__tests__/transport-jobs.test.ts src/app/api/__tests__/transport-eir.test.ts src/app/api/__tests__/transport-actions.test.ts src/app/api/__tests__/transport-activity.test.ts src/app/api/__tests__/transport-portal-ui.test.ts --runInBand
 npm run lint
-npm test -- --cacheDirectory .tmp\jest --runInBand
+npm run build
+npm test -- --runInBand
 ```
 
-ผลล่าสุด: focused routing/access/gate tests `5 suites / 20 tests` ผ่าน, transport API/UI tests `4 suites / 9 tests` ผ่าน, `npx tsc --noEmit --pretty false` ผ่าน, `npm run lint` ผ่าน และ full Jest `154 suites / 1553 tests` ผ่าน
+ผลล่าสุด: focused Transport regression `7 suites / 50 tests` ผ่าน, `npm run lint` ผ่าน, `npm run build` ผ่าน, full Jest `156 suites / 1594 tests` ผ่าน
+
+Browser smoke:
+- เปิด `http://127.0.0.1:3005/transport` ด้วย session ผู้ดูแลระบบแล้วถูก redirect กลับ Dashboard ตาม guard ที่ตั้งใจไว้
+- ฐานข้อมูลหลังล้างข้อมูลมี customer users `customer_1`, `customer_2` เป็น `customer_admin` เท่านั้น ยังไม่มี `driver_user`/`trucking_coordinator` และไม่มี transport job seed จึงยัง smoke flow จริงผ่าน Browser (เห็น job card + กด action) ไม่ได้โดยไม่สร้าง/แก้ข้อมูลลูกค้า
 
 ข้อจำกัดรอบนี้:
-- ยังไม่มี Driver/Trucking self-service action เช่น upload photo, self check-in, GPS, QR pass
+- Transport Portal supports limited job actions: confirm, arrived, issue report, proof upload. Gate/Internal still controls release and EIR issuance.
+- ยังไม่มี GPS, QR gate pass, driver release, หรือ Driver/Trucking Portal UI อื่นนอก worklist/action drawer
 - Trucking/Driver ยังไม่เห็นเอกสารการเงิน และตั้งใจไม่ให้เห็น invoice/payment ใน MVP นี้
 - Transport Portal ใช้ fixed server-side policy ก่อน ยังไม่เปิดหน้า configurable policy UI
 
@@ -474,7 +495,7 @@ npm run lint
 
 ### อัปเดตล่าสุดก่อนหน้า: Customer Portal Access Control + EIR Visibility Policy (25 พ.ค. 2569)
 
-รอบนี้ harden ชั้นข้อมูลของ Customer Portal และ EIR visibility เพื่อปิดความเสี่ยง data leakage ก่อนทำ Driver/Trucking Portal UI:
+รอบนี้ harden ชั้นข้อมูลของ Customer Portal และ EIR visibility เพื่อปิดความเสี่ยง data leakage ก่อนทำ Driver/Trucking Portal UI (หมายเหตุ: ตอนนี้ถูกต่อยอดแล้วในหัวข้อ Driver / Trucking Transport Portal Action Workflow ด้านบน):
 
 - **Public EIR แยก endpoint แล้ว**: `/eir/[id]` ใช้ `/api/public/eir` เท่านั้น และแสดงเฉพาะ verification data เช่น `eir_number`, `container_number`, `transaction_type`, `gate_datetime`, yard/depot, `document_status`, condition summary; `/api/gate/eir` กลับเป็น internal authenticated API
 - **EIR policy กลาง**: เพิ่ม `src/lib/eirVisibility.ts` สำหรับ `internal/customer/shipping_line/booking_customer/billing/trucking/driver/public/auditor` และทุก EIR JSON/PDF ต้องผ่าน sanitized payload
@@ -484,7 +505,7 @@ npm run lint
 - **EIRAccessLog**: เพิ่มตารางและ helper `src/lib/eirAccessLog.ts` เพื่อ log action `view/download/print/public_verify`
 - **Customer Portal Action Permission**: เพิ่ม `src/lib/customerPortalPermissions.ts`, `Users.customer_portal_role`, role/action map และ `requirePortalAction()` ครอบ portal routes หลักทั้งหมด
 - **Grant creation rules กลาง**: เพิ่ม `src/lib/portalGrantRules.ts` เพื่อสร้าง grants จาก Booking, BookingContainers, GateTransactions/EIR/Container, Invoice, M&R invoice, Reefer check/exception โดย invoice grant ให้เฉพาะ bill-to/invoice customer เท่านั้น
-- **Driver/Trucking backend policy พร้อมต่อยอด**: รองรับ `access_role = trucking/driver`, `permission_scope`, และ `valid_until` ใน backend grants/reconciler โดยยังไม่ทำ Driver/Trucking Portal UI ตาม scope รอบนี้
+- **Driver/Trucking backend policy พร้อมต่อยอด**: รองรับ `access_role = trucking/driver`, `permission_scope`, และ `valid_until` ใน backend grants/reconciler; scope รอบนั้นยังไม่ทำ UI แต่ตอนนี้มี Transport Portal worklist/action workflow แล้ว
 - **Reconciler/Backfill แข็งแรงขึ้น**: `src/lib/portalGrantReconciler.ts` preview/repair missing/stale grants พร้อม `permission_scope`, validity windows, reefer grants, และ yard-scoped gate booking fallback เพื่อไม่ grant ข้าม yard เมื่อ booking number ซ้ำ
 - **Admin field-scope endpoint**: เพิ่ม `PATCH /api/portal/grants/field-scope` สำหรับ yard manager เปิด/ปิด field `eir.fields.container_grade` พร้อม audit action `portal_grant_field_scope_update` และ label `แสดงเกรดตู้ใน EIR ให้ลูกค้า`
 - **Security regression tests**: เพิ่ม/ขยาย tests สำหรับ public EIR, portal EIR masking, customer_id จาก session เท่านั้น, invoice visibility, driver/trucking grants, reconciler, field-scope audit และ portal action permissions
@@ -523,7 +544,7 @@ npm run lint
 Default policy:
 - Customer Portal does not see `container_grade` unless the user has `portal.eir.grade.view` and the grant scope enables `eir.fields.container_grade`.
 - Public EIR never shows `container_grade`.
-- Driver/trucking grants remain backend policy only; no Driver/Trucking Portal UI yet.
+- Driver/trucking grants started as backend policy only; current state has Transport Portal worklist/action workflow, while broader Driver/Trucking self-service UI remains future scope.
 
 Migration ที่ต้องรันหลัง pull:
 
@@ -2341,7 +2362,7 @@ New Tab → Proxy ตรวจ cookie (page guard) ✅
 | **Pagination** | ~~ตารางตู้แสดง max 50 รายการ ยังไม่มี pagination~~ → **แก้แล้ว** Yard overview + Gate History + Invoices + CODECO + Demurrage = 25/หน้า |
 | **Confirmation Dialogs** | ✅ **แก้แล้ว** — action confirmation และ reason/input flow ใช้ custom dialogs (`ConfirmDialog` / `ActionInputDialog`) และมี source tests กัน `window.prompt()` / `window.confirm()` ใน call sites หลัก |
 | **SQL Injection** | ✅ **แก้แล้ว** — customer branch update ใช้ validated positive integer + parameterized `NOT IN` placeholders |
-| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --cacheDirectory .tmp\jest --runInBand` ผ่าน 147 suites / 1520 tests; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Portal entity access grants + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning + Yard 3D Workspace Polish + Reefer Monitoring/Exception + Document Template Designer + Billing/Settings/API/EDI Attachment hardening tests + Gate print-return restore + Document Activity resolver-first access + native action dialog cleanup แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
+| **Automated Testing** | ✅ **กลับมาเขียวแล้ว** — ล่าสุด full `npm test -- --runInBand` ผ่าน 156 suites / 1594 tests; เพิ่ม global search + TOTP 2FA + trusted device binding + PromptPay QR + Gate guided workflow + Gate operational guardrails + Billing tariff simulator + AR dunning action center + Supervisor approval inbox + Portal entity access grants + Reports action center + Offline queue + component boundary + Customer Portal bundle/dispute/ETA + Yard Planning + Yard 3D Workspace Polish + Reefer Monitoring/Exception + Document Template Designer + Billing/Settings/API/EDI Attachment hardening tests + Gate print-return restore + Document Activity resolver-first access + native action dialog cleanup + Transport Portal action workflow แล้ว และมี static guard กัน runtime DDL ทั้ง `src/app/api` + `src/lib` |
 | **Credit Note / ใบลดหนี้** | ✅ **มีแล้ว** — CN-YYYY-XXXXXX, modal กรอกเหตุผล+ยอด, ยอดติดลบ, auto-cancel เมื่อลดเต็มจำนวน |
 | **AR Aging Report** | ✅ **มีแล้ว** — แท็บ AR Aging แยกตามลูกค้า, summary current/30/60/90+ วัน + สีความเสี่ยง |
 | **Dashboard Range Toggle** | ✅ **มีแล้ว** — toggle 7 วัน / 30 วัน / 3 เดือน + รวมรายสัปดาห์อัตโนมัติสำหรับ 30d/90d |
