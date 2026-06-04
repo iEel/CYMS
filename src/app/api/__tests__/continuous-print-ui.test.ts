@@ -115,6 +115,7 @@ describe('continuous print UI', () => {
   const billingClearanceTabPath = path.join(root, 'src/app/(dashboard)/billing/BillingClearanceTab.tsx');
   const gateInTabPath = path.join(root, 'src/app/(dashboard)/gate/GateInTab.tsx');
   const gateOutTabPath = path.join(root, 'src/app/(dashboard)/gate/GateOutTab.tsx');
+  const gatePrintDraftHookPath = path.join(root, 'src/app/(dashboard)/gate/hooks/useGatePrintReturnDraft.ts');
 
   it('loads continuous print preview data from the planned preview route', () => {
     const source = fs.readFileSync(pagePath, 'utf8');
@@ -599,16 +600,28 @@ describe('continuous print UI', () => {
     expect(gateOut).not.toContain('/billing/print?id=${invId}');
   });
 
+  it('uses a shared helper for Gate print return drafts', () => {
+    const gateIn = fs.readFileSync(gateInTabPath, 'utf8');
+    const gateOut = fs.readFileSync(gateOutTabPath, 'utf8');
+    const helper = fs.readFileSync(gatePrintDraftHookPath, 'utf8');
+
+    expect(gateIn).toContain('useGatePrintReturnDraft<GateInPrintDraft>');
+    expect(gateOut).toContain('useGatePrintReturnDraft<GateOutPrintDraft>');
+    expect(helper).toContain('window.localStorage.setItem');
+    expect(helper).toContain('window.localStorage.removeItem');
+  });
+
   it('preserves the gate-in payment draft before opening a print preview', () => {
     const gateIn = fs.readFileSync(gateInTabPath, 'utf8');
 
     expect(gateIn).toContain('GATE_IN_PRINT_DRAFT_KEY');
-    expect(gateIn).toContain('localStorage.setItem(GATE_IN_PRINT_DRAFT_KEY');
-    expect(gateIn).toContain('localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY)');
+    expect(gateIn).toContain('gateInPrintDraft.saveDraft');
+    expect(gateIn).toContain('gateInPrintDraft.clearDraft');
+    expect(gateIn).not.toContain('localStorage.setItem(GATE_IN_PRINT_DRAFT_KEY');
+    expect(gateIn).not.toContain('localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY');
     expect(gateIn).not.toContain('sessionStorage.setItem(GATE_IN_PRINT_DRAFT_KEY');
     expect(gateIn).toContain('restoreGateInPrintDraft');
     expect(gateIn).toContain('persistGateInPrintDraft');
-    expect(gateIn).toContain('localStorage.removeItem(GATE_IN_PRINT_DRAFT_KEY);');
   });
 
   it('preserves gate-in billing charge state when returning from receipt print', () => {
@@ -629,8 +642,10 @@ describe('continuous print UI', () => {
     const gateOut = fs.readFileSync(gateOutTabPath, 'utf8');
 
     expect(gateOut).toContain('GATE_OUT_PRINT_DRAFT_KEY');
-    expect(gateOut).toContain('localStorage.setItem(GATE_OUT_PRINT_DRAFT_KEY');
-    expect(gateOut).toContain('localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY)');
+    expect(gateOut).toContain('gateOutPrintDraft.saveDraft');
+    expect(gateOut).toContain('gateOutPrintDraft.clearDraft');
+    expect(gateOut).not.toContain('localStorage.setItem(GATE_OUT_PRINT_DRAFT_KEY');
+    expect(gateOut).not.toContain('localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY');
     expect(gateOut).not.toContain('sessionStorage.setItem(GATE_OUT_PRINT_DRAFT_KEY');
     expect(gateOut).toContain('restoreGateOutPrintDraft');
     expect(gateOut).toContain('persistGateOutPrintDraft');

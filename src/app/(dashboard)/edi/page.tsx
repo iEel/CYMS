@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/providers/ToastProvider';
+import ActionInputDialog from '@/components/ui/ActionInputDialog';
 import {
   Loader2, Search, FileText, ShieldCheck,
   CheckCircle2, XCircle, AlertTriangle,
@@ -192,6 +193,8 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [updatingAmendmentId, setUpdatingAmendmentId] = useState<number | null>(null);
+  const [bookingActionDialog, setBookingActionDialog] = useState<{ booking: BookingApprovalRow; action: 'approve' | 'reject' | 'request_info' } | null>(null);
+  const [amendmentActionDialog, setAmendmentActionDialog] = useState<{ amendment: BookingAmendmentRow; action: 'approve' | 'reject' } | null>(null);
 
   const loadInbox = useCallback(async () => {
     setLoading(true);
@@ -221,13 +224,7 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
 
   useEffect(() => { loadInbox(); }, [loadInbox]);
 
-  const updateBooking = async (booking: BookingApprovalRow, action: 'approve' | 'reject' | 'request_info') => {
-    const note = action === 'approve'
-      ? window.prompt('หมายเหตุการอนุมัติ Booking', '')
-      : action === 'reject'
-        ? window.prompt('เหตุผลที่ปฏิเสธ Booking', '')
-        : window.prompt('ข้อมูลเพิ่มเติมที่ต้องการจากลูกค้า', '');
-    if (note === null) return;
+  const updateBooking = async (booking: BookingApprovalRow, action: 'approve' | 'reject' | 'request_info', note: string) => {
     setUpdatingId(booking.booking_id);
     try {
       await fetch('/api/edi/bookings/approval', {
@@ -235,17 +232,14 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ booking_id: booking.booking_id, action, note }),
       });
+      setBookingActionDialog(null);
       loadInbox();
     } finally {
       setUpdatingId(null);
     }
   };
 
-  const updateAmendment = async (amendment: BookingAmendmentRow, action: 'approve' | 'reject') => {
-    const note = action === 'approve'
-      ? window.prompt('หมายเหตุการอนุมัติคำขอแก้ไข', '')
-      : window.prompt('เหตุผลที่ปฏิเสธคำขอแก้ไข', '');
-    if (note === null) return;
+  const updateAmendment = async (amendment: BookingAmendmentRow, action: 'approve' | 'reject', note: string) => {
     setUpdatingAmendmentId(amendment.amendment_id);
     try {
       await fetch('/api/edi/bookings/amendments', {
@@ -253,6 +247,7 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amendment_id: amendment.amendment_id, action, note }),
       });
+      setAmendmentActionDialog(null);
       loadInbox();
     } finally {
       setUpdatingAmendmentId(null);
@@ -315,21 +310,21 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                   <button
-                    onClick={() => updateBooking(booking, 'approve')}
+                    onClick={() => setBookingActionDialog({ booking, action: 'approve' })}
                     disabled={updatingId === booking.booking_id}
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                   >
                     <CheckCircle2 size={14} /> อนุมัติ
                   </button>
                   <button
-                    onClick={() => updateBooking(booking, 'request_info')}
+                    onClick={() => setBookingActionDialog({ booking, action: 'request_info' })}
                     disabled={updatingId === booking.booking_id}
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-amber-100 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-200 disabled:opacity-50"
                   >
                     <AlertTriangle size={14} /> ขอข้อมูล
                   </button>
                   <button
-                    onClick={() => updateBooking(booking, 'reject')}
+                    onClick={() => setBookingActionDialog({ booking, action: 'reject' })}
                     disabled={updatingId === booking.booking_id}
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-rose-100 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:opacity-50"
                   >
@@ -415,14 +410,14 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                   <button
-                    onClick={() => updateAmendment(amendment, 'approve')}
+                    onClick={() => setAmendmentActionDialog({ amendment, action: 'approve' })}
                     disabled={updatingAmendmentId === amendment.amendment_id}
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                   >
                     <CheckCircle2 size={14} /> อนุมัติ
                   </button>
                   <button
-                    onClick={() => updateAmendment(amendment, 'reject')}
+                    onClick={() => setAmendmentActionDialog({ amendment, action: 'reject' })}
                     disabled={updatingAmendmentId === amendment.amendment_id}
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-rose-100 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:opacity-50"
                   >
@@ -434,6 +429,59 @@ function BookingApprovalInbox({ yardId }: { yardId: number }) {
           </div>
         )}
       </div>
+      <ActionInputDialog
+        open={Boolean(bookingActionDialog)}
+        title={
+          bookingActionDialog?.action === 'approve'
+            ? 'อนุมัติ Booking'
+            : bookingActionDialog?.action === 'reject'
+              ? 'ปฏิเสธ Booking'
+              : 'ขอข้อมูลเพิ่มเติม'
+        }
+        description={bookingActionDialog?.booking.booking_number}
+        fields={[{
+          name: 'note',
+          label:
+            bookingActionDialog?.action === 'approve'
+              ? 'หมายเหตุการอนุมัติ Booking'
+              : bookingActionDialog?.action === 'reject'
+                ? 'เหตุผลที่ปฏิเสธ Booking'
+                : 'ข้อมูลเพิ่มเติมที่ต้องการจากลูกค้า',
+          type: 'textarea',
+          required: bookingActionDialog?.action !== 'approve',
+        }]}
+        confirmLabel={
+          bookingActionDialog?.action === 'approve'
+            ? 'อนุมัติ'
+            : bookingActionDialog?.action === 'reject'
+              ? 'ปฏิเสธ'
+              : 'ส่งคำขอข้อมูล'
+        }
+        loading={Boolean(bookingActionDialog && updatingId === bookingActionDialog.booking.booking_id)}
+        onCancel={() => setBookingActionDialog(null)}
+        onSubmit={({ note }) => {
+          if (!bookingActionDialog) return;
+          void updateBooking(bookingActionDialog.booking, bookingActionDialog.action, note || '');
+        }}
+      />
+      <ActionInputDialog
+        open={Boolean(amendmentActionDialog)}
+        title={amendmentActionDialog?.action === 'approve' ? 'อนุมัติคำขอแก้ไข' : 'ปฏิเสธคำขอแก้ไข'}
+        description={amendmentActionDialog?.amendment.booking_number}
+        fields={[{
+          name: 'note',
+          label: amendmentActionDialog?.action === 'approve' ? 'หมายเหตุการอนุมัติคำขอแก้ไข' : 'เหตุผลที่ปฏิเสธคำขอแก้ไข',
+          type: 'textarea',
+          required: amendmentActionDialog?.action === 'reject',
+        }]}
+        confirmLabel={amendmentActionDialog?.action === 'approve' ? 'อนุมัติ' : 'ปฏิเสธ'}
+        loading={Boolean(amendmentActionDialog && updatingAmendmentId === amendmentActionDialog.amendment.amendment_id)}
+        onCancel={() => setAmendmentActionDialog(null)}
+        onSubmit={({ note }) => {
+          if (!amendmentActionDialog) return;
+          void updateAmendment(amendmentActionDialog.amendment, amendmentActionDialog.action, note || '');
+        }}
+      />
     </div>
   );
 }

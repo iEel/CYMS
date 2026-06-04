@@ -4,6 +4,11 @@ import sql from 'mssql';
 import { ensureDocumentLifecycle } from '@/lib/documentLifecycle';
 import { formatDocumentActivity } from '@/lib/documentActivity';
 import { requireAnyPermission, requireYardAccess } from '@/lib/apiAuth';
+import {
+  inferDocumentActivityType,
+  normalizeDocumentActivityType,
+  requireDocumentActivityAccess,
+} from '@/lib/documentActivityAccess';
 
 const DOCUMENT_READ_PERMISSIONS = [
   'audit_trail.read',
@@ -13,26 +18,23 @@ const DOCUMENT_READ_PERMISSIONS = [
   'billing.payment.receive',
 ];
 
-function inferDocumentType(documentNumber: string | null) {
-  const value = (documentNumber || '').toUpperCase();
-  if (value.startsWith('EIR')) return 'eir';
-  if (value.startsWith('INV')) return 'invoice';
-  if (value.startsWith('CN')) return 'credit_note';
-  if (value.startsWith('REC') || value.startsWith('RCP')) return 'receipt';
-  return null;
-}
-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const documentNumber = searchParams.get('document_number');
-    const documentType = searchParams.get('document_type') || inferDocumentType(documentNumber);
+    const requestedDocumentType = searchParams.get('document_type');
+    const documentType = requestedDocumentType
+      ? normalizeDocumentActivityType(requestedDocumentType)
+      : inferDocumentActivityType(documentNumber);
     const documentId = searchParams.get('document_id') ? Number(searchParams.get('document_id')) : null;
     const yardId = searchParams.get('yard_id') ? Number(searchParams.get('yard_id')) : null;
     const limit = Math.min(Math.max(Number(searchParams.get('limit') || 50), 1), 200);
 
     if (!documentNumber && !documentId) {
       return NextResponse.json({ error: 'ต้องระบุ document_number หรือ document_id' }, { status: 400 });
+    }
+    if (!documentType) {
+      return NextResponse.json({ error: 'document_type นี้ยังไม่รองรับ Activity Feed' }, { status: 400 });
     }
 
     const db = await getDb();
@@ -44,6 +46,15 @@ export async function GET(request: NextRequest) {
     }
 
     await ensureDocumentLifecycle(db);
+    const access = await requireDocumentActivityAccess({
+      request,
+      db,
+      actor,
+      documentType,
+      documentId,
+      documentNumber,
+    });
+    if (access instanceof NextResponse) return access;
 
     const result = await db.request()
       .input('documentType', sql.VarChar(30), documentType)
@@ -67,18 +78,6 @@ export async function GET(request: NextRequest) {
           )
         ORDER BY dl.created_at ASC, dl.lifecycle_id ASC
       `);
-
-    if (!yardId) {
-      const yardIds = Array.from(new Set(
-        result.recordset
-          .map((row: Record<string, unknown>) => Number(row.yard_id))
-          .filter((value) => Number.isInteger(value) && value > 0)
-      ));
-      for (const scopedYardId of yardIds) {
-        const yardAccess = await requireYardAccess(request, db, scopedYardId);
-        if (yardAccess instanceof NextResponse) return yardAccess;
-      }
-    }
 
     return NextResponse.json({
       document_type: documentType,

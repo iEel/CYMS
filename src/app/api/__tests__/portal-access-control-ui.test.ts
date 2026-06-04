@@ -26,7 +26,8 @@ describe('portal access control UI', () => {
     expect(ui).toContain('/api/portal/grants/reconcile');
     expect(ui).toContain('/api/portal/grants/field-scope');
     expect(ui).toContain('แสดงเกรดตู้ใน EIR ให้ลูกค้า');
-    expect(ui).toContain('window.confirm');
+    expect(ui).toContain('ConfirmDialog');
+    expect(ui).not.toContain('window.confirm');
     expect(ui).toContain('repairing');
     expect(ui).toContain('!reconcile');
     expect(ui).toContain('โหลด grants ไม่สำเร็จ');

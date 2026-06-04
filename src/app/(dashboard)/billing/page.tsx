@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/providers/ToastProvider';
+import ActionInputDialog from '@/components/ui/ActionInputDialog';
 import { formatDateTime } from '@/lib/utils';
 import {
   Loader2, Calculator, Receipt, CreditCard, FileText, Plus, Search,
@@ -138,6 +139,7 @@ export default function BillingPage() {
   const [statementBusyKey, setStatementBusyKey] = useState<string | null>(null);
   const [statements, setStatements] = useState<BillingStatementRow[]>([]);
   const [statementsLoading, setStatementsLoading] = useState(false);
+  const [paymentDialogInvoice, setPaymentDialogInvoice] = useState<InvoiceRow | null>(null);
 
   // Billing clearance audit
   const [clearances, setClearances] = useState<ClearanceRow[]>([]);
@@ -426,20 +428,21 @@ export default function BillingPage() {
     }
   };
 
-  const receiveInvoicePayment = async (invoice: InvoiceRow) => {
+  const receiveInvoicePayment = (invoice: InvoiceRow) => {
     if (!canReceivePayment) {
       toast('error', 'คุณไม่มีสิทธิ์รับชำระเงิน');
       return;
     }
+    setPaymentDialogInvoice(invoice);
+  };
+
+  const submitInvoicePayment = async (invoice: InvoiceRow, amountText: string, paymentRef: string) => {
     const balance = Number(invoice.balance_amount ?? invoice.grand_total ?? 0);
-    const amountText = window.prompt('ยอดรับชำระ', String(balance));
-    if (amountText === null) return;
     const amount = Number(amountText);
     if (!Number.isFinite(amount) || amount <= 0 || amount - balance > 0.01) {
       toast('error', 'ยอดรับชำระไม่ถูกต้อง');
       return;
     }
-    const paymentRef = window.prompt('เลขอ้างอิงการชำระเงิน / หมายเหตุ', '') || '';
     try {
       const res = await fetch('/api/billing/payments', {
         method: 'POST',
@@ -459,6 +462,7 @@ export default function BillingPage() {
         return;
       }
       toast('success', 'บันทึกรับชำระเงินแล้ว', data.payment?.receipt_number || invoice.invoice_number);
+      setPaymentDialogInvoice(null);
       fetchInvoices();
     } catch (error) {
       console.error(error);
@@ -1058,6 +1062,28 @@ export default function BillingPage() {
       )}
 
       {/* =================== CREDIT NOTE MODAL =================== */}
+      <ActionInputDialog
+        open={Boolean(paymentDialogInvoice)}
+        title="รับชำระเงิน"
+        description={paymentDialogInvoice ? `เอกสาร ${paymentDialogInvoice.invoice_number}` : undefined}
+        fields={[
+          {
+            name: 'amount',
+            label: 'ยอดรับชำระ',
+            type: 'number',
+            defaultValue: paymentDialogInvoice ? String(Number(paymentDialogInvoice.balance_amount ?? paymentDialogInvoice.grand_total ?? 0)) : '',
+            required: true,
+          },
+          { name: 'payment_ref', label: 'เลขอ้างอิง / หมายเหตุ', type: 'text' },
+        ]}
+        confirmLabel="บันทึกรับชำระ"
+        onCancel={() => setPaymentDialogInvoice(null)}
+        onSubmit={({ amount, payment_ref }) => {
+          if (!paymentDialogInvoice) return;
+          void submitInvoicePayment(paymentDialogInvoice, amount, payment_ref);
+        }}
+      />
+
       {cnModal.open && cnModal.invoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setCnModal({ open: false, invoice: null })}>
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>

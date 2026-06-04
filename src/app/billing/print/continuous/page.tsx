@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, Printer } from 'lucide-react';
+import ActionInputDialog from '@/components/ui/ActionInputDialog';
 import { ContinuousTaxReceipt } from '@/components/billing/ContinuousTaxReceipt';
 import { buildSampleContinuousPrintPayload } from '@/lib/billingContinuousPrintSample';
 import { buildDefaultA4TaxReceiptTemplateConfig, buildDefaultContinuousTemplateConfig } from '@/lib/documentTemplateDefaults';
@@ -171,6 +172,7 @@ function ContinuousPrintContent() {
   const [errorMessage, setErrorMessage] = useState('');
   const [printError, setPrintError] = useState('');
   const [printing, setPrinting] = useState(false);
+  const [reprintReasonOpen, setReprintReasonOpen] = useState(false);
   const isSamplePreview = searchParams.get('preview') === 'sample' || payload?.document.document_type === 'sample';
   const realDocumentId = isSamplePreview
     ? null
@@ -256,6 +258,31 @@ function ContinuousPrintContent() {
     return data;
   }
 
+  async function completeLoggedPrint(documentId: number, reprintReason?: string | null) {
+    setPrintError('');
+    if (!payload || !config) return;
+
+    setPrinting(true);
+    try {
+      const result = await postPrintLog(documentId, reprintReason);
+      if (result.error === 'reprint reason is required') {
+        setReprintReasonOpen(true);
+        return;
+      }
+
+      if (result.error) {
+        setPrintError(result.error);
+        return;
+      }
+
+      setReprintReasonOpen(false);
+      setReprintLabel(result.reprint_label || null);
+      window.setTimeout(() => window.print(), 0);
+    } finally {
+      setPrinting(false);
+    }
+  }
+
   async function handlePrint() {
     setPrintError('');
     if (!payload || !config) return;
@@ -264,28 +291,7 @@ function ContinuousPrintContent() {
       return;
     }
 
-    setPrinting(true);
-    try {
-      let result = await postPrintLog(realDocumentId);
-      if (result.error === 'reprint reason is required') {
-        const reason = window.prompt('กรุณาระบุเหตุผลในการพิมพ์ซ้ำ');
-        if (!reason?.trim()) {
-          setPrintError('ต้องระบุเหตุผลในการพิมพ์ซ้ำ');
-          return;
-        }
-        result = await postPrintLog(realDocumentId, reason);
-      }
-
-      if (result.error) {
-        setPrintError(result.error);
-        return;
-      }
-
-      setReprintLabel(result.reprint_label || null);
-      window.setTimeout(() => window.print(), 0);
-    } finally {
-      setPrinting(false);
-    }
+    await completeLoggedPrint(realDocumentId);
   }
 
   function handleBackToTemplate() {
@@ -362,6 +368,20 @@ function ContinuousPrintContent() {
           .continuous-print-shell { padding: 0; }
         }
       `}</style>
+      <ActionInputDialog
+        open={reprintReasonOpen}
+        title="เหตุผลในการพิมพ์ซ้ำ"
+        description="เอกสารนี้ถูกตั้งค่าให้ต้องระบุเหตุผลทุกครั้งที่พิมพ์ซ้ำ"
+        fields={[{ name: 'reason', label: 'เหตุผล', type: 'textarea', required: true }]}
+        confirmLabel="บันทึกและพิมพ์"
+        loading={printing}
+        onCancel={() => setReprintReasonOpen(false)}
+        onSubmit={({ reason }) => {
+          const trimmed = reason.trim();
+          if (!realDocumentId || !trimmed) return;
+          void completeLoggedPrint(realDocumentId, trimmed);
+        }}
+      />
       <div className="continuous-print-toolbar">
         <div className="continuous-print-toolbar-main">
           <a

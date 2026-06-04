@@ -13,11 +13,13 @@ import { buildGateDecisionSignals, buildGateOutWorkflow } from '@/lib/gateWorkfl
 import { buildGateOperationalGuardrails, type GateRecentTransaction } from '@/lib/gateOperationalGuardrails';
 import { isOfflineQueuedResponse, offlineFetch } from '@/lib/offlineQueue';
 import { useAuth } from '@/components/providers/AuthProvider';
+import ActionInputDialog from '@/components/ui/ActionInputDialog';
 import GateOutSearchSection from './components/GateOutSearchSection';
 import type { GateOutFormState, GateOutPhase } from './components/GateOutReleaseRequestSection';
 import GateOutStatusRail, { GateOutSelectedStatusCards } from './components/GateOutStatusRail';
 import { useGateOutSearch } from './hooks/useGateOutSearch';
 import { useGateOutVisibilityPreview } from './hooks/useGateOutVisibilityPreview';
+import { useGatePrintReturnDraft } from './hooks/useGatePrintReturnDraft';
 
 interface GateOutTabProps {
   yardId: number;
@@ -158,6 +160,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [chargeOverrides, setChargeOverrides] = useState<Record<number, number>>({});
   const [customCharges, setCustomCharges] = useState<BillingCharge[]>([]);
   const [selectedCustom, setSelectedCustom] = useState<Set<number>>(new Set());
+  const [waiveDialogOpen, setWaiveDialogOpen] = useState(false);
 
   // Manual customer selection (when no auto-match)
   const [customerList, setCustomerList] = useState<{ customer_id: number; customer_name: string; is_line: boolean; is_trucking: boolean; is_forwarder: boolean; credit_term: number }[]>([]);
@@ -172,80 +175,72 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [bookingLoading, setBookingLoading] = useState(false);
   const [showBookingPicker, setShowBookingPicker] = useState(false);
   const [bookingWarning, setBookingWarning] = useState('');
+  const gateOutPrintDraft = useGatePrintReturnDraft<GateOutPrintDraft>({
+    storageKey: GATE_OUT_PRINT_DRAFT_KEY,
+    label: 'Gate-Out print draft',
+    isValidDraft: draft => draft.yard_id === yardId
+      && Boolean(draft.saved_at)
+      && Date.now() - Number(draft.saved_at) <= GATE_OUT_PRINT_DRAFT_MAX_AGE_MS,
+  });
 
   const restoreGateOutPrintDraft = () => {
-    try {
-      const raw = localStorage.getItem(GATE_OUT_PRINT_DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw) as GateOutPrintDraft;
-      if (draft.yard_id !== yardId || !draft.saved_at || Date.now() - draft.saved_at > GATE_OUT_PRINT_DRAFT_MAX_AGE_MS) {
-        localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
-        return;
-      }
+    const draft = gateOutPrintDraft.restoreDraft();
+    if (!draft) return;
 
-      setSearchQuery(draft.searchQuery || draft.selectedContainer?.container_number || '');
-      setSearchResults([]);
-      setSelectedContainer(draft.selectedContainer || null);
-      setSelectedGateOutRequest(draft.selectedGateOutRequest || null);
-      if (draft.gateOutForm) setGateOutForm(draft.gateOutForm);
-      setGateOutPhotos(draft.gateOutPhotos || []);
-      setGateOutPhase(draft.gateOutPhase || (draft.selectedContainer ? 'confirm_release' : 'search'));
-      if (draft.billingData) setBillingData(draft.billingData);
-      if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
-      setBillingPaid(Boolean(draft.billingPaid));
-      setBillingInvoiceNumber(draft.billingInvoiceNumber || '');
-      setBillingInvoiceId(draft.billingInvoiceId || null);
-      setBillingClearance(draft.billingClearance || null);
-      if (draft.selectedCharges) setSelectedCharges(new Set(draft.selectedCharges));
-      if (draft.chargeOverrides) setChargeOverrides(draft.chargeOverrides);
-      if (draft.customCharges) setCustomCharges(draft.customCharges);
-      if (draft.selectedCustom) setSelectedCustom(new Set(draft.selectedCustom));
-      setManualCustomerId(draft.manualCustomerId || null);
-      setCustomerSearch(draft.customerSearch || '');
-      setSelectedBooking(draft.selectedBooking || null);
-      setBookingSearch(draft.bookingSearch || '');
-      setBookingResults([]);
-      setBookingWarning(draft.bookingWarning || '');
-      setShowCustomerPicker(false);
-      setShowBookingPicker(false);
-      setGateOutResult(null);
-      localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
-    } catch (error) {
-      console.warn('Restore Gate-Out print draft failed:', error);
-      localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
-    }
+    setSearchQuery(draft.searchQuery || draft.selectedContainer?.container_number || '');
+    setSearchResults([]);
+    setSelectedContainer(draft.selectedContainer || null);
+    setSelectedGateOutRequest(draft.selectedGateOutRequest || null);
+    if (draft.gateOutForm) setGateOutForm(draft.gateOutForm);
+    setGateOutPhotos(draft.gateOutPhotos || []);
+    setGateOutPhase(draft.gateOutPhase || (draft.selectedContainer ? 'confirm_release' : 'search'));
+    if (draft.billingData) setBillingData(draft.billingData);
+    if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
+    setBillingPaid(Boolean(draft.billingPaid));
+    setBillingInvoiceNumber(draft.billingInvoiceNumber || '');
+    setBillingInvoiceId(draft.billingInvoiceId || null);
+    setBillingClearance(draft.billingClearance || null);
+    if (draft.selectedCharges) setSelectedCharges(new Set(draft.selectedCharges));
+    if (draft.chargeOverrides) setChargeOverrides(draft.chargeOverrides);
+    if (draft.customCharges) setCustomCharges(draft.customCharges);
+    if (draft.selectedCustom) setSelectedCustom(new Set(draft.selectedCustom));
+    setManualCustomerId(draft.manualCustomerId || null);
+    setCustomerSearch(draft.customerSearch || '');
+    setSelectedBooking(draft.selectedBooking || null);
+    setBookingSearch(draft.bookingSearch || '');
+    setBookingResults([]);
+    setBookingWarning(draft.bookingWarning || '');
+    setShowCustomerPicker(false);
+    setShowBookingPicker(false);
+    setGateOutResult(null);
   };
 
   const persistGateOutPrintDraft = () => {
-    try {
-      localStorage.setItem(GATE_OUT_PRINT_DRAFT_KEY, JSON.stringify({
-        saved_at: Date.now(),
-        yard_id: yardId,
-        searchQuery,
-        selectedContainer,
-        selectedGateOutRequest,
-        gateOutForm,
-        gateOutPhotos,
-        gateOutPhase,
-        billingData,
-        paymentMethod,
-        billingPaid,
-        billingInvoiceNumber,
-        billingInvoiceId,
-        billingClearance,
-        selectedCharges: Array.from(selectedCharges),
-        chargeOverrides,
-        customCharges,
-        selectedCustom: Array.from(selectedCustom),
-        manualCustomerId,
-        customerSearch,
-        selectedBooking,
-        bookingSearch,
-        bookingWarning,
-      }));
-    } catch (error) {
-      console.warn('Persist Gate-Out print draft failed:', error);
-    }
+    gateOutPrintDraft.saveDraft({
+      saved_at: Date.now(),
+      yard_id: yardId,
+      searchQuery,
+      selectedContainer,
+      selectedGateOutRequest,
+      gateOutForm,
+      gateOutPhotos,
+      gateOutPhase,
+      billingData,
+      paymentMethod,
+      billingPaid,
+      billingInvoiceNumber,
+      billingInvoiceId,
+      billingClearance,
+      selectedCharges: Array.from(selectedCharges),
+      chargeOverrides,
+      customCharges,
+      selectedCustom: Array.from(selectedCustom),
+      manualCustomerId,
+      customerSearch,
+      selectedBooking,
+      bookingSearch,
+      bookingWarning,
+    });
   };
 
   useEffect(() => {
@@ -475,14 +470,21 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     } catch (err) { console.error(err); }
   };
 
+  const submitGateOutWaiver = async (reason: string) => {
+    try {
+      await createGateOutClearance('waived', null, reason);
+      setWaiveDialogOpen(false);
+    } catch (err) { console.error(err); }
+  };
+
   const handleRequestApproval = async () => {
     try {
       const isWaived = originalSelectedTotal > 0;
-      const reason = isWaived
-        ? window.prompt('ระบุเหตุผลการยกเว้นค่าใช้จ่าย') || ''
-        : 'ไม่มีค่าบริการ';
-      if (isWaived && !reason.trim()) return;
-      await createGateOutClearance(isWaived ? 'waived' : 'no_charge', null, reason);
+      if (isWaived) {
+        setWaiveDialogOpen(true);
+        return;
+      }
+      await createGateOutClearance('no_charge', null, 'ไม่มีค่าบริการ');
     } catch (err) { console.error(err); }
   };
 
@@ -892,7 +894,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       const data = await res.json();
       if (isOfflineQueuedResponse(data)) {
         setGateOutResult({ success: true, message: `บันทึก Gate-Out ${selectedContainer.container_number} เข้าคิวออฟไลน์แล้ว — จะซิงค์เมื่อออนไลน์` });
-        localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
+        gateOutPrintDraft.clearDraft();
         clearGateOutSearch();
         setSelectedGateOutRequest(null);
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
@@ -909,7 +911,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       }
       if (data.success) {
         setGateOutResult({ success: true, message: `✅ ปล่อยตู้ ${selectedContainer.container_number} ออกจากลานสำเร็จ`, eir_number: data.eir_number });
-        localStorage.removeItem(GATE_OUT_PRINT_DRAFT_KEY);
+        gateOutPrintDraft.clearDraft();
         clearGateOutSearch();
         setSelectedGateOutRequest(null);
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
@@ -1175,6 +1177,19 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           onClose={() => setShowOCR(null)}
         />
       )}
+      <ActionInputDialog
+        open={waiveDialogOpen}
+        title="ยกเว้นค่าใช้จ่าย Gate-Out"
+        description="ระบุเหตุผลเพื่อเก็บใน billing clearance และ audit trail"
+        fields={[{ name: 'reason', label: 'เหตุผล', type: 'textarea', required: true }]}
+        confirmLabel="ยืนยันยกเว้น"
+        onCancel={() => setWaiveDialogOpen(false)}
+        onSubmit={({ reason }) => {
+          const trimmed = reason.trim();
+          if (!trimmed) return;
+          void submitGateOutWaiver(trimmed);
+        }}
+      />
     </div>
   );
 }
