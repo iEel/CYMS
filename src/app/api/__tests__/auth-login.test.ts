@@ -116,4 +116,36 @@ describe('POST /api/auth/login — two-factor auth', () => {
       yardIds: [1, 2],
     }));
   });
+
+  it('includes customer portal role in the login session for transport users', async () => {
+    const transportUser = {
+      ...user,
+      user_id: 7,
+      username: 'driver1',
+      role_code: 'customer',
+      two_fa_enabled: false,
+      two_fa_secret: null,
+      customer_portal_role: 'driver_user',
+    };
+    queryQueue = [
+      q([transportUser]),
+      q([]),
+      q([{ yard_id: 1 }]),
+      q([{ customer_id: 44 }]),
+      q([]),
+    ];
+
+    const res = await POST(makeRequest({ username: 'driver1', password: 'driverpass' }));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.session.customerId).toBe(44);
+    expect(body.session.customerPortalRole).toBe('driver_user');
+    expect(mockedCreateToken).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 7,
+      role: 'customer',
+      customerId: 44,
+      customerPortalRole: 'driver_user',
+    }));
+  });
 });

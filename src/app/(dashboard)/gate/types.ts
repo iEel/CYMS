@@ -85,6 +85,7 @@ export interface GateOutBooking {
   shipper_id?: number | null;
   consignee_id?: number | null;
   trucking_company_id?: number | null;
+  driver_user_id?: number | null;
   bill_to_customer_id?: number | null;
   booking_customer_name?: string | null;
   shipping_line_name?: string | null;
@@ -130,6 +131,7 @@ export interface GateOutRequest {
   shipper_id?: number | null;
   consignee_id?: number | null;
   trucking_company_id?: number | null;
+  driver_user_id?: number | null;
   bill_to_customer_id?: number | null;
   booking_customer_name?: string | null;
   shipping_line_name?: string | null;

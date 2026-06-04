@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Loader2,
   FileText, X,
@@ -29,6 +29,12 @@ interface GateOutTabProps {
 
 type GateBillingPrintTemplateFamily = 'a4_tax_receipt' | 'continuous_tax_receipt';
 
+type DriverPortalUserOption = {
+  user_id: number;
+  full_name: string;
+  username: string;
+};
+
 const GATE_OUT_PRINT_DRAFT_KEY = 'cyms.gateOut.printDraft.v1';
 const GATE_OUT_PRINT_DRAFT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
@@ -56,6 +62,7 @@ type GateOutPrintDraft = {
   selectedBooking?: GateOutBooking | null;
   bookingSearch?: string;
   bookingWarning?: string;
+  selectedDriverUserId?: number | null;
 };
 
 function gateOutPhaseFromRequest(request: GateOutRequest): GateOutPhase {
@@ -147,6 +154,10 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
   const [gateOutRequests, setGateOutRequests] = useState<GateOutRequest[]>([]);
   const [gateOutRequestsLoading, setGateOutRequestsLoading] = useState(false);
   const [selectedGateOutRequest, setSelectedGateOutRequest] = useState<GateOutRequest | null>(null);
+  const [driverUsers, setDriverUsers] = useState<DriverPortalUserOption[]>([]);
+  const [driverUsersLoading, setDriverUsersLoading] = useState(false);
+  const [selectedDriverUserId, setSelectedDriverUserId] = useState<number | null>(null);
+  const driverUsersTruckingCompanyIdRef = useRef<number | null>(null);
 
   // Billing
   const [billingData, setBillingData] = useState<BillingData | null>(null);
@@ -210,6 +221,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     setBookingSearch(draft.bookingSearch || '');
     setBookingResults([]);
     setBookingWarning(draft.bookingWarning || '');
+    setSelectedDriverUserId(draft.selectedDriverUserId || null);
     setShowCustomerPicker(false);
     setShowBookingPicker(false);
     setGateOutResult(null);
@@ -240,6 +252,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       selectedBooking,
       bookingSearch,
       bookingWarning,
+      selectedDriverUserId,
     });
   };
 
@@ -299,6 +312,46 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
     return billingData?.billing_customer || billingData?.customer || null;
   }, [billingData?.billing_customer, billingData?.customer, manualCustomerId, customerList]);
   const resolvedIsCredit = resolvedCustomer ? (resolvedCustomer.credit_term || 0) > 0 : false;
+
+  const resolvedGateOutTruckingCompanyId = useMemo(
+    () => selectedGateOutRequest?.trucking_company_id || selectedBooking?.trucking_company_id || null,
+    [selectedGateOutRequest?.trucking_company_id, selectedBooking?.trucking_company_id],
+  );
+
+  useEffect(() => {
+    const truckingCompanyId = resolvedGateOutTruckingCompanyId;
+    const previousTruckingCompanyId = driverUsersTruckingCompanyIdRef.current;
+    if (previousTruckingCompanyId !== null && previousTruckingCompanyId !== truckingCompanyId) {
+      setSelectedDriverUserId(null);
+    }
+    driverUsersTruckingCompanyIdRef.current = truckingCompanyId;
+    if (!truckingCompanyId) {
+      setDriverUsers([]);
+      setDriverUsersLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setDriverUsersLoading(true);
+    fetch(`/api/settings/customers/drivers?trucking_company_id=${truckingCompanyId}`, { signal: controller.signal })
+      .then(res => res.ok ? res.json() : { drivers: [] })
+      .then(data => {
+        if (!controller.signal.aborted) {
+          setDriverUsers(Array.isArray(data.drivers) ? data.drivers : []);
+        }
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          console.error('Load Gate-Out driver portal users error:', err);
+          setDriverUsers([]);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDriverUsersLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [resolvedGateOutTruckingCompanyId]);
 
   const filteredGateOutCustomers = useMemo(() => {
     if (!customerSearch) return customerList.slice(0, 10);
@@ -585,6 +638,8 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       booking_ref?: string | null;
       billing_customer_id?: number | null;
       billing_clearance_id?: number | null;
+      trucking_company_id?: number | null;
+      driver_user_id?: number | null;
       driver_name?: string | null;
       driver_license?: string | null;
       truck_plate?: string | null;
@@ -606,6 +661,8 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
             || selectedBooking?.booking_customer_id
             || selectedBooking?.customer_id
             || null,
+          trucking_company_id: resolvedGateOutTruckingCompanyId || null,
+          driver_user_id: selectedDriverUserId || null,
           driver_name: gateOutForm.driver_name || null,
           driver_license: gateOutForm.driver_license || null,
           truck_plate: gateOutForm.truck_plate || null,
@@ -650,6 +707,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
       booking_ref: bookingRef,
       notes: request.notes || '',
     });
+    setSelectedDriverUserId(request.driver_user_id || null);
     if (billingCustomerId) setManualCustomerId(billingCustomerId);
     if (request.billing_clearance_id) {
       setBillingClearance({
@@ -827,6 +885,8 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
             || selectedBooking?.customer_id
             || null,
           billing_clearance_id: billingClearance?.clearance_id || null,
+          trucking_company_id: resolvedGateOutTruckingCompanyId || null,
+          driver_user_id: selectedDriverUserId || null,
           from_zone_id: selectedContainer.zone_id,
           from_bay: selectedContainer.bay,
           from_row: selectedContainer.row,
@@ -884,8 +944,8 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           billing_customer_id: resolvedCustomer?.customer_id || selectedBooking?.bill_to_customer_id || selectedBooking?.booking_customer_id || selectedBooking?.customer_id || undefined,
           container_owner_id: selectedContainer.container_owner_id || billingData?.owner?.customer_id || undefined,
           booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || undefined,
-          trucking_company_id: selectedBooking?.trucking_company_id || undefined,
-          driver_user_id: undefined,
+          trucking_company_id: resolvedGateOutTruckingCompanyId || undefined,
+          driver_user_id: selectedDriverUserId || undefined,
           billing_clearance_id: billingClearance?.clearance_id || undefined,
           ...(gateOutPhotos.length > 0 ? { damage_report: { exit_photos: gateOutPhotos } } : {}),
           ...gateOutForm,
@@ -897,6 +957,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
         gateOutPrintDraft.clearDraft();
         clearGateOutSearch();
         setSelectedGateOutRequest(null);
+        setSelectedDriverUserId(null);
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
         setGateOutPhotos([]);
         setGateOutPhase('search');
@@ -914,6 +975,7 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
         gateOutPrintDraft.clearDraft();
         clearGateOutSearch();
         setSelectedGateOutRequest(null);
+        setSelectedDriverUserId(null);
         setGateOutForm({ driver_name: '', driver_license: '', truck_plate: '', seal_number: '', booking_ref: '', notes: '' });
         setGateOutPhotos([]);
         setGateOutPhase('search');
@@ -1115,6 +1177,10 @@ export default function GateOutTab({ yardId, userId, onViewEIR }: GateOutTabProp
           billingCleared={billingCleared}
           gateOutForm={gateOutForm}
           setGateOutForm={setGateOutForm}
+          driverUsers={driverUsers}
+          selectedDriverUserId={selectedDriverUserId}
+          setSelectedDriverUserId={setSelectedDriverUserId}
+          driverUsersLoading={driverUsersLoading}
           setShowOCR={setShowOCR}
           loadBookingByNumber={loadBookingByNumber}
           handleRequestRelease={handleRequestRelease}

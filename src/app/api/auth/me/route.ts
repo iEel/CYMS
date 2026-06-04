@@ -27,14 +27,14 @@ export async function GET(request: NextRequest) {
     const result = await db.request()
       .input('userId', sql.Int, payload.userId)
       .query(`
-        SELECT u.user_id, u.username, u.full_name, u.email,
+        SELECT u.user_id, u.username, u.full_name, u.email, u.customer_portal_role,
                r.role_code,
                STRING_AGG(CAST(uya.yard_id AS NVARCHAR), ',') AS yard_ids
         FROM Users u
         JOIN Roles r ON u.role_id = r.role_id
         LEFT JOIN UserYardAccess uya ON u.user_id = uya.user_id
         WHERE u.user_id = @userId AND u.status = 'active'
-        GROUP BY u.user_id, u.username, u.full_name, u.email, r.role_code
+        GROUP BY u.user_id, u.username, u.full_name, u.email, u.customer_portal_role, r.role_code
       `);
 
     const user = result.recordset[0];
@@ -54,6 +54,9 @@ export async function GET(request: NextRequest) {
       yardIds,
       activeYardId: yardIds[0] || 1,
       customerId: (payload.customerId as number) || null,
+      customerPortalRole: user.role_code === 'customer'
+        ? (user.customer_portal_role || (payload.customerPortalRole as string) || 'customer_admin')
+        : null,
     };
 
     return NextResponse.json({ authenticated: true, session });

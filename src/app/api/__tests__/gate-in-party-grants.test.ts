@@ -17,7 +17,9 @@ describe('Gate In party grants', () => {
     expect(submitBody).toContain('...gateInForm');
     expect(submitBody).toContain('booking_customer_id: selectedBooking?.booking_customer_id || selectedBooking?.customer_id || manualCustomerId || undefined');
     expect(submitBody).toContain('trucking_company_id: resolvedTruckingCompanyId || undefined');
-    expect(submitBody).toContain('driver_user_id: undefined');
+    expect(submitBody).toContain('driver_user_id: selectedDriverUserId || undefined');
+    expect(gateIn).toContain('/api/settings/customers/drivers');
+    expect(gateIn).toContain('setSelectedDriverUserId(null)');
   });
 
   it('uses the same resolved trucking company id for preview and submit', () => {

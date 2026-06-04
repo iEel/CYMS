@@ -46,6 +46,8 @@ async function fetchGateOutRequests(
     WITH RequestRows AS (
       SELECT TOP 100
         gor.*,
+        gor.trucking_company_id AS request_trucking_company_id,
+        gor.driver_user_id AS request_driver_user_id,
         wo.status AS work_order_status,
         wo.created_at AS work_order_created_at,
         wo.started_at AS work_order_started_at,
@@ -96,7 +98,7 @@ async function fetchGateOutRequests(
       LEFT JOIN Customers forwarder ON forwarder.customer_id = b.forwarder_id
       LEFT JOIN Customers shipper ON shipper.customer_id = b.shipper_id
       LEFT JOIN Customers consignee ON consignee.customer_id = b.consignee_id
-      LEFT JOIN Customers trucking ON trucking.customer_id = b.trucking_company_id
+      LEFT JOIN Customers trucking ON trucking.customer_id = COALESCE(gor.trucking_company_id, b.trucking_company_id)
       LEFT JOIN Customers billTo ON billTo.customer_id = b.bill_to_customer_id
       LEFT JOIN BillingClearances bc ON bc.clearance_id = gor.billing_clearance_id
       WHERE ${filters.join(' AND ')}
@@ -177,6 +179,8 @@ export async function POST(request: NextRequest) {
         .input('requestId', sql.Int, current.request_id)
         .input('bookingId', sql.Int, positiveInt(body.booking_id))
         .input('bookingRef', sql.NVarChar, cleanText(body.booking_ref, 100))
+        .input('truckingCompanyId', sql.Int, positiveInt(body.trucking_company_id))
+        .input('driverUserId', sql.Int, positiveInt(body.driver_user_id))
         .input('billingCustomerId', sql.Int, positiveInt(body.billing_customer_id))
         .input('billingClearanceId', sql.Int, positiveInt(body.billing_clearance_id))
         .input('driverName', sql.NVarChar, cleanText(body.driver_name, 100))
@@ -188,6 +192,8 @@ export async function POST(request: NextRequest) {
           UPDATE GateOutRequests
           SET booking_id = COALESCE(@bookingId, booking_id),
               booking_ref = COALESCE(@bookingRef, booking_ref),
+              trucking_company_id = COALESCE(@truckingCompanyId, trucking_company_id),
+              driver_user_id = COALESCE(@driverUserId, driver_user_id),
               billing_customer_id = COALESCE(@billingCustomerId, billing_customer_id),
               billing_clearance_id = COALESCE(@billingClearanceId, billing_clearance_id),
               driver_name = COALESCE(@driverName, driver_name),
@@ -229,6 +235,8 @@ export async function POST(request: NextRequest) {
       .input('containerId', sql.Int, containerId)
       .input('bookingId', sql.Int, positiveInt(body.booking_id))
       .input('bookingRef', sql.NVarChar, cleanText(body.booking_ref, 100))
+      .input('truckingCompanyId', sql.Int, positiveInt(body.trucking_company_id))
+      .input('driverUserId', sql.Int, positiveInt(body.driver_user_id))
       .input('billingCustomerId', sql.Int, positiveInt(body.billing_customer_id))
       .input('billingClearanceId', sql.Int, positiveInt(body.billing_clearance_id))
       .input('workOrderId', sql.Int, workOrder.order_id)
@@ -240,11 +248,13 @@ export async function POST(request: NextRequest) {
       .input('requestedBy', sql.Int, actor.userId)
       .query(`
         INSERT INTO GateOutRequests (yard_id, container_id, booking_id, booking_ref,
+          trucking_company_id, driver_user_id,
           billing_customer_id, billing_clearance_id, work_order_id,
           driver_name, driver_license, truck_plate, seal_number, notes,
           status, requested_by)
         OUTPUT INSERTED.*
         VALUES (@yardId, @containerId, @bookingId, @bookingRef,
+          @truckingCompanyId, @driverUserId,
           @billingCustomerId, @billingClearanceId, @workOrderId,
           @driverName, @driverLicense, @truckPlate, @sealNumber, @notes,
           'requested', @requestedBy)
@@ -305,6 +315,8 @@ export async function PATCH(request: NextRequest) {
         .input('requestId', sql.Int, requestId)
         .input('bookingId', sql.Int, positiveInt(body.booking_id))
         .input('bookingRef', sql.NVarChar, cleanText(body.booking_ref, 100))
+        .input('truckingCompanyId', sql.Int, positiveInt(body.trucking_company_id))
+        .input('driverUserId', sql.Int, positiveInt(body.driver_user_id))
         .input('billingCustomerId', sql.Int, positiveInt(body.billing_customer_id))
         .input('billingClearanceId', sql.Int, positiveInt(body.billing_clearance_id))
         .input('driverName', sql.NVarChar, cleanText(body.driver_name, 100))
@@ -316,6 +328,8 @@ export async function PATCH(request: NextRequest) {
           UPDATE GateOutRequests
           SET booking_id = COALESCE(@bookingId, booking_id),
               booking_ref = COALESCE(@bookingRef, booking_ref),
+              trucking_company_id = COALESCE(@truckingCompanyId, trucking_company_id),
+              driver_user_id = COALESCE(@driverUserId, driver_user_id),
               billing_customer_id = COALESCE(@billingCustomerId, billing_customer_id),
               billing_clearance_id = COALESCE(@billingClearanceId, billing_clearance_id),
               driver_name = COALESCE(@driverName, driver_name),

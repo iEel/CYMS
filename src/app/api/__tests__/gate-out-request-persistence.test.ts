@@ -15,7 +15,14 @@ describe('Gate Out request persistence', () => {
     expect(migration).toContain('work_order_id INT NULL');
     expect(migration).toContain('billing_clearance_id INT NULL');
     expect(migration).toContain('gate_transaction_id INT NULL');
+    expect(migration).toContain('trucking_company_id INT NULL');
+    expect(migration).toContain('driver_user_id INT NULL');
+    expect(migration).toContain('IX_GateOutRequests_Transport');
+    expect(migration).toContain('UPDATE gor');
     expect(schema).toContain('CREATE TABLE GateOutRequests');
+    expect(schema).toContain('trucking_company_id INT NULL');
+    expect(schema).toContain('driver_user_id INT NULL');
+    expect(schema).toContain('IX_GateOutRequests_Transport');
   });
 
   it('exposes a yard-scoped API for listing, creating, and updating Gate Out requests', () => {
@@ -26,6 +33,8 @@ describe('Gate Out request persistence', () => {
     expect(route).toContain('requireYardAccess');
     expect(route).toContain('GateOutRequests');
     expect(route).toContain('WorkOrders');
+    expect(route).toContain('gor.trucking_company_id');
+    expect(route).toContain('gor.driver_user_id');
     expect(route).toContain("WHEN status = 'at_gate' THEN 'at_gate'");
     expect(route).toContain("work_order_status IN ('pending', 'assigned', 'in_progress')");
     expect(route).toContain("work_order_status = 'completed'");
@@ -38,6 +47,15 @@ describe('Gate Out request persistence', () => {
     expect(gateOut).toContain('selectedGateOutRequest');
     expect(gateOut).toContain('gate_out_request_id: selectedGateOutRequest?.request_id || undefined');
     expect(gateOut).not.toContain('gateout_driver_');
+  });
+
+  it('persists trucking company and driver user assignment for transport portal pickup jobs', () => {
+    expect(route).toContain(".input('truckingCompanyId', sql.Int, positiveInt(body.trucking_company_id))");
+    expect(route).toContain(".input('driverUserId', sql.Int, positiveInt(body.driver_user_id))");
+    expect(route).toContain('trucking_company_id = COALESCE(@truckingCompanyId, trucking_company_id)');
+    expect(route).toContain('driver_user_id = COALESCE(@driverUserId, driver_user_id)');
+    expect(route).toContain('trucking_company_id, driver_user_id');
+    expect(route).toContain('@truckingCompanyId, @driverUserId');
   });
 
   it('marks the durable request released when the final Gate Out EIR is issued', () => {
