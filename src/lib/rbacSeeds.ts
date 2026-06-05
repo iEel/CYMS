@@ -44,6 +44,8 @@ export const PERMISSION_SEEDS: PermissionSeed[] = [
   { code: 'yard.slot.move', module: 'yard', action: 'slot_move', description: 'ย้าย slot หรือตำแหน่งวางตู้' },
   { code: 'yard.location.assign', module: 'yard', action: 'location_assign', description: 'กำหนด location ให้ตู้' },
   { code: 'yard.hold.release', module: 'yard', action: 'hold_release', description: 'ปล่อยตู้ที่ติด hold หรือ billing hold', risk: 'high' },
+  { code: 'operations.exceptions.view', module: 'operations', action: 'exceptions_view', description: 'ดูศูนย์รวม exception งานปฏิบัติการ' },
+  { code: 'operations.exceptions.manage', module: 'operations', action: 'exceptions_manage', description: 'มอบหมาย รับทราบ ปิด หรือ ignore exception งานปฏิบัติการ', risk: 'medium' },
   { code: 'reefer.check.read', module: 'reefer', action: 'check_read', description: 'ดูคิวและประวัติการตรวจอุณหภูมิตู้เย็น' },
   { code: 'reefer.check.record', module: 'reefer', action: 'check_record', description: 'บันทึกผลตรวจอุณหภูมิตู้เย็นพร้อมหลักฐานรูปถ่าย' },
   { code: 'reefer.exception.manage', module: 'reefer', action: 'exception_manage', description: 'รับทราบ แก้ไข และปิด exception อุณหภูมิตู้เย็น', risk: 'high' },
@@ -93,9 +95,10 @@ export const PERMISSION_SEEDS: PermissionSeed[] = [
 ];
 
 export const ROLE_GRANTS: Record<string, string[]> = {
+  yard_manager: ['operations.exceptions.view', 'operations.exceptions.manage'],
   gate_clerk: ['gate.in', 'gate.out', 'gate.eir.print', 'documents.attachment.view', 'documents.attachment.upload', 'booking.manage', 'integration.logs.view', 'reefer.check.read'],
-  surveyor: ['survey.inspect', 'survey.damage.update', 'survey.grade.change', 'yard.location.assign', 'mnr.eor.create', 'reports.view', 'documents.attachment.view', 'documents.attachment.upload', 'reefer.check.read', 'reefer.check.record', 'reefer.exception.manage'],
-  yard_planner: ['yard.slot.move', 'yard.location.assign', 'booking.manage', 'reports.view', 'reefer.check.read'],
+  surveyor: ['survey.inspect', 'survey.damage.update', 'survey.grade.change', 'yard.location.assign', 'mnr.eor.create', 'reports.view', 'documents.attachment.view', 'documents.attachment.upload', 'reefer.check.read', 'reefer.check.record', 'reefer.exception.manage', 'operations.exceptions.view'],
+  yard_planner: ['yard.slot.move', 'yard.location.assign', 'booking.manage', 'reports.view', 'reefer.check.read', 'operations.exceptions.view'],
   rs_driver: ['yard.slot.move', 'yard.location.assign'],
   billing_officer: [
     'billing.invoice.create',
@@ -108,6 +111,7 @@ export const ROLE_GRANTS: Record<string, string[]> = {
     'document_templates.export',
     'integration.logs.view',
     'reports.view',
+    'operations.exceptions.view',
   ],
   supervisor: [
     'gate.in',
@@ -121,6 +125,8 @@ export const ROLE_GRANTS: Record<string, string[]> = {
     'yard.slot.move',
     'yard.location.assign',
     'yard.hold.release',
+    'operations.exceptions.view',
+    'operations.exceptions.manage',
     'reefer.check.read',
     'reefer.check.record',
     'reefer.exception.manage',

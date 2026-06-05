@@ -1267,6 +1267,14 @@ async function migrate() {
       IF COL_LENGTH('Permissions', 'risk_level') IS NULL
         ALTER TABLE Permissions ADD risk_level NVARCHAR(20) NULL;
 
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'operations.exceptions.view')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('operations.exceptions.view', 'operations', 'exceptions_view', N'ดูศูนย์รวม exception งานปฏิบัติการ', 0, NULL, NULL);
+
+      IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'operations.exceptions.manage')
+        INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
+        VALUES ('operations.exceptions.manage', 'operations', 'exceptions_manage', N'มอบหมาย รับทราบ ปิด หรือ ignore exception งานปฏิบัติการ', 0, NULL, 'medium');
+
       IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'reefer.check.read')
         INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
         VALUES ('reefer.check.read', 'reefer', 'check_read', N'ดูคิวและประวัติการตรวจอุณหภูมิตู้เย็น', 0, NULL, NULL);
@@ -1310,6 +1318,28 @@ async function migrate() {
       IF NOT EXISTS (SELECT 1 FROM Permissions WHERE permission_code = 'document_templates.test_print')
         INSERT INTO Permissions (permission_code, module, action, description, requires_approval, approval_permission_code, risk_level)
         VALUES ('document_templates.test_print', 'document_templates', 'test_print', N'ทดสอบพิมพ์ template เอกสาร', 0, NULL, NULL);
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code IN ('yard_manager', 'supervisor', 'surveyor', 'yard_planner', 'billing_officer')
+        AND p.permission_code = 'operations.exceptions.view'
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
+
+      INSERT INTO RolePermissions (role_id, permission_id)
+      SELECT r.role_id, p.permission_id
+      FROM Roles r
+      CROSS JOIN Permissions p
+      WHERE r.role_code IN ('yard_manager', 'supervisor')
+        AND p.permission_code = 'operations.exceptions.manage'
+        AND NOT EXISTS (
+          SELECT 1 FROM RolePermissions rp
+          WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id
+        );
 
       INSERT INTO RolePermissions (role_id, permission_id)
       SELECT r.role_id, p.permission_id

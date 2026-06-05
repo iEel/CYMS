@@ -62,8 +62,8 @@ const menuItems: MenuItem[] = [
     label: 'ปฏิบัติการ',
     href: '/operations',
     icon: <Truck size={20} />,
-    roles: ['yard_manager', 'supervisor', 'yard_planner', 'rs_driver', 'surveyor'],
-    permissions: ['yard.slot.move', 'yard.location.assign'],
+    roles: ['yard_manager', 'supervisor', 'yard_planner', 'rs_driver', 'surveyor', 'billing_officer'],
+    permissions: ['yard.slot.move', 'yard.location.assign', 'operations.exceptions.view'],
   },
   {
     label: 'ตู้เย็น Reefer',
