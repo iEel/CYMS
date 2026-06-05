@@ -338,9 +338,14 @@ export default function DashboardPage() {
                 <h2 className="text-base font-semibold text-slate-800 dark:text-white">Exception Dashboard</h2>
                 <p className="text-xs text-slate-400 mt-1">งานตกหล่นจาก Gate, Billing, Booking, M&R, EDI และเครดิตลูกค้า</p>
               </div>
-              <Link href="/reports" className="text-xs text-[#3B82F6] hover:underline flex items-center gap-1">
-                เปิดรายงาน <ArrowRight size={12} />
-              </Link>
+              <div className="flex flex-wrap items-center gap-3">
+                <Link href="/operations?tab=exceptions" className="text-xs text-rose-600 hover:underline flex items-center gap-1">
+                  เปิด Exception Center <ArrowRight size={12} />
+                </Link>
+                <Link href="/reports" className="text-xs text-[#3B82F6] hover:underline flex items-center gap-1">
+                  เปิดรายงาน <ArrowRight size={12} />
+                </Link>
+              </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
               <div className="rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3">

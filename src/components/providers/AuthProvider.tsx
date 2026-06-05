@@ -105,17 +105,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (Array.isArray(session.permissions) && session.permissions.length > 0) {
+        setPermissions(session.permissions);
+        setPermissionsLoading(false);
+        return;
+      }
+
       setPermissionsLoading(true);
       try {
-        const res = await fetch('/api/settings/permissions');
+        const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('Permission refresh failed');
         const data = await res.json();
-        const role = (data.roles || []).find((r: { role_id: number; role_code: string }) => r.role_code === session.role);
-        const rolePermIds: number[] = role ? (data.matrix?.[role.role_id] || []) : [];
-        const codes = (data.permissions || [])
-          .filter((p: { permission_id: number }) => rolePermIds.includes(p.permission_id))
-          .map((p: { permission_code?: string }) => p.permission_code)
-          .filter(Boolean);
+        const refreshed = data.session as Partial<AuthSession> | undefined;
+        const codes = Array.isArray(refreshed?.permissions) ? refreshed.permissions : [];
         setPermissions(codes);
+        if (refreshed) {
+          setSession(prev => {
+            if (!prev) return prev;
+            const updated = { ...prev, ...refreshed, token: prev.token };
+            localStorage.setItem('cyms_session', JSON.stringify(updated));
+            return updated;
+          });
+        }
       } catch {
         setPermissions([]);
       } finally {
@@ -124,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     loadPermissions();
-  }, [session?.role]);
+  }, [session?.role, session?.permissions]);
 
   const hasPermission = useCallback((permissionCode: string) => {
     if (session?.role === 'yard_manager' || permissions.includes('*')) return true;

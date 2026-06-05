@@ -5,6 +5,7 @@ import { rateLimitLogin, getClientIP } from '@/lib/rateLimit';
 import { getPasswordPolicy } from '@/lib/passwordPolicy';
 import { verifyTotpCode } from '@/lib/totp';
 import { getDeviceBindingPolicy, isDeviceBindingRequired, normalizeDeviceId } from '@/lib/deviceBinding';
+import { loadRolePermissionCodes } from '@/lib/rolePermissions';
 import bcrypt from 'bcryptjs';
 import sql from 'mssql';
 
@@ -225,6 +226,7 @@ export async function POST(request: NextRequest) {
       customerId = custResult.recordset[0]?.customer_id || undefined;
       customerPortalRole = user.customer_portal_role || 'customer_admin';
     }
+    const permissions = await loadRolePermissionCodes(db, user.role_code);
 
     // สร้าง JWT token
     const token = await createToken({
@@ -260,6 +262,7 @@ export async function POST(request: NextRequest) {
       activeYardId: yardIds[0] || 1,
       customerId,
       customerPortalRole,
+      permissions,
       token,
     };
 

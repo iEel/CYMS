@@ -31,6 +31,7 @@ type StatusFilter = '' | 'open' | 'in_progress' | 'pending_review' | 'acknowledg
 interface OperationalExceptionCenterProps {
   yardId: number;
   canManageExceptions: boolean;
+  initialSource?: OperationalExceptionSource;
 }
 
 interface OperationalExceptionResponse {
@@ -160,9 +161,10 @@ function badge(className: string) {
 export default function OperationalExceptionCenter({
   yardId,
   canManageExceptions,
+  initialSource,
 }: OperationalExceptionCenterProps) {
   const { toast } = useToast();
-  const [source, setSource] = useState<SourceFilter>('');
+  const [source, setSource] = useState<SourceFilter>(initialSource || '');
   const [severity, setSeverity] = useState<SeverityFilter>('');
   const [status, setStatus] = useState<StatusFilter>('');
   const [includeClosed, setIncludeClosed] = useState(false);
@@ -212,6 +214,10 @@ export default function OperationalExceptionCenter({
   useEffect(() => {
     void fetchExceptions();
   }, [fetchExceptions]);
+
+  useEffect(() => {
+    setSource(initialSource || '');
+  }, [initialSource]);
 
   const metricCards = useMemo(() => [
     { label: 'Total open', value: summary.total_open, icon: <ShieldAlert size={16} />, tone: 'text-blue-600' },

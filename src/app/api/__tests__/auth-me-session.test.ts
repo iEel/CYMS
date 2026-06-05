@@ -29,4 +29,20 @@ describe('/api/auth/me session hardening', () => {
     expect(source).toContain('u.customer_portal_role');
     expect(sessionSource).toContain('customerPortalRole');
   });
+
+  it('returns current user permission codes without exposing the admin permission matrix', () => {
+    const source = read('src/app/api/auth/me/route.ts');
+    const provider = read('src/components/providers/AuthProvider.tsx');
+    const helper = read('src/lib/rolePermissions.ts');
+    const sessionStart = source.indexOf('const session = {');
+    const sessionEnd = source.indexOf('return NextResponse.json({ authenticated: true, session })');
+    const sessionSource = source.slice(sessionStart, sessionEnd);
+
+    expect(source).toContain('loadRolePermissionCodes');
+    expect(sessionSource).toContain('permissions');
+    expect(helper).toContain('RolePermissions');
+    expect(helper).toContain('permission_code');
+    expect(provider).toContain('/api/auth/me');
+    expect(provider).not.toContain('/api/settings/permissions');
+  });
 });

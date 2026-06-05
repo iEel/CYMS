@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { getDb } from '@/lib/db';
 import sql from 'mssql';
+import { loadRolePermissionCodes } from '@/lib/rolePermissions';
 
 function getJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest) {
     const yardIds: number[] = user.yard_ids
       ? user.yard_ids.split(',').map(Number)
       : [];
+    const permissions = await loadRolePermissionCodes(db, user.role_code);
 
     const session = {
       userId: user.user_id,
@@ -57,6 +59,7 @@ export async function GET(request: NextRequest) {
       customerPortalRole: user.role_code === 'customer'
         ? (user.customer_portal_role || (payload.customerPortalRole as string) || 'customer_admin')
         : null,
+      permissions,
     };
 
     return NextResponse.json({ authenticated: true, session });

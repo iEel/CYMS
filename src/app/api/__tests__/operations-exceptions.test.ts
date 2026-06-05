@@ -64,11 +64,15 @@ describe('Operational exception center UI', () => {
 
     expect(page).toContain('OperationalExceptionCenter');
     expect(page).toContain('Exception Center');
+    expect(page).toContain('useSearchParams');
     expect(page).toContain('operations.exceptions.view');
     expect(page).toContain('operations.exceptions.manage');
     expect(page).toContain("id: 'exceptions'");
     expect(page).toContain('allowed: canViewExceptions');
     expect(page).toContain('canManageExceptions');
+    expect(page).toContain("searchParams.get('tab')");
+    expect(page).toContain("searchParams.get('source')");
+    expect(page).toContain('initialSource={exceptionInitialSource}');
   });
 
   it('renders exception filters, summary metrics, API calls, and action labels', () => {
@@ -77,6 +81,7 @@ describe('Operational exception center UI', () => {
 
     expect(component).toContain('/api/operations/exceptions');
     expect(component).toContain('include_closed');
+    expect(component).toContain('initialSource');
     expect(component).toContain('ActionInputDialog');
     expect(component).toContain('allowed_actions');
     expect(component).toContain('Total open');
@@ -102,6 +107,15 @@ describe('Operational exception center UI', () => {
     expect(component).toContain("item.source === 'reefer' && action === 'assign'");
     expect(component).toContain('Reefer assign requires a user ID');
     expect(component).not.toContain('assigned_to_user_id: Number(values.assigned_to)');
+  });
+
+  it('deep-links dashboard and reports into the Exception Center', () => {
+    const dashboard = fs.readFileSync(path.join(root, 'src/app/(dashboard)/dashboard/page.tsx'), 'utf8');
+    const reports = fs.readFileSync(path.join(root, 'src/app/(dashboard)/reports/page.tsx'), 'utf8');
+
+    expect(dashboard).toContain('/operations?tab=exceptions');
+    expect(reports).toContain('/operations?tab=exceptions&source=reconciliation');
+    expect(reports).toContain('/operations?tab=exceptions&source=reefer');
   });
 });
 

@@ -33,6 +33,7 @@ export interface AuthSession {
   activeYardId: number;
   customerId?: number | null;
   customerPortalRole?: string | null;
+  permissions?: string[];
   token: string;
 }
 

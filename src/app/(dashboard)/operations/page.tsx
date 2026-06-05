@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import OperationalExceptionCenter from '@/components/operations/OperationalExceptionCenter';
+import { useSearchParams } from 'next/navigation';
+import type { OperationalExceptionSource } from '@/lib/operationalExceptions';
 import {
   Loader2, Search, Truck, Package, ArrowRight, Play, CheckCircle2,
   XCircle, Clock, AlertTriangle, Plus, Layers, Shuffle,
@@ -82,6 +84,7 @@ interface OperationTab {
 
 export default function OperationsPage() {
   const { session, hasAnyPermission } = useAuth();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<OperationTabId>('queue');
 
   // Job Queue
@@ -128,6 +131,17 @@ export default function OperationsPage() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
+  const exceptionSourceParam = searchParams.get('source');
+  const exceptionInitialSource = (
+    exceptionSourceParam && ['reconciliation', 'reefer', 'approval', 'transport'].includes(exceptionSourceParam)
+  ) ? exceptionSourceParam as OperationalExceptionSource : undefined;
+
+  useEffect(() => {
+    const tab = searchParams.get('tab') as OperationTabId | null;
+    if (tab && ['queue', 'create', 'shifting', 'exceptions'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   const fetchOrders = useCallback(async () => {
     setQueueLoading(true);
@@ -841,7 +855,11 @@ export default function OperationsPage() {
 
       {/* =================== EXCEPTION CENTER TAB =================== */}
       {effectiveTab === 'exceptions' && canViewExceptions && (
-        <OperationalExceptionCenter yardId={yardId} canManageExceptions={canManageExceptions} />
+        <OperationalExceptionCenter
+          yardId={yardId}
+          canManageExceptions={canManageExceptions}
+          initialSource={exceptionInitialSource}
+        />
       )}
 
       {/* Container Timeline Modal */}

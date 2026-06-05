@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/providers/ToastProvider';
 import { formatDate } from '@/lib/utils';
+import Link from 'next/link';
 import {
   Loader2, BarChart3, Wrench, Package,
   FileSpreadsheet, TrendingDown, TrendingUp,
@@ -696,6 +697,10 @@ function ReconciliationReportTab({ yardId }: { yardId: number }) {
           {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
           ตรวจซ้ำ
         </button>
+        <Link href="/operations?tab=exceptions&source=reconciliation"
+          className="h-10 px-4 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-sm font-semibold hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300 flex items-center gap-2 transition-all">
+          <AlertTriangle size={14} /> เปิด Exception Center
+        </Link>
         {data?.generated_at && (
           <p className="text-xs text-slate-400">อัปเดตล่าสุด {formatDate(data.generated_at)}</p>
         )}
@@ -978,6 +983,10 @@ function ReeferComplianceTab({ yardId }: { yardId: number }) {
           {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
           รีเฟรช
         </button>
+        <Link href="/operations?tab=exceptions&source=reefer"
+          className="h-10 px-4 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-sm font-semibold hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300 flex items-center gap-2 transition-all">
+          <AlertTriangle size={14} /> เปิด Exception Center
+        </Link>
         {data?.generatedAt && <p className="text-xs text-slate-400">อัปเดตล่าสุด {formatDate(data.generatedAt)}</p>}
       </div>
 
