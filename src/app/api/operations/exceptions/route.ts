@@ -46,7 +46,7 @@ const PATCH_ACTIONS: Array<Exclude<OperationalExceptionAction, 'open_detail'>> =
   'ignore',
   'reopen',
 ];
-const REEFER_SOURCE_ACTIONS: ReeferExceptionAction[] = ['acknowledge', 'resolve', 'ignore', 'reopen'];
+const REEFER_SOURCE_ACTIONS: ReeferExceptionAction[] = ['assign', 'acknowledge', 'resolve', 'ignore', 'reopen'];
 const CLOSED_STATUSES = new Set<OperationalExceptionStatus>(['resolved', 'ignored']);
 
 const statusByAction = {
@@ -114,7 +114,7 @@ function applyOperationalOverlays(
   return items
     .map((item) => {
       const action = actionMap.get(itemActionKey(item));
-      if (!action || item.source === 'approval' || item.source === 'reconciliation') return item;
+      if (!action || item.source === 'approval') return item;
 
       const actionContext = { ...item.context, operational_action: action };
       if (item.source === 'reefer') {
@@ -452,10 +452,14 @@ export async function PATCH(request: NextRequest) {
     const entityRef = cleanText(body.entity_ref, 150);
     const note = cleanText(body.note ?? body.reason ?? body.resolution_note, 500);
     const assignedTo = cleanText(body.assigned_to, 100);
+    const assignedToUserId = positiveInt(body.assigned_to_user_id);
 
     if (source === 'reefer' && REEFER_SOURCE_ACTIONS.includes(action as ReeferExceptionAction)) {
       const exceptionId = positiveInt(body.exception_id ?? body.entity_id);
       if (!exceptionId) return NextResponse.json({ error: 'ต้องระบุ exception_id' }, { status: 400 });
+      if (action === 'assign' && !assignedToUserId) {
+        return NextResponse.json({ error: 'ต้องระบุ assigned_to_user_id' }, { status: 400 });
+      }
 
       const scope = await db.request()
         .input('exceptionId', sql.Int, exceptionId)
@@ -471,7 +475,7 @@ export async function PATCH(request: NextRequest) {
         exceptionId,
         action: action as ReeferExceptionAction,
         note,
-        assignedToUserId: positiveInt(body.assigned_to_user_id),
+        assignedToUserId,
         actor,
       });
       if ('error' in updateResult) {

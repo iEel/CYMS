@@ -5,7 +5,7 @@ import type { RequestActor } from '@/lib/apiAuth';
 
 export type ReeferExceptionSeverity = 'medium' | 'high' | 'critical';
 export type ReeferExceptionStatus = 'open' | 'in_progress' | 'resolved' | 'ignored';
-export type ReeferExceptionAction = 'acknowledge' | 'resolve' | 'ignore' | 'reopen';
+export type ReeferExceptionAction = 'assign' | 'acknowledge' | 'resolve' | 'ignore' | 'reopen';
 
 export interface ReeferExceptionCheck {
   check_id: number;
@@ -139,6 +139,35 @@ export async function updateReeferExceptionAction({
     .query('SELECT TOP 1 yard_id, status FROM ReeferExceptions WHERE exception_id = @exceptionId');
   const current = scope.recordset[0] as { yard_id?: number; status?: string } | undefined;
   if (!current?.yard_id) return { error: 'not_found' };
+
+  if (action === 'assign') {
+    if (!assignedToUserId) return { error: 'invalid_transition', yardId: current.yard_id };
+
+    const result = await db.request()
+      .input('exceptionId', sql.Int, exceptionId)
+      .input('assignedToUserId', sql.Int, assignedToUserId)
+      .query(`
+        UPDATE ReeferExceptions
+        SET assigned_to_user_id = @assignedToUserId,
+            updated_at = GETDATE()
+        OUTPUT INSERTED.*
+        WHERE exception_id = @exceptionId
+      `);
+
+    const exception = result.recordset[0] as ReeferExceptionActionUpdateRow | undefined;
+    if (!exception) return { error: 'not_found', yardId: current.yard_id };
+
+    await logAudit({
+      userId: actor.userId,
+      yardId: current.yard_id,
+      action: 'reefer_exception_assign',
+      entityType: 'reefer_exception',
+      entityId: exceptionId,
+      details: { assigned_to_user_id: assignedToUserId },
+    });
+
+    return { exception, yardId: current.yard_id };
+  }
 
   const nextStatus = nextReeferExceptionStatus(current.status || '', action);
   if (!nextStatus) return { error: 'invalid_transition', yardId: current.yard_id };

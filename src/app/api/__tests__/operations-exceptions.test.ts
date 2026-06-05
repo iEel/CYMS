@@ -113,6 +113,26 @@ describe('Operational exceptions API source integration', () => {
     expect(route).not.toMatch(/status\s*=\s*['"]acknowledged['"]/);
   });
 
+  it('applies operational action overlays to normalized reconciliation issues', () => {
+    expect(fs.existsSync(routePath)).toBe(true);
+    const route = fs.readFileSync(routePath, 'utf8');
+    const overlayFunction = route.match(/function applyOperationalOverlays[\s\S]*?\n}\n\nfunction matchesSearch/)?.[0] || '';
+
+    expect(overlayFunction).toContain('actionMap.get(itemActionKey(item))');
+    expect(overlayFunction).not.toMatch(/item\.source\s*===\s*['"]reconciliation['"]/);
+  });
+
+  it('handles reefer assign as a source-owned action using assigned_to_user_id', () => {
+    expect(fs.existsSync(routePath)).toBe(true);
+    const route = fs.readFileSync(routePath, 'utf8');
+    const reeferBranch = route.match(/if \(source === 'reefer'[\s\S]*?\n    }\n\n    if \(!entityId/)?.[0] || '';
+
+    expect(reeferBranch).toContain("action === 'assign'");
+    expect(reeferBranch).toContain('assigned_to_user_id');
+    expect(reeferBranch).toContain('updateReeferExceptionAction');
+    expect(reeferBranch).not.toContain('upsertOperationalAction');
+  });
+
   it('routes reefer actions through the shared reefer update helper', () => {
     const reeferRoute = fs.readFileSync(reeferRoutePath, 'utf8');
     const reeferSource = fs.readFileSync(reeferSourcePath, 'utf8');

@@ -91,12 +91,17 @@ export async function PATCH(request: NextRequest) {
     const actor = await requirePermission(request, db, 'reefer.exception.manage', 'คุณไม่มีสิทธิ์จัดการ exception ตู้เย็น');
     if (actor instanceof NextResponse) return actor;
 
+    const assignedToUserId = parsePositiveInt(body.assigned_to_user_id);
+    if (body.action === 'assign' && !assignedToUserId) {
+      return NextResponse.json({ error: 'ต้องระบุ assigned_to_user_id' }, { status: 400 });
+    }
+
     const updateResult = await updateReeferExceptionAction({
       db,
       exceptionId,
       action: body.action as ReeferExceptionAction,
       note: body.resolution_note || body.note || null,
-      assignedToUserId: parsePositiveInt(body.assigned_to_user_id),
+      assignedToUserId,
       actor,
     });
     if ('error' in updateResult) {
