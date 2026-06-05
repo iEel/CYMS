@@ -816,7 +816,7 @@ container-yard-system/
 │   │   │   │   ├── GateOutTab.tsx    # Gate-Out: **2-Phase durable request workflow** (ขอดึง → รอรถยก → ปล่อยออก) + pending jobs + billing + payment + **Booking Picker/Summary** + **Billing Clearance** + BoxTech specs read-only + workstation UI
 │   │   │   │   ├── HistoryTab.tsx    # ประวัติ Gate: search + date filter + pagination + **Excel export**
 │   │   │   │   └── TransferTab.tsx   # ย้ายข้ามลาน: send transfer + receive in-transit
-│   │   │   ├── operations/page.tsx # หน้าปฏิบัติการ (3 tabs: Job Queue/สร้างงาน/Shifting)
+│   │   │   ├── operations/page.tsx # หน้าปฏิบัติการ (4 tabs: Job Queue/สร้างงาน/Shifting/Exception Center)
 │   │   │   ├── edi/page.tsx      # หน้า EDI (4 tabs: Bookings/นำเข้า/ตรวจซีล/CODECO)
 │   │   │   ├── mnr/page.tsx      # หน้า M&R (3 tabs: EOR/สร้าง EOR/รหัสความเสียหาย) + **actual_cost modal + notes field + user_id tracking**
 │   │   │   ├── supervisor-review/page.tsx # Supervisor approval inbox + approve/reject review workflow
@@ -864,7 +864,7 @@ container-yard-system/
 │   │   └── api/
 │   │       ├── auth/login/route.ts         # POST login → JWT + **🔐 Rate limit: 5 req/15min per IP** + TOTP challenge + trusted device enforcement
 │   │       ├── auth/2fa/route.ts           # GET/POST TOTP 2FA status/setup/verify/disable
-│   │       ├── auth/me/route.ts            # GET session restore — ตรวจ token จาก x-cyms-token header (proxy) หรือ cookie → ดึง user+role+yards จาก DB
+│   │       ├── auth/me/route.ts            # GET session restore — ตรวจ token จาก x-cyms-token header (proxy) หรือ cookie → ดึง user+role+yards+permissions จาก DB
 │   │       ├── boxtech/route.ts           # **GET Boxtech proxy** (token cache + BIC + container lookup + prefix→customer)
 │   │       ├── containers/
 │   │       │   ├── route.ts               # GET/POST/PUT (dynamic fields) + position check
@@ -878,6 +878,7 @@ container-yard-system/
 │   │       ├── notifications/route.ts      # GET activity feed (gate + work orders)
 │   │       ├── operations/
 │   │       │   ├── route.ts                # GET/POST/PUT work orders
+│   │       │   ├── exceptions/route.ts     # GET/PATCH Operational Exception Center (normalized source exceptions + safe actions)
 │   │       │   ├── stream/route.ts         # **GET SSE stream** — real-time work order updates (polls DB every 5s)
 │   │       │   └── shift/route.ts          # POST smart shifting (LIFO)
 │   │       ├── edi/
@@ -1200,6 +1201,8 @@ container-yard-system/
 | POST | `/api/operations` | สร้าง Work Order — `{ order_type, container_id, to_zone/bay/row/tier, priority }` |
 | PUT | `/api/operations` | อัปเดทสถานะ — `{ order_id, action: accept/complete/cancel }` + optional `{ to_zone_id, to_bay, to_row, to_tier }` สำหรับ position override |
 | POST | `/api/operations/shift` | Smart Shifting — `{ container_id, yard_id }` → LIFO plan |
+| GET | `/api/operations/exceptions?yard_id=X&source=&severity=&status=&search=&include_closed=1` | Operational Exception Center — normalized exceptions จาก reconciliation/reefer/approval/transport + summary |
+| PATCH | `/api/operations/exceptions` | จัดการ exception — `{ yard_id, source, issue_code, action, entity_id/entity_ref, note, assigned_to }`; reefer source-owned actions ใช้ `exception_id` และ assign ต้องใช้ `assigned_to_user_id` |
 
 ### Settings
 
@@ -1547,7 +1550,7 @@ container-yard-system/
 
 ### 7.8 ปฏิบัติการ (Operations)
 
-3 แท็บ:
+4 แท็บ:
 
 #### แท็บ "Job Queue"
 - ตาราง Work Orders + **2-button workflow** สำหรับคนขับรถยก:
@@ -1571,6 +1574,17 @@ container-yard-system/
 - ค้นหาตู้ล่างที่ต้องดึงออก
 - ระบบวิเคราะห์ตู้ที่ซ้อนข้างบน (LIFO) — **รวมทุกสถานะ** (in_yard, repair, hold ฯลฯ) ยกเว้น gated_out
 - แสดง: ตู้ที่ต้องหลบ + ตำแหน่งพักชั่วคราว + total moves
+
+#### แท็บ "Exception Center" (✅ เสร็จ — 5 มิ.ย. 2569)
+- ศูนย์รวม exception หน้างานจาก 4 แหล่ง: Reconciliation, Reefer, Supervisor Approval, Transport/Gate-Out Request
+- API กลาง `GET /api/operations/exceptions` คืน normalized read model พร้อม summary (`total_open`, critical/warning/info, SLA breach, count ตาม source)
+- Action center ไม่ใช่รายงานอย่างเดียว: filter source/severity/status/search/include closed, deep-link กลับ source, และ quick action ตาม `allowed_actions`
+- `PATCH /api/operations/exceptions` require `operations.exceptions.manage`; Reconciliation/Transport ใช้ generic action overlay, Reefer delegate ไป `updateReeferExceptionAction`, Approval ต้องเปิด Supervisor Review เท่านั้น
+- Source-owned hardening: Reefer/Approval ไม่ถูก override ด้วย generic overlay, Reefer assign ต้องใช้ `assigned_to_user_id`, cross-yard reefer exception คืน 404 fail-closed
+- สิทธิ์ใหม่: `operations.exceptions.view`, `operations.exceptions.manage`; view ให้ yard_planner/billing_officer/surveyor, manage ให้ yard_manager/supervisor
+- AuthProvider โหลด permission ของ current user จาก `/api/auth/me`/login session ผ่าน `loadRolePermissionCodes()` ไม่ใช้ `/api/settings/permissions` ที่เป็น admin matrix จึงรองรับ exception-center-only user
+- Deep links: `/operations?tab=exceptions`, `/operations?tab=exceptions&source=reconciliation`, `/operations?tab=exceptions&source=reefer`; Dashboard และ Reports มีปุ่มเข้า Exception Center
+- Tests: `operations-exceptions.test.ts`, `operationalExceptions.test.ts`, `reconciliationIssueRegistry.test.ts`, `auth-me-session.test.ts`, `reefer-exceptions.test.ts`
 
 ### 7.9 3D Yard Viewer (Three.js)
 
