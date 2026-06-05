@@ -33,7 +33,10 @@ function makeOperationalItem(overrides: Partial<OperationalExceptionItem>): Oper
   };
 }
 
-function makeDb(recordset: Array<Record<string, unknown>>) {
+function makeDb(
+  recordset: Array<Record<string, unknown>>,
+  queryImpl?: (statement: string) => Promise<{ recordset: Array<Record<string, unknown>>; statement: string }>,
+) {
   type MockRequest = {
     input: jest.Mock;
     query: jest.Mock;
@@ -41,7 +44,7 @@ function makeDb(recordset: Array<Record<string, unknown>>) {
 
   const request = {} as MockRequest;
   request.input = jest.fn((): MockRequest => request);
-  request.query = jest.fn(async (statement: string) => ({ recordset, statement }));
+  request.query = jest.fn(queryImpl ?? (async (statement: string) => ({ recordset, statement })));
 
   const db = {
     request: jest.fn(() => request),
@@ -110,6 +113,69 @@ describe('operational exception normalization', () => {
     });
 
     expect(item.severity).toBe('warning');
+  });
+
+  it('defaults unknown severity and status values to source-safe fallbacks', () => {
+    const reefer = normalizeReeferException({
+      exception_id: 4,
+      reason: 'out_of_range',
+      severity: 'urgent',
+      status: 'mystery',
+    });
+    const approval = normalizeApprovalException({
+      permission_code: 'billing.waive.approve',
+      severity: 'urgent',
+      status: 'mystery',
+    });
+
+    expect(reefer.severity).toBe('warning');
+    expect(reefer.status).toBe('open');
+    expect(approval.severity).toBe('warning');
+    expect(approval.status).toBe('pending_review');
+  });
+
+  it('uses stable fallback refs when source exceptions have no numeric id', () => {
+    const reeferByContainer = normalizeReeferException({
+      container_number: 'RFPU1234567',
+      reason: 'out_of_range',
+    });
+    const reeferByCheck = normalizeReeferException({
+      check_id: 'CHK-9',
+      reason: 'power_loss',
+    });
+    const approvalByEntity = normalizeApprovalException({
+      permission_code: 'billing.waive.approve',
+      entity_type: 'booking',
+      entity_id: 22,
+    });
+    const approvalByPermission = normalizeApprovalException({
+      permission_code: 'billing.release.approve',
+    });
+    const transportByContainer = normalizeTransportException({
+      container_number: 'TLLU1234567',
+      status: 'attention',
+    });
+    const transportByJob = normalizeTransportException({
+      job_id: 'JOB-7',
+      status: 'attention',
+    });
+
+    expect(reeferByContainer.exception_id).toBe('reefer.out_of_range:RFPU1234567');
+    expect(reeferByCheck.exception_id).toBe('reefer.power_loss:CHK-9');
+    expect(approvalByEntity.exception_id).toBe('approval.pending_review:booking:22');
+    expect(approvalByPermission.exception_id).toBe('approval.pending_review:billing.release.approve');
+    expect(transportByContainer.exception_id).toBe('transport.attention:TLLU1234567');
+    expect(transportByJob.exception_id).toBe('transport.attention:JOB-7');
+    expect([
+      reeferByContainer,
+      reeferByCheck,
+      approvalByEntity,
+      approvalByPermission,
+      transportByContainer,
+      transportByJob,
+    ]).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ exception_id: expect.stringMatching(/:unknown$/) }),
+    ]));
   });
 
   it('keeps approval exceptions as deep-link only actions', () => {
@@ -198,7 +264,7 @@ describe('operational exception action records', () => {
         action_id: 1,
         issue_code: 'reefer.out_of_range',
         entity_id: 3,
-        status: 'acknowledged',
+        status: 'open',
       },
     ]);
 
@@ -209,8 +275,28 @@ describe('operational exception action records', () => {
     expect(request.query.mock.calls[0][0]).toContain('WHERE yard_id = @yardId');
     expect(records[0]).toMatchObject({
       issue_code: 'reefer.out_of_range',
-      status: 'acknowledged',
+      status: 'open',
     });
+  });
+
+  it('returns no action records when ReconciliationActions table is missing', async () => {
+    const missingTableError = Object.assign(new Error("Invalid object name 'ReconciliationActions'."), {
+      code: 'EREQUEST',
+      number: 208,
+    });
+    const { db } = makeDb([], async () => {
+      throw missingTableError;
+    });
+
+    await expect(loadOperationalActionRecords(db, 5)).resolves.toEqual([]);
+  });
+
+  it('rejects non-migration database errors while loading action records', async () => {
+    const { db } = makeDb([], async () => {
+      throw new Error('Database timeout');
+    });
+
+    await expect(loadOperationalActionRecords(db, 5)).rejects.toThrow('Database timeout');
   });
 
   it('upserts action state with a parameterized MERGE', async () => {
@@ -221,7 +307,7 @@ describe('operational exception action records', () => {
       issueCode: 'transport.issue_reported',
       entityId: 12,
       entityRef: 'TLLU1234567',
-      status: 'acknowledged',
+      status: 'open',
       reason: 'Driver contacted',
       assignedTo: 'Ops Lead',
       actor: { userId: 99, role: 'supervisor' },
@@ -230,6 +316,7 @@ describe('operational exception action records', () => {
     expect(actionId).toBe(42);
     expect(request.input).toHaveBeenCalledWith('yardId', expect.anything(), 5);
     expect(request.input).toHaveBeenCalledWith('issueCode', expect.anything(), 'transport.issue_reported');
+    expect(request.input).toHaveBeenCalledWith('status', expect.anything(), 'open');
     expect(request.input).toHaveBeenCalledWith('actorId', expect.anything(), 99);
     expect(request.query.mock.calls[0][0]).toContain('MERGE ReconciliationActions WITH (HOLDLOCK) AS target');
     expect(request.query.mock.calls[0][0]).toContain('OUTPUT INSERTED.action_id');

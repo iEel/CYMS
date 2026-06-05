@@ -67,6 +67,14 @@ function toNullableString(value: unknown) {
   return normalized ? normalized : null;
 }
 
+function firstNullableString(...values: unknown[]) {
+  for (const value of values) {
+    const normalized = toNullableString(value);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
 function toFiniteNumber(value: unknown) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -186,9 +194,10 @@ export function normalizeReeferException(row: Record<string, unknown>): Operatio
   const issueCode = buildOperationalIssueCode('reefer', reason);
   const recommendedAction = toNullableString(row.recommended_action);
   const ageMinutes = toFiniteNumber(row.escalation_age_minutes);
+  const entityRef = firstNullableString(row.container_number, row.check_id);
 
   return {
-    exception_id: buildExceptionKey(issueCode, exceptionId),
+    exception_id: buildExceptionKey(issueCode, exceptionId, entityRef),
     source: 'reefer',
     issue_code: issueCode,
     title: `Reefer ${reason.replace(/_/g, ' ')}`,
@@ -198,7 +207,7 @@ export function normalizeReeferException(row: Record<string, unknown>): Operatio
     yard_id: positiveNumberOrNull(row.yard_id),
     entity_type: 'reefer_exception',
     entity_id: exceptionId,
-    entity_ref: toNullableString(row.container_number),
+    entity_ref: entityRef,
     owner_role: 'Reefer',
     assigned_to: toNullableString(row.assigned_to ?? row.assigned_to_user_id),
     created_at: toIsoString(row.created_at),
@@ -216,9 +225,14 @@ export function normalizeApprovalException(row: Record<string, unknown>): Operat
   const reviewId = positiveNumberOrNull(row.review_id);
   const permissionCode = toStringValue(row.permission_code, 'approval');
   const reason = toNullableString(row.reason);
+  const sourceEntityType = toNullableString(row.entity_type);
+  const sourceEntityId = toNullableString(row.entity_id);
+  const entityRef = sourceEntityType && sourceEntityId
+    ? `${sourceEntityType}:${sourceEntityId}`
+    : toNullableString(row.permission_code);
 
   return {
-    exception_id: buildExceptionKey(buildOperationalIssueCode('approval', 'pending_review'), reviewId),
+    exception_id: buildExceptionKey(buildOperationalIssueCode('approval', 'pending_review'), reviewId, entityRef),
     source: 'approval',
     issue_code: buildOperationalIssueCode('approval', 'pending_review'),
     title: `Pending approval ${permissionCode}`,
@@ -228,7 +242,7 @@ export function normalizeApprovalException(row: Record<string, unknown>): Operat
     yard_id: positiveNumberOrNull(row.yard_id),
     entity_type: 'approval_review',
     entity_id: reviewId,
-    entity_ref: toNullableString(row.entity_type),
+    entity_ref: entityRef,
     owner_role: 'Supervisor',
     assigned_to: toNullableString(row.approved_by_name),
     created_at: toIsoString(row.created_at),
@@ -246,9 +260,12 @@ export function normalizeTransportException(row: Record<string, unknown>): Opera
   const issueReason = normalizeCodePart(status, 'attention');
   const issueCode = buildOperationalIssueCode('transport', issueReason);
   const attentionReason = toNullableString(row.attention_reason) || status;
+  const entityRef = requestId
+    ? firstNullableString(row.container_number, row.entity_ref, row.job_id)
+    : firstNullableString(row.container_number, row.job_id, row.entity_ref);
 
   return {
-    exception_id: buildExceptionKey(issueCode, requestId),
+    exception_id: buildExceptionKey(issueCode, requestId, entityRef),
     source: 'transport',
     issue_code: issueCode,
     title: 'Transport job needs attention',
@@ -258,7 +275,7 @@ export function normalizeTransportException(row: Record<string, unknown>): Opera
     yard_id: positiveNumberOrNull(row.yard_id),
     entity_type: 'gate_out_request',
     entity_id: requestId,
-    entity_ref: toNullableString(row.container_number ?? row.entity_ref),
+    entity_ref: entityRef,
     owner_role: 'Transport',
     assigned_to: toNullableString(row.assigned_to),
     created_at: toIsoString(row.requested_at ?? row.created_at),

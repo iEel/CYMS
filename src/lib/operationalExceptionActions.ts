@@ -3,44 +3,80 @@ import sql from 'mssql';
 import type { RequestActor } from '@/lib/apiAuth';
 import type { ReconciliationActionRecord, ReconciliationActionStatus } from '@/lib/reconciliationActions';
 
-export type OperationalExceptionActionStatus = ReconciliationActionStatus | 'acknowledged';
-
-export interface OperationalActionRecord extends Omit<ReconciliationActionRecord, 'status'> {
-  status: OperationalExceptionActionStatus;
-}
+export type OperationalActionRecord = ReconciliationActionRecord;
 
 export interface OperationalActionUpsertInput {
   yardId: number;
   issueCode: string;
   entityId?: number | null;
   entityRef?: string | null;
-  status: OperationalExceptionActionStatus;
+  status: ReconciliationActionStatus;
   reason?: string | null;
   assignedTo?: string | null;
   actor: RequestActor;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function collectSqlErrorParts(error: unknown, parts: unknown[] = []): unknown[] {
+  if (!isRecord(error)) return parts;
+
+  parts.push(error);
+
+  if (error.originalError && error.originalError !== error) {
+    collectSqlErrorParts(error.originalError, parts);
+  }
+  if (error.info && error.info !== error) {
+    collectSqlErrorParts(error.info, parts);
+  }
+  if (Array.isArray(error.precedingErrors)) {
+    for (const precedingError of error.precedingErrors) {
+      collectSqlErrorParts(precedingError, parts);
+    }
+  }
+
+  return parts;
+}
+
+function isMissingSqlServerObjectError(error: unknown) {
+  return collectSqlErrorParts(error).some((part) => {
+    if (!isRecord(part)) return false;
+
+    const errorNumber = Number(part.number);
+    const message = typeof part.message === 'string' ? part.message : '';
+
+    return errorNumber === 208 || /invalid object name/i.test(message);
+  });
 }
 
 export async function loadOperationalActionRecords(
   db: sql.ConnectionPool,
   yardId: number,
 ): Promise<OperationalActionRecord[]> {
-  const result = await db.request()
-    .input('yardId', sql.Int, yardId)
-    .query(`
-      SELECT
-        action_id,
-        issue_code,
-        entity_id,
-        entity_ref,
-        status,
-        reason,
-        assigned_to,
-        updated_at
-      FROM ReconciliationActions
-      WHERE yard_id = @yardId
-    `);
+  try {
+    const result = await db.request()
+      .input('yardId', sql.Int, yardId)
+      .query(`
+        SELECT
+          action_id,
+          issue_code,
+          entity_id,
+          entity_ref,
+          status,
+          reason,
+          assigned_to,
+          updated_at
+        FROM ReconciliationActions
+        WHERE yard_id = @yardId
+      `);
 
-  return result.recordset as OperationalActionRecord[];
+    return result.recordset as OperationalActionRecord[];
+  } catch (error) {
+    if (isMissingSqlServerObjectError(error)) return [];
+    throw error;
+  }
 }
 
 export async function upsertOperationalAction(
