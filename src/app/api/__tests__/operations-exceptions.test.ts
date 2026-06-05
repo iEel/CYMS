@@ -67,6 +67,7 @@ describe('Operational exceptions API source integration', () => {
     expect(route).toContain('requireYardAccess');
     expect(route).toContain('operations.exceptions.view');
     expect(route).toContain('operations.exceptions.manage');
+    expect(route).not.toContain("'reports.view'");
   });
 
   it('reads every operational exception source through existing source tables and helpers', () => {
@@ -122,6 +123,25 @@ describe('Operational exceptions API source integration', () => {
     expect(overlayFunction).not.toMatch(/item\.source\s*===\s*['"]reconciliation['"]/);
   });
 
+  it('does not overlay source-owned approval or reefer exception state', () => {
+    expect(fs.existsSync(routePath)).toBe(true);
+    const route = fs.readFileSync(routePath, 'utf8');
+    const overlayFunction = route.match(/function applyOperationalOverlays[\s\S]*?\n}\n\nfunction matchesSearch/)?.[0] || '';
+
+    expect(overlayFunction).toMatch(/item\.source\s*===\s*['"]approval['"]/);
+    expect(overlayFunction).toMatch(/item\.source\s*===\s*['"]reefer['"]/);
+  });
+
+  it('validates mutable exception actions by source contract', () => {
+    expect(fs.existsSync(routePath)).toBe(true);
+    const route = fs.readFileSync(routePath, 'utf8');
+
+    expect(route).toContain('SOURCE_PATCH_ACTIONS');
+    expect(route).toContain("reconciliation: ['assign', 'resolve', 'ignore']");
+    expect(route).toContain("transport: ['assign', 'acknowledge']");
+    expect(route).toContain("action ไม่ถูกต้องสำหรับ source นี้");
+  });
+
   it('handles reefer assign as a source-owned action using assigned_to_user_id', () => {
     expect(fs.existsSync(routePath)).toBe(true);
     const route = fs.readFileSync(routePath, 'utf8');
@@ -130,7 +150,9 @@ describe('Operational exceptions API source integration', () => {
     expect(reeferBranch).toContain("action === 'assign'");
     expect(reeferBranch).toContain('assigned_to_user_id');
     expect(reeferBranch).toContain('updateReeferExceptionAction');
+    expect(reeferBranch).toContain('yardId');
     expect(reeferBranch).not.toContain('upsertOperationalAction');
+    expect(reeferBranch).not.toContain('exception ไม่อยู่ในลานที่ระบุ');
   });
 
   it('routes reefer actions through the shared reefer update helper', () => {

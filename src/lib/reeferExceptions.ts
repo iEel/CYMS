@@ -122,6 +122,7 @@ export type ReeferExceptionActionUpdateResult =
 export async function updateReeferExceptionAction({
   db,
   exceptionId,
+  yardId,
   action,
   note,
   assignedToUserId,
@@ -129,14 +130,25 @@ export async function updateReeferExceptionAction({
 }: {
   db: sql.ConnectionPool;
   exceptionId: number;
+  yardId?: number;
   action: ReeferExceptionAction;
   note?: string | null;
   assignedToUserId?: number | null;
   actor: RequestActor;
 }): Promise<ReeferExceptionActionUpdateResult> {
-  const scope = await db.request()
-    .input('exceptionId', sql.Int, exceptionId)
-    .query('SELECT TOP 1 yard_id, status FROM ReeferExceptions WHERE exception_id = @exceptionId');
+  const scopeRequest = db.request()
+    .input('exceptionId', sql.Int, exceptionId);
+  const filters = ['exception_id = @exceptionId'];
+  if (yardId) {
+    scopeRequest.input('yardId', sql.Int, yardId);
+    filters.push('yard_id = @yardId');
+  }
+
+  const scope = await scopeRequest.query(`
+    SELECT TOP 1 yard_id, status
+    FROM ReeferExceptions
+    WHERE ${filters.join(' AND ')}
+  `);
   const current = scope.recordset[0] as { yard_id?: number; status?: string } | undefined;
   if (!current?.yard_id) return { error: 'not_found' };
 

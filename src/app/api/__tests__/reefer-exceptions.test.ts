@@ -62,7 +62,7 @@ function makeDb() {
         recordset: [{ exception_id: 900, status: 'open', severity: 'high' }],
       });
     }
-    if (statement.includes('FROM ReeferExceptions WHERE exception_id = @exceptionId')) {
+    if (statement.includes('FROM ReeferExceptions') && statement.includes('exception_id = @exceptionId')) {
       return Promise.resolve({ recordset: [{ yard_id: 1, status: 'open' }] });
     }
     if (statement.includes('FROM ReeferExceptions e')) {

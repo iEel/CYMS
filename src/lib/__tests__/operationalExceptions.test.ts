@@ -115,6 +115,28 @@ describe('operational exception normalization', () => {
     expect(item.severity).toBe('warning');
   });
 
+  it('advertises reopen only for closed reefer exceptions', () => {
+    const open = normalizeReeferException({
+      exception_id: 4,
+      reason: 'out_of_range',
+      status: 'open',
+    });
+    const inProgress = normalizeReeferException({
+      exception_id: 5,
+      reason: 'out_of_range',
+      status: 'in_progress',
+    });
+    const resolved = normalizeReeferException({
+      exception_id: 6,
+      reason: 'out_of_range',
+      status: 'resolved',
+    });
+
+    expect(open.allowed_actions).toEqual(['assign', 'acknowledge', 'resolve', 'ignore', 'open_detail']);
+    expect(inProgress.allowed_actions).toEqual(['assign', 'resolve', 'ignore', 'open_detail']);
+    expect(resolved.allowed_actions).toEqual(['reopen', 'open_detail']);
+  });
+
   it('defaults unknown severity and status values to source-safe fallbacks', () => {
     const reefer = normalizeReeferException({
       exception_id: 4,

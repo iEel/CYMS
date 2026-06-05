@@ -47,6 +47,12 @@ const PATCH_ACTIONS: Array<Exclude<OperationalExceptionAction, 'open_detail'>> =
   'reopen',
 ];
 const REEFER_SOURCE_ACTIONS: ReeferExceptionAction[] = ['assign', 'acknowledge', 'resolve', 'ignore', 'reopen'];
+const SOURCE_PATCH_ACTIONS: Record<OperationalExceptionSource, Array<Exclude<OperationalExceptionAction, 'open_detail'>>> = {
+  reconciliation: ['assign', 'resolve', 'ignore'],
+  reefer: REEFER_SOURCE_ACTIONS,
+  approval: [],
+  transport: ['assign', 'acknowledge'],
+};
 const CLOSED_STATUSES = new Set<OperationalExceptionStatus>(['resolved', 'ignored']);
 
 const statusByAction = {
@@ -114,18 +120,9 @@ function applyOperationalOverlays(
   return items
     .map((item) => {
       const action = actionMap.get(itemActionKey(item));
-      if (!action || item.source === 'approval') return item;
+      if (!action || item.source === 'approval' || item.source === 'reefer') return item;
 
       const actionContext = { ...item.context, operational_action: action };
-      if (item.source === 'reefer') {
-        return {
-          ...item,
-          assigned_to: action.assigned_to ?? item.assigned_to,
-          updated_at: action.updated_at ? String(action.updated_at) : item.updated_at,
-          context: actionContext,
-        };
-      }
-
       return {
         ...item,
         status: action.status,
@@ -375,7 +372,6 @@ export async function GET(request: NextRequest) {
     const actor = await requireAnyPermission(request, db, [
       'operations.exceptions.view',
       'operations.exceptions.manage',
-      'reports.view',
     ], 'คุณไม่มีสิทธิ์ดูศูนย์รวม exception งานปฏิบัติการ');
     if (actor instanceof NextResponse) return actor;
 
@@ -447,6 +443,10 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    if (!SOURCE_PATCH_ACTIONS[source].includes(action)) {
+      return NextResponse.json({ error: 'action ไม่ถูกต้องสำหรับ source นี้' }, { status: 400 });
+    }
+
     const issueCode = normalizeIssueCode(source, code);
     const entityId = positiveInt(body.entity_id ?? body.exception_id);
     const entityRef = cleanText(body.entity_ref, 150);
@@ -461,18 +461,10 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'ต้องระบุ assigned_to_user_id' }, { status: 400 });
       }
 
-      const scope = await db.request()
-        .input('exceptionId', sql.Int, exceptionId)
-        .query('SELECT TOP 1 yard_id FROM ReeferExceptions WHERE exception_id = @exceptionId');
-      const current = scope.recordset[0] as { yard_id?: number } | undefined;
-      if (!current?.yard_id) return NextResponse.json({ error: 'ไม่พบ exception' }, { status: 404 });
-      if (Number(current.yard_id) !== yardId) {
-        return NextResponse.json({ error: 'exception ไม่อยู่ในลานที่ระบุ' }, { status: 400 });
-      }
-
       const updateResult = await updateReeferExceptionAction({
         db,
         exceptionId,
+        yardId,
         action: action as ReeferExceptionAction,
         note,
         assignedToUserId,

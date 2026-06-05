@@ -49,7 +49,6 @@ interface ReconciliationExceptionIssue {
 }
 
 const RECONCILIATION_ACTIONS: OperationalExceptionAction[] = ['assign', 'resolve', 'ignore', 'open_detail'];
-const REEFER_ACTIONS: OperationalExceptionAction[] = ['assign', 'acknowledge', 'resolve', 'ignore', 'open_detail'];
 const APPROVAL_ACTIONS: OperationalExceptionAction[] = ['open_detail'];
 const TRANSPORT_ACTIONS: OperationalExceptionAction[] = ['assign', 'acknowledge', 'open_detail'];
 
@@ -135,6 +134,12 @@ function normalizeStatus(value: unknown, fallback: OperationalExceptionStatus = 
   return fallback;
 }
 
+function reeferAllowedActions(status: OperationalExceptionStatus): OperationalExceptionAction[] {
+  if (status === 'resolved' || status === 'ignored') return ['reopen', 'open_detail'];
+  if (status === 'in_progress' || status === 'acknowledged') return ['assign', 'resolve', 'ignore', 'open_detail'];
+  return ['assign', 'acknowledge', 'resolve', 'ignore', 'open_detail'];
+}
+
 function positiveNumberOrNull(value: unknown) {
   const parsed = toFiniteNumber(value);
   return parsed !== null && parsed > 0 ? parsed : null;
@@ -195,6 +200,7 @@ export function normalizeReeferException(row: Record<string, unknown>): Operatio
   const recommendedAction = toNullableString(row.recommended_action);
   const ageMinutes = toFiniteNumber(row.escalation_age_minutes);
   const entityRef = firstNullableString(row.container_number, row.check_id);
+  const status = normalizeStatus(row.status);
 
   return {
     exception_id: buildExceptionKey(issueCode, exceptionId, entityRef),
@@ -203,7 +209,7 @@ export function normalizeReeferException(row: Record<string, unknown>): Operatio
     title: `Reefer ${reason.replace(/_/g, ' ')}`,
     message: recommendedAction || reason,
     severity: normalizeSeverity(row.severity),
-    status: normalizeStatus(row.status),
+    status,
     yard_id: positiveNumberOrNull(row.yard_id),
     entity_type: 'reefer_exception',
     entity_id: exceptionId,
@@ -216,7 +222,7 @@ export function normalizeReeferException(row: Record<string, unknown>): Operatio
     sla_breached: toBoolean(row.escalation_breached),
     recommended_action: recommendedAction,
     href: exceptionId ? `/reefer?exception_id=${exceptionId}` : '/reefer',
-    allowed_actions: REEFER_ACTIONS,
+    allowed_actions: reeferAllowedActions(status),
     context: { ...row },
   };
 }

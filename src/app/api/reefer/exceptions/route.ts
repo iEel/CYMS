@@ -99,6 +99,7 @@ export async function PATCH(request: NextRequest) {
     const updateResult = await updateReeferExceptionAction({
       db,
       exceptionId,
+      yardId: current.yard_id,
       action: body.action as ReeferExceptionAction,
       note: body.resolution_note || body.note || null,
       assignedToUserId,
