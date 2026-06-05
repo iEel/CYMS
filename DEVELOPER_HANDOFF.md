@@ -1,6 +1,6 @@
 # 📋 CYMS — Developer Handoff Document
 > **Container Yard Management System** (ระบบบริหารจัดการลานตู้คอนเทนเนอร์อัจฉริยะ)  
-> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 4 มิถุนายน 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer + Continuous Receipt Canvas Renderer + Billing API Permission Hardening + Settings API Hardening + EDI/Booking API Permission Hardening + Remaining Operational API Hardening + Attachment Center Hardening + CODECO Export Guard + Smoke Coverage + Migration Ledger + Preview Navigation Hardening + Yard 3D Workspace Polish + Gate Billing Print Return Restore + Document Activity Resolver-First Access + Native Action Dialog Cleanup + Gate Print Draft Helper + Driver/Trucking Transport Portal MVP + Transport Portal Action Workflow** (~100%)
+> ส่งมอบงาน: 12 เมษายน 2569 | อัปเดทล่าสุด: 5 มิถุนายน 2569 | เวอร์ชัน: เฟส 1-9 + FR1-6 + NFR + Master Setup + Customer Management + Gate Auto-Allocation + EIR A5 + 2-Phase Gate-Out + File Storage + Notifications + **Tiered Billing + Printable Invoice/Receipt + PromptPay QR + Bay View + 3D Search Highlight + Container Detail Modal + Boxtech API + Prefix Mapping + Gate-In/Out Billing + SSE Real-Time Operations + Billing Reports + CODECO/EDI + SFTP/Email/Auto-Schedule + Production Readiness + Audit Trail + Pagination + ConfirmDialog + Automated Testing + Dashboard Analytics + Credit Note + AR Aging + Auto-Allocation DB Rules + M&R Hardening + PDF Export + Gate Component Decomposition + Billing Component Split + Password Policy & Account Lockout + TOTP 2FA + Trusted Device Binding + Inter-Yard Transfer + PWA Camera OCR + Offline Queue Flow Integration + Offline Outbox + RBAC Reports Module + Notification Cross-Browser Sync + Gate Reports + Reports Action Center + Security Hardening + Next.js 16 Proxy Migration + Auth Session Persistence Fix + Multi-Role Customer Master + Billing Clearance + Gate-Out Booking Picker + Booking Received/Released Progress + Durable Gate-Out Requests + Customer Portal Document Bundle + Portal Dispute Requests + Booking ETA/Empty Return Guidance + Server-side RBAC Helper + Admin API Hardening + Portal Owner/Billing Visibility Fix + Portal Entity Access Grants + Customer Branch SQL Hardening + Runtime DDL Migration + Billing/M&R Test Drift Cleanup + Global Search & Real Yard Switcher + Gate Guided Workflow Panel + Gate Sticky Decision Bar + Yard Planning Heatmap & Forecast + Yard Planning WO Action + Gate Operational Guardrails + Billing Tariff Simulator + AR Dunning Action Center + AR Contact Audit + Supervisor Approval Inbox + ESLint Warning Cleanup + API Actor Attribution Hardening + API Yard Access Guard + Hard Approval Gates + Customer Portal Container Inventory + Admin Password Reset UX + Portal Overview/Inventory Summary Alignment + Portal EIR Inspection Parity + Portal EIR In/Out Actions + Direct EIR Buttons + Portal Booking Requests & Activity + Reefer Temperature Monitoring + Reefer Exception Workflow + Reefer Offline Walk Mode + Reefer Compliance Reports + Reefer Plug Planning + Staff Reefer Check History + Portal Customer Notifications + Reefer Escalation + Portal Notification Preferences + Booking Approval Inbox + Reefer SLA Dashboard + Portal Audit Trail + Operational Mobile Mode + BoxTech Container Specs + Document Template Manager + Continuous Tax Invoice/Receipt Print + Document Template Visual Designer + Continuous Receipt Canvas Renderer + Billing API Permission Hardening + Settings API Hardening + EDI/Booking API Permission Hardening + Remaining Operational API Hardening + Attachment Center Hardening + CODECO Export Guard + Smoke Coverage + Migration Ledger + Preview Navigation Hardening + Yard 3D Workspace Polish + Gate Billing Print Return Restore + Document Activity Resolver-First Access + Native Action Dialog Cleanup + Gate Print Draft Helper + Driver/Trucking Transport Portal MVP + Transport Portal Action Workflow + Transport Smoke Seed** (~100%)
 
 ---
 
@@ -22,7 +22,80 @@
 | **เฟส 8** | บัญชี Billing, Tariff, Hold/Release, **Tiered Storage Rates, Customer-specific Storage Rates, Gate-Out Billing, Gate-In Billing, Billing Clearance (Paid/Credit/No Charge/Waived), A4 Invoice/Receipt Print, Continuous Tax Invoice/Receipt Template, Demurrage Calculator, AR Dunning Action Center** | ✅ เสร็จ |
 | **เฟส 9** | PWA, Toast, UI Polish, Print | ✅ เสร็จ |
 
-### อัปเดตล่าสุด: Driver / Trucking Transport Portal Action Workflow (4 มิ.ย. 2569)
+### อัปเดตล่าสุด: Transport Portal Smoke Seed (5 มิ.ย. 2569)
+
+รอบนี้เพิ่ม seed/runner สำหรับ smoke จริงของ Driver/Trucking Transport Portal หลังล้างข้อมูลธุรกิจ เพื่อแก้ข้อจำกัดเดิมที่ DB ไม่มี `driver_user` / `trucking_coordinator` และไม่มี transport job ให้ Browser smoke กด action ได้:
+
+- **Preview-first seed**: `scripts/seed-transport-smoke.js` เป็น preview-only by default; ต้องใส่ `--confirm` ก่อนเขียน DB และรองรับ `--reset-smoke-job` เพื่อ reset เฉพาะ action/proof history ของ smoke job
+- **Deterministic fixture**: `scripts/transport-smoke-fixture.cjs` เก็บ smoke customer/user/container/booking/gate-out request/proof constants ชุดเดียว ใช้ร่วมกันระหว่าง seed, smoke runner และ tests
+- **Smoke users**: seed สร้าง/อัปเดตเฉพาะ `smoke_transport_driver` และ `smoke_transport_trucking` พร้อม `role_code = customer`, `customer_portal_role = driver_user/trucking_coordinator`; ไม่แตะ password ของ user จริง
+- **Smoke job**: seed สร้าง/อัปเดต `SMKU2026001`, `SMOKE-TRANSPORT-BK-001`, `GateOutRequests` สถานะ `requested`, `trucking_company_id`, `driver_user_id`, และ trucking grants ที่เกี่ยวข้อง
+- **Proof fixture**: seed สร้างไฟล์ proof ทดสอบที่ `public/uploads/smoke/transport-proof.jpg` เพื่อให้ `add_proof` ผ่าน safe upload URL policy
+- **Transport E2E runner**: `scripts/e2e-transport-smoke.mjs` login ผ่าน `/api/auth/login`, เก็บ cookie, เรียก `/api/transport/jobs`, แล้วทดสอบ `confirm_job`, `add_proof`, `report_issue`, `mark_arrived`, และตรวจ `/api/transport/activity`
+
+คำสั่งใช้งานหลังล้างข้อมูลธุรกิจ:
+
+```bash
+node scripts/migrate-runtime-core-schema.js
+node scripts/seed-transport-smoke.js --confirm --reset-smoke-job
+npm run test:e2e:transport
+```
+
+คำสั่ง preview ก่อน seed:
+
+```bash
+node scripts/seed-transport-smoke.js
+```
+
+คำสั่งลบ smoke/test data ชุดนี้เท่านั้น:
+
+```bash
+node scripts/seed-transport-smoke.js --cleanup
+```
+
+บัญชีทดสอบ dev/test:
+
+```text
+smoke_transport_driver / SmokeDriver123!
+smoke_transport_trucking / SmokeTransport123!
+```
+
+Manual Browser smoke:
+1. Login ด้วย `smoke_transport_driver`
+2. เปิด `/transport`
+3. ตรวจว่าเห็น job card ของตู้ `SMKU2026001`
+4. กด confirm job, add proof, report issue, mark arrived
+5. เปิด activity drawer แล้วตรวจว่า action/proof ถูกบันทึก
+
+ข้อจำกัด:
+- Seed ไม่ออก invoice, ไม่ release container, ไม่ออก EIR และไม่สร้าง GateTransactions ที่เสร็จแล้ว
+- ถ้าต้องการ smoke ใหม่ ให้ rerun `node scripts/seed-transport-smoke.js --confirm --reset-smoke-job`
+- ถ้าต้องการล้างเฉพาะ smoke/test data ชุดนี้ ให้ใช้ `node scripts/seed-transport-smoke.js --cleanup`
+- ถ้าต้องการล้างข้อมูลเต็ม ให้ใช้ `scripts/clear-business-data-preserve-users.js` ตาม deployment guide แล้ว seed ใหม่
+
+ไฟล์หลัก:
+- `scripts/transport-smoke-fixture.cjs`
+- `scripts/seed-transport-smoke.js`
+- `scripts/e2e-transport-smoke.mjs`
+- `src/app/api/__tests__/transport-smoke-seed-script.test.ts`
+- `src/app/api/__tests__/transport-smoke-runner.test.ts`
+- `package.json`
+
+Verification รอบนี้:
+
+```bash
+npm test -- --runInBand --cacheDirectory ./tmp/jest-cache --runTestsByPath src/app/api/__tests__/transport-smoke-seed-script.test.ts
+npm test -- --runInBand --cacheDirectory ./tmp/jest-cache --runTestsByPath src/app/api/__tests__/transport-smoke-runner.test.ts
+node scripts/seed-transport-smoke.js
+node scripts/seed-transport-smoke.js --confirm --reset-smoke-job
+npm run test:e2e:transport
+node --check scripts/seed-transport-smoke.js
+node --check scripts/e2e-transport-smoke.mjs
+```
+
+ผลล่าสุด: focused seed/runner tests `2 suites / 8 tests` ผ่าน, transport regression `9 suites / 58 tests` ผ่าน, `npm run lint` ผ่าน, `npx tsc --noEmit` ผ่าน, seed preview ไม่แตะ DB, migration/seed จริงผ่าน, smoke data ได้ `Booking #1` และ `Transport Job request-1`, `npm run test:e2e:transport` ผ่านกับ dev server จริง, JS syntax check ผ่าน; `npm run build` ยังติด `EPERM` ตอน unlink `.next/app-path-routes-manifest.json` เพราะ dev server/Next process lock ไฟล์ build output อยู่ ให้หยุด dev server ก่อน build production
+
+### อัปเดตล่าสุดก่อนหน้า: Driver / Trucking Transport Portal Action Workflow (4 มิ.ย. 2569)
 
 รอบนี้ต่อยอด MVP ฝั่งคนขับ/บริษัทรถขนส่งจาก read-only worklist ให้เป็น workflow แบบจำกัดสิทธิ์: ยืนยันงาน, แจ้งถึงลาน, แจ้งปัญหา, แนบหลักฐาน และดูประวัติงาน โดยยังให้ Gate/Internal เป็นผู้ควบคุมการปล่อยตู้และออก EIR เท่านั้น:
 
