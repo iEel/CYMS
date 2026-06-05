@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sql from 'mssql';
 import { getDb } from '@/lib/db';
-import { logAudit } from '@/lib/audit';
 import { requirePermission, requireYardAccess } from '@/lib/apiAuth';
 import { deriveReeferEscalation } from '@/lib/reeferEscalation';
-import { nextReeferExceptionStatus } from '@/lib/reeferExceptions';
+import { updateReeferExceptionAction, type ReeferExceptionAction } from '@/lib/reeferExceptions';
 import {
   applyPortalGrants,
   buildReeferExceptionGrants,
@@ -92,43 +91,24 @@ export async function PATCH(request: NextRequest) {
     const actor = await requirePermission(request, db, 'reefer.exception.manage', 'คุณไม่มีสิทธิ์จัดการ exception ตู้เย็น');
     if (actor instanceof NextResponse) return actor;
 
-    const nextStatus = nextReeferExceptionStatus(current.status, body.action);
-    if (!nextStatus) return NextResponse.json({ error: 'action ไม่ถูกต้องกับสถานะปัจจุบัน' }, { status: 400 });
+    const updateResult = await updateReeferExceptionAction({
+      db,
+      exceptionId,
+      action: body.action as ReeferExceptionAction,
+      note: body.resolution_note || body.note || null,
+      assignedToUserId: parsePositiveInt(body.assigned_to_user_id),
+      actor,
+    });
+    if ('error' in updateResult) {
+      if (updateResult.error === 'not_found') return NextResponse.json({ error: 'ไม่พบ exception' }, { status: 404 });
+      return NextResponse.json({ error: 'action ไม่ถูกต้องกับสถานะปัจจุบัน' }, { status: 400 });
+    }
 
-    const result = await db.request()
-      .input('exceptionId', sql.Int, exceptionId)
-      .input('status', sql.NVarChar(30), nextStatus)
-      .input('resolutionNote', sql.NVarChar(1000), body.resolution_note || body.note || null)
-      .input('assignedToUserId', sql.Int, parsePositiveInt(body.assigned_to_user_id))
-      .input('actorUserId', sql.Int, actor.userId)
-      .query(`
-        UPDATE ReeferExceptions
-        SET status = @status,
-            resolution_note = COALESCE(@resolutionNote, resolution_note),
-            assigned_to_user_id = COALESCE(@assignedToUserId, assigned_to_user_id),
-            acknowledged_by_user_id = CASE WHEN @status = 'in_progress' THEN @actorUserId ELSE acknowledged_by_user_id END,
-            acknowledged_at = CASE WHEN @status = 'in_progress' THEN GETDATE() ELSE acknowledged_at END,
-            resolved_by_user_id = CASE WHEN @status IN ('resolved', 'ignored') THEN @actorUserId ELSE resolved_by_user_id END,
-            resolved_at = CASE WHEN @status IN ('resolved', 'ignored') THEN GETDATE() ELSE resolved_at END,
-            updated_at = GETDATE()
-        OUTPUT INSERTED.*
-        WHERE exception_id = @exceptionId
-      `);
-
-    const updated = result.recordset[0];
+    const updated = updateResult.exception;
     const containerGrantRows = await fetchContainerPortalGrantRows(db, {
       container_id: updated.container_id,
     });
     await applyPortalGrants(db, buildReeferExceptionGrants(updated, containerGrantRows));
-
-    await logAudit({
-      userId: actor.userId,
-      yardId: current.yard_id,
-      action: `reefer_exception_${body.action}`,
-      entityType: 'reefer_exception',
-      entityId: exceptionId,
-      details: { status: nextStatus, note: body.resolution_note || body.note || null },
-    });
 
     return NextResponse.json({ success: true, exception: updated });
   } catch (error) {

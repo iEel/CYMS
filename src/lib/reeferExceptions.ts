@@ -1,3 +1,8 @@
+import sql from 'mssql';
+
+import { logAudit } from '@/lib/audit';
+import type { RequestActor } from '@/lib/apiAuth';
+
 export type ReeferExceptionSeverity = 'medium' | 'high' | 'critical';
 export type ReeferExceptionStatus = 'open' | 'in_progress' | 'resolved' | 'ignored';
 export type ReeferExceptionAction = 'acknowledge' | 'resolve' | 'ignore' | 'reopen';
@@ -101,4 +106,74 @@ export function nextReeferExceptionStatus(
   if (action === 'ignore' && ['open', 'in_progress'].includes(currentStatus)) return 'ignored';
   if (action === 'reopen' && ['resolved', 'ignored'].includes(currentStatus)) return 'open';
   return null;
+}
+
+export interface ReeferExceptionActionUpdateRow extends Record<string, unknown> {
+  exception_id?: number | string | null;
+  container_id?: number | string | null;
+  container_number?: number | string | null;
+  status?: string | null;
+}
+
+export type ReeferExceptionActionUpdateResult =
+  | { exception: ReeferExceptionActionUpdateRow; yardId: number }
+  | { error: 'not_found' | 'invalid_transition'; yardId?: number };
+
+export async function updateReeferExceptionAction({
+  db,
+  exceptionId,
+  action,
+  note,
+  assignedToUserId,
+  actor,
+}: {
+  db: sql.ConnectionPool;
+  exceptionId: number;
+  action: ReeferExceptionAction;
+  note?: string | null;
+  assignedToUserId?: number | null;
+  actor: RequestActor;
+}): Promise<ReeferExceptionActionUpdateResult> {
+  const scope = await db.request()
+    .input('exceptionId', sql.Int, exceptionId)
+    .query('SELECT TOP 1 yard_id, status FROM ReeferExceptions WHERE exception_id = @exceptionId');
+  const current = scope.recordset[0] as { yard_id?: number; status?: string } | undefined;
+  if (!current?.yard_id) return { error: 'not_found' };
+
+  const nextStatus = nextReeferExceptionStatus(current.status || '', action);
+  if (!nextStatus) return { error: 'invalid_transition', yardId: current.yard_id };
+
+  const result = await db.request()
+    .input('exceptionId', sql.Int, exceptionId)
+    .input('status', sql.NVarChar(30), nextStatus)
+    .input('resolutionNote', sql.NVarChar(1000), note || null)
+    .input('assignedToUserId', sql.Int, assignedToUserId ?? null)
+    .input('actorUserId', sql.Int, actor.userId)
+    .query(`
+      UPDATE ReeferExceptions
+      SET status = @status,
+          resolution_note = COALESCE(@resolutionNote, resolution_note),
+          assigned_to_user_id = COALESCE(@assignedToUserId, assigned_to_user_id),
+          acknowledged_by_user_id = CASE WHEN @status = 'in_progress' THEN @actorUserId ELSE acknowledged_by_user_id END,
+          acknowledged_at = CASE WHEN @status = 'in_progress' THEN GETDATE() ELSE acknowledged_at END,
+          resolved_by_user_id = CASE WHEN @status IN ('resolved', 'ignored') THEN @actorUserId ELSE resolved_by_user_id END,
+          resolved_at = CASE WHEN @status IN ('resolved', 'ignored') THEN GETDATE() ELSE resolved_at END,
+          updated_at = GETDATE()
+      OUTPUT INSERTED.*
+      WHERE exception_id = @exceptionId
+    `);
+
+  const exception = result.recordset[0] as ReeferExceptionActionUpdateRow | undefined;
+  if (!exception) return { error: 'not_found', yardId: current.yard_id };
+
+  await logAudit({
+    userId: actor.userId,
+    yardId: current.yard_id,
+    action: `reefer_exception_${action}`,
+    entityType: 'reefer_exception',
+    entityId: exceptionId,
+    details: { status: nextStatus, note: note || null },
+  });
+
+  return { exception, yardId: current.yard_id };
 }

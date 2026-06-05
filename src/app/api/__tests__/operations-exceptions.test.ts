@@ -54,3 +54,70 @@ describe('Operational exception center RBAC', () => {
     expect(sidebar).toContain("href: '/operations'");
   });
 });
+
+describe('Operational exceptions API source integration', () => {
+  const routePath = path.join(root, 'src/app/api/operations/exceptions/route.ts');
+  const reeferRoutePath = path.join(root, 'src/app/api/reefer/exceptions/route.ts');
+  const reeferSourcePath = path.join(root, 'src/lib/reeferExceptions.ts');
+
+  it('defines an internal operations exception route with yard and permission guards', () => {
+    expect(fs.existsSync(routePath)).toBe(true);
+    const route = fs.readFileSync(routePath, 'utf8');
+
+    expect(route).toContain('requireYardAccess');
+    expect(route).toContain('operations.exceptions.view');
+    expect(route).toContain('operations.exceptions.manage');
+  });
+
+  it('reads every operational exception source through existing source tables and helpers', () => {
+    expect(fs.existsSync(routePath)).toBe(true);
+    const route = fs.readFileSync(routePath, 'utf8');
+
+    expect(route).toContain('ReeferExceptions');
+    expect(route).toContain('ApprovalReviews');
+    expect(route).toContain('GateOutRequests');
+    expect(route).toContain('RECONCILIATION_ISSUE_DEFINITIONS');
+    expect(route).toContain('runReconciliationIssue');
+    expect(route).toContain('buildReconciliationIssueResponse');
+    expect(route).toContain('normalizeReconciliationException');
+  });
+
+  it('does not run schema DDL from the operations exception route', () => {
+    expect(fs.existsSync(routePath)).toBe(true);
+    const route = fs.readFileSync(routePath, 'utf8');
+
+    expect(route).not.toMatch(/\bOBJECT_ID\b/);
+    expect(route).not.toMatch(/\bCOL_LENGTH\b/);
+    expect(route).not.toMatch(/\bALTER\s+TABLE\b/i);
+    expect(route).not.toMatch(/\bCREATE\s+TABLE\b/i);
+  });
+
+  it('parameterizes source filters and action upserts', () => {
+    expect(fs.existsSync(routePath)).toBe(true);
+    const route = fs.readFileSync(routePath, 'utf8');
+
+    expect(route).toContain(".input('yardId'");
+    expect(route).toContain(".input('status'");
+    expect(route).toContain(".input('source'");
+    expect(route).toMatch(/\.input\('actorId'|actorId\s*:/);
+  });
+
+  it('uses shared action helpers and never persists acknowledged action status', () => {
+    expect(fs.existsSync(routePath)).toBe(true);
+    const route = fs.readFileSync(routePath, 'utf8');
+
+    expect(route).toContain('loadOperationalActionRecords');
+    expect(route).toContain('upsertOperationalAction');
+    expect(route).toMatch(/acknowledge[\s\S]*status:\s*'open'|statusByAction[\s\S]*acknowledge:\s*'open'/);
+    expect(route).not.toMatch(/status:\s*['"]acknowledged['"]/);
+    expect(route).not.toMatch(/status\s*=\s*['"]acknowledged['"]/);
+  });
+
+  it('routes reefer actions through the shared reefer update helper', () => {
+    const reeferRoute = fs.readFileSync(reeferRoutePath, 'utf8');
+    const reeferSource = fs.readFileSync(reeferSourcePath, 'utf8');
+
+    expect(reeferRoute).toContain('updateReeferExceptionAction');
+    expect(reeferSource).toContain('export async function updateReeferExceptionAction');
+  });
+});
