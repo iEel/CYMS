@@ -291,12 +291,39 @@ describe('operational exception action records', () => {
     await expect(loadOperationalActionRecords(db, 5)).resolves.toEqual([]);
   });
 
+  it('rejects missing SQL Server objects other than ReconciliationActions', async () => {
+    const missingOtherTableError = Object.assign(new Error("Invalid object name 'OtherTable'."), {
+      code: 'EREQUEST',
+      number: 208,
+    });
+    const { db } = makeDb([], async () => {
+      throw missingOtherTableError;
+    });
+
+    await expect(loadOperationalActionRecords(db, 5)).rejects.toThrow("Invalid object name 'OtherTable'.");
+  });
+
   it('rejects non-migration database errors while loading action records', async () => {
     const { db } = makeDb([], async () => {
       throw new Error('Database timeout');
     });
 
     await expect(loadOperationalActionRecords(db, 5)).rejects.toThrow('Database timeout');
+  });
+
+  it('rejects invalid action statuses before opening a database request', async () => {
+    const { db } = makeDb([{ action_id: 42 }]);
+
+    await expect(upsertOperationalAction(db, {
+      yardId: 5,
+      issueCode: 'transport.issue_reported',
+      entityId: 12,
+      entityRef: 'TLLU1234567',
+      status: 'acknowledged' as never,
+      actor: { userId: 99, role: 'supervisor' },
+    })).rejects.toThrow('Invalid operational action status');
+
+    expect(db.request).not.toHaveBeenCalled();
   });
 
   it('upserts action state with a parameterized MERGE', async () => {

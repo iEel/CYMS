@@ -16,8 +16,14 @@ export interface OperationalActionUpsertInput {
   actor: RequestActor;
 }
 
+const OPERATIONAL_ACTION_STATUSES: ReconciliationActionStatus[] = ['open', 'resolved', 'ignored'];
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isOperationalActionStatus(status: unknown): status is ReconciliationActionStatus {
+  return OPERATIONAL_ACTION_STATUSES.includes(status as ReconciliationActionStatus);
 }
 
 function collectSqlErrorParts(error: unknown, parts: unknown[] = []): unknown[] {
@@ -41,13 +47,22 @@ function collectSqlErrorParts(error: unknown, parts: unknown[] = []): unknown[] 
 }
 
 function isMissingSqlServerObjectError(error: unknown) {
-  return collectSqlErrorParts(error).some((part) => {
+  const parts = collectSqlErrorParts(error);
+  const messages = parts
+    .filter(isRecord)
+    .map(part => (typeof part.message === 'string' ? part.message : ''));
+  const namesReconciliationActions = messages.some(message => /ReconciliationActions/i.test(message));
+
+  return parts.some((part) => {
     if (!isRecord(part)) return false;
 
     const errorNumber = Number(part.number);
     const message = typeof part.message === 'string' ? part.message : '';
+    const namesMissingReconciliationActions =
+      /Invalid object name\s+'?ReconciliationActions'?/i.test(message)
+      || (/invalid object name/i.test(message) && /ReconciliationActions/i.test(message));
 
-    return errorNumber === 208 || /invalid object name/i.test(message);
+    return namesMissingReconciliationActions || (errorNumber === 208 && namesReconciliationActions);
   });
 }
 
@@ -83,6 +98,10 @@ export async function upsertOperationalAction(
   db: sql.ConnectionPool,
   input: OperationalActionUpsertInput,
 ): Promise<number | null> {
+  if (!isOperationalActionStatus(input.status)) {
+    throw new Error('Invalid operational action status');
+  }
+
   const result = await db.request()
     .input('yardId', sql.Int, input.yardId)
     .input('issueCode', sql.NVarChar(80), input.issueCode)
