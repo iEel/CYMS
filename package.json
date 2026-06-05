@@ -10,6 +10,8 @@
     "lint": "eslint",
     "test": "jest --verbose",
     "test:e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "seed:transport-smoke": "node scripts/seed-transport-smoke.js --confirm",
+    "test:e2e:transport": "node scripts/e2e-transport-smoke.mjs",
     "test:watch": "jest --watch"
   },
   "dependencies": {

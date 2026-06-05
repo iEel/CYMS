@@ -1,9 +1,16 @@
 'use client';
 
-import { CalendarClock, FileText, MapPin, Truck } from 'lucide-react';
+import { CalendarClock, FileText, History, MapPin, Truck } from 'lucide-react';
 
 import { TransportStatusPill } from './TransportStatusPills';
-import type { TransportJob } from './types';
+import type { TransportAction, TransportJob } from './types';
+
+const actionLabels: Record<TransportAction, string> = {
+  confirm_job: 'รับงาน',
+  mark_arrived: 'ถึงลานแล้ว',
+  report_issue: 'แจ้งปัญหา',
+  add_proof: 'เพิ่มหลักฐาน',
+};
 
 function formatDateTime(value?: string) {
   if (!value) return '-';
@@ -20,11 +27,16 @@ function formatDateTime(value?: string) {
 export function TransportJobCard({
   job,
   onOpenEir,
+  onAction,
+  onOpenActivity,
 }: {
   job: TransportJob;
   onOpenEir: (eirNumber: string) => void;
+  onAction: (job: TransportJob, action: TransportAction) => void;
+  onOpenActivity: (job: TransportJob) => void;
 }) {
   const time = job.gateDatetime || job.requestedAt;
+  const hasActivity = job.proofCount > 0 || Boolean(job.lastActivityAt);
 
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -73,7 +85,32 @@ export function TransportJobCard({
         </div>
       )}
 
-      <div className="mt-4 flex justify-end">
+      {hasActivity && (
+        <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-slate-500">
+          {job.proofCount > 0 && <span>หลักฐาน {job.proofCount} ไฟล์</span>}
+          {job.lastActivityAt && <span>ล่าสุด {formatDateTime(job.lastActivityAt)}</span>}
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        {job.availableActions.map(action => (
+          <button
+            key={action}
+            type="button"
+            onClick={() => onAction(job, action)}
+            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            {actionLabels[action]}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => onOpenActivity(job)}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          <History size={16} />
+          ประวัติ
+        </button>
         <button
           type="button"
           disabled={!job.eirNumber}

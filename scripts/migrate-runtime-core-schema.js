@@ -167,6 +167,49 @@ async function migrate() {
       END;
     `);
 
+    await runStep(pool, 'Transport job action workflow tables', `
+      IF OBJECT_ID('TransportJobActivities', 'U') IS NULL
+      BEGIN
+        CREATE TABLE TransportJobActivities (
+          activity_id BIGINT PRIMARY KEY IDENTITY(1,1),
+          job_source NVARCHAR(40) NOT NULL,
+          job_id INT NOT NULL,
+          action NVARCHAR(40) NOT NULL,
+          previous_status NVARCHAR(40) NULL,
+          new_status NVARCHAR(40) NULL,
+          note NVARCHAR(1000) NULL,
+          proof_url NVARCHAR(500) NULL,
+          actor_user_id INT NULL,
+          actor_customer_id INT NULL,
+          actor_mode NVARCHAR(20) NOT NULL,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE()
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('TransportJobActivities') AND name = 'IX_TransportJobActivities_Job')
+        CREATE INDEX IX_TransportJobActivities_Job
+          ON TransportJobActivities (job_source, job_id, created_at DESC);
+
+      IF OBJECT_ID('TransportJobProofs', 'U') IS NULL
+      BEGIN
+        CREATE TABLE TransportJobProofs (
+          proof_id BIGINT PRIMARY KEY IDENTITY(1,1),
+          job_source NVARCHAR(40) NOT NULL,
+          job_id INT NOT NULL,
+          proof_type NVARCHAR(40) NOT NULL,
+          file_url NVARCHAR(500) NOT NULL,
+          note NVARCHAR(1000) NULL,
+          uploaded_by_user_id INT NULL,
+          uploaded_by_customer_id INT NULL,
+          created_at DATETIME2 NOT NULL DEFAULT GETDATE()
+        );
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('TransportJobProofs') AND name = 'IX_TransportJobProofs_Job')
+        CREATE INDEX IX_TransportJobProofs_Job
+          ON TransportJobProofs (job_source, job_id, created_at DESC);
+    `);
+
     await runStep(pool, 'Portal grant party columns', `
       IF OBJECT_ID('Bookings', 'U') IS NOT NULL
       BEGIN

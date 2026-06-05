@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardList, RefreshCw, Truck } from 'lucide-react';
 
+import { TransportActionDialog } from './TransportActionDialog';
+import { TransportActivityDrawer } from './TransportActivityDrawer';
 import { TransportEirModal } from './TransportEirModal';
 import { TransportJobCard } from './TransportJobCard';
-import type { TransportCapabilities, TransportJobsResponse } from './types';
+import type { TransportAction, TransportCapabilities, TransportJob, TransportJobsResponse } from './types';
 
 const emptyJobs: TransportJobsResponse = {
   summary: { open: 0, atGate: 0, releasedToday: 0, attention: 0 },
@@ -20,6 +22,11 @@ const filterOptions = [
   { key: 'attention', label: 'ต้องดูแล' },
 ];
 
+const transportPortalEndpoints = {
+  actions: '/api/transport/actions',
+  activity: '/api/transport/activity',
+};
+
 function isDone(status: string) {
   return ['released', 'completed'].includes(status);
 }
@@ -33,26 +40,43 @@ export function TransportDashboard() {
   const [eirLoading, setEirLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [selectedAction, setSelectedAction] = useState<TransportAction | null>(null);
+  const [selectedJob, setSelectedJob] = useState<TransportJob | null>(null);
+  const [activityJob, setActivityJob] = useState<TransportJob | null>(null);
+  const requestSequenceRef = useRef(0);
+  const mountedRef = useRef(false);
 
   const loadData = useCallback(async () => {
+    const requestSequence = ++requestSequenceRef.current;
     setLoading(true);
     try {
       const [capabilityRes, jobsRes] = await Promise.all([
         fetch('/api/transport/capabilities'),
         fetch('/api/transport/jobs'),
       ]);
-      if (capabilityRes.ok) setCapabilities(await capabilityRes.json());
-      if (jobsRes.ok) setData(await jobsRes.json());
+
+      const nextCapabilities = capabilityRes.ok ? await capabilityRes.json() : null;
+      const nextData = jobsRes.ok ? await jobsRes.json() : null;
+
+      if (!mountedRef.current || requestSequence !== requestSequenceRef.current) return;
+      if (nextCapabilities) setCapabilities(nextCapabilities);
+      if (nextData) setData(nextData);
       setLastUpdated(new Date());
     } finally {
-      setLoading(false);
+      if (mountedRef.current && requestSequence === requestSequenceRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     loadData();
     const interval = window.setInterval(loadData, 30000);
-    return () => window.clearInterval(interval);
+    return () => {
+      mountedRef.current = false;
+      window.clearInterval(interval);
+    };
   }, [loadData]);
 
   const mode = capabilities?.transport?.mode;
@@ -82,6 +106,21 @@ export function TransportDashboard() {
     } finally {
       setEirLoading(false);
     }
+  };
+
+  const openAction = (job: TransportJob, action: TransportAction) => {
+    setSelectedJob(job);
+    setSelectedAction(action);
+  };
+
+  const closeAction = () => {
+    setSelectedJob(null);
+    setSelectedAction(null);
+  };
+
+  const handleActionDone = () => {
+    closeAction();
+    loadData();
   };
 
   const metrics = [
@@ -151,7 +190,13 @@ export function TransportDashboard() {
           </div>
         ) : (
           filteredJobs.map(job => (
-            <TransportJobCard key={job.jobId} job={job} onOpenEir={openEir} />
+            <TransportJobCard
+              key={job.jobId}
+              job={job}
+              onOpenEir={openEir}
+              onAction={openAction}
+              onOpenActivity={setActivityJob}
+            />
           ))
         )}
       </section>
@@ -162,6 +207,26 @@ export function TransportDashboard() {
           eir={selectedEir}
           loading={eirLoading}
           onClose={() => setModalOpen(false)}
+        />
+      )}
+
+      {selectedAction && selectedJob && (
+        <TransportActionDialog
+          key={`${selectedJob.jobId}-${selectedAction}`}
+          action={selectedAction}
+          job={selectedJob}
+          actionEndpoint={transportPortalEndpoints.actions}
+          onClose={closeAction}
+          onDone={handleActionDone}
+        />
+      )}
+
+      {activityJob && (
+        <TransportActivityDrawer
+          key={activityJob.jobId}
+          job={activityJob}
+          activityEndpoint={transportPortalEndpoints.activity}
+          onClose={() => setActivityJob(null)}
         />
       )}
     </div>

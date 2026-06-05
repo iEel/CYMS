@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
+  assertTransportJobSource,
   buildTransportJobAccessSql,
   isDriverTransportActor,
   isTruckingTransportActor,
   requireTransportPortalActor,
+  resolveTransportJobId,
 } from '../transportPortalAccess';
 
 function makeRequest(headers: Record<string, string> = {}) {
@@ -50,6 +52,25 @@ describe('transport portal access policy', () => {
     expect(isDriverTransportActor(result as never)).toBe(true);
   });
 
+  it('allows transport job action and activity view scopes for transport actors', async () => {
+    const jobActionDb = makeDb([{ user_id: 22, customer_id: 44, role_code: 'customer', customer_portal_role: 'driver_user' }]);
+    const activityViewDb = makeDb([{ user_id: 23, customer_id: 44, role_code: 'customer', customer_portal_role: 'trucking_coordinator' }]);
+
+    const jobAction = await requireTransportPortalActor(
+      makeRequest({ 'x-user-id': '22' }),
+      jobActionDb,
+      'transport.jobs.action',
+    );
+    const activityView = await requireTransportPortalActor(
+      makeRequest({ 'x-user-id': '23' }),
+      activityViewDb,
+      'transport.activity.view',
+    );
+
+    expect(jobAction).not.toBeInstanceOf(NextResponse);
+    expect(activityView).not.toBeInstanceOf(NextResponse);
+  });
+
   it('rejects non-transport customer portal roles', async () => {
     const db = makeDb([{ user_id: 31, customer_id: 44, role_code: 'customer', customer_portal_role: 'customer_admin' }]);
 
@@ -89,5 +110,24 @@ describe('transport portal access policy', () => {
     expect(truckingSql).toContain("pea.access_role = 'trucking'");
     expect(driverSql).toContain('@transportUserId');
     expect(driverSql).not.toContain('@transportCustomerId');
+  });
+
+  it('resolves request and gate transport job ids', () => {
+    expect(resolveTransportJobId('request-88')).toEqual({ source: 'gate_out_request', id: 88 });
+    expect(resolveTransportJobId('gate-99')).toEqual({ source: 'gate_transaction', id: 99 });
+  });
+
+  it('rejects invalid transport job ids', () => {
+    expect(resolveTransportJobId('request-x')).toBeNull();
+    expect(resolveTransportJobId('invoice-1')).toBeNull();
+    expect(resolveTransportJobId(88)).toBeNull();
+  });
+
+  it('checks whether a resolved job source is allowed', () => {
+    const job = resolveTransportJobId('request-88');
+
+    expect(job).not.toBeNull();
+    expect(assertTransportJobSource(job!, ['gate_out_request'])).toBe(true);
+    expect(assertTransportJobSource(job!, ['gate_transaction'])).toBe(false);
   });
 });

@@ -4,7 +4,13 @@ import sql from 'mssql';
 import type { CustomerPortalRole } from './customerPortalPermissions';
 import { hasPortalAction, normalizeCustomerPortalRole } from './customerPortalPermissions';
 
-export type TransportPortalAction = 'transport.jobs.view' | 'transport.eir.view';
+export type TransportPortalAction =
+  | 'transport.jobs.view'
+  | 'transport.eir.view'
+  | 'transport.jobs.action'
+  | 'transport.activity.view';
+
+export type TransportJobSource = 'gate_out_request' | 'gate_transaction';
 
 export type TransportPortalActor = {
   userId: number;
@@ -60,6 +66,25 @@ export function isTruckingTransportActor(actor: unknown): actor is TransportPort
   return Boolean(actor && typeof actor === 'object' && (actor as { mode?: unknown }).mode === 'trucking');
 }
 
+export function resolveTransportJobId(value: unknown): { source: TransportJobSource; id: number } | null {
+  if (typeof value !== 'string') return null;
+
+  const match = /^(request|gate)-([1-9]\d*)$/.exec(value);
+  if (!match) return null;
+
+  return {
+    source: match[1] === 'request' ? 'gate_out_request' : 'gate_transaction',
+    id: Number(match[2]),
+  };
+}
+
+export function assertTransportJobSource(
+  job: { source: TransportJobSource; id: number },
+  allowed: TransportJobSource[],
+): boolean {
+  return allowed.includes(job.source);
+}
+
 export async function requireTransportPortalActor(
   request: NextRequest,
   db: TransportPortalDb,
@@ -96,7 +121,9 @@ export async function requireTransportPortalActor(
 
   const transportActionAllowed =
     action === 'transport.jobs.view' ||
-    action === 'transport.eir.view';
+    action === 'transport.eir.view' ||
+    action === 'transport.jobs.action' ||
+    action === 'transport.activity.view';
   if (!transportActionAllowed) {
     return NextResponse.json({ error: 'คุณไม่มีสิทธิ์เข้าถึงฟังก์ชันนี้' }, { status: 403 });
   }

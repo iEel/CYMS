@@ -6,8 +6,18 @@ import {
   buildTransportJobAccessSql,
   requireTransportPortalActor,
 } from '@/lib/transportPortalAccess';
+import type { TransportAction } from '@/components/transport/types';
 
 type TransportJobRow = Record<string, unknown>;
+
+const finalRequestStatuses = new Set(['released', 'completed', 'cancelled', 'rejected']);
+
+const transitionRules: Record<TransportAction, string[]> = {
+  confirm_job: ['requested', 'pending', 'issue_reported'],
+  mark_arrived: ['confirmed', 'issue_reported'],
+  report_issue: ['requested', 'pending', 'confirmed', 'at_gate'],
+  add_proof: ['requested', 'pending', 'confirmed', 'at_gate', 'issue_reported'],
+};
 
 function asString(value: unknown, fallback = '') {
   if (value === null || value === undefined) return fallback;
@@ -39,11 +49,26 @@ function buildYardSlot(row: TransportJobRow) {
   return parts.length > 0 ? parts.join('-') : undefined;
 }
 
+function availableActionsForStatus(status: string, source: string): TransportAction[] {
+  const normalized = status.trim().toLowerCase();
+  if (source !== 'gate_out_request' || finalRequestStatuses.has(normalized)) return [];
+
+  return (Object.keys(transitionRules) as TransportAction[]).filter((action) => {
+    return transitionRules[action].includes(normalized);
+  });
+}
+
 function toTransportJob(row: TransportJobRow) {
+  const source = asString(row.source) === 'gate_transaction' ? 'gate_transaction' : 'gate_out_request';
+  const status = asString(row.status, 'open');
+
   return {
     jobId: asString(row.job_id),
-    source: asString(row.source) === 'gate_transaction' ? 'gate_transaction' : 'gate_out_request',
-    status: asString(row.status, 'open'),
+    source,
+    status,
+    availableActions: availableActionsForStatus(status, source),
+    proofCount: asNumber(row.proof_count),
+    lastActivityAt: asIsoString(row.last_activity_at),
     containerNumber: asString(row.container_number),
     bookingNumber: asNullableString(row.booking_number),
     transactionType: asNullableString(row.transaction_type),
@@ -108,6 +133,8 @@ export async function GET(request: NextRequest) {
             COALESCE(gor.driver_name, g.driver_name) AS driver_name,
             COALESCE(gor.truck_plate, g.truck_plate) AS truck_plate,
             COALESCE(gor.eir_number, g.eir_number) AS eir_number,
+            COALESCE(proofStats.proof_count, 0) AS proof_count,
+            activityStats.last_activity_at,
             CASE
               WHEN gor.status IN ('cancelled', 'rejected') THEN gor.status
               WHEN gor.status = 'pending' THEN 'รอดำเนินการ'
@@ -120,6 +147,19 @@ export async function GET(request: NextRequest) {
             OR (gor.booking_ref IS NOT NULL AND b.booking_number = gor.booking_ref AND b.yard_id = gor.yard_id)
           LEFT JOIN Yards y ON y.yard_id = gor.yard_id
           LEFT JOIN YardZones z ON z.zone_id = c.zone_id
+          OUTER APPLY (
+            SELECT COUNT(*) AS proof_count
+            FROM TransportJobProofs tp
+            WHERE tp.job_source = 'gate_out_request'
+              AND tp.job_id = gor.request_id
+          ) proofStats
+          OUTER APPLY (
+            SELECT TOP 1 ta.created_at AS last_activity_at
+            FROM TransportJobActivities ta
+            WHERE ta.job_source = 'gate_out_request'
+              AND ta.job_id = gor.request_id
+            ORDER BY ta.created_at DESC
+          ) activityStats
           WHERE ${accessSql}
         ),
         GateJobs AS (
@@ -140,6 +180,8 @@ export async function GET(request: NextRequest) {
             g.driver_name,
             g.truck_plate,
             g.eir_number,
+            0 AS proof_count,
+            NULL AS last_activity_at,
             NULL AS attention_reason
           FROM GateTransactions g
           LEFT JOIN GateOutRequests gor ON gor.gate_transaction_id = g.transaction_id

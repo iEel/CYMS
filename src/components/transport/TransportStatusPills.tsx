@@ -3,7 +3,9 @@
 const statusStyles: Record<string, string> = {
   requested: 'bg-amber-50 text-amber-700 ring-amber-200',
   pending: 'bg-amber-50 text-amber-700 ring-amber-200',
+  confirmed: 'bg-indigo-50 text-indigo-700 ring-indigo-200',
   at_gate: 'bg-blue-50 text-blue-700 ring-blue-200',
+  issue_reported: 'bg-rose-50 text-rose-700 ring-rose-200',
   released: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   completed: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   cancelled: 'bg-rose-50 text-rose-700 ring-rose-200',
@@ -12,7 +14,9 @@ const statusStyles: Record<string, string> = {
 const statusLabels: Record<string, string> = {
   requested: 'รอรับงาน',
   pending: 'รอดำเนินการ',
+  confirmed: 'รับงานแล้ว',
   at_gate: 'อยู่หน้าด่าน',
+  issue_reported: 'แจ้งปัญหา',
   released: 'ปล่อยออกแล้ว',
   completed: 'เสร็จสิ้น',
   cancelled: 'ยกเลิก',
