@@ -55,6 +55,56 @@ describe('Operational exception center RBAC', () => {
   });
 });
 
+describe('Operational exception center UI', () => {
+  const pagePath = path.join(root, 'src/app/(dashboard)/operations/page.tsx');
+  const componentPath = path.join(root, 'src/components/operations/OperationalExceptionCenter.tsx');
+
+  it('adds a permission-gated Exception Center tab without requiring yard move rights', () => {
+    const page = fs.readFileSync(pagePath, 'utf8');
+
+    expect(page).toContain('OperationalExceptionCenter');
+    expect(page).toContain('Exception Center');
+    expect(page).toContain('operations.exceptions.view');
+    expect(page).toContain('operations.exceptions.manage');
+    expect(page).toContain("id: 'exceptions'");
+    expect(page).toContain('allowed: canViewExceptions');
+    expect(page).toContain('canManageExceptions');
+  });
+
+  it('renders exception filters, summary metrics, API calls, and action labels', () => {
+    expect(fs.existsSync(componentPath)).toBe(true);
+    const component = fs.existsSync(componentPath) ? fs.readFileSync(componentPath, 'utf8') : '';
+
+    expect(component).toContain('/api/operations/exceptions');
+    expect(component).toContain('include_closed');
+    expect(component).toContain('ActionInputDialog');
+    expect(component).toContain('allowed_actions');
+    expect(component).toContain('Total open');
+    expect(component).toContain('Critical');
+    expect(component).toContain('Warning');
+    expect(component).toContain('SLA breached');
+    for (const label of ['Assign', 'Acknowledge', 'Resolve', 'Ignore', 'Reopen', 'Open detail']) {
+      expect(component).toContain(label);
+    }
+  });
+
+  it('submits valid patch identity fields and blocks reefer text assignment in the MVP', () => {
+    expect(fs.existsSync(componentPath)).toBe(true);
+    const component = fs.existsSync(componentPath) ? fs.readFileSync(componentPath, 'utf8') : '';
+
+    expect(component).toContain("method: 'PATCH'");
+    expect(component).toContain('issue_code');
+    expect(component).toContain('entity_id');
+    expect(component).toContain('entity_ref');
+    expect(component).toContain('exception_id');
+    expect(component).toContain('assigned_to');
+    expect(component).toContain('note');
+    expect(component).toContain("item.source === 'reefer' && action === 'assign'");
+    expect(component).toContain('Reefer assign requires a user ID');
+    expect(component).not.toContain('assigned_to_user_id: Number(values.assigned_to)');
+  });
+});
+
 describe('Operational exceptions API source integration', () => {
   const routePath = path.join(root, 'src/app/api/operations/exceptions/route.ts');
   const reeferRoutePath = path.join(root, 'src/app/api/reefer/exceptions/route.ts');

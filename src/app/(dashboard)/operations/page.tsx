@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import OperationalExceptionCenter from '@/components/operations/OperationalExceptionCenter';
 import {
   Loader2, Search, Truck, Package, ArrowRight, Play, CheckCircle2,
   XCircle, Clock, AlertTriangle, Plus, Layers, Shuffle,
@@ -70,9 +71,18 @@ interface ShiftResult {
   message: string;
 }
 
+type OperationTabId = 'queue' | 'create' | 'shifting' | 'exceptions';
+
+interface OperationTab {
+  id: OperationTabId;
+  label: string;
+  icon: React.ReactNode;
+  allowed: boolean;
+}
+
 export default function OperationsPage() {
   const { session, hasAnyPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState<'queue' | 'create' | 'shifting'>('queue');
+  const [activeTab, setActiveTab] = useState<OperationTabId>('queue');
 
   // Job Queue
   const [orders, setOrders] = useState<WorkOrderRow[]>([]);
@@ -105,10 +115,13 @@ export default function OperationsPage() {
 
   const yardId = session?.activeYardId || 1;
   const canMoveYard = hasAnyPermission(['yard.slot.move', 'yard.location.assign']);
-  const operationTabs = [
+  const canViewExceptions = hasAnyPermission(['operations.exceptions.view', 'operations.exceptions.manage']);
+  const canManageExceptions = hasAnyPermission(['operations.exceptions.manage']);
+  const operationTabs: OperationTab[] = [
     { id: 'queue' as const, label: 'Job Queue', icon: <ListOrdered size={14} />, allowed: canMoveYard },
     { id: 'create' as const, label: 'สร้างงาน', icon: <Plus size={14} />, allowed: canMoveYard },
     { id: 'shifting' as const, label: 'Smart Shifting', icon: <Shuffle size={14} />, allowed: canMoveYard },
+    { id: 'exceptions' as const, label: 'Exception Center', icon: <AlertTriangle size={14} />, allowed: canViewExceptions },
   ].filter(tab => tab.allowed);
   const effectiveTab = operationTabs.some(tab => tab.id === activeTab) ? activeTab : operationTabs[0]?.id;
   const [sseConnected, setSseConnected] = useState(false);
@@ -824,6 +837,11 @@ export default function OperationsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* =================== EXCEPTION CENTER TAB =================== */}
+      {effectiveTab === 'exceptions' && canViewExceptions && (
+        <OperationalExceptionCenter yardId={yardId} canManageExceptions={canManageExceptions} />
       )}
 
       {/* Container Timeline Modal */}
