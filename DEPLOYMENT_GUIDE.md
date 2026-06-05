@@ -294,7 +294,7 @@ npx tsc --noEmit --pretty false
 npm test -- --cacheDirectory .tmp/jest --runInBand
 
 # Build production bundle
-npm run build
+npm run build:clean
 # → สร้าง .next/ directory
 # ⏱ ใช้เวลาประมาณ 1-3 นาที
 ```
@@ -953,14 +953,27 @@ cloudflared tunnel run cyms
 
 ### Build ไม่ผ่าน / `.next` ถูกล็อกไฟล์
 
-ถ้า `npm run build` เจอ error ประเภท `EPERM`, `permission denied`, `unlink .next/...` หรือสงสัยว่าไฟล์ build ถูก process เดิมล็อกอยู่ ให้หยุด PM2 แล้วล้าง `.next` ก่อน build ใหม่:
+ถ้า `npm run build` เจอ error ประเภท `EPERM`, `permission denied`, `unlink .next/...` หรือสงสัยว่าไฟล์ build ถูก process เดิมล็อกอยู่ ให้หยุด PM2/Next dev server แล้วล้าง `.next` ก่อน build ใหม่:
 
 ```bash
 cd /var/www/container-yard-system
 pm2 stop cyms
-rm -rf .next
-npm run build
+npm run build:clean
 pm2 restart cyms
+```
+
+บน Windows dev machine ให้หยุด `npm run dev` ก่อน แล้วใช้คำสั่งเดียวกัน:
+
+```powershell
+npm run build:clean
+```
+
+ถ้า `clean:next` แจ้งว่า `Cannot rename folders inside ...` แปลว่า Windows user ปัจจุบันยังไม่มีสิทธิ์ rename/delete directory ในโฟลเดอร์โปรเจกต์ ให้แก้ permission ที่โฟลเดอร์โปรเจกต์ ไม่ใช่แค่ `.next`:
+
+```powershell
+# Run in an elevated PowerShell if normal terminal cannot change ACL.
+$user = "$env:USERDOMAIN\$env:USERNAME"
+icacls "D:\Antigravity\container-yard-system" /grant "${user}:(OI)(CI)F" /T
 ```
 
 ถ้า build fail เกี่ยวกับ SFTP/EDI ให้ตรวจว่า `next.config.ts` ยังมี external package ต่อไปนี้:

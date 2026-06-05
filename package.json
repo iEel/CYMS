@@ -6,6 +6,8 @@
     "dev": "next dev --webpack -p 3005",
     "dev:turbo": "next dev --turbo -p 3005",
     "build": "next build",
+    "clean:next": "node scripts/clean-next-build.js",
+    "build:clean": "npm run clean:next && npm run build",
     "start": "next start -p 3005",
     "lint": "eslint",
     "test": "jest --verbose",

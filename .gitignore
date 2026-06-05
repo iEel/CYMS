@@ -14,10 +14,13 @@
 /coverage
 /.jest-cache
 /.tmp
+/tmp/
 /.playwright-cli/
 
 # next.js
 /.next/
+/.next-delete-*/
+/.next-clean-permission-probe-*/
 /out/
 
 # production
